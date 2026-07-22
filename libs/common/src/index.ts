@@ -14,6 +14,10 @@ export * from './interfaces/api-response.interface';
 // Database
 export * from './database/base.entity';
 export * from './database/numeric.transformer';
+export * from './database/typeorm.util';
+
+// DTO
+export * from './dto/auth.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';
@@ -37,6 +41,7 @@ export * from './security/ssrf.util';
 // Messaging
 export * from './messaging/execute-and-ack';
 export * from './messaging/rmq.util';
+export * from './messaging/rpc.util';
 
 // Idempotency / Outbox / Activity-log
 export * from './idempotency/idempotency-record.entity';

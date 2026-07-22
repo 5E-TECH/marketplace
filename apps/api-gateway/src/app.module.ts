@@ -14,12 +14,13 @@ import {
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EchoController } from './echo.controller';
+import { AuthController } from './auth/auth.controller';
 
 @Module({
   imports: [
     CommonConfigModule, // .env + Joi (global)
     CommonAuthModule, // JWT + guardlar (global)
-    // Servislarga RMQ client'lari (hozircha echo; keyin identity/catalog/...)
+    // Servislarga RMQ client'lari (echo demo + identity; keyin catalog/...)
     ClientsModule.registerAsync([
       {
         name: RmqClient.ECHO,
@@ -27,9 +28,15 @@ import { EchoController } from './echo.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.ECHO),
       },
+      {
+        name: RmqClient.IDENTITY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
+      },
     ]),
   ],
-  controllers: [AppController, EchoController],
+  controllers: [AppController, EchoController, AuthController],
   providers: [
     AppService,
     // Global auth: avval JWT (401), keyin rol (403)
