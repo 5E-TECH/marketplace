@@ -28,9 +28,14 @@ Holat: **DRAFT** · Boshlanish: 2026-07-20 (Dushanba) · **Ish rejimi: Dushanba�
 
 **Definition of Done (DoD) — har card uchun umumiy:**
 - [ ] Acceptance checklist to'liq bajarilgan
-- [ ] **🧪 Barcha test-case'lar o'tgan** (backend: avtomat test yashil; frontend: qo'lda QA)
+- [ ] **🧪 Card ichidagi `🧪 Test (Done'dan oldin)` checklistidagi BARCHA punkt ✓ belgilangan** —
+      dasturchi har testni **qo'lda bajarib ko'radi** va belgilaydi (backend: avtomat test ham yashil;
+      frontend: qo'lda QA). **Checklist 100% (masalan 6/6) bo'lmasa card Done'ga o'tmaydi.**
 - [ ] PR ochilgan, L review qilgan, `main`ga merge
 - [ ] Swagger/README yangilangan (kerak bo'lsa)
+
+> **Qoida:** har cardda TC1/TC2… testlari Trello checklisti sifatida turadi. Reviewer (L) ham
+> merge'dan oldin checklist to'liq ✓ ekanini tekshiradi. Yarim bajarilgan checklist = card Done EMAS.
 
 ---
 

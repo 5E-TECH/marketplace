@@ -113,7 +113,9 @@ async function main() {
       idLabels.push(id);
     }
 
-    const body = { idList, name, desc: r['Description'] || '', idLabels };
+    // card tanasi = toza tavsif (testlar "|| TEST:" dan keyin — ular checklistga boradi)
+    const cleanDesc = (r['Description'] || '').split('|| TEST:')[0].trim();
+    const body = { idList, name, desc: cleanDesc, idLabels };
     if (r['Due Date']) body.due = r['Due Date'];
 
     await api('POST', '/cards', body);

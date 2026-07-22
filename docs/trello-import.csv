@@ -1,78 +1,526 @@
 List,Card Name,Description,Labels,Members,Due Date
-Phase 0,C0.0a Trello board yaratish + cardlarni ko'chirish,"Trello board + 5 list + labellar. trello-import.csv import. Har card member/label/due. Jamoa taklif. || TEST: TC1 5 list ko'rinadi; TC2 card soni = CSV soni (~70); TC3 tasodifiy 5 card'da member+label+due bor; TC4 jamoa a'zolari kira oladi.",Phase 0;DevOps;High;M,Dilshodbek,2026-07-21
-Phase 0,C0.0b Sayt uchun dizayn topish/tanlash,"Storefront+cabinet vizual yo'nalish: referens, UI kit/design system, palitra/tipografiya, mockup. || TEST: TC1 4+ ekran mockup; TC2 palitra(hex)+tipografiya hujjatlangan; TC3 UI kit havola bilan ulashilgan; TC4 L approve.",Phase 0;Frontend;High;M,Bahodir,2026-07-21
-Phase 0,C0.1 Monorepo init + Docker infra,"NestJS monorepo (nest-cli) + docker-compose (postgres/rabbitmq/minio/adminer) + .env.example + Joi config. || TEST: TC1 docker up -> 4 konteyner healthy; TC2 start:dev xatosiz; TC3 env yetishmasa Joi xato; TC4 .env git'da yo'q.",Phase 0;DevOps;Blocker;M,Lead,2026-07-21
-Phase 0,C0.2 libs/common port,"BaseEntity, response envelope, executeAndAck, idempotency, outbox, activity-log, guards, numericTransformer, enums, SSRF+HMAC. || TEST: TC1 javob {statusCode,message,data}; TC2 xato->filter to'g'ri kod; TC3 tokensiz 401/noto'g'ri rol 403; TC4 money drift yo'q; TC5 idempotency 2x->1 yozuv; TC6 outbox 1 marta yuboradi.",Phase 0;Backend-Core;Blocker;L,Lead,2026-07-24
-Phase 0,C0.3 api-gateway skeleton,"HTTP->RMQ ClientProxy, global pipe/interceptor/filter, JWT+Roles, Swagger, health. || TEST: TC1 /health 200; TC2 /api/docs ochiladi; TC3 tokensiz route 401; TC4 gateway->servis echo ishlaydi.",Phase 0;Backend-Core;High;S,Lead,2026-07-27
-Phase 0,C0.4 identity-service,"user(seller/buyer/admin), register/login(bcrypt+JWT), roles seed, gateway auth route. || TEST: TC1 register->hash(plain emas); TC2 login->JWT(sub,role); TC3 noto'g'ri parol 401; TC4 dublikat phone 409; TC5 soxta token 401.",Phase 0;Backend-Core;Blocker;L,Lead,2026-07-30
-Phase 0,C0.5 CI/CD + lint + dev docs,"ESLint+Prettier+husky, GitHub Actions (lint/build/test), CONTRIBUTING+README. || TEST: TC1 lint xato PR->CI qizil; TC2 toza PR->CI yashil; TC3 husky pre-commit bloklaydi.",Phase 0;DevOps;Normal;S,Lead,2026-07-31
-Phase 0,C0.6 catalog-service entities,"shop, category(tree), product, product_variant + migratsiya. || TEST: TC1 migratsiya->4 jadval catalog_schema; TC2 dublikat shop slug->violation; TC3 dublikat sku->violation; TC4 category parent_id daraxt.",Phase 0;Backend-Commerce;High;M,Dilshodbek,2026-07-23
-Phase 0,C0.7 inventory-service entities,"warehouse, stock(uniq variant+warehouse), stock_movement, reservation+item + migratsiya. || TEST: TC1 migratsiya inventory_schema; TC2 dublikat (variant,warehouse)->violation; TC3 reservation order_ref unique.",Phase 0;Backend-Commerce;Blocker;S,Dilshodbek,2026-07-24
-Phase 0,C0.8 Inventory reserve/commit/release/inbound/adjust,"tx + SELECT FOR UPDATE, invariant on_hand-reserved>=0, movement journal, idempotency. || TEST: TC1 reserve5(oh10)->reserved5; TC2 reserve20->THROW,holat o'zgarmaydi; TC3 commit->oh5,res0; TC4 release->tiklanadi; TC5 inbound; TC6 invariant hech manfiy emas; TC7 idempotency 2x->1; TC8 adjust actor bilan.",Phase 0;Backend-Commerce;Blocker;L,Dilshodbek,2026-07-29
-Phase 0,C0.9 Reservation TTL sweeper + out_of_stock,"Cron: held&expires<now->release. on_hand=0->stock_depleted->catalog out_of_stock. || TEST: TC1 expired->released,res qaytadi; TC2 muddat o'tmagan tegilmaydi; TC3 oh=0->out_of_stock event.",Phase 0;Backend-Commerce;High;S,Dilshodbek,2026-07-30
-Phase 0,C0.10 Inventory testlar,"happy-path, oversell imkonsiz, concurrency, idempotency, TTL. || TEST: TC1 npm test yashil; TC2 oh=100,2x reserve60->1 fail,res<=100; TC3 50 concurrent->yig'indi=100 overshoot yo'q; TC4 CI yashil.",Phase 0;Backend-Commerce;Blocker;M,Dilshodbek,2026-08-03
-Phase 0,C0.11 seller-cabinet setup,"Vite+React19+TS+antd+RTK+react-query+router + dizayn tokenlari. || TEST: TC1 dev ochiladi; TC2 build xatosiz; TC3 lint 0 xato; TC4 palitra qo'llangan.",Phase 0;Frontend;High;S,Bahodir,2026-07-22
-Phase 0,C0.12 Auth foundation (FE),"Axios interceptor(token/401), authSlice+persist, ProtectedRoute, react-query. || TEST: TC1 token->Authorization header; TC2 401->logout; TC3 tokensiz->login redirect; TC4 refresh->token saqlanadi.",Phase 0;Frontend;High;M,Bahodir,2026-07-24
-Phase 0,C0.13 App layout + design tokens,"Sidebar+header, antd theme, responsive, breadcrumb. || TEST: TC1 nav o'tish ishlaydi; TC2 logout ishlaydi; TC3 375px responsive buzilmaydi.",Phase 0;Frontend;Normal;M,Bahodir,2026-07-28
-Phase 0,C0.14 Reusable komponentlar,"DataTable, FormModal, ConfirmDialog, ImageUpload, StatusTag, MoneyText, EmptyState. || TEST: TC1 DataTable pagination/sort/search; TC2 ConfirmDialog callback; TC3 ImageUpload preview+format rad; TC4 MoneyText 1234567->1 234 567.",Phase 0;Frontend;Normal;M,Bahodir,2026-07-30
-Phase 0,C0.15 Register + Login sahifalari,"Register+validatsiya, Login, token->redirect. || TEST: TC1 bo'sh submit->validatsiya; TC2 register->success; TC3 login->token->dashboard; TC4 noto'g'ri parol->xato.",Phase 0;Frontend;High;M,Bahodir,2026-08-03
-Phase 1,C1.1 Elchi partner entities,"partner(api_key_hash, webhook_url, secret AES, is_active) + partner_shipment_ref + migratsiya. || TEST: TC1 migratsiya integration_schema; TC2 mavjud Elchi testlari yashil; TC3 secret AES(ochiq emas).",Phase 1;Elchi-Integration;High;S,Lead,2026-08-03
-Phase 1,C1.2 Elchi PartnerApiKeyGuard + gateway,"X-Api-Key->validate_key->req.partner. controller+Swagger+rate-limit. || TEST: TC1 to'g'ri key->o'tadi; TC2 noto'g'ri key 401; TC3 limitdan oshiq 429; TC4 JWT emas API-key.",Phase 1;Elchi-Integration;Blocker;M,Lead,2026-08-05
-Phase 1,C1.3 Elchi partner CRUD + kalit,"create/rotate/activate, key hash, secret AES, activity-log. || TEST: TC1 create->key bir marta ko'rsatiladi; TC2 rotate->eski 401 yangi ishlaydi; TC3 inactive->403; TC4 activity-log.",Phase 1;Elchi-Integration;Normal;S,Lead,2026-08-06
-Phase 1,C1.4 Elchi geo passthrough,"regions/districts/tariff, logistics.* ichkarida. || TEST: TC1 regions bo'sh emas; TC2 districts?region_id filtr; TC3 tariff summa qaytadi.",Phase 1;Elchi-Integration;Normal;S,Lead,2026-08-07
-Phase 1,C1.5 Elchi POST /partner/markets,"Per-seller market provision (market.create+cashbox), idempotent external_seller_id->elchi_market_id. || TEST: TC1 yangi->market+cashbox, id qaytadi; TC2 idempotent 2x->yangi yaratilmaydi; TC3 market shu partner bilan bog'langan.",Phase 1;Elchi-Integration;Blocker;L,Lead,2026-08-12
-Phase 1,C1.6 Marketplace elchi-integration client,"approve->POST /partner/markets->shop.elchi_market_id. geo_cache sync, AES key, retry. || TEST: TC1 approve->elchi_market_id to'ldiriladi; TC2 Elchi down->retry, 2x market ochilmaydi; TC3 geo_cache mos.",Phase 1;Elchi-Integration;High;M,Lead,2026-08-14
-Phase 1,C1.7 Admin backend shops moderatsiya,"GET /admin/shops, approve(active+warehouse+provision), reject, notify. || TEST: TC1 ?status=pending filtr; TC2 approve->active+warehouse+market_id; TC3 reject+notify; TC4 seller admin route 403.",Phase 1;Backend-Core;High;M,Lead,2026-08-18
-Phase 1,C1.8 Seller register endpoint,"user(seller,inactive)+shop(pending) atomik, admin notify, dublikat tekshiruv. || TEST: TC1 register->user+shop ikkalasi; TC2 shop xato->user rollback; TC3 dublikat 409; TC4 admin notify.",Phase 1;Backend-Commerce;Blocker;M,Dilshodbek,2026-08-05
-Phase 1,C1.9 Shop profil /sellers/me,"GET/PATCH shop profil, SelfGuard. || TEST: TC1 GET o'z do'koni; TC2 PATCH saqlanadi; TC3 boshqa do'kon->403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-06
-Phase 1,C1.10 Category CRUD + public tree,"admin CRUD, public tree, slug uniq. || TEST: TC1 parent bilan yaratish->daraxt; TC2 GET /categories ierarxik; TC3 dublikat slug xato/user 403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-07
-Phase 1,C1.11 Product CRUD (boy),"CRUD(slug/description/price/attributes/status), /products/my filter, ownership. || TEST: TC1 create->slug avtomat; TC2 /my faqat o'ziniki+filter; TC3 boshqa mahsulot PATCH/DELETE 403; TC4 manfiy narx/bo'sh nom 400.",Phase 1;Backend-Commerce;Blocker;L,Dilshodbek,2026-08-12
-Phase 1,C1.12 Product variant CRUD,"variants(sku/attributes/price/barcode), default variant avtomat, sku uniq. || TEST: TC1 variantsiz->default variant avtomat; TC2 variant qo'shish->narx null=product; TC3 dublikat sku xato.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-14
-Phase 1,C1.13 file-service MinIO + media upload,"MinIO bucket+URL, /files/upload(validatsiya), images jsonb, cover. || TEST: TC1 upload->URL ochiladi; TC2 10MB+/.exe rad; TC3 3 rasm->jsonb+cover.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-18
-Phase 1,C1.14 Warehouse + stock GET,"warehouses CRUD, GET stock, /stock/low. || TEST: TC1 ombor yaratish->birinchi default; TC2 GET stock faqat o'z do'koni; TC3 /low threshold ostidagilar.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-20
-Phase 1,C1.15 Inbound/adjust endpointlari,"inbound + adjust(sabab), movement. || TEST: TC1 inbound50->oh+50+movement; TC2 adjust-5 sabab+actor; TC3 boshqa ombor 403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-21
-Phase 1,C1.16 Seller orders + dashboard,"/seller/orders(Elchi status), /seller/dashboard(aggregate). || TEST: TC1 orders faqat o'ziniki; TC2 dashboard sotuv/daromad to'g'ri; TC3 buyurtmasiz->bo'sh,0(xato emas).",Phase 1;Backend-Commerce;Normal;M,Dilshodbek,2026-08-25
-Phase 1,C1.17 notification-service,"notification entity+in-app+adapter(email/tg/sms), eventlar. || TEST: TC1 event->notification yoziladi(in-app); TC2 adapter chaqiriladi(mock); TC3 adapter xato->retry/queue.",Phase 1;Backend-Commerce;Normal;M,Dilshodbek,2026-08-27
-Phase 1,C1.18 Shop profil sahifasi (FE),"ko'rish/tahrir, logo/banner upload, save. || TEST: TC1 joriy ma'lumot to'ldirilgan; TC2 save->o'zgargan; TC3 logo preview+saqlanadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-05
-Phase 1,C1.19 Products list sahifasi (FE),"jadval(search/filter/status/pagination), tez amallar, cache. || TEST: TC1 pagination ishlaydi; TC2 search filtr; TC3 delete->tasdiq->yo'qoladi.",Phase 1;Frontend;High;M,Bahodir,2026-08-07
-Phase 1,C1.20 Product create/edit forma (FE),"boy forma, rasm upload, create/update. || TEST: TC1 yangi saqlash->ro'yxatda; TC2 edit->o'zgaradi; TC3 majburiy bo'sh->validatsiya; TC4 kategoriya select.",Phase 1;Frontend;Blocker;L,Bahodir,2026-08-12
-Phase 1,C1.21 Variant management UI (FE),"variant qo'shish/tahrir, variantsiz holat, jadval. || TEST: TC1 variant qo'shish->saqlanadi; TC2 o'chirish->yo'qoladi; TC3 variantsizda default.",Phase 1;Frontend;High;M,Bahodir,2026-08-14
-Phase 1,C1.22 Media upload UI (FE),"ko'p rasm drag-drop, tartib/cover, progress. || TEST: TC1 bir nechta->preview; TC2 drag tartib saqlanadi; TC3 cover belgilanadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-18
-Phase 1,C1.23 Warehouses sahifasi (FE),"list/create, default. || TEST: TC1 yaratish->ro'yxatda; TC2 default->bitta default.",Phase 1;Frontend;Normal;S,Bahodir,2026-08-19
-Phase 1,C1.24 Stock (qoldiq) sahifasi (FE),"qoldiq jadval, inbound/adjust modal, low-stock highlight. || TEST: TC1 jadval to'g'ri sonlar; TC2 inbound+10->yangilanadi; TC3 low-stock ajratilgan.",Phase 1;Frontend;High;M,Bahodir,2026-08-21
-Phase 1,C1.25 Orders sahifasi (FE),"list + Elchi status timeline, filter. || TEST: TC1 ro'yxat+status rang; TC2 filter natija; TC3 timeline ochiladi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-25
-Phase 1,C1.26 Dashboard sahifasi (FE),"kartalar, chart, top mahsulot. || TEST: TC1 kartalar backend'ga mos; TC2 chart render(bo'sh ham).",Phase 1;Frontend;Normal;M,Bahodir,2026-08-27
-Phase 1,C1.27 Admin shops moderatsiya UI (FE),"pending list, detail+approve/reject, status. || TEST: TC1 pending ro'yxat; TC2 approve->active,ro'yxatdan chiqadi; TC3 reject sabab bilan.",Phase 1;Frontend;High;M,Bahodir,2026-08-31
-Phase 2,C2.1 Elchi POST /partner/shipments -> order.create,"shipment->order.create, cod_amount=0 prepaid, idempotent. || TEST: TC1 shipment->order+ref+shipment_id; TC2 cod=0->to_be_paid=0; TC3 cod=50000->to_be_paid=50000; TC4 idempotent 2x->yangi yo'q.",Phase 2;Elchi-Integration;Blocker;L,Lead,2026-08-21
-Phase 2,C2.2 Elchi get/cancel shipment,"GET /:id, POST /cancel. || TEST: TC1 GET status/tracking/cod; TC2 cancel->cancelled; TC3 yetkazilganni cancel->409.",Phase 2;Elchi-Integration;Normal;S,Lead,2026-08-24
-Phase 2,C2.3 Elchi outbound webhook,"status event->outbox->HMAC POST, backoff retry, settled/remittance. || TEST: TC1 status->POST+X-Elchi-Signature; TC2 500->backoff retry; TC3 2xx->dedup(qayta yo'q); TC4 sold->cod_collected.",Phase 2;Elchi-Integration;Blocker;L,Lead,2026-08-27
-Phase 2,C2.4 Marketplace webhook receiver,"HMAC verify->sales_order_seller mirror, returned->inbound, delivered+online->payout. || TEST: TC1 to'g'ri imzo->status yangilanadi; TC2 noto'g'ri imzo 401; TC3 returned->inventory.inbound; TC4 2x event->1 marta(idempotent).",Phase 2;Elchi-Integration;Blocker;M,Lead,2026-08-31
-Phase 2,C2.5 Elchi OrderItem.product_id yumshatish,"external item nom/qty, internal buzilmaydi. || TEST: TC1 external item(product_id null)->order yaratiladi; TC2 internal oqim regressiya yashil.",Phase 2;Elchi-Integration;Normal;S,Lead,2026-09-01
-Phase 2,C2.6 Catalog public endpoints,"list(filter/sort/pagination), product detail, shop page(active). || TEST: TC1 faqat active(draft ko'rinmaydi); TC2 filter/sort; TC3 suspended shop yashirin.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-08-31
-Phase 2,C2.7 search-service,"index, search+facet, reindex on event. || TEST: TC1 qidiruv relevant; TC2 facet filtr toraytiradi; TC3 yangi mahsulot->indeksga.",Phase 2;Backend-Commerce;High;L,Dilshodbek,2026-09-03
-Phase 2,C2.8 cart-service,"cart+item(add/update/remove), narx snapshot, anon+logged. || TEST: TC1 qo'shish->snapshot; TC2 qty/o'chirish->yangilanadi; TC3 anon savat login'da merge.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-09-07
-Phase 2,C2.9 checkout.create (split),"shop_id guruh->N sub-order, reserve ttl=30daq, manzil. || TEST: TC1 2 do'kon->2 sub-order; TC2 checkout->reserve(band); TC3 qoldiq yetmasa->400 order yo'q; TC4 online=pending_payment/COD=draft.",Phase 2;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-10
-Phase 2,C2.10 confirmSalesOrder (COD),"har seller->shipment(cod=subtotal), inventory.commit, confirmed+notify. || TEST: TC1 confirm->har sub-order shipment; TC2 commit(qoldiq kamayadi)+confirmed; TC3 elchi_shipment_id+notify; TC4 shipment xato->rollback.",Phase 2;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-15
-Phase 2,C2.11 Sales order status mirror + returns,"webhook->status, returned->inbound, seller orders real. || TEST: TC1 on-road webhook->status; TC2 returned->qoldiq tiklanadi; TC3 seller orders real status.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-09-17
-Phase 2,C2.12 storefront Next.js setup,"SSR, layout/SEO/sitemap, API client. || TEST: TC1 SSR HTML(view-source); TC2 title/meta bor; TC3 /sitemap.xml ochiladi.",Phase 2;Frontend;High;M,Bahodir,2026-09-02
-Phase 2,C2.13 Home + catalog listing (FE),"bosh+kategoriya, listing(filter/sort/pagination SSR), qidiruv. || TEST: TC1 bosh sahifa yuklanadi; TC2 filter URL query+SSR; TC3 qidiruv natija.",Phase 2;Frontend;Blocker;L,Bahodir,2026-09-07
-Phase 2,C2.14 Product detail sahifasi (FE),"galereya, variant, savatga, SEO. || TEST: TC1 galereya ochiladi; TC2 variant->narx/rasm yangilanadi; TC3 savatga->son oshadi; TC4 og/schema meta.",Phase 2;Frontend;High;M,Bahodir,2026-09-09
-Phase 2,C2.15 Shop storefront sahifasi (FE),"shop header, mahsulotlar, slug route. || TEST: TC1 /shop/[slug]->sahifa; TC2 noto'g'ri slug 404.",Phase 2;Frontend;Normal;M,Bahodir,2026-09-11
-Phase 2,C2.16 Cart sahifasi (FE),"ko'p sotuvchi guruh, qty/o'chirish, jami. || TEST: TC1 2 do'kon->guruhlangan; TC2 qty->jami qayta hisob; TC3 o'chirish->chiqadi.",Phase 2;Frontend;High;M,Bahodir,2026-09-15
-Phase 2,C2.17 Checkout sahifasi (FE),"manzil/region/district, to'lov usuli, per-seller posilka preview, buyurtma. || TEST: TC1 manzil to'ldirilmasa bloklanadi; TC2 2 do'kon->2 posilka preview; TC3 to'lov usuli tanlash; TC4 buyurtma->tasdiq sahifa.",Phase 2;Frontend;Blocker;L,Bahodir,2026-09-18
-Phase 2,C2.18 Order confirmation + tracking (FE),"tasdiq, posilka status/tracking. || TEST: TC1 tasdiq(raqam+posilka); TC2 har posilka status/tracking.",Phase 2;Frontend;Normal;M,Bahodir,2026-09-22
-Phase 3,C3.1 payment-service skeleton,"payment/txn/provider_config(AES), payment.create, SSRF-guard. || TEST: TC1 payment.create->created; TC2 secret AES; TC3 ichki IP->SSRF bloklaydi.",Phase 3;Backend-Commerce;High;M,Dilshodbek,2026-09-21
-Phase 3,C3.2 Payme JSON-RPC callback,"6 metod, Basic auth, state->txn, sandbox. || TEST: TC1 sandbox CheckPerform->Create->Perform->paid; TC2 noto'g'ri summa->-31001; TC3 noto'g'ri auth rad; TC4 Cancel->cancelled; TC5 2x Perform idempotent.",Phase 3;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-24
-Phase 3,C3.3 Click Prepare/Complete,"prepare+complete, sign_string(md5), sandbox. || TEST: TC1 sandbox Prepare->Complete->paid; TC2 noto'g'ri sign rad; TC3 summa mos emas rad.",Phase 3;Backend-Commerce;High;M,Lead,2026-09-23
-Phase 3,C3.4 payment.paid -> confirmSalesOrder (online),"paid->confirm, cod=0 shipment, inventory.commit. || TEST: TC1 paid->confirmed+cod=0 prepaid; TC2 to'lov fail->confirm yo'q,TTL bo'shatadi; TC3 commit qoldiq kamayadi.",Phase 3;Backend-Commerce;Blocker;S,Lead,2026-09-25
-Phase 3,C3.5 finance-service (escrow->payout),"ledger/payout/commission, delivered->ledger->payout, percent/fixed. || TEST: TC1 delivered->sale/commission yozuv,balance; TC2 percent10%+fixed to'g'ri; TC3 payout 2x imkonsiz(idempotent); TC4 refund->teskari yozuv.",Phase 3;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-29
-Phase 3,C3.6 Refund flow,"Cancel/returned->refund, inventory.inbound, ledger refund. || TEST: TC1 returned->Payme Cancel->refunded; TC2 refund->qoldiq inbound; TC3 ledger refund,balans kamayadi.",Phase 3;Backend-Commerce;High;M,Lead,2026-09-29
-Phase 3,C3.7 Checkout payment integration (FE),"Payme/Click redirect, return callback, holat. || TEST: TC1 to'lash->Payme/Click redirect; TC2 qaytish->holat sahifa.",Phase 3;Frontend;High;M,Bahodir,2026-09-24
-Phase 3,C3.8 Payment status sahifasi (FE),"success/fail/pending, buyurtmaga qaytish. || TEST: TC1 muvaffaqiyat->success+havola; TC2 bekor->fail+qayta urinish.",Phase 3;Frontend;Normal;S,Bahodir,2026-09-25
-Phase 3,C3.9 Seller finance sahifasi (FE),"ledger/balans, payout tarixi, komissiya. || TEST: TC1 ledger+balans backend'ga mos; TC2 payout tarixi+komissiya to'g'ri.",Phase 3;Frontend;Normal;M,Bahodir,2026-09-29
-Phase 4,C4.1 Review / rating,"review(delivered), rating aggregate, FE. || TEST: TC1 faqat delivered egasi sharh; TC2 sharh->rating qayta hisob; TC3 2x sharh rad.",Phase 4;Backend-Commerce;Normal;M,Dilshodbek,2026-10-01
-Phase 4,C4.2 Returns / refund UI,"buyer so'rov, seller/admin ko'rish, status oqimi. || TEST: TC1 so'rov->seller/admin ko'radi; TC2 tasdiq->refund oqimi.",Phase 4;Frontend;Normal;M,Bahodir,2026-10-01
-Phase 4,C4.3 COD komissiya reconciliation,"settled->ledger, netting/invoys, recon hisobot. || TEST: TC1 settled->COD ledger(komissiya-); TC2 netting online payout'dan ushlanadi; TC3 recon farq=0.",Phase 4;Backend-Commerce;High;L,Dilshodbek,2026-10-06
-Phase 4,C4.4 Analytics dashboard (admin FE),"GMV/orders/top, grafiklar. || TEST: TC1 GMV backend'ga mos; TC2 top tartib to'g'ri; TC3 sana filtri o'zgartiradi.",Phase 4;Frontend;Normal;M,Bahodir,2026-10-05
-Phase 4,C4.5 Admin moderatsiya kengaytmasi,"suspend/reactivate, product moderatsiya, audit log. || TEST: TC1 suspend->mahsulotlar storefront'da yo'qoladi; TC2 reactivate->qaytadi; TC3 audit log yoziladi.",Phase 4;Backend-Commerce;Normal;M,Dilshodbek,2026-10-08
-Phase 4,C4.6 E2E smoke + deploy + monitoring,"E2E to'liq oqim, prod deploy+domen+TLS, monitoring, backup. || TEST: TC1 E2E register->...->payout uzilishsiz; TC2 prod HTTPS(TLS); TC3 servis yiqilsa alert+log; TC4 DB backup+restore.",Phase 4;DevOps;Blocker;M,Lead,2026-10-12
+Phase 0,C0.0a Trello board yaratish + cardlarni ko'chirish,"**Maqsad:** Rejadagi barcha vazifalarni Trello'ga ko'chirib, jamoa ish boshlaydigan taxta tayyorlash.
+
+Trello'da bitta board ochiladi, unga 5 ta ustun (Backlog, Doing, Testing, Done + kerak bo'lsa Review) qo'yiladi. `trello-import.csv` import qilinib, har bir card o'z egasiga, labeliga va muddatiga biriktiriladi. Jamoa a'zolari (Dilshodbek, Bahodir) boardga taklif qilinadi.
+
+**Ishlar:**
+- Board + ustunlar + label'lar (Phase, Area, Priority, Hajm) yaratish
+- 77 card import qilish, har biriga a'zo/label/deadline biriktirish
+- Jamoani boardga qo'shish || TEST: TC1 5 list ko'rinadi; TC2 card soni = CSV soni (~70); TC3 tasodifiy 5 card'da member+label+due bor; TC4 jamoa a'zolari kira oladi.",Phase 0;DevOps;High;M,Dilshodbek,2026-07-21
+Phase 0,C0.0b Sayt uchun dizayn topish/tanlash,"**Maqsad:** Saytning umumiy ko'rinishi (dizayn yo'nalishi) qanday bo'lishini oldindan belgilash — keyin frontend shu asosda quriladi.
+
+Storefront (xaridor sayti) va sotuvchi kabineti uchun vizual uslub tanlanadi: rang palitrasi, shrift (tipografiya), tayyor UI kit yoki dizayn tizimi. Bir nechta asosiy ekran uchun mockup (chizma) tayyorlanadi va Lead tasdiqlaydi.
+
+**Ishlar:**
+- Referens saytlar to'plash, uslub tanlash
+- Palitra (hex ranglar) + tipografiya hujjatlash
+- UI kit/dizayn tizimi tanlash, 4+ ekran mockup, Lead approve || TEST: TC1 4+ ekran mockup; TC2 palitra(hex)+tipografiya hujjatlangan; TC3 UI kit havola bilan ulashilgan; TC4 L approve.",Phase 0;Frontend;High;M,Bahodir,2026-07-21
+Phase 0,C0.1 Monorepo init + Docker infra,"**Maqsad:** Loyihaning bo'sh ""skeleti"" va lokal ishlash muhitini tayyorlash — hamma shu poydevor ustiga kod yozadi.
+
+NestJS monorepo (bitta repo ichida ko'p servis) `nest-cli` bilan quriladi. `docker-compose` orqali lokal xizmatlar ko'tariladi: PostgreSQL (baza), RabbitMQ (servislararo xabar), MinIO (rasm saqlash), Adminer (bazani ko'rish). Sozlamalar `.env` orqali beriladi va Joi bilan tekshiriladi (kerakli sozlama yo'q bo'lsa dastur ishga tushmaydi).
+
+**Ishlar:**
+- Monorepo + apps/libs tuzilishi
+- docker-compose (postgres/rabbitmq/minio/adminer)
+- `.env.example` + Joi config validatsiya || TEST: TC1 docker up -> 4 konteyner healthy; TC2 start:dev xatosiz; TC3 env yetishmasa Joi xato; TC4 .env git'da yo'q.",Phase 0;DevOps;Blocker;M,Lead,2026-07-21
+Phase 0,C0.2 libs/common port,"**Maqsad:** Barcha servislar birga ishlatadigan umumiy kod (""libs/common"") ni tayyorlash — bir marta yozib, hamma joyda qayta ishlatiladi.
+
+Elchi loyihasidan sinovdan o'tgan pattern'lar ko'chiriladi: BaseEntity (id, sana, soft-delete), yagona javob shakli `{statusCode, message, data}`, xatolarni ushlash, idempotency (bir amal ikki marta bajarilib qolmasligi), outbox (event ishonchli yuborilishi), activity-log, JWT/rol guard'lari, pul (numeric) transformeri, enum'lar, SSRF va HMAC yordamchilar.
+
+**Ishlar:**
+- BaseEntity, response envelope, executeAndAck
+- idempotency, outbox, activity-log
+- guards (JWT/Roles/Self), numericTransformer, enums, SSRF+HMAC helper || TEST: TC1 javob {statusCode,message,data}; TC2 xato->filter to'g'ri kod; TC3 tokensiz 401/noto'g'ri rol 403; TC4 money drift yo'q; TC5 idempotency 2x->1 yozuv; TC6 outbox 1 marta yuboradi.",Phase 0;Backend-Core;Blocker;L,Lead,2026-07-24
+Phase 0,C0.3 api-gateway skeleton,"**Maqsad:** Tashqi dunyoga qaraydigan yagona kirish nuqtasi (API Gateway) ni qurish — barcha so'rovlar shu yerdan o'tadi.
+
+Gateway HTTP so'rovlarni qabul qilib, RabbitMQ orqali kerakli servisga uzatadi. Global tekshiruvlar (validatsiya, xato filtri, javob formati) shu yerda o'rnatiladi. JWT va rol tekshiruvi, Swagger (API hujjati) va `/health` (tiriklik) endpointi qo'shiladi.
+
+**Ishlar:**
+- HTTP→RabbitMQ ClientProxy
+- Global pipe/interceptor/filter, JWT + RolesGuard
+- Swagger hujjat, `/health` || TEST: TC1 /health 200; TC2 /api/docs ochiladi; TC3 tokensiz route 401; TC4 gateway->servis echo ishlaydi.",Phase 0;Backend-Core;High;S,Lead,2026-07-27
+Phase 0,C0.4 identity-service,"**Maqsad:** Foydalanuvchilar (sotuvchi/xaridor/admin) va ularning tizimga kirishini (auth) yaratish.
+
+identity-service `users` jadvalini boshqaradi. Ro'yxatdan o'tish va login qilish (parol bcrypt bilan shifrlanadi, JWT token beriladi) yoziladi. Rollar (SELLER/BUYER/ADMIN/SUPERADMIN) seed qilinadi. Gateway'da auth route'lari ulanadi.
+
+**Ishlar:**
+- `users` entity + migratsiya
+- register/login (bcrypt + JWT), rol seed
+- gateway auth route'lari || TEST: TC1 register->hash(plain emas); TC2 login->JWT(sub,role); TC3 noto'g'ri parol 401; TC4 dublikat phone 409; TC5 soxta token 401.",Phase 0;Backend-Core;Blocker;L,Lead,2026-07-30
+Phase 0,C0.5 CI/CD + lint + dev docs,"**Maqsad:** Kod sifatini avtomat nazorat qilish va yangi dasturchi tez qo'shiladigan hujjat tayyorlash.
+
+ESLint + Prettier (kod uslubi) + husky (commit oldidan tekshiruv) o'rnatiladi. GitHub Actions CI quriladi — har PR'da lint/build/test avtomat ishlaydi. CONTRIBUTING va README yoziladi (loyihani qanday ishga tushirish, qoidalar).
+
+**Ishlar:**
+- ESLint + Prettier + husky pre-commit
+- GitHub Actions (lint/build/test)
+- CONTRIBUTING + README || TEST: TC1 lint xato PR->CI qizil; TC2 toza PR->CI yashil; TC3 husky pre-commit bloklaydi.",Phase 0;DevOps;Normal;S,Lead,2026-07-31
+Phase 0,C0.6 catalog-service entities,"**Maqsad:** Katalog ma'lumotlar bazasi jadvallarini yaratish (do'kon, kategoriya, mahsulot, variant).
+
+catalog-service uchun 4 ta jadval va ularning migratsiyasi yoziladi: `shop` (do'kon), `category` (daraxt ko'rinishidagi kategoriyalar), `product` (mahsulot), `product_variant` (rang/o'lcham varianti). Do'kon slug'i va SKU takrorlanmasligi (unique) ta'minlanadi.
+
+**Ishlar:**
+- shop, category (self-ref daraxt), product, product_variant
+- migratsiya + unique cheklovlar (slug, sku) || TEST: TC1 migratsiya->4 jadval catalog_schema; TC2 dublikat shop slug->violation; TC3 dublikat sku->violation; TC4 category parent_id daraxt.",Phase 0;Backend-Commerce;High;M,Dilshodbek,2026-07-23
+Phase 0,C0.7 inventory-service entities,"**Maqsad:** Sklad (ombor/qoldiq) bazasi jadvallarini yaratish.
+
+inventory-service uchun jadvallar: `warehouse` (ombor), `stock` (har variant×ombor uchun qoldiq, unique), `stock_movement` (har o'zgarish jurnali), `reservation` va `reservation_item` (buyurtma uchun band qilingan tovar). Migratsiya yoziladi.
+
+**Ishlar:**
+- warehouse, stock (uniq variant+warehouse), stock_movement, reservation(+item)
+- migratsiya + unique cheklovlar || TEST: TC1 migratsiya inventory_schema; TC2 dublikat (variant,warehouse)->violation; TC3 reservation order_ref unique.",Phase 0;Backend-Commerce;Blocker;S,Dilshodbek,2026-07-24
+Phase 0,C0.8 Inventory reserve/commit/release/inbound/adjust,"**Maqsad:** Skladning eng muhim mantig'i — tovarni band qilish/berish, hech qachon ""yo'q tovarni sotib qo'ymaslik"".
+
+Bitta tranzaksiya ichida `SELECT ... FOR UPDATE` bilan qoldiq qulflanadi va invariant saqlanadi: `bor − band ≥ 0` (ya'ni hech qachon manfiy bo'lmaydi). Amallar: **reserve** (band qilish), **commit** (sotildi, kamaytirish), **release** (bekor, qaytarish), **inbound** (kirim), **adjust** (tuzatish). Har amal jurnalga yoziladi, idempotency bilan takror bajarilmaydi.
+
+**Ishlar:**
+- reserve/commit/release/inbound/adjust (tranzaksiya + FOR UPDATE)
+- invariant on_hand−reserved≥0, movement jurnal, idempotency || TEST: TC1 reserve5(oh10)->reserved5; TC2 reserve20->THROW,holat o'zgarmaydi; TC3 commit->oh5,res0; TC4 release->tiklanadi; TC5 inbound; TC6 invariant hech manfiy emas; TC7 idempotency 2x->1; TC8 adjust actor bilan.",Phase 0;Backend-Commerce;Blocker;L,Dilshodbek,2026-07-29
+Phase 0,C0.9 Reservation TTL sweeper + out_of_stock,"**Maqsad:** Band qilingan, lekin to'lanmagan tovarni avtomat bo'shatish va tugagan tovarni ""sotuvda yo'q"" qilish.
+
+Cron (vaqti-vaqti bilan ishlaydigan) vazifa: muddati o'tgan (`held` va `expires < hozir`) rezervlarni topib `release` qiladi. Qoldiq 0 ga tushsa, mahsulot avtomat `OUT_OF_STOCK` bo'ladi (catalog'ga event yuboriladi).
+
+**Ishlar:**
+- TTL sweeper cron: muddati o'tgan reservni bo'shatish
+- qoldiq 0 → out_of_stock event || TEST: TC1 expired->released,res qaytadi; TC2 muddat o'tmagan tegilmaydi; TC3 oh=0->out_of_stock event.",Phase 0;Backend-Commerce;High;S,Dilshodbek,2026-07-30
+Phase 0,C0.10 Inventory testlar,"**Maqsad:** Sklad mantig'i xatosiz ishlashini avtomat testlar bilan kafolatlash.
+
+Turli holatlar uchun testlar yoziladi: oddiy oqim, ""ortiqcha sotib bo'lmasligi"" (oversell imkonsiz), bir vaqtda ko'p so'rov (concurrency), idempotency, TTL. CI'da hammasi yashil bo'lishi kerak.
+
+**Ishlar:**
+- happy-path, oversell, concurrency, idempotency, TTL testlari
+- CI yashil || TEST: TC1 npm test yashil; TC2 oh=100,2x reserve60->1 fail,res<=100; TC3 50 concurrent->yig'indi=100 overshoot yo'q; TC4 CI yashil.",Phase 0;Backend-Commerce;Blocker;M,Dilshodbek,2026-08-03
+Phase 0,C0.11 seller-cabinet setup,"**Maqsad:** Sotuvchi kabineti (frontend) loyihasini boshlash.
+
+Vite + React 19 + TypeScript asosida loyiha quriladi. antd (UI kutubxona), Redux Toolkit (holat), react-query (server ma'lumoti), router qo'shiladi. C0.0b dagi dizayn tokenlari (rang/shrift) ulanadi.
+
+**Ishlar:**
+- Vite + React 19 + TS + antd + RTK + react-query + router
+- dizayn tokenlari ulanishi || TEST: TC1 dev ochiladi; TC2 build xatosiz; TC3 lint 0 xato; TC4 palitra qo'llangan.",Phase 0;Frontend;High;S,Bahodir,2026-07-22
+Phase 0,C0.12 Auth foundation (FE),"**Maqsad:** Frontendda tizimga kirish (auth) poydevorini qurish.
+
+Axios interceptor (har so'rovga token qo'shadi, 401 bo'lsa logout), authSlice (token saqlash, sahifa yangilanganda ham qolishi), ProtectedRoute (tokensiz sahifalarga kirmaslik), react-query sozlamasi.
+
+**Ishlar:**
+- Axios interceptor (token/401)
+- authSlice + persist, ProtectedRoute || TEST: TC1 token->Authorization header; TC2 401->logout; TC3 tokensiz->login redirect; TC4 refresh->token saqlanadi.",Phase 0;Frontend;High;M,Bahodir,2026-07-24
+Phase 0,C0.13 App layout + design tokens,"**Maqsad:** Kabinetning umumiy ko'rinishi (layout) va dizayn uslubini o'rnatish.
+
+Chap menyu (sidebar) + tepa panel (header), antd theme (rang/uslub), responsive (telefon/planshet), breadcrumb (qayerdaligini ko'rsatuvchi yo'l).
+
+**Ishlar:**
+- Sidebar + header + breadcrumb
+- antd theme, responsive (375px'da ham buzilmaydi) || TEST: TC1 nav o'tish ishlaydi; TC2 logout ishlaydi; TC3 375px responsive buzilmaydi.",Phase 0;Frontend;Normal;M,Bahodir,2026-07-28
+Phase 0,C0.14 Reusable komponentlar,"**Maqsad:** Ko'p joyda ishlatiladigan tayyor komponentlarni bir marta yozib qo'yish.
+
+Umumiy komponentlar: DataTable (jadval — sahifalash/saralash/qidiruv), FormModal, ConfirmDialog (tasdiq oynasi), ImageUpload (rasm yuklash), StatusTag, MoneyText (pulni chiroyli ko'rsatish: 1 234 567), EmptyState.
+
+**Ishlar:**
+- DataTable, FormModal, ConfirmDialog
+- ImageUpload, StatusTag, MoneyText, EmptyState || TEST: TC1 DataTable pagination/sort/search; TC2 ConfirmDialog callback; TC3 ImageUpload preview+format rad; TC4 MoneyText 1234567->1 234 567.",Phase 0;Frontend;Normal;M,Bahodir,2026-07-30
+Phase 0,C0.15 Register + Login sahifalari,"**Maqsad:** Ro'yxatdan o'tish va login sahifalarini yasash.
+
+Register sahifasi (maydonlar + validatsiya), Login sahifasi. Muvaffaqiyatli kirgach token olinadi va foydalanuvchi dashboardga yo'naltiriladi.
+
+**Ishlar:**
+- Register (validatsiya) + Login sahifalari
+- token → redirect (dashboard) || TEST: TC1 bo'sh submit->validatsiya; TC2 register->success; TC3 login->token->dashboard; TC4 noto'g'ri parol->xato.",Phase 0;Frontend;High;M,Bahodir,2026-08-03
+Phase 1,C1.1 Elchi partner entities,"**Maqsad:** Elchi tomonda marketplace'ni tanish uchun ""hamkor"" (partner) ma'lumotlarini saqlash.
+
+Elchi-Backend'da `partner` jadvali qo'shiladi: api kalit hash'i, webhook manzili, HMAC secret (AES bilan shifrlangan), aktivligi. Marketplace shu kalit orqali Elchi API'siga murojaat qiladi. Migratsiya yoziladi, mavjud Elchi testlari buzilmasligi kerak.
+
+**Ishlar:**
+- partner entity (api_key_hash, webhook_url, secret AES, is_active) + partner_shipment_ref
+- migratsiya, secret shifrlangan holda || TEST: TC1 migratsiya integration_schema; TC2 mavjud Elchi testlari yashil; TC3 secret AES(ochiq emas).",Phase 1;Elchi-Integration;High;S,Lead,2026-08-03
+Phase 1,C1.2 Elchi PartnerApiKeyGuard + gateway,"**Maqsad:** Elchi Partner API'ga faqat to'g'ri kalit bilan kirishni ta'minlash.
+
+`X-Api-Key` header'i tekshiriladi (PartnerApiKeyGuard) — kalit bazadagi hamkorga mos bo'lsa `req.partner` to'ldiriladi. Controller, Swagger va rate-limit qo'shiladi. Bu JWT emas, alohida API-key mexanizmi.
+
+**Ishlar:**
+- PartnerApiKeyGuard (X-Api-Key → validate → req.partner)
+- controller + Swagger + rate-limit || TEST: TC1 to'g'ri key->o'tadi; TC2 noto'g'ri key 401; TC3 limitdan oshiq 429; TC4 JWT emas API-key.",Phase 1;Elchi-Integration;Blocker;M,Lead,2026-08-05
+Phase 1,C1.3 Elchi partner CRUD + kalit,"**Maqsad:** Hamkorlarni va ularning kalitlarini boshqarish (yaratish/yangilash).
+
+Partner CRUD: yaratish, kalitni yangilash (rotate), aktivlashtirish. Kalit hash sifatida saqlanadi, secret AES bilan shifrlanadi, har amal activity-log'ga yoziladi. Yangi kalit faqat bir marta ko'rsatiladi.
+
+**Ishlar:**
+- create/rotate/activate, kalit hash, secret AES
+- activity-log || TEST: TC1 create->key bir marta ko'rsatiladi; TC2 rotate->eski 401 yangi ishlaydi; TC3 inactive->403; TC4 activity-log.",Phase 1;Elchi-Integration;Normal;S,Lead,2026-08-06
+Phase 1,C1.4 Elchi geo passthrough,"**Maqsad:** Marketplace'ga Elchi'ning hudud (region/tuman) va tarif ma'lumotlarini ochish.
+
+Elchi'ning ichki logistika ma'lumotlari (regionlar, tumanlar, yetkazish tarifi) Partner API orqali ""passthrough"" qilinadi — marketplace shu ro'yxatlarni oladi (manzil tanlash uchun).
+
+**Ishlar:**
+- regions / districts / tariff endpointlari (passthrough) || TEST: TC1 regions bo'sh emas; TC2 districts?region_id filtr; TC3 tariff summa qaytadi.",Phase 1;Elchi-Integration;Normal;S,Lead,2026-08-07
+Phase 1,C1.5 Elchi POST /partner/markets,"**Maqsad:** Har bir sotuvchi uchun Elchi tizimida alohida ""market"" akkaunt ochish (pul va posilka shu akkauntga bog'lanadi).
+
+Partner API'da `POST /partner/markets` yoziladi — u Elchi'da market + kassa (cashbox) yaratadi. Idempotent: bir sotuvchi uchun ikki marta chaqirilsa, yangi market ochilmaydi (`external_seller_id` bo'yicha). Javobda `elchi_market_id` qaytadi.
+
+**Ishlar:**
+- market + cashbox provision (idempotent external_seller_id)
+- javobda elchi_market_id || TEST: TC1 yangi->market+cashbox, id qaytadi; TC2 idempotent 2x->yangi yaratilmaydi; TC3 market shu partner bilan bog'langan.",Phase 1;Elchi-Integration;Blocker;L,Lead,2026-08-12
+Phase 1,C1.6 Marketplace elchi-integration client,"**Maqsad:** Marketplace tomonda Elchi bilan gaplashadigan mijoz (client) kodini yozish.
+
+Sotuvchi approve bo'lganda elchi-integration `POST /partner/markets` chaqiradi va qaytgan `elchi_market_id` ni `shop`ga yozadi. Geo ma'lumot keshlanadi, kalit AES bilan saqlanadi, xatoda qayta urinadi (retry — lekin 2 marta market ochilmaydi).
+
+**Ishlar:**
+- approve → market provision → shop.elchi_market_id
+- geo_cache sync, AES kalit, retry || TEST: TC1 approve->elchi_market_id to'ldiriladi; TC2 Elchi down->retry, 2x market ochilmaydi; TC3 geo_cache mos.",Phase 1;Elchi-Integration;High;M,Lead,2026-08-14
+Phase 1,C1.7 Admin backend shops moderatsiya,"**Maqsad:** Adminga do'konlarni ko'rish va tasdiqlash/rad etish imkonini berish (backend).
+
+`GET /admin/shops` (filtrlash bilan), `approve` (do'konni aktiv qiladi + default ombor + Elchi market provision), `reject`, va sotuvchiga xabar (notify). Faqat admin kira oladi.
+
+**Ishlar:**
+- GET /admin/shops (status filtr)
+- approve (active + warehouse + provision), reject + notify || TEST: TC1 ?status=pending filtr; TC2 approve->active+warehouse+market_id; TC3 reject+notify; TC4 seller admin route 403.",Phase 1;Backend-Core;High;M,Lead,2026-08-18
+Phase 1,C1.8 Seller register endpoint,"**Maqsad:** Sotuvchi o'zini ro'yxatdan o'tkazganda foydalanuvchi va do'kon birga (atomik) yaratilishi.
+
+`POST /sellers/register` — bitta tranzaksiyada `user(SELLER, inactive)` va `shop(PENDING)` yaratiladi. Biri xato bo'lsa ikkalasi bekor bo'ladi (rollback). Adminga xabar boradi, takroriy telefon tekshiriladi.
+
+**Ishlar:**
+- user + shop atomik yaratish (rollback bilan)
+- admin notify, dublikat telefon tekshiruvi || TEST: TC1 register->user+shop ikkalasi; TC2 shop xato->user rollback; TC3 dublikat 409; TC4 admin notify.",Phase 1;Backend-Commerce;Blocker;M,Dilshodbek,2026-08-05
+Phase 1,C1.9 Shop profil /sellers/me,"**Maqsad:** Sotuvchi o'z do'koni profilini ko'rishi va tahrirlashi.
+
+`GET /sellers/me` va `PATCH /sellers/me`. SelfGuard bilan himoyalanadi — sotuvchi faqat o'z do'konini ko'radi/tahrirlaydi, boshqasiniki 403.
+
+**Ishlar:**
+- GET/PATCH shop profil
+- SelfGuard (o'zganiki 403) || TEST: TC1 GET o'z do'koni; TC2 PATCH saqlanadi; TC3 boshqa do'kon->403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-06
+Phase 1,C1.10 Category CRUD + public tree,"**Maqsad:** Kategoriyalarni boshqarish (admin) va ochiq daraxt ko'rinishida berish.
+
+Admin kategoriya CRUD qiladi (slug takrorlanmaydi). Ommaga (public) kategoriyalar daraxt (ierarxik) ko'rinishida beriladi.
+
+**Ishlar:**
+- admin CRUD (slug uniq)
+- public tree (ierarxik ro'yxat) || TEST: TC1 parent bilan yaratish->daraxt; TC2 GET /categories ierarxik; TC3 dublikat slug xato/user 403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-07
+Phase 1,C1.11 Product CRUD (boy),"**Maqsad:** Mahsulotlarni to'liq boshqarish (sotuvchi).
+
+Boy Product CRUD: slug, tavsif, narx, atributlar, status. `/products/my` — sotuvchi faqat o'z mahsulotlarini ko'radi (filtr bilan). Egalik tekshiriladi — boshqaning mahsulotini tahrirlab/o'chirib bo'lmaydi.
+
+**Ishlar:**
+- CRUD (slug avtomat, narx/nom validatsiya)
+- /products/my (filtr), ownership (403) || TEST: TC1 create->slug avtomat; TC2 /my faqat o'ziniki+filter; TC3 boshqa mahsulot PATCH/DELETE 403; TC4 manfiy narx/bo'sh nom 400.",Phase 1;Backend-Commerce;Blocker;L,Dilshodbek,2026-08-12
+Phase 1,C1.12 Product variant CRUD,"**Maqsad:** Mahsulot variantlarini (rang/o'lcham) boshqarish.
+
+Variant CRUD: sku, atributlar, narx, barcode. Variantsiz mahsulotga ham avtomat bitta ""default"" variant yaratiladi. SKU takrorlanmaydi.
+
+**Ishlar:**
+- variant CRUD (sku uniq)
+- variantsizga default variant avtomat || TEST: TC1 variantsiz->default variant avtomat; TC2 variant qo'shish->narx null=product; TC3 dublikat sku xato.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-14
+Phase 1,C1.13 file-service MinIO + media upload,"**Maqsad:** Rasm/media yuklash xizmatini yaratish (MinIO).
+
+file-service MinIO bucket va URL beradi. `POST /files/upload` — fayl validatsiya bilan (format/hajm) yuklanadi, mahsulotga bir nechta rasm (images jsonb) va cover biriktiriladi.
+
+**Ishlar:**
+- MinIO bucket + URL
+- /files/upload (validatsiya), images jsonb + cover || TEST: TC1 upload->URL ochiladi; TC2 10MB+/.exe rad; TC3 3 rasm->jsonb+cover.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-18
+Phase 1,C1.14 Warehouse + stock GET,"**Maqsad:** Omborlar va qoldiqni ko'rish (sotuvchi).
+
+Ombor CRUD, qoldiqni ko'rish (`GET /stock`), kam qolgan tovarlar (`/stock/low`). Sotuvchi faqat o'z do'koni ma'lumotini ko'radi.
+
+**Ishlar:**
+- warehouses CRUD (birinchi = default)
+- GET stock, /stock/low (threshold ostidagilar) || TEST: TC1 ombor yaratish->birinchi default; TC2 GET stock faqat o'z do'koni; TC3 /low threshold ostidagilar.",Phase 1;Backend-Commerce;High;M,Dilshodbek,2026-08-20
+Phase 1,C1.15 Inbound/adjust endpointlari,"**Maqsad:** Sotuvchi qo'lda tovar kirim qilishi va qoldiqni tuzatishi.
+
+`inbound` (kirim, +) va `adjust` (tuzatish, sabab bilan) endpointlari. Har amal `stock_movement` jurnaliga actor bilan yoziladi. Boshqaning ombori 403.
+
+**Ishlar:**
+- inbound + adjust (sabab) → movement jurnal
+- boshqa ombor 403 || TEST: TC1 inbound50->oh+50+movement; TC2 adjust-5 sabab+actor; TC3 boshqa ombor 403.",Phase 1;Backend-Commerce;Normal;S,Dilshodbek,2026-08-21
+Phase 1,C1.16 Seller orders + dashboard,"**Maqsad:** Sotuvchiga o'z buyurtmalari va statistikasini ko'rsatish.
+
+`/seller/orders` — sotuvchi buyurtmalari (Elchi statusi bilan). `/seller/dashboard` — jamlangan ko'rsatkichlar (sotuv, daromad va h.k.). Buyurtma bo'lmasa bo'sh/0 (xato emas).
+
+**Ishlar:**
+- /seller/orders (faqat o'ziniki)
+- /seller/dashboard (aggregate) || TEST: TC1 orders faqat o'ziniki; TC2 dashboard sotuv/daromad to'g'ri; TC3 buyurtmasiz->bo'sh,0(xato emas).",Phase 1;Backend-Commerce;Normal;M,Dilshodbek,2026-08-25
+Phase 1,C1.17 notification-service,"**Maqsad:** Bildirishnoma (xabar) xizmatini yaratish.
+
+notification-service: `notification` jadvali + in-app + adapter (email/telegram/sms). Muhim hodisalarda (ro'yxat, approve, buyurtma) xabar yoziladi va yuboriladi; adapter xatosida qayta urinadi.
+
+**Ishlar:**
+- notification entity + in-app + adapter (email/tg/sms)
+- eventlar → notification, retry || TEST: TC1 event->notification yoziladi(in-app); TC2 adapter chaqiriladi(mock); TC3 adapter xato->retry/queue.",Phase 1;Backend-Commerce;Normal;M,Dilshodbek,2026-08-27
+Phase 1,C1.18 Shop profil sahifasi (FE),"**Maqsad:** Do'kon profili sahifasi (frontend).
+
+Sotuvchi do'kon ma'lumotini ko'radi/tahrirlaydi, logo va banner yuklaydi, saqlaydi.
+
+**Ishlar:**
+- ko'rish/tahrir, logo/banner upload, save || TEST: TC1 joriy ma'lumot to'ldirilgan; TC2 save->o'zgargan; TC3 logo preview+saqlanadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-05
+Phase 1,C1.19 Products list sahifasi (FE),"**Maqsad:** Mahsulotlar ro'yxati sahifasi (frontend).
+
+Jadval: qidiruv, filtr, status, sahifalash. Tez amallar (o'chirish/tahrir), react-query cache.
+
+**Ishlar:**
+- jadval (search/filter/status/pagination)
+- tez amallar, delete → tasdiq || TEST: TC1 pagination ishlaydi; TC2 search filtr; TC3 delete->tasdiq->yo'qoladi.",Phase 1;Frontend;High;M,Bahodir,2026-08-07
+Phase 1,C1.20 Product create/edit forma (FE),"**Maqsad:** Mahsulot qo'shish/tahrirlash formasi (frontend).
+
+Boy forma (nom, tavsif, narx, kategoriya, atribut), rasm yuklash. Yangi mahsulot saqlanadi yoki mavjudi yangilanadi, majburiy maydonlar validatsiya qilinadi.
+
+**Ishlar:**
+- boy forma + rasm upload
+- create/update, validatsiya, kategoriya select || TEST: TC1 yangi saqlash->ro'yxatda; TC2 edit->o'zgaradi; TC3 majburiy bo'sh->validatsiya; TC4 kategoriya select.",Phase 1;Frontend;Blocker;L,Bahodir,2026-08-12
+Phase 1,C1.21 Variant management UI (FE),"**Maqsad:** Variantlarni boshqarish interfeysi (frontend).
+
+Variant qo'shish/tahrirlash/o'chirish jadvali; variantsiz holat uchun default.
+
+**Ishlar:**
+- variant qo'shish/tahrir/o'chirish jadvali
+- variantsizda default || TEST: TC1 variant qo'shish->saqlanadi; TC2 o'chirish->yo'qoladi; TC3 variantsizda default.",Phase 1;Frontend;High;M,Bahodir,2026-08-14
+Phase 1,C1.22 Media upload UI (FE),"**Maqsad:** Ko'p rasm yuklash interfeysi (frontend).
+
+Drag-and-drop bilan bir nechta rasm, tartibni o'zgartirish, cover (asosiy rasm) belgilash, yuklash progressi.
+
+**Ishlar:**
+- ko'p rasm drag-drop, tartib/cover, progress || TEST: TC1 bir nechta->preview; TC2 drag tartib saqlanadi; TC3 cover belgilanadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-18
+Phase 1,C1.23 Warehouses sahifasi (FE),"**Maqsad:** Omborlar sahifasi (frontend).
+
+Omborlar ro'yxati, yangi ombor qo'shish, default belgilash.
+
+**Ishlar:**
+- list/create, default (bitta default) || TEST: TC1 yaratish->ro'yxatda; TC2 default->bitta default.",Phase 1;Frontend;Normal;S,Bahodir,2026-08-19
+Phase 1,C1.24 Stock (qoldiq) sahifasi (FE),"**Maqsad:** Qoldiq (stock) sahifasi (frontend).
+
+Qoldiq jadvali, kirim/tuzatish modal oynasi, kam qolgan tovar ajratib ko'rsatiladi.
+
+**Ishlar:**
+- qoldiq jadval, inbound/adjust modal, low-stock highlight || TEST: TC1 jadval to'g'ri sonlar; TC2 inbound+10->yangilanadi; TC3 low-stock ajratilgan.",Phase 1;Frontend;High;M,Bahodir,2026-08-21
+Phase 1,C1.25 Orders sahifasi (FE),"**Maqsad:** Buyurtmalar sahifasi (frontend).
+
+Buyurtmalar ro'yxati + Elchi status timeline (yo'nalish tarixi), filtr.
+
+**Ishlar:**
+- list + Elchi status timeline, filter || TEST: TC1 ro'yxat+status rang; TC2 filter natija; TC3 timeline ochiladi.",Phase 1;Frontend;Normal;M,Bahodir,2026-08-25
+Phase 1,C1.26 Dashboard sahifasi (FE),"**Maqsad:** Statistika (dashboard) sahifasi (frontend).
+
+Ko'rsatkich kartalari, grafik, top mahsulotlar. Ma'lumot bo'lmasa ham chiroyli ko'rinadi.
+
+**Ishlar:**
+- kartalar, chart, top mahsulot || TEST: TC1 kartalar backend'ga mos; TC2 chart render(bo'sh ham).",Phase 1;Frontend;Normal;M,Bahodir,2026-08-27
+Phase 1,C1.27 Admin shops moderatsiya UI (FE),"**Maqsad:** Admin do'kon moderatsiyasi interfeysi (frontend).
+
+Kutilayotgan (pending) do'konlar ro'yxati, batafsil ko'rish + approve/reject, status o'zgarishi.
+
+**Ishlar:**
+- pending list, detail + approve/reject, status || TEST: TC1 pending ro'yxat; TC2 approve->active,ro'yxatdan chiqadi; TC3 reject sabab bilan.",Phase 1;Frontend;High;M,Bahodir,2026-08-31
+Phase 2,C2.1 Elchi POST /partner/shipments -> order.create,"**Maqsad:** Marketplace buyurtmasini Elchi'ga posilka (shipment) sifatida yuborish.
+
+Partner API'da `POST /partner/shipments` yoziladi — u Elchi'da `order.create` qiladi. Online to'lovda `cod_amount=0` (oldindan to'langan, kuryer pul yig'maydi), COD'da `cod_amount=subtotal`. Idempotent.
+
+**Ishlar:**
+- shipment → order.create, cod_amount mantiqi
+- idempotent (2x → yangi yo'q) || TEST: TC1 shipment->order+ref+shipment_id; TC2 cod=0->to_be_paid=0; TC3 cod=50000->to_be_paid=50000; TC4 idempotent 2x->yangi yo'q.",Phase 2;Elchi-Integration;Blocker;L,Lead,2026-08-21
+Phase 2,C2.2 Elchi get/cancel shipment,"**Maqsad:** Posilkani ko'rish va bekor qilish (Elchi tomon).
+
+`GET /:id` (status/tracking/cod), `POST /cancel`. Yetkazib bo'lingan posilkani bekor qilib bo'lmaydi (409).
+
+**Ishlar:**
+- GET shipment, POST cancel
+- yetkazilganni cancel → 409 || TEST: TC1 GET status/tracking/cod; TC2 cancel->cancelled; TC3 yetkazilganni cancel->409.",Phase 2;Elchi-Integration;Normal;S,Lead,2026-08-24
+Phase 2,C2.3 Elchi outbound webhook,"**Maqsad:** Elchi statusi o'zgarganda marketplace'ga xabar yuborish (outbound webhook).
+
+Status o'zgarishi outbox orqali marketplace webhook manziliga HMAC imzo bilan POST qilinadi. Xatoda backoff bilan qayta urinadi, muvaffaqiyatda takrorlanmaydi (dedup). ""sold"" da yig'ilgan pul (cod_collected) uzatiladi.
+
+**Ishlar:**
+- status event → outbox → HMAC POST, backoff retry
+- dedup, sold → cod_collected || TEST: TC1 status->POST+X-Elchi-Signature; TC2 500->backoff retry; TC3 2xx->dedup(qayta yo'q); TC4 sold->cod_collected.",Phase 2;Elchi-Integration;Blocker;L,Lead,2026-08-27
+Phase 2,C2.4 Marketplace webhook receiver,"**Maqsad:** Elchi'dan kelgan status xabarini marketplace qabul qilib, buyurtmani yangilashi.
+
+Webhook receiver HMAC imzoni tekshiradi, `sales_order_seller` statusini yangilaydi. ""returned"" bo'lsa tovar skladga qaytadi (inbound), ""delivered"" + online bo'lsa payout ishga tushadi. Bir xabar 2 marta kelsa bir marta ishlaydi (idempotent).
+
+**Ishlar:**
+- HMAC verify → status mirror
+- returned → inbound, delivered+online → payout, idempotent || TEST: TC1 to'g'ri imzo->status yangilanadi; TC2 noto'g'ri imzo 401; TC3 returned->inventory.inbound; TC4 2x event->1 marta(idempotent).",Phase 2;Elchi-Integration;Blocker;M,Lead,2026-08-31
+Phase 2,C2.5 Elchi OrderItem.product_id yumshatish,"**Maqsad:** Elchi buyurtmasidagi tovar Elchi katalogiga bog'liq bo'lmasligi.
+
+Elchi shipment item'i faqat nom/miqdorni oladi (`product_id` majburiy emas). Bu Elchi'ning ichki oqimini buzmasligi kerak (regressiya yashil).
+
+**Ishlar:**
+- external item (product_id null) → order yaratiladi
+- internal oqim buzilmaydi || TEST: TC1 external item(product_id null)->order yaratiladi; TC2 internal oqim regressiya yashil.",Phase 2;Elchi-Integration;Normal;S,Lead,2026-09-01
+Phase 2,C2.6 Catalog public endpoints,"**Maqsad:** Xaridorlar uchun ochiq katalog endpointlari.
+
+Ommaviy ro'yxat (filtr/saralash/sahifalash), mahsulot batafsil, do'kon sahifasi. Faqat aktiv narsalar ko'rinadi (draft/suspended yashirin).
+
+**Ishlar:**
+- list (filter/sort/pagination), product detail, shop page
+- faqat active || TEST: TC1 faqat active(draft ko'rinmaydi); TC2 filter/sort; TC3 suspended shop yashirin.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-08-31
+Phase 2,C2.7 search-service,"**Maqsad:** Qidiruv xizmatini yaratish.
+
+search-service: indeks, qidiruv + facet (filtr), yangi/o'zgargan mahsulot event bilan qayta indekslanadi.
+
+**Ishlar:**
+- index, search + facet
+- reindex on event || TEST: TC1 qidiruv relevant; TC2 facet filtr toraytiradi; TC3 yangi mahsulot->indeksga.",Phase 2;Backend-Commerce;High;L,Dilshodbek,2026-09-03
+Phase 2,C2.8 cart-service,"**Maqsad:** Savat (cart) xizmatini yaratish.
+
+Savat + item (qo'shish/o'zgartirish/o'chirish), narx snapshot (o'sha paytdagi narx saqlanadi). Anonim va login qilgan xaridor uchun; login qilganda anon savat birlashtiriladi (merge).
+
+**Ishlar:**
+- cart + item, narx snapshot
+- anon + logged (login'da merge) || TEST: TC1 qo'shish->snapshot; TC2 qty/o'chirish->yangilanadi; TC3 anon savat login'da merge.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-09-07
+Phase 2,C2.9 checkout.create (split),"**Maqsad:** Buyurtma berish (checkout) va ko'p sotuvchini ajratish.
+
+Savat `shop_id` bo'yicha guruhlanadi → har sotuvchiga alohida sub-buyurtma. Tovar 30 daqiqaga band qilinadi (reserve). Qoldiq yetmasa buyurtma yaratilmaydi (400). Online → `pending_payment`, COD → `draft`.
+
+**Ishlar:**
+- shop_id guruh → N sub-order
+- reserve (ttl=30daq), qoldiq yetmasa 400 || TEST: TC1 2 do'kon->2 sub-order; TC2 checkout->reserve(band); TC3 qoldiq yetmasa->400 order yo'q; TC4 online=pending_payment/COD=draft.",Phase 2;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-10
+Phase 2,C2.10 confirmSalesOrder (COD),"**Maqsad:** COD buyurtmani tasdiqlab, har sotuvchi uchun Elchi posilkasini ochish.
+
+Har sub-buyurtma uchun shipment yaratiladi (`cod=subtotal`), tovar commit qilinadi (qoldiq kamayadi), buyurtma `confirmed` bo'ladi, xabar yuboriladi. Shipment xato bo'lsa hammasi bekor (rollback).
+
+**Ishlar:**
+- har seller → shipment, inventory.commit
+- confirmed + notify, xatoda rollback || TEST: TC1 confirm->har sub-order shipment; TC2 commit(qoldiq kamayadi)+confirmed; TC3 elchi_shipment_id+notify; TC4 shipment xato->rollback.",Phase 2;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-15
+Phase 2,C2.11 Sales order status mirror + returns,"**Maqsad:** Buyurtma statusini Elchi bilan sinxron qilish va qaytishlarni boshqarish.
+
+Elchi webhook → status yangilanadi; ""returned"" → tovar skladga qaytadi; sotuvchi buyurtmalarida haqiqiy status ko'rinadi.
+
+**Ishlar:**
+- webhook → status mirror
+- returned → inbound, seller orders real status || TEST: TC1 on-road webhook->status; TC2 returned->qoldiq tiklanadi; TC3 seller orders real status.",Phase 2;Backend-Commerce;High;M,Dilshodbek,2026-09-17
+Phase 2,C2.12 storefront Next.js setup,"**Maqsad:** Xaridor sayti (storefront) loyihasini boshlash (Next.js).
+
+SSR (serverda render — SEO uchun), layout/SEO/sitemap, API client sozlanadi.
+
+**Ishlar:**
+- SSR, layout/SEO/sitemap, API client || TEST: TC1 SSR HTML(view-source); TC2 title/meta bor; TC3 /sitemap.xml ochiladi.",Phase 2;Frontend;High;M,Bahodir,2026-09-02
+Phase 2,C2.13 Home + catalog listing (FE),"**Maqsad:** Bosh sahifa va katalog ro'yxati (frontend).
+
+Bosh sahifa + kategoriyalar, mahsulot listing (filtr/saralash/sahifalash SSR bilan), qidiruv.
+
+**Ishlar:**
+- bosh + kategoriya, listing (SSR, URL query), qidiruv || TEST: TC1 bosh sahifa yuklanadi; TC2 filter URL query+SSR; TC3 qidiruv natija.",Phase 2;Frontend;Blocker;L,Bahodir,2026-09-07
+Phase 2,C2.14 Product detail sahifasi (FE),"**Maqsad:** Mahsulot batafsil sahifasi (frontend).
+
+Rasm galereyasi, variant tanlash (narx/rasm yangilanadi), savatga qo'shish, SEO meta.
+
+**Ishlar:**
+- galereya, variant, savatga qo'shish, og/schema meta || TEST: TC1 galereya ochiladi; TC2 variant->narx/rasm yangilanadi; TC3 savatga->son oshadi; TC4 og/schema meta.",Phase 2;Frontend;High;M,Bahodir,2026-09-09
+Phase 2,C2.15 Shop storefront sahifasi (FE),"**Maqsad:** Do'kon sahifasi (frontend).
+
+Do'kon header'i, uning mahsulotlari, `/shop/[slug]` route. Noto'g'ri slug → 404.
+
+**Ishlar:**
+- shop header + mahsulotlar, slug route (404) || TEST: TC1 /shop/[slug]->sahifa; TC2 noto'g'ri slug 404.",Phase 2;Frontend;Normal;M,Bahodir,2026-09-11
+Phase 2,C2.16 Cart sahifasi (FE),"**Maqsad:** Savat sahifasi (frontend).
+
+Ko'p sotuvchi bo'yicha guruhlangan savat, miqdor o'zgartirish/o'chirish, jami hisob.
+
+**Ishlar:**
+- sotuvchi bo'yicha guruh, qty/o'chirish, jami || TEST: TC1 2 do'kon->guruhlangan; TC2 qty->jami qayta hisob; TC3 o'chirish->chiqadi.",Phase 2;Frontend;High;M,Bahodir,2026-09-15
+Phase 2,C2.17 Checkout sahifasi (FE),"**Maqsad:** Buyurtma rasmiylashtirish sahifasi (frontend).
+
+Manzil (region/tuman), to'lov usuli, har sotuvchi uchun alohida posilka preview, buyurtma berish.
+
+**Ishlar:**
+- manzil + to'lov usuli
+- per-seller posilka preview, buyurtma → tasdiq || TEST: TC1 manzil to'ldirilmasa bloklanadi; TC2 2 do'kon->2 posilka preview; TC3 to'lov usuli tanlash; TC4 buyurtma->tasdiq sahifa.",Phase 2;Frontend;Blocker;L,Bahodir,2026-09-18
+Phase 2,C2.18 Order confirmation + tracking (FE),"**Maqsad:** Buyurtma tasdiqi va kuzatuv sahifasi (frontend).
+
+Tasdiq (raqam + posilkalar), har posilka statusi/tracking.
+
+**Ishlar:**
+- tasdiq, posilka status/tracking || TEST: TC1 tasdiq(raqam+posilka); TC2 har posilka status/tracking.",Phase 2;Frontend;Normal;M,Bahodir,2026-09-22
+Phase 3,C3.1 payment-service skeleton,"**Maqsad:** To'lov xizmatining poydevorini qurish.
+
+payment-service: `payment`/`transaction`/`provider_config` (AES). `payment.create`. Tashqi URL SSRF-guard bilan himoyalanadi.
+
+**Ishlar:**
+- payment/txn/provider_config (AES)
+- payment.create, SSRF-guard || TEST: TC1 payment.create->created; TC2 secret AES; TC3 ichki IP->SSRF bloklaydi.",Phase 3;Backend-Commerce;High;M,Dilshodbek,2026-09-21
+Phase 3,C3.2 Payme JSON-RPC callback,"**Maqsad:** Payme to'lovini ulash (JSON-RPC).
+
+Payme Merchant API 6 metodi (CheckPerform/Create/Perform/Cancel/CheckTransaction/GetStatement), Basic auth, state → transaction, sandbox'da sinov.
+
+**Ishlar:**
+- 6 metod, Basic auth, state → txn
+- sandbox test || TEST: TC1 sandbox CheckPerform->Create->Perform->paid; TC2 noto'g'ri summa->-31001; TC3 noto'g'ri auth rad; TC4 Cancel->cancelled; TC5 2x Perform idempotent.",Phase 3;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-24
+Phase 3,C3.3 Click Prepare/Complete,"**Maqsad:** Click to'lovini ulash (Prepare/Complete).
+
+Click Prepare + Complete, `sign_string` (md5) tekshiruvi, sandbox'da sinov.
+
+**Ishlar:**
+- prepare + complete, md5 sign
+- sandbox test || TEST: TC1 sandbox Prepare->Complete->paid; TC2 noto'g'ri sign rad; TC3 summa mos emas rad.",Phase 3;Backend-Commerce;High;M,Lead,2026-09-23
+Phase 3,C3.4 payment.paid -> confirmSalesOrder (online),"**Maqsad:** To'lov muvaffaqiyatli bo'lganda buyurtmani avtomat tasdiqlash (online).
+
+`payment.paid` eventida `confirmSalesOrder()` chaqiriladi: shipment (cod=0, prepaid) ochiladi, tovar commit qilinadi. To'lov muvaffaqiyatsiz bo'lsa confirm bo'lmaydi, TTL tovarni bo'shatadi.
+
+**Ishlar:**
+- paid → confirm (cod=0 prepaid) + commit
+- fail → confirm yo'q, TTL bo'shatadi || TEST: TC1 paid->confirmed+cod=0 prepaid; TC2 to'lov fail->confirm yo'q,TTL bo'shatadi; TC3 commit qoldiq kamayadi.",Phase 3;Backend-Commerce;Blocker;S,Lead,2026-09-25
+Phase 3,C3.5 finance-service (escrow->payout),"**Maqsad:** Sotuvchi puli hisob-kitobi (escrow → payout).
+
+finance-service: ledger/payout/commission. ""delivered"" bo'lganda ledger yoziladi va payout tayyorlanadi; komissiya (foiz/fiks) hisoblanadi. Payout ikki marta bajarilmaydi (idempotent); refund teskari yozuv beradi.
+
+**Ishlar:**
+- ledger/payout/commission
+- delivered → ledger → payout, percent/fixed || TEST: TC1 delivered->sale/commission yozuv,balance; TC2 percent10%+fixed to'g'ri; TC3 payout 2x imkonsiz(idempotent); TC4 refund->teskari yozuv.",Phase 3;Backend-Commerce;Blocker;L,Dilshodbek,2026-09-29
+Phase 3,C3.6 Refund flow,"**Maqsad:** Pulni qaytarish (refund) oqimi.
+
+Bekor yoki ""returned"" bo'lganda refund qilinadi (Payme Cancel), tovar skladga qaytadi (inbound), ledger'da refund yozuvi.
+
+**Ishlar:**
+- Cancel/returned → refund
+- inventory.inbound, ledger refund || TEST: TC1 returned->Payme Cancel->refunded; TC2 refund->qoldiq inbound; TC3 ledger refund,balans kamayadi.",Phase 3;Backend-Commerce;High;M,Lead,2026-09-29
+Phase 3,C3.7 Checkout payment integration (FE),"**Maqsad:** To'lovni checkout'ga ulash (frontend).
+
+Payme/Click'ga yo'naltirish (redirect), qaytish (return) callback, holatni ko'rsatish.
+
+**Ishlar:**
+- Payme/Click redirect, return callback, holat || TEST: TC1 to'lash->Payme/Click redirect; TC2 qaytish->holat sahifa.",Phase 3;Frontend;High;M,Bahodir,2026-09-24
+Phase 3,C3.8 Payment status sahifasi (FE),"**Maqsad:** To'lov holati sahifasi (frontend).
+
+Muvaffaqiyat/xato/kutish holatlari, buyurtmaga qaytish havolasi.
+
+**Ishlar:**
+- success/fail/pending, buyurtmaga qaytish || TEST: TC1 muvaffaqiyat->success+havola; TC2 bekor->fail+qayta urinish.",Phase 3;Frontend;Normal;S,Bahodir,2026-09-25
+Phase 3,C3.9 Seller finance sahifasi (FE),"**Maqsad:** Sotuvchi moliyasi sahifasi (frontend).
+
+Ledger/balans, payout tarixi, komissiya ko'rinishi.
+
+**Ishlar:**
+- ledger/balans, payout tarixi, komissiya || TEST: TC1 ledger+balans backend'ga mos; TC2 payout tarixi+komissiya to'g'ri.",Phase 3;Frontend;Normal;M,Bahodir,2026-09-29
+Phase 4,C4.1 Review / rating,"**Maqsad:** Sharh va reyting tizimi.
+
+Faqat yetkazib olingan (delivered) xaridor sharh qoldiradi; sharh do'kon/mahsulot reytingini qayta hisoblaydi; ikki marta sharh mumkin emas. Frontend ham qo'shiladi.
+
+**Ishlar:**
+- review (delivered) + rating aggregate + FE || TEST: TC1 faqat delivered egasi sharh; TC2 sharh->rating qayta hisob; TC3 2x sharh rad.",Phase 4;Backend-Commerce;Normal;M,Dilshodbek,2026-10-01
+Phase 4,C4.2 Returns / refund UI,"**Maqsad:** Qaytarish/refund interfeysi (frontend).
+
+Xaridor qaytarish so'rovi, sotuvchi/admin ko'radi, status oqimi.
+
+**Ishlar:**
+- buyer so'rov, seller/admin ko'rish, status oqimi || TEST: TC1 so'rov->seller/admin ko'radi; TC2 tasdiq->refund oqimi.",Phase 4;Frontend;Normal;M,Bahodir,2026-10-01
+Phase 4,C4.3 COD komissiya reconciliation,"**Maqsad:** COD komissiyasini hisob-kitob qilish (reconciliation).
+
+Elchi ""settled"" bo'lganda COD ledger yoziladi, komissiya online payout'dan netting (ushlab qolish) yoki invoys bilan undiriladi, recon hisobotda farq 0 bo'lishi kerak.
+
+**Ishlar:**
+- settled → COD ledger
+- netting/invoys, recon (farq=0) || TEST: TC1 settled->COD ledger(komissiya-); TC2 netting online payout'dan ushlanadi; TC3 recon farq=0.",Phase 4;Backend-Commerce;High;L,Dilshodbek,2026-10-06
+Phase 4,C4.4 Analytics dashboard (admin FE),"**Maqsad:** Admin analitika paneli (frontend).
+
+GMV (umumiy aylanma), buyurtmalar, top mahsulotlar, grafiklar, sana filtri.
+
+**Ishlar:**
+- GMV/orders/top + grafiklar + sana filtri || TEST: TC1 GMV backend'ga mos; TC2 top tartib to'g'ri; TC3 sana filtri o'zgartiradi.",Phase 4;Frontend;Normal;M,Bahodir,2026-10-05
+Phase 4,C4.5 Admin moderatsiya kengaytmasi,"**Maqsad:** Admin moderatsiyani kengaytirish.
+
+Do'konni to'xtatish (suspend)/qayta yoqish, mahsulot moderatsiyasi, audit log. Suspend bo'lganda mahsulotlar storefront'dan yo'qoladi.
+
+**Ishlar:**
+- suspend/reactivate, product moderatsiya, audit log || TEST: TC1 suspend->mahsulotlar storefront'da yo'qoladi; TC2 reactivate->qaytadi; TC3 audit log yoziladi.",Phase 4;Backend-Commerce;Normal;M,Dilshodbek,2026-10-08
+Phase 4,C4.6 E2E smoke + deploy + monitoring,"**Maqsad:** To'liq oqimni tekshirish va tizimni ishlab chiqarishga (prod) chiqarish.
+
+E2E smoke test (ro'yxatdan to'lov/payout gacha uzilishsiz), prod deploy + domen + TLS (HTTPS), monitoring/alert, DB backup+restore.
+
+**Ishlar:**
+- E2E smoke, prod deploy + TLS
+- monitoring/alert, backup+restore || TEST: TC1 E2E register->...->payout uzilishsiz; TC2 prod HTTPS(TLS); TC3 servis yiqilsa alert+log; TC4 DB backup+restore.",Phase 4;DevOps;Blocker;M,Lead,2026-10-12
