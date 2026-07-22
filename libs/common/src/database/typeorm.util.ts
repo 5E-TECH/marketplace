@@ -9,7 +9,7 @@ import { Client } from 'pg';
 export function typeOrmOptions(
   config: ConfigService,
   schema: string,
-  entities: Function[],
+  entities: TypeOrmModuleOptions['entities'],
 ): TypeOrmModuleOptions {
   return {
     type: 'postgres',

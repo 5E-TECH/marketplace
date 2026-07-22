@@ -13,7 +13,7 @@ describe('numericTransformer (TC4)', () => {
     expect(numericTransformer.from(undefined)).toBeUndefined();
   });
 
-  it('qo\'shishda drift bermaydi', () => {
+  it("qo'shishda drift bermaydi", () => {
     const a = numericTransformer.from('10.00') as number;
     const b = numericTransformer.from('5.05') as number;
     expect(a + b).toBe(15.05);

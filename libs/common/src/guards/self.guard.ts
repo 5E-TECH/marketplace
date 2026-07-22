@@ -23,7 +23,9 @@ export class SelfGuard implements CanActivate {
 
     const targetId = req.params?.userId ?? req.params?.id;
     if (targetId && String(targetId) !== String(user.sub)) {
-      throw new ForbiddenException('Boshqa foydalanuvchi resursiga ruxsat berilmagan');
+      throw new ForbiddenException(
+        'Boshqa foydalanuvchi resursiga ruxsat berilmagan',
+      );
     }
     return true;
   }

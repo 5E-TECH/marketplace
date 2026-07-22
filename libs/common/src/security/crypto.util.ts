@@ -26,7 +26,11 @@ export function encryptSecret(plain: string, secret: string): string {
 
 export function decryptSecret(payload: string, secret: string): string {
   const [ivHex, tagHex, dataHex] = payload.split(':');
-  const decipher = createDecipheriv(ALGO, keyFrom(secret), Buffer.from(ivHex, 'hex'));
+  const decipher = createDecipheriv(
+    ALGO,
+    keyFrom(secret),
+    Buffer.from(ivHex, 'hex'),
+  );
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
   const dec = Buffer.concat([
     decipher.update(Buffer.from(dataHex, 'hex')),

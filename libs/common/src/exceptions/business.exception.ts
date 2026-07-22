@@ -23,7 +23,7 @@ export class BusinessException extends HttpException {
     );
   }
 
-  static invalidState(message = "Holat bu amalga ruxsat bermaydi") {
+  static invalidState(message = 'Holat bu amalga ruxsat bermaydi') {
     return new BusinessException(
       message,
       ErrorCode.INVALID_STATE,
@@ -32,6 +32,10 @@ export class BusinessException extends HttpException {
   }
 
   static conflict(message = 'Bunday yozuv allaqachon mavjud') {
-    return new BusinessException(message, ErrorCode.CONFLICT, HttpStatus.CONFLICT);
+    return new BusinessException(
+      message,
+      ErrorCode.CONFLICT,
+      HttpStatus.CONFLICT,
+    );
   }
 }

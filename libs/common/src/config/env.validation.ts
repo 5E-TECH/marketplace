@@ -20,7 +20,9 @@ export const envValidationSchema = Joi.object({
   DB_NAME: Joi.string().required(),
 
   // RabbitMQ
-  RABBITMQ_URL: Joi.string().uri({ scheme: ['amqp', 'amqps'] }).required(),
+  RABBITMQ_URL: Joi.string()
+    .uri({ scheme: ['amqp', 'amqps'] })
+    .required(),
 
   // MinIO
   MINIO_ENDPOINT: Joi.string().required(),

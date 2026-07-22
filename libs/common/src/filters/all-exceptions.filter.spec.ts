@@ -22,13 +22,19 @@ describe('AllExceptionsFilter (TC2)', () => {
     new AllExceptionsFilter().catch(new NotFoundException('topilmadi'), host);
     expect(status).toHaveBeenCalledWith(404);
     expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: 404, errorCode: ErrorCode.NOT_FOUND }),
+      expect.objectContaining({
+        statusCode: 404,
+        errorCode: ErrorCode.NOT_FOUND,
+      }),
     );
   });
 
   it('BusinessException custom errorCode ni saqlaydi', () => {
     const { host, status, json } = makeHost();
-    new AllExceptionsFilter().catch(BusinessException.insufficientStock(), host);
+    new AllExceptionsFilter().catch(
+      BusinessException.insufficientStock(),
+      host,
+    );
     expect(status).toHaveBeenCalledWith(422);
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -43,7 +49,10 @@ describe('AllExceptionsFilter (TC2)', () => {
     new AllExceptionsFilter().catch(new Error('boom'), host);
     expect(status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: 500, errorCode: ErrorCode.INTERNAL_ERROR }),
+      expect.objectContaining({
+        statusCode: 500,
+        errorCode: ErrorCode.INTERNAL_ERROR,
+      }),
     );
   });
 });

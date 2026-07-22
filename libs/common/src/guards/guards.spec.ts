@@ -19,19 +19,19 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
       getClass: () => ({}),
     }) as any;
 
-  it('token yo\'q -> UnauthorizedException (401)', () => {
+  it("token yo'q -> UnauthorizedException (401)", () => {
     const guard = new JwtAuthGuard(jwt, reflector);
     expect(() => guard.canActivate(ctx({}))).toThrow(UnauthorizedException);
   });
 
   it('yaroqsiz token -> 401', () => {
     const guard = new JwtAuthGuard(jwt, reflector);
-    expect(() => guard.canActivate(ctx({ authorization: 'Bearer bad' }))).toThrow(
-      UnauthorizedException,
-    );
+    expect(() =>
+      guard.canActivate(ctx({ authorization: 'Bearer bad' })),
+    ).toThrow(UnauthorizedException);
   });
 
-  it('to\'g\'ri token -> true va req.user to\'ladi', () => {
+  it("to'g'ri token -> true va req.user to'ladi", () => {
     const req: any = { headers: { authorization: 'Bearer good' } };
     const context = {
       switchToHttp: () => ({ getRequest: () => req }),
@@ -52,19 +52,21 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
 describe('RolesGuard (TC3 — 403)', () => {
   const ctx = (role?: Role) =>
     ({
-      switchToHttp: () => ({ getRequest: () => ({ user: role ? { role } : undefined }) }),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: role ? { role } : undefined }),
+      }),
       getHandler: () => ({}),
       getClass: () => ({}),
     }) as any;
 
-  it('noto\'g\'ri rol -> ForbiddenException (403)', () => {
+  it("noto'g'ri rol -> ForbiddenException (403)", () => {
     const reflector = { getAllAndOverride: () => [Role.ADMIN] } as any;
-    expect(() => new RolesGuard(reflector).canActivate(ctx(Role.SELLER))).toThrow(
-      ForbiddenException,
-    );
+    expect(() =>
+      new RolesGuard(reflector).canActivate(ctx(Role.SELLER)),
+    ).toThrow(ForbiddenException);
   });
 
-  it('to\'g\'ri rol -> true', () => {
+  it("to'g'ri rol -> true", () => {
     const reflector = { getAllAndOverride: () => [Role.ADMIN] } as any;
     expect(new RolesGuard(reflector).canActivate(ctx(Role.ADMIN))).toBe(true);
   });

@@ -7,7 +7,7 @@ describe('TransformInterceptor (TC1)', () => {
     ({ switchToHttp: () => ({ getResponse: () => ({ statusCode }) }) }) as any;
   const handler = (val: unknown) => ({ handle: () => of(val) }) as any;
 
-  it('oddiy qiymatni qobiqqa o\'raydi', async () => {
+  it("oddiy qiymatni qobiqqa o'raydi", async () => {
     const res = await lastValueFrom(
       new TransformInterceptor().intercept(ctx(200), handler({ id: '1' })),
     );
@@ -28,6 +28,10 @@ describe('TransformInterceptor (TC1)', () => {
         handler({ message: 'Yaratildi', data: { id: '9' } }),
       ),
     );
-    expect(res).toEqual({ statusCode: 200, message: 'Yaratildi', data: { id: '9' } });
+    expect(res).toEqual({
+      statusCode: 200,
+      message: 'Yaratildi',
+      data: { id: '9' },
+    });
   });
 });

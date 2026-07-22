@@ -5,7 +5,9 @@ describe('IdempotencyService (TC5)', () => {
   it('bir xil kalit bilan takror -> fn va save faqat 1 marta', async () => {
     const store = new Map<string, any>();
     const repo = {
-      findOne: jest.fn(async ({ where: { key } }: any) => store.get(key) ?? null),
+      findOne: jest.fn(
+        async ({ where: { key } }: any) => store.get(key) ?? null,
+      ),
       create: (o: any) => o,
       save: jest.fn(async (r: any) => {
         store.set(r.key, r);
@@ -27,7 +29,9 @@ describe('IdempotencyService (TC5)', () => {
   it('turli kalit -> alohida bajariladi', async () => {
     const store = new Map<string, any>();
     const repo = {
-      findOne: jest.fn(async ({ where: { key } }: any) => store.get(key) ?? null),
+      findOne: jest.fn(
+        async ({ where: { key } }: any) => store.get(key) ?? null,
+      ),
       create: (o: any) => o,
       save: jest.fn(async (r: any) => {
         store.set(r.key, r);

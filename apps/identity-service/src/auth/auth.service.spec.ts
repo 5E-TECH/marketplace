@@ -11,11 +11,13 @@ describe('AuthService (C0.4)', () => {
   const jwt = new JwtService({ secret: 'test-access-secret' });
   const config = {
     get: (key: string, def?: unknown) =>
-      (({
-        JWT_EXPIRES_IN: '1h',
-        JWT_REFRESH_SECRET: 'test-refresh-secret',
-        JWT_REFRESH_EXPIRES_IN: '7d',
-      }) as Record<string, unknown>)[key] ?? def,
+      (
+        ({
+          JWT_EXPIRES_IN: '1h',
+          JWT_REFRESH_SECRET: 'test-refresh-secret',
+          JWT_REFRESH_EXPIRES_IN: '7d',
+        }) as Record<string, unknown>
+      )[key] ?? def,
   } as any;
 
   beforeEach(() => {
@@ -25,14 +27,19 @@ describe('AuthService (C0.4)', () => {
       return u;
     });
     const users = {
-      findOne: jest.fn(async ({ where }: any) =>
-        store.find(
-          (u) =>
-            (where.phone && u.phone === where.phone) ||
-            (where.id && u.id === where.id),
-        ) ?? null,
+      findOne: jest.fn(
+        async ({ where }: any) =>
+          store.find(
+            (u) =>
+              (where.phone && u.phone === where.phone) ||
+              (where.id && u.id === where.id),
+          ) ?? null,
       ),
-      create: (o: any) => ({ id: String(store.length + 1), isDeleted: false, ...o }),
+      create: (o: any) => ({
+        id: String(store.length + 1),
+        isDeleted: false,
+        ...o,
+      }),
       save: saveSpy,
     };
     service = new AuthService(users as any, jwt, config);
@@ -65,7 +72,7 @@ describe('AuthService (C0.4)', () => {
         phone: '+998901112233',
         password: 'Other123',
       });
-      throw new Error('kutilgan xato bo\'lmadi');
+      throw new Error("kutilgan xato bo'lmadi");
     } catch (e: any) {
       expect(e.getStatus()).toBe(409);
     }
@@ -88,7 +95,7 @@ describe('AuthService (C0.4)', () => {
     expect(res.refreshToken).toBeDefined();
   });
 
-  it('TC3: noto\'g\'ri parol -> 401', async () => {
+  it("TC3: noto'g'ri parol -> 401", async () => {
     await service.register({
       name: 'A',
       phone: '+998901112233',
@@ -99,7 +106,7 @@ describe('AuthService (C0.4)', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('TC3b: mavjud bo\'lmagan telefon -> 401 (bir xil xabar)', async () => {
+  it("TC3b: mavjud bo'lmagan telefon -> 401 (bir xil xabar)", async () => {
     await expect(
       service.login({ phone: '+998900000000', password: 'x' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);

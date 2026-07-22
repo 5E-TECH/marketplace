@@ -13,9 +13,10 @@ import { ApiResponse } from '../interfaces/api-response.interface';
  * API_CONTRACT.md §1.3. Agar handler allaqachon {message,data} qaytarsa — hurmat qilinadi.
  */
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,

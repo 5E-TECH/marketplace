@@ -24,7 +24,9 @@ export class IdempotencyService {
 
     const result = await fn();
     try {
-      await this.repo.save(this.repo.create({ key, response: result as unknown }));
+      await this.repo.save(
+        this.repo.create({ key, response: result as unknown }),
+      );
     } catch (e) {
       if (e instanceof QueryFailedError) {
         // parallel so'rov allaqachon yozgan — o'sha natijani qaytaramiz

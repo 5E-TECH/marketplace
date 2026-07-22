@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node o'rnatish
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Bog'liqliklar (npm ci)
+        run: npm ci
+        env:
+          HUSKY: 0 # CI'da git hook o'rnatish shart emas
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Format tekshiruvi (Prettier)
+        run: npm run format:check
+
+      - name: Build (barcha app)
+        run: npm run build:all
+
+      - name: Testlar (Jest)
+        run: npm test
