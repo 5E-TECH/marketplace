@@ -1,0 +1,76 @@
+# ============================================================================
+# Elchi Marketplace — lokal infratuzilma (dev).
+# Ishga tushirish:  docker compose up -d   (yoki: npm run infra:up)
+# Qiymatlar .env dan olinadi (docker compose avtomat o'qiydi).
+#   Postgres  → localhost:5432
+#   RabbitMQ  → localhost:5672  (UI: localhost:15672, guest/guest)
+#   MinIO     → localhost:9000  (Console: localhost:9001)
+#   Adminer   → localhost:8080  (Postgres'ni ko'rish)
+# ============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mkt_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: mkt_rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: mkt_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  adminer:
+    image: adminer:latest
+    container_name: mkt_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  rabbitmqdata:
+  miniodata:

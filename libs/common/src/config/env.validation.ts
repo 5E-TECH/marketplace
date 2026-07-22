@@ -1,0 +1,40 @@
+import * as Joi from 'joi';
+
+/**
+ * Muhit o'zgaruvchilari sxemasi. Dastur ishga tushishida tekshiriladi —
+ * majburiy (`required`) qiymat yo'q yoki noto'g'ri bo'lsa, dastur ishga tushmaydi
+ * va aniq xato beradi (`abortEarly:false` — barcha xatolar birdan ko'rsatiladi).
+ */
+export const envValidationSchema = Joi.object({
+  // Umumiy
+  NODE_ENV: Joi.string()
+    .valid('development', 'production', 'test')
+    .default('development'),
+  API_GATEWAY_PORT: Joi.number().port().default(3000),
+
+  // PostgreSQL
+  DB_HOST: Joi.string().required(),
+  DB_PORT: Joi.number().port().default(5432),
+  DB_USERNAME: Joi.string().required(),
+  DB_PASSWORD: Joi.string().required(),
+  DB_NAME: Joi.string().required(),
+
+  // RabbitMQ
+  RABBITMQ_URL: Joi.string().uri({ scheme: ['amqp', 'amqps'] }).required(),
+
+  // MinIO
+  MINIO_ENDPOINT: Joi.string().required(),
+  MINIO_PORT: Joi.number().port().default(9000),
+  MINIO_ACCESS_KEY: Joi.string().required(),
+  MINIO_SECRET_KEY: Joi.string().required(),
+  MINIO_BUCKET: Joi.string().default('marketplace-media'),
+
+  // Auth (JWT)
+  JWT_SECRET: Joi.string().min(16).required(),
+  JWT_EXPIRES_IN: Joi.string().default('1h'),
+  JWT_REFRESH_SECRET: Joi.string().min(16).required(),
+  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+
+  // Integratsiya kalitlari shifri (AES)
+  INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),
+});
