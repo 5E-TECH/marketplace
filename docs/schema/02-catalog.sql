@@ -39,7 +39,8 @@ CREATE TABLE category (
     sort_order      INTEGER      NOT NULL DEFAULT 0,
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    is_deleted      BOOLEAN      NOT NULL DEFAULT FALSE
 );
 
 -- Mahsulot
@@ -77,5 +78,6 @@ CREATE TABLE product_variant (
     image_url       VARCHAR(500),
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    is_deleted      BOOLEAN      NOT NULL DEFAULT FALSE
 );
