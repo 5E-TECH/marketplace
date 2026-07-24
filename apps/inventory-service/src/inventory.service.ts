@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { BusinessException } from '@app/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { BusinessException, OutboxEvent, OutboxStatus } from '@app/common';
+import { DataSource, EntityManager, MoreThan } from 'typeorm';
 import { InventoryOperation } from './entities/inventory-operation.entity';
 import {
   ReservationStatus,
@@ -157,6 +157,35 @@ export class InventoryService {
     );
   }
 
+  async releaseExpired(
+    reservationId: string,
+    now = new Date(),
+  ): Promise<boolean> {
+    this.assertId(reservationId, 'reservationId');
+    return this.dataSource.transaction(async (manager) => {
+      const reservation = await manager
+        .getRepository(Reservation)
+        .createQueryBuilder('reservation')
+        .setLock('pessimistic_write')
+        .where('reservation.id = :reservationId', { reservationId })
+        .andWhere('reservation.status = :status', {
+          status: ReservationStatus.HELD,
+        })
+        .andWhere('reservation.expires_at < :now', { now })
+        .getOne();
+      if (!reservation) return false;
+
+      await this.applyReservationTransition(
+        manager,
+        reservation,
+        StockMovementType.RELEASE,
+        ReservationStatus.RELEASED,
+        'TTL_EXPIRED',
+      );
+      return true;
+    });
+  }
+
   inbound(input: StockIncreaseInput): Promise<InventoryResult> {
     this.assertStockTarget(input);
     this.assertPositive(input.quantity);
@@ -274,46 +303,99 @@ export class InventoryService {
           );
         }
 
-        const items = await manager.getRepository(ReservationItem).find({
-          where: { reservationId: reservation.id },
-        });
-        for (const item of this.sortedItems(items)) {
-          const stock = await this.lockStock(
-            manager,
-            item.variantId,
-            item.warehouseId,
-          );
-          if (!stock || stock.quantityReserved < item.quantity) {
-            throw BusinessException.invalidState(
-              'Band qilingan qoldiq yozuvi mos emas',
-            );
-          }
-
-          stock.quantityReserved -= item.quantity;
-          if (type === StockMovementType.COMMIT) {
-            stock.quantityOnHand -= item.quantity;
-          }
-          await manager.getRepository(Stock).save(stock);
-          await this.saveMovement(
-            manager,
-            stock,
-            type,
-            -item.quantity,
-            input.reason,
-            input.actorId,
-            'RESERVATION',
-            reservation.id,
-          );
-        }
-
-        reservation.status = nextStatus;
-        await manager.getRepository(Reservation).save(reservation);
+        await this.applyReservationTransition(
+          manager,
+          reservation,
+          type,
+          nextStatus,
+          input.reason,
+          input.actorId,
+        );
         return {
           operation: type,
           orderRef: reservation.orderRef,
           reservationId: reservation.id,
         };
       },
+    );
+  }
+
+  private async applyReservationTransition(
+    manager: EntityManager,
+    reservation: Reservation,
+    type: StockMovementType.COMMIT | StockMovementType.RELEASE,
+    nextStatus: ReservationStatus,
+    reason?: string,
+    actorId?: string,
+  ): Promise<void> {
+    const items = await manager.getRepository(ReservationItem).find({
+      where: { reservationId: reservation.id },
+    });
+    for (const item of this.sortedItems(items)) {
+      const stock = await this.lockStock(
+        manager,
+        item.variantId,
+        item.warehouseId,
+      );
+      if (!stock || stock.quantityReserved < item.quantity) {
+        throw BusinessException.invalidState(
+          'Band qilingan qoldiq yozuvi mos emas',
+        );
+      }
+
+      stock.quantityReserved -= item.quantity;
+      if (type === StockMovementType.COMMIT) {
+        stock.quantityOnHand -= item.quantity;
+      }
+      await manager.getRepository(Stock).save(stock);
+      await this.saveMovement(
+        manager,
+        stock,
+        type,
+        -item.quantity,
+        reason,
+        actorId,
+        'RESERVATION',
+        reservation.id,
+      );
+      if (type === StockMovementType.COMMIT) {
+        await this.emitStockDepletedIfNeeded(manager, stock);
+      }
+    }
+
+    reservation.status = nextStatus;
+    await manager.getRepository(Reservation).save(reservation);
+  }
+
+  private async emitStockDepletedIfNeeded(
+    manager: EntityManager,
+    stock: Stock,
+  ): Promise<void> {
+    if (stock.quantityOnHand !== 0) return;
+
+    const hasStockInAnotherWarehouse = await manager
+      .getRepository(Stock)
+      .exist({
+        where: {
+          variantId: stock.variantId,
+          quantityOnHand: MoreThan(0),
+        },
+      });
+    if (hasStockInAnotherWarehouse) return;
+
+    const repo = manager.getRepository(OutboxEvent);
+    await repo.save(
+      repo.create({
+        aggregateType: 'product_variant',
+        aggregateId: stock.variantId,
+        eventType: 'inventory.stock_depleted',
+        payload: {
+          variantId: stock.variantId,
+          warehouseId: stock.warehouseId,
+          status: 'OUT_OF_STOCK',
+        },
+        status: OutboxStatus.PENDING,
+      }),
     );
   }
 

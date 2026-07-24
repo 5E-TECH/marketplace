@@ -1,4 +1,4 @@
-import { ErrorCode } from '@app/common';
+import { ErrorCode, OutboxEvent, OutboxStatus } from '@app/common';
 import { InventoryOperation } from './entities/inventory-operation.entity';
 import {
   ReservationStatus,
@@ -16,6 +16,7 @@ class InventoryDbFake {
   items: ReservationItem[] = [];
   movements: StockMovement[] = [];
   operations: InventoryOperation[] = [];
+  outboxEvents: OutboxEvent[] = [];
   locks: string[] = [];
   queries: Array<{ sql: string; params: unknown[] }> = [];
   private sequence = 1;
@@ -80,6 +81,13 @@ class InventoryDbFake {
           Object.entries(where).every(([key, value]) => row[key] === value),
         );
       }),
+      exist: jest.fn(async ({ where }: any) => {
+        return rows.some((row: any) => {
+          if (row.variantId !== where.variantId) return false;
+          const threshold = where.quantityOnHand?._value ?? 0;
+          return row.quantityOnHand > threshold;
+        });
+      }),
       createQueryBuilder: jest.fn(() => {
         const params: Record<string, string> = {};
         return {
@@ -96,15 +104,15 @@ class InventoryDbFake {
   private queryBuilder(
     entity: unknown,
     rows: any[],
-    params: Record<string, string>,
+    params: Record<string, any>,
   ): any {
     const builder = {
       setLock: jest.fn(() => builder),
-      where: jest.fn((_sql: string, values: Record<string, string>) => {
+      where: jest.fn((_sql: string, values: Record<string, any>) => {
         Object.assign(params, values);
         return builder;
       }),
-      andWhere: jest.fn((_sql: string, values: Record<string, string>) => {
+      andWhere: jest.fn((_sql: string, values: Record<string, any>) => {
         Object.assign(params, values);
         return builder;
       }),
@@ -115,6 +123,16 @@ class InventoryDbFake {
               (row) =>
                 row.variantId === params.variantId &&
                 row.warehouseId === params.warehouseId,
+            ) ?? null
+          );
+        }
+        if (params.reservationId) {
+          return (
+            rows.find(
+              (row) =>
+                row.id === params.reservationId &&
+                row.status === params.status &&
+                row.expiresAt < params.now,
             ) ?? null
           );
         }
@@ -130,6 +148,7 @@ class InventoryDbFake {
     if (entity === ReservationItem) return this.items;
     if (entity === StockMovement) return this.movements;
     if (entity === InventoryOperation) return this.operations;
+    if (entity === OutboxEvent) return this.outboxEvents;
     throw new Error(`Unexpected entity: ${this.entityName(entity)}`);
   }
 
@@ -144,6 +163,7 @@ class InventoryDbFake {
       items: this.items,
       movements: this.movements,
       operations: this.operations,
+      outboxEvents: this.outboxEvents,
     });
   }
 
@@ -153,6 +173,7 @@ class InventoryDbFake {
     this.items = snapshot.items;
     this.movements = snapshot.movements;
     this.operations = snapshot.operations;
+    this.outboxEvents = snapshot.outboxEvents;
   }
 }
 
@@ -217,6 +238,29 @@ describe('InventoryService', () => {
     });
     expect(db.reservations[0].status).toBe(ReservationStatus.COMMITTED);
     expect(db.movements.at(-1)?.type).toBe(StockMovementType.COMMIT);
+    expect(db.outboxEvents).toHaveLength(0);
+  });
+
+  it('C0.9 TC3: commit on_hand=0 qilsa stock_depleted event yozadi', async () => {
+    db.addStock(5);
+    await reserve('reserve-all', 5);
+
+    await service.commit({
+      orderRef: '301',
+      idempotencyKey: 'commit-all',
+    });
+
+    expect(db.outboxEvents[0]).toMatchObject({
+      aggregateType: 'product_variant',
+      aggregateId: '101',
+      eventType: 'inventory.stock_depleted',
+      status: OutboxStatus.PENDING,
+      payload: {
+        variantId: '101',
+        warehouseId: '201',
+        status: 'OUT_OF_STOCK',
+      },
+    });
   });
 
   it('TC4: release on_handni saqlab, reservedni qaytaradi', async () => {
@@ -311,5 +355,39 @@ describe('InventoryService', () => {
       actorId: '401',
       reason: 'Sanoq natijasi',
     });
+  });
+
+  it('C0.9 TC1: muddati o‘tgan rezervatsiyani bo‘shatadi', async () => {
+    db.addStock(10);
+    await reserve();
+    db.reservations[0].expiresAt = new Date('2026-07-24T09:00:00.000Z');
+
+    const released = await service.releaseExpired(
+      db.reservations[0].id,
+      new Date('2026-07-24T10:00:00.000Z'),
+    );
+
+    expect(released).toBe(true);
+    expect(db.stocks[0].quantityReserved).toBe(0);
+    expect(db.reservations[0].status).toBe(ReservationStatus.RELEASED);
+    expect(db.movements.at(-1)).toMatchObject({
+      type: StockMovementType.RELEASE,
+      reason: 'TTL_EXPIRED',
+    });
+  });
+
+  it('C0.9 TC2: muddati o‘tmagan rezervatsiyaga tegmaydi', async () => {
+    db.addStock(10);
+    await reserve();
+    db.reservations[0].expiresAt = new Date('2026-07-24T11:00:00.000Z');
+
+    const released = await service.releaseExpired(
+      db.reservations[0].id,
+      new Date('2026-07-24T10:00:00.000Z'),
+    );
+
+    expect(released).toBe(false);
+    expect(db.stocks[0].quantityReserved).toBe(5);
+    expect(db.reservations[0].status).toBe(ReservationStatus.HELD);
   });
 });
