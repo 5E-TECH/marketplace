@@ -99,7 +99,7 @@ Konvensiya (Elchi'dan): RMQ `{service}.{resource}.{action}`, `executeAndAck`,
 | **file-service** | — (MinIO) | — | Mahsulot media (ko'p rasm) |
 
 > `identity`, `finance`, `notification`, `search`, `file` — Elchi'dagi bir nomdagi
-> servislarга **o'xshash lekin ALOHIDA** (o'z DB, o'z userlari). Elchi bilan faqat
+> servislarga **o'xshash lekin ALOHIDA** (o'z DB, o'z userlari). Elchi bilan faqat
 > `elchi-integration` gaplashadi.
 
 ---
@@ -319,7 +319,16 @@ region bo'yicha filialga yo'nalish **avtomat** (marketplace bilmaydi).
 | POST | `/inventory/stock/inbound`, `/adjust` | seller | kirim/tuzatish |
 | GET | `/seller/orders` | seller | o'z buyurtmalari (Elchi status bilan) |
 | GET | `/seller/dashboard` | seller | sotuv/daromad |
-| GET/POST | `/admin/shops`, `/admin/shops/:id/approve` | admin | moderatsiya |
+| GET | `/admin/dashboard` | admin | platforma sanoqlari |
+| GET | `/admin/users`, `/admin/users/:id` | admin | account ko'rish |
+| POST | `/admin/users/:id/block\|unblock` | admin | bloklash |
+| GET/POST | `/admin/shops`, `/admin/shops/:id/approve\|reject\|suspend\|activate` | admin | do'kon moderatsiya |
+| GET | `/admin/orders`, `/admin/orders/:id` | admin | hamma buyurtma (ko'rish) |
+| GET/POST/PATCH/DELETE | `/admin/categories` | admin | kategoriya daraxt |
+| — | `/admin/finance/*`, `/admin/payments/*`, `/admin/settings`, `/admin/team/*` | **superadmin** | moliya/sozlama/jamoa (Faza 3-4) |
+
+> **Admin/back-office to'liq spec:** `ADMIN_TZ.md` (rollar, 15 domen, MVP ajratmasi),
+> endpoint shakllari `API_CONTRACT.md §8`. ⭐ MVP = dashboard/shops/users/orders(ko'rish)/kategoriya + audit yozish.
 
 **Faza 2:** `/storefront/*`, `/cart/*`, `POST /checkout`. **Faza 3:** `/payments/*`.
 **Webhook:** `POST /webhooks/elchi` (Elchi'dan status; HMAC verify).
@@ -332,7 +341,13 @@ region bo'yicha filialga yo'nalish **avtomat** (marketplace bilmaydi).
 |---|---|---|---|
 | **seller-cabinet** | React SPA (React 19 + antd + RTK + react-query) | Sotuvchi | **1 (MVP)** |
 | **storefront** | Next.js (SSR/SEO) | Xaridor | 2 |
-| **admin** | React SPA (yoki cabinet ichida) | Moderatsiya | 1-2 |
+| **admin** | seller-cabinet **ichida** (ADMIN role, alohida bo'lim — alohida app emas) | Moderatsiya | 1-2 |
+
+> **Tamoyil (qaror 2026-07):** framework ekranning vazifasiga qarab tanlanadi — **SEO
+> kerakmi yoki yo'q**. Ochiq storefront (Google'dan organik trafik) → **Next.js (SSR/SEO)**.
+> Login ortidagi panellar (cabinet + admin, SEO shart emas) → **React SPA (Vite + antd)**,
+> bir xil komponent/theme'ni ulashadi. Ya'ni 3 xil tex emas — 2 profil: SPA (ichki) + Next
+> (ochiq). Admin — alohida app emas, cabinet ichida ADMIN-role bo'lim (o'sganda ajratiladi).
 
 ---
 
@@ -341,7 +356,7 @@ region bo'yicha filialga yo'nalish **avtomat** (marketplace bilmaydi).
 | Faza | Ish | Qabul mezoni |
 |---|---|---|
 | **0. Skelet + poydevor** | Monorepo (nest-cli, libs/common ko'chirish), identity(seller/buyer/admin), catalog entity, inventory-service | `reserve→commit→release` testlari yashil; oversell imkonsiz |
-| **1. Sotuvchi kabineti (MVP)** ⭐ | register→approve; product+variant+media; inventory route; seller order/dashboard; **elchi-integration provision (`/partner/markets`)** | Sotuvchi ro'yxatdan o'tadi→approve→mahsulot+qoldiq qo'shadi; Elchi'da market akkaunt ochiladi |
+| **1. Sotuvchi kabineti + admin MVP** ⭐ | register→approve; product+variant+media; inventory route; seller order/dashboard; **elchi-integration provision (`/partner/markets`)**; **admin MVP: dashboard/shops/users/orders(ko'rish)/kategoriya + audit yozish** (`ADMIN_TZ.md §8`) | Sotuvchi ro'yxatdan o'tadi→approve→mahsulot+qoldiq qo'shadi; Elchi'da market akkaunt; **admin do'kon tasdiqlaydi + hamma buyurtmani ko'radi** |
 | **2. Storefront + checkout** | Public katalog/qidiruv; cart; checkout split; **`/partner/shipments`** ko'prik; webhook receiver | 2 sotuvchidan savat → checkout → Elchi'da 2 shipment; qoldiq kamayadi; webhook status yangilaydi |
 | **3. Online to'lov** | payment-service Payme+Click; `payment.paid`→confirm; finance escrow payout+komissiya | Payme sandbox → shipment avtomat (prepaid); refund→qoldiq qaytadi |
 | **4. Sayqal** | Review/rating, qaytarish/refund UI, COD komissiya reconciliation, moderatsiya, analytics | Sharh; payout hisobot; COD komissiya undiriladi |

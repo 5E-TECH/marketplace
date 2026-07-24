@@ -27,7 +27,7 @@ Dev:   http://localhost:3000/api/v1
 ```
 Authorization: Bearer <access_jwt>
 ```
-- Public route'lardan tashqari hammasi shu header'ni talab qiladi. Yo'q/muddati o'tган → `401`.
+- Public route'lardan tashqari hammasi shu header'ni talab qiladi. Yo'q/muddati o'tgan → `401`.
 - Rol yetmasa → `403`. O'zganing resursi → `403` (SelfGuard).
 
 ### 1.3 Muvaffaqiyatli javob (envelope)
@@ -45,7 +45,7 @@ Barcha 2xx javob **bir xil qobiqda**:
 ### 1.4 Pagination
 List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 - `page` ≥ 1 (default 1), `limit` 1..100 (default 20).
-- `sort` = `maydon:asc|desc`. Ruxsat etilган maydonlar har endpoint'da.
+- `sort` = `maydon:asc|desc`. Ruxsat etilgan maydonlar har endpoint'da.
 - Javob `data` shakli:
 ```jsonc
 {
@@ -116,7 +116,7 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 
 ### 2.2 Refresh oqimi (rotation)
 - `login`/`register` → `{ accessToken, refreshToken }` qaytaradi.
-- Access muddati o'tса → `POST /auth/refresh {refreshToken}` → **yangi juftlik**; eski refresh **bekor** qilinadi (rotation).
+- Access muddati o'tsa → `POST /auth/refresh {refreshToken}` → **yangi juftlik**; eski refresh **bekor** qilinadi (rotation).
 - `POST /auth/logout` → refresh bekor qilinadi.
 - FE: access'ni memory/localStorage, refresh'ni saqlaydi; 401 da bir marta refresh, keyin login'ga.
 
@@ -145,7 +145,7 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 ```
 - Atomik: `user(SELLER,inactive)` + `shop(PENDING)`; biri xato → ikkalasi rollback.
 - Xato: `409 CONFLICT` (phone band), `400 VALIDATION_ERROR`.
-- **Eslatma:** `isActive=false` — approve'gacha faqat kabinetга kiradi, storefront'da ko'rinmaydi.
+- **Eslatma:** `isActive=false` — approve'gacha faqat kabinetga kiradi, storefront'da ko'rinmaydi.
 
 **`POST /auth/login` · public**
 ```jsonc
@@ -172,7 +172,7 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
   "regionId":"12", "districtId":"140", "address":"..." }
 // 200 data: yangilangan shop
 ```
-- `slug`, `status`, `elchiMarketId`, `rating` — **tahrir qilib bo'lmaydi** (server boshqaradi). Yuborilса — e'tiborsiz yoki `400`.
+- `slug`, `status`, `elchiMarketId`, `rating` — **tahrir qilib bo'lmaydi** (server boshqaradi). Yuborilsa — e'tiborsiz yoki `400`.
 - Boshqa do'kon → `403 FORBIDDEN` (SelfGuard).
 
 ---
@@ -214,14 +214,14 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 // 201 data: yaratilgan product (slug avtomat: "adidas-krossovka", shop ichida unique)
 ```
 - Validatsiya: `name` 1..255, `price` > 0, `status ∈ ProductStatus`, `categoryId` mavjud bo'lsin.
-- `shopId`/`ownerUserId` — **body'dan olinmaydi**, token'dan (`shopId`). Yuborilса e'tiborsiz.
+- `shopId`/`ownerUserId` — **body'dan olinmaydi**, token'dan (`shopId`). Yuborilsa e'tiborsiz.
 - Dublikat slug (shop ichida) → `409`.
 
 **`PATCH /products/:id` · SELLER** — yuqoridagi maydonlar (barchasi ixtiyoriy). O'zganiki → `403`.
 **`DELETE /products/:id` · SELLER** — soft-delete (`isDeleted=true`). → `204`-ma'noli.
 
 ### 5.3 Variantlar
-> Variantsiz mahsulotга ham server **1 ta default variant** yaratadi (sklad `variantId` bo'yicha).
+> Variantsiz mahsulotga ham server **1 ta default variant** yaratadi (sklad `variantId` bo'yicha).
 
 **`POST /products/:id/variants` · SELLER**
 ```jsonc
@@ -260,7 +260,7 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
   "idempotencyKey":"po-2026-07-21-001" }     // ixtiyoriy, takror-himoya
 // 200 data: { variantId, warehouseId, onHand, reserved, available }
 ```
-- `quantity` > 0. Yangi (variant,warehouse) juftligi bo'lса — stock qatori avtomat yaratiladi.
+- `quantity` > 0. Yangi (variant,warehouse) juftligi bo'lsa — stock qatori avtomat yaratiladi.
 
 **`POST /inventory/stock/adjust` · SELLER**
 ```jsonc
@@ -298,9 +298,38 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 
 ---
 
-## 8. Admin — shops moderatsiya
+## 8. Admin / Platform Back-office
 
+> **Domen tavsifi va qamrov:** `ADMIN_TZ.md`. Bu yerda **wire format**. Barcha `/admin/*`
+> route `ADMIN|SUPERADMIN` rol talab qiladi; **xavfli** amallar (payout, komissiya, provayder
+> kaliti, rol/o'chirish, sozlama) faqat **`SUPERADMIN`**. Har yozuv amali **audit'ga** yoziladi.
+> Belgilar: ⭐ MVP · ◻︎ keyin.
+
+### 8.1 Dashboard ⭐
+**`GET /admin/dashboard` · ADMIN**
+```jsonc
+// 200 data
+{ "shops": { "total": 120, "pending": 4, "active": 110, "suspended": 6 },
+  "users": { "sellers": 118, "buyers": 3400, "admins": 5 },
+  "orders": { "total": 5200, "today": 42 },
+  "gmv": 840000000, "revenue": 42000000 }   // revenue = komissiya
+```
+- ◻︎ Keyin: `?range=7d|30d` bilan grafik seriyalari, top do'kon/mahsulot.
+
+### 8.2 Accountlar (users) ⭐
+**`GET /admin/users` · ADMIN** — pagination. Query: `role(Role)?, status(active|blocked)?, search?`.
+- `items[]`: `{ id, name, phone, role, isActive, shopId?, createdAt }`.
+
+**`GET /admin/users/:id` · ADMIN** — to'liq profil + (seller bo'lsa) shop qisqa + oxirgi faoliyat.
+**`POST /admin/users/:id/block` · ADMIN** — `{ "reason":"..." }` → `isActive=false` (kira olmaydi). O'zini bloklab bo'lmaydi → `409`.
+**`POST /admin/users/:id/unblock` · ADMIN** → `isActive=true`.
+**`POST /admin/users/:id/reset-password` · ADMIN ◻︎** → vaqtinchalik parol / reset havola.
+**`PATCH /admin/users/:id/role` · SUPERADMIN ◻︎** — `{ "role":"ADMIN" }`. Oxirgi SUPERADMIN pasaymaydi → `409`.
+**`POST /admin/users/:id/impersonate` · SUPERADMIN ◻︎** → `{ impersonationToken }` (cheklangan muddat, audit).
+
+### 8.3 Do'konlar (shops) ⭐
 **`GET /admin/shops` · ADMIN** — pagination. Query: `status(ShopStatus)?, search?`.
+**`GET /admin/shops/:id` · ADMIN** — to'liq do'kon + statistikasi (mahsulot/buyurtma/ombor soni, ⭐; moliya ◻︎).
 **`POST /admin/shops/:id/approve` · ADMIN**
 ```jsonc
 // Request: bo'sh yoki { "note":"..." }
@@ -311,7 +340,63 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 - Elchi provision xato → tranzaksiya rollback, `shop` `PENDING` qoladi, `502`-ma'noli xato (`errorCode: BUSINESS_RULE_VIOLATION`, message = sabab).
 
 **`POST /admin/shops/:id/reject` · ADMIN** — `{ "reason":"..." }` (majburiy) → `shop.REJECTED` + notify.
-**`POST /admin/shops/:id/suspend` · ADMIN** (Faza 4) — `active → suspended`, mahsulotlari storefront'da yashirinadi.
+**`POST /admin/shops/:id/suspend` · ADMIN** — `active → suspended`, mahsulotlari storefront'da yashirinadi.
+**`POST /admin/shops/:id/activate` · ADMIN** — `suspended → active`.
+**`PATCH /admin/shops/:id` · ADMIN ◻︎** — profil tahrir. **`POST /admin/shops/:id/feature` · ADMIN ◻︎** — tavsiya (featured).
+
+### 8.4 Katalog / mahsulot moderatsiya
+**`GET /admin/products` · ADMIN ⭐** — hamma mahsulot, pagination. Query: `shopId?, categoryId?, status?, search?`.
+**`POST /admin/products/:id/hide` · ADMIN ◻︎** — storefront'da yashiradi. **`.../flag` ◻︎** — belgilaydi.
+
+### 8.5 Kategoriyalar ⭐
+**`GET /admin/categories` · ADMIN** — daraxt (yoki `?flat=true`).
+**`POST /admin/categories` · ADMIN** — `{ name, parentId?, iconUrl?, sortOrder?, isActive? }`. Dublikat slug → `409`.
+**`PATCH /admin/categories/:id` · ADMIN** · **`DELETE /admin/categories/:id` · ADMIN** — bola bo'lsa ogohlantirish/`409`.
+
+### 8.6 Buyurtmalar (butun platforma)
+**`GET /admin/orders` · ADMIN ⭐** — hamma buyurtma, pagination. Query: `status?, paymentMethod?, shopId?, dateFrom?, dateTo?, search?`.
+- `items[]`: `{ id, buyerName, total, paymentMethod, status, sellersCount, createdAt }`.
+
+**`GET /admin/orders/:id` · ADMIN ⭐** — to'liq: sub-buyurtmalar + itemlar + shipmentlar + to'lov + tarix.
+**`POST /admin/orders/:id/cancel` · ADMIN ◻︎** — `{ reason }` → majburiy bekor (reserve release + Elchi cancel).
+**`POST /admin/orders/:id/refund` · SUPERADMIN ◻︎** — `{ reason, amount? }` → refund oqimi.
+
+### 8.7 Sklad nazorati ◻︎
+**`GET /admin/inventory/stock` · ADMIN** — istalgan do'kon qoldig'i (query: `shopId, warehouseId, variantId`).
+**`GET /admin/inventory/movements` · ADMIN** — jurnal (audit uchun).
+
+### 8.8 To'lovlar ◻︎
+**`GET /admin/payments` · ADMIN** — hamma tranzaksiya (query: `provider?, status?, orderId?, dateFrom/To?`).
+**`GET /admin/payments/providers` · SUPERADMIN** · **`PUT /admin/payments/providers/:provider` · SUPERADMIN** — `merchantId`, `secret` (AES; javobda **maskalanadi**), `isActive`.
+
+### 8.9 Moliya: payout + komissiya ◻︎
+**`GET /admin/finance/ledger` · ADMIN** — seller ledger (query: `shopId?`).
+**`GET /admin/finance/payouts` · ADMIN** — payout ro'yxati (query: `shopId?, status?`).
+**`POST /admin/finance/payouts/:id/approve|hold|release` · SUPERADMIN** — holat o'zgartirish. **Release idempotent** (2x → 1 marta).
+**`GET/POST/PATCH /admin/finance/commissions` · SUPERADMIN** — `{ scope:"global|category|shop", refId?, type:(PERCENT|FIXED), value }`.
+**`GET /admin/finance/reports` · ADMIN** — daromad, COD vs online reconciliation.
+
+### 8.10 Elchi integratsiya ◻︎
+**`GET /admin/integration/shipments` · ADMIN** · **`GET /admin/integration/webhooks` · ADMIN** — loglar.
+**`POST /admin/integration/shops/:id/reprovision` · ADMIN** — Elchi market qayta ochish (xato bo'lsa).
+
+### 8.11 Broadcast / bildirishnoma ◻︎
+**`POST /admin/broadcast` · ADMIN** — `{ audience:"sellers|buyers|all", channel:"inapp|sms|email|telegram", title, body }`.
+**`GET /admin/notifications/templates` · ADMIN** — shablonlar.
+
+### 8.12 Kontent / bannerlar ◻︎
+**`GET/POST/PATCH/DELETE /admin/content/banners` · ADMIN** — storefront bosh sahifa bloklari.
+
+### 8.13 Platforma sozlamalari ◻︎
+**`GET /admin/settings` · ADMIN** · **`PUT /admin/settings` · SUPERADMIN** — komissiya default, rate-limit, feature flag, dostavka narx siyosati.
+
+### 8.14 Admin jamoa ◻︎
+**`GET /admin/team` · SUPERADMIN** · **`POST /admin/team` · SUPERADMIN** — `{ name, phone, role }`.
+**`PATCH /admin/team/:id/role` · SUPERADMIN** · **`DELETE /admin/team/:id` · SUPERADMIN** — oxirgi SUPERADMIN himoyalangan.
+
+### 8.15 Audit log
+- ⭐ **Yozish:** har xavfli admin amali `activity-log` (libs/common) ga yoziladi (kim, nima, resurs, eski→yangi, IP, vaqt).
+- ◻︎ **`GET /admin/audit` · ADMIN** — filtr/qidiruv/eksport. Yozuvlar **immutable** (tahrir/o'chirish yo'q).
 
 ---
 
@@ -320,7 +405,7 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 **`POST /webhooks/elchi` · public (imzo bilan himoyalangan)**
 - Header: `X-Elchi-Signature: <hmac_sha256(body, WEBHOOK_SECRET)>`.
 - Server **HMAC'ni tekshiradi** → mos emas `401`. **Timestamp oynasi** (masalan ±5 daqiqa) — replay himoya.
-- **Idempotent:** `eventId` bo'yicha 2x kelса — 1 marta qayta ishlanadi, ikkinchisi `200` (dedup).
+- **Idempotent:** `eventId` bo'yicha 2x kelsa — 1 marta qayta ishlanadi, ikkinchisi `200` (dedup).
 ```jsonc
 // Elchi yuboradigan body (namuna)
 { "eventId":"evt_123","type":"shipment.status_changed","shipmentId":"77012",
@@ -333,13 +418,14 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 
 ## 10. Rol → route matritsasi (qisqa)
 
-| Route guruhi | public | SELLER | ADMIN |
-|---|:--:|:--:|:--:|
-| `/auth/*` (register,login,refresh) | ✅ | — | — |
-| `/categories` GET | ✅ | ✅ | ✅ |
-| `/sellers/me`, `/products/*`, `/inventory/*`, `/seller/*`, `/files/upload` | — | ✅ | — |
-| `/admin/*` | — | — | ✅ |
-| `/webhooks/elchi` | ✅(HMAC) | — | — |
+| Route guruhi | public | SELLER | ADMIN | SUPERADMIN |
+|---|:--:|:--:|:--:|:--:|
+| `/auth/*` (register,login,refresh) | ✅ | — | — | — |
+| `/categories` GET | ✅ | ✅ | ✅ | ✅ |
+| `/sellers/me`, `/products/*`, `/inventory/*`, `/seller/*`, `/files/upload` | — | ✅ | — | — |
+| `/admin/*` (dashboard, shops, users, orders ko'rish, kategoriya) | — | — | ✅ | ✅ |
+| `/admin/finance/*`, `/admin/settings` PUT, `/admin/team/*`, `/admin/payments/providers`, rol/impersonate | — | — | ❌ | ✅ |
+| `/webhooks/elchi` | ✅(HMAC) | — | — | — |
 
 ---
 
@@ -353,4 +439,4 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 ## 12. Keyingi fazalar (placeholder — hozir yozilmaydi)
 - **Faza 2:** `GET /storefront/products|shops/:slug`, `/cart/*`, `POST /checkout` (split, reserve).
 - **Faza 3:** `POST /payments/payme/callback` (JSON-RPC), `/payments/click/prepare|complete`.
-- Ular boshlanganда shu faylga §13/§14 bo'lib qo'shiladi (bir xil konvensiya).
+- Ular boshlanganda shu faylga §13/§14 bo'lib qo'shiladi (bir xil konvensiya).
