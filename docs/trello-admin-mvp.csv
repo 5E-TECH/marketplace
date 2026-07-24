@@ -1,0 +1,71 @@
+List,Card Name,Description,Labels,Members,Due Date
+Phase 1,C1.28 Admin dashboard (platforma statistikasi),"**Maqsad:** Platforma egalari va adminlarga butun tizim holatini bir qarashda ko'rsatadigan dashboard yaratish (backend).
+
+Admin uchun `GET /admin/dashboard` endpoint yoziladi. U bir necha servisdan ma'lumot yig'adi: do'konlar soni (holat bo'yicha), sotuvchi/xaridor soni, jami buyurtma va bugungi buyurtma, GMV (umumiy aylanma) va platforma daromadi (komissiya). Faqat ADMIN/SUPERADMIN kira oladi. Yangi platformada barcha son 0 bo'ladi (bu xato emas).
+
+- GET /admin/dashboard (cross-service aggregatsiya)
+- do'kon/sotuvchi/xaridor/buyurtma sanoqlari + GMV + daromad
+- faqat ADMIN/SUPERADMIN || TEST: TC1 GET /admin/dashboard admin token bilan sanoqlar qaytadi; TC2 seller token 403; TC3 yangi platforma nol qaytadi xatosiz; TC4 GMV tasdiqlangan buyurtmalar yigindisiga teng.",Phase 1;Backend-Core;Normal;M,Lead,2026-08-26
+Phase 1,C1.29 Admin accounts (users) boshqaruv,"**Maqsad:** Adminga barcha foydalanuvchilarni (sotuvchi/xaridor/admin) ko'rish va bloklash imkonini berish (backend).
+
+`GET /admin/users` (rol/holat/qidiruv filtri, pagination), `GET /admin/users/:id` (to'liq profil), `POST /admin/users/:id/block` va `/unblock` yoziladi. Bloklangan foydalanuvchi tizimga kira olmaydi. Admin o'zini bloklay olmaydi. Har amal audit logga yoziladi.
+
+- GET /admin/users (filtr + pagination), GET /admin/users/:id
+- POST block/unblock (bloklangan user 401)
+- o'zini bloklash himoyasi || TEST: TC1 ?role=SELLER filtr ishlaydi; TC2 block dan keyin user login 401; TC3 unblock dan keyin login ishlaydi; TC4 admin o'zini block 409; TC5 seller admin route 403.",Phase 1;Backend-Core;High;M,Lead,2026-08-27
+Phase 1,C1.30 Admin orders oversight,"**Maqsad:** Adminga butun platformadagi barcha buyurtmalarni bitta joydan ko'rish imkonini berish (backend, faqat o'qish).
+
+`GET /admin/orders` (hamma sotuvchi bo'yicha, holat/to'lov/do'kon/sana filtri, pagination) va `GET /admin/orders/:id` (to'liq: sub-buyurtmalar + itemlar + shipment + to'lov + tarix) yoziladi. MVP da faqat ko'rish (read-only); majburiy bekor/refund keyingi fazada.
+
+- GET /admin/orders (hamma, filtr + pagination)
+- GET /admin/orders/:id (drill-in)
+- read-only (bekor/refund keyin) || TEST: TC1 hamma sotuvchi buyurtmasi ko'rinadi; TC2 status va do'kon filtri ishlaydi; TC3 detail sub-order+item+shipment qaytaradi; TC4 seller admin route 403.",Phase 1;Backend-Core;Normal;M,Lead,2026-08-28
+Phase 1,C1.31 Admin audit log (yozish),"**Maqsad:** Har bir xavfli admin amalini o'zgarmas (immutable) tarixga yozish (backend).
+
+libs/common dagi activity-log ustidan admin amallari (do'kon approve/reject/suspend, user block, rol o'zgarishi) audit yozuviga ulanadi: kim, nima, qaysi resurs, eski->yangi qiymat, IP, vaqt. Yozuvlar tahrirlanmaydi va o'chirilmaydi. UI keyingi fazada.
+
+- admin write amallari -> activity-log
+- maydon: actor, action, resource, old->new, ip, time
+- immutable (tahrir/o'chirish yo'q) || TEST: TC1 shop approve audit yozuv yaratadi; TC2 user block audit yozuv yaratadi; TC3 yozuvni o'zgartirib bo'lmaydi; TC4 actor admin id ga teng.",Phase 1;Backend-Core;High;S,Lead,2026-08-29
+Phase 1,C1.32 Admin shops moderatsiya kengaytmasi,"**Maqsad:** C1.7 (shops moderatsiya) ustiga do'kon detali va suspend/activate qo'shish (backend).
+
+`GET /admin/shops/:id` (profil + mahsulot/buyurtma/ombor sanoqlari), `POST /admin/shops/:id/suspend` (active->suspended, mahsulotlar storefront da yashirinadi) va `/activate` (suspended->active) yoziladi. Approve/reject C1.7 da bor.
+
+- GET /admin/shops/:id (detail + statistika)
+- suspend (storefront yashiradi) / activate
+- noto'g'ri holatda 409 || TEST: TC1 detail profil+sanoqlarni qaytaradi; TC2 suspend dan keyin mahsulot storefront da yashirin; TC3 activate qayta ko'rsatadi; TC4 PENDING do'konni suspend 409.",Phase 1;Backend-Core;Normal;S,Lead,2026-08-30
+Phase 1,C1.33 Admin panel shell + rol gate (FE),"**Maqsad:** Seller-cabinet ichida ADMIN/SUPERADMIN roli bilan ochiladigan admin bo'limini yaratish (frontend).
+
+Admin bo'lim uchun alohida layout: sidebar (Dashboard/Accountlar/Do'konlar/Buyurtmalar/Kategoriyalar), rol gate (faqat ADMIN/SUPERADMIN kiradi, seller kira olmaydi), tepada ADMIN rejim belgisi. SUPERADMIN qo'shimcha menyularni (moliya/jamoa) ko'radi. Bir xil antd theme ishlatiladi (DESIGN_TZ §11).
+
+- admin layout + sidebar (rol asosida menyu)
+- rol gate (seller kira olmaydi)
+- ADMIN belgisi + SUPERADMIN qo'shimcha menyu || TEST: TC1 seller admin URL ga kira olmaydi (redirect); TC2 admin login admin sidebarni ko'radi; TC3 SUPERADMIN moliya/jamoa menyusini ko'radi; TC4 ADMIN rejim belgisi ko'rinadi.",Phase 1;Frontend;High;M,Bahodir,2026-09-01
+Phase 1,C1.34 Admin dashboard sahifasi (FE),"**Maqsad:** Admin dashboard sahifasini yasash (frontend).
+
+Statistika kartalari (do'kon/sotuvchi/buyurtma/GMV/daromad) va tasdiq kutayotgan do'konlar ro'yxati ko'rsatiladi. Ma'lumot `GET /admin/dashboard` dan keladi. Loading skeleton, bo'sh holat (nol) va xato holati bo'ladi.
+
+- statistika kartalari (backend dan)
+- tasdiq kutayotgan do'konlar bloki
+- loading/empty/error holatlari || TEST: TC1 kartalar backend qiymatini ko'rsatadi; TC2 bo'sh platformada nol ko'rinadi; TC3 loading da skeleton chiqadi; TC4 Ko'rish tugmasi do'kon detaliga o'tadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-09-02
+Phase 1,C1.35 Admin accounts sahifasi (FE),"**Maqsad:** Foydalanuvchilarni boshqarish sahifasini yasash (frontend).
+
+Foydalanuvchilar jadvali (ism, telefon, rol, holat, sana), rol va holat filtri, qidiruv, pagination. Bloklash/faollashtirish tugmasi tasdiq (confirm) modali bilan. Ma'lumot `GET /admin/users` va block/unblock endpointlaridan.
+
+- users jadvali + filtr + pagination
+- block/unblock (confirm modal)
+- bloklangan holat ko'rinadi || TEST: TC1 jadval va pagination ishlaydi; TC2 rol/holat filtri ishlaydi; TC3 block tugmasi confirm modal ochadi; TC4 bloklangan user holati jadvalda ko'rinadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-09-03
+Phase 1,C1.36 Admin orders sahifasi (FE),"**Maqsad:** Barcha buyurtmalarni ko'rish sahifasini yasash (frontend).
+
+Hamma buyurtma jadvali (raqam, do'kon, xaridor, summa, to'lov, holat, sana), holat/to'lov/do'kon/sana filtri, pagination. Buyurtma detali (sub-buyurtma + item + shipment + tarix) — read-only. Ma'lumot `GET /admin/orders` va `/:id` dan.
+
+- hamma buyurtma jadvali + filtr
+- detail (drawer yoki sahifa, read-only)
+- bo'sh/loading holat || TEST: TC1 hamma sotuvchi buyurtmasi ko'rinadi; TC2 filtrlar ishlaydi; TC3 detail sub-order+item+shipment ko'rsatadi; TC4 buyurtmasiz bo'sh holat chiqadi.",Phase 1;Frontend;Normal;M,Bahodir,2026-09-04
+Phase 1,C1.37 Admin categories UI (FE),"**Maqsad:** Kategoriya daraxtini boshqarish sahifasini yasash (frontend).
+
+Kategoriyalar daraxt ko'rinishida ko'rsatiladi; qo'shish, tahrirlash, o'chirish (ikonka, tartib, faol/nofaol). Ma'lumot `GET/POST/PATCH/DELETE /admin/categories` dan. Dublikat slug da xato ko'rsatiladi.
+
+- daraxt ko'rinishi
+- qo'shish/tahrir/o'chirish
+- dublikat slug xatosi || TEST: TC1 daraxt to'g'ri ko'rinadi; TC2 yangi kategoriya qo'shiladi; TC3 tahrir va o'chirish ishlaydi; TC4 dublikat slug da xato chiqadi.",Phase 1;Frontend;Normal;S,Bahodir,2026-09-05
