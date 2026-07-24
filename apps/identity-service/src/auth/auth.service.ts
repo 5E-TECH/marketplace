@@ -4,8 +4,16 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { BusinessException, LoginDto, RegisterDto, Role } from '@app/common';
+import { createHash, randomUUID } from 'crypto';
+import {
+  BusinessException,
+  LoginDto,
+  LogoutDto,
+  RegisterDto,
+  Role,
+} from '@app/common';
 import { User } from '../entities/user.entity';
+import { AuthSession } from '../entities/auth-session.entity';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -13,6 +21,8 @@ const BCRYPT_ROUNDS = 10;
 export class AuthService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(AuthSession)
+    private readonly sessions: Repository<AuthSession>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
@@ -55,16 +65,63 @@ export class AuthService {
     return this.sanitize(user);
   }
 
-  private buildAuthResult(user: User) {
+  async logout(userId: string, dto: LogoutDto): Promise<null> {
+    let payload: { sub: string; jti: string };
+    try {
+      payload = await this.jwt.verifyAsync(dto.refreshToken, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Refresh token yaroqsiz');
+    }
+    if (payload.sub !== userId || !payload.jti) {
+      throw new UnauthorizedException('Refresh token yaroqsiz');
+    }
+
+    const session = await this.sessions.findOne({
+      where: { id: payload.jti, userId },
+    });
+    if (!session || session.tokenHash !== this.hashToken(dto.refreshToken)) {
+      throw new UnauthorizedException('Refresh token yaroqsiz');
+    }
+    if (!session.revokedAt) {
+      session.revokedAt = new Date();
+      await this.sessions.save(session);
+    }
+    return null;
+  }
+
+  private async buildAuthResult(user: User) {
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwt.sign(payload, {
       expiresIn: this.config.get<string>('JWT_EXPIRES_IN', '1h') as any,
     });
-    const refreshToken = this.jwt.sign(payload, {
-      secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') as any,
-    });
+    const sessionId = randomUUID();
+    const refreshToken = this.jwt.sign(
+      { ...payload, jti: sessionId },
+      {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.config.get<string>(
+          'JWT_REFRESH_EXPIRES_IN',
+          '7d',
+        ) as any,
+      },
+    );
+    const decoded = this.jwt.decode(refreshToken) as { exp: number };
+    await this.sessions.save(
+      this.sessions.create({
+        id: sessionId,
+        userId: user.id,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt: new Date(decoded.exp * 1000),
+        revokedAt: null,
+      }),
+    );
     return { user: this.sanitize(user), accessToken, refreshToken };
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private sanitize(user: User) {
