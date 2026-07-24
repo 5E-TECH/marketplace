@@ -8,6 +8,22 @@ on:
 jobs:
   lint-build-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: marketplace
+          POSTGRES_PASSWORD: marketplace_test_pass
+          POSTGRES_DB: elchi_marketplace_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U marketplace -d elchi_marketplace_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://marketplace:marketplace_test_pass@localhost:5432/elchi_marketplace_test
     steps:
       - uses: actions/checkout@v4
 
@@ -32,4 +48,7 @@ jobs:
         run: npm run build:all
 
       - name: Testlar (Jest)
-        run: npm test
+        run: npm test -- --runInBand
+
+      - name: Inventory coverage
+        run: npm run test:inventory:coverage
