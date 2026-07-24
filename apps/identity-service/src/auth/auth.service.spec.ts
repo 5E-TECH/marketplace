@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 describe('AuthService (C0.4)', () => {
   let service: AuthService;
   let saveSpy: jest.Mock;
+  let sessionStore: any[];
   const jwt = new JwtService({ secret: 'test-access-secret' });
   const config = {
     get: (key: string, def?: unknown) =>
@@ -42,7 +43,26 @@ describe('AuthService (C0.4)', () => {
       }),
       save: saveSpy,
     };
-    service = new AuthService(users as any, jwt, config);
+    sessionStore = [];
+    const sessions = {
+      findOne: jest.fn(
+        async ({ where }: any) =>
+          sessionStore.find(
+            (session) =>
+              session.id === where.id && session.userId === where.userId,
+          ) ?? null,
+      ),
+      create: (value: any) => ({ ...value }),
+      save: jest.fn(async (session: any) => {
+        const index = sessionStore.findIndex(
+          (stored) => stored.id === session.id,
+        );
+        if (index === -1) sessionStore.push(session);
+        else sessionStore[index] = session;
+        return session;
+      }),
+    };
+    service = new AuthService(users as any, sessions as any, jwt, config);
   });
 
   it('TC1: register parolni hash qiladi (plain saqlamaydi)', async () => {
@@ -114,5 +134,44 @@ describe('AuthService (C0.4)', () => {
 
   it('TC5: soxta/buzilgan token verify -> xato', () => {
     expect(() => jwt.verify('soxta.token.qiymat')).toThrow();
+  });
+
+  it('logout refresh sessionni bekor qiladi va null qaytaradi', async () => {
+    const auth = await service.register({
+      name: 'A',
+      phone: '+998901112233',
+      password: 'Secret123',
+    });
+
+    await expect(
+      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
+    ).resolves.toBeNull();
+    expect(sessionStore).toHaveLength(1);
+    expect(sessionStore[0].revokedAt).toBeInstanceOf(Date);
+  });
+
+  it('logout takror chaqirilsa ham idempotent', async () => {
+    const auth = await service.register({
+      name: 'A',
+      phone: '+998901112233',
+      password: 'Secret123',
+    });
+    await service.logout(auth.user.id, { refreshToken: auth.refreshToken });
+
+    await expect(
+      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
+    ).resolves.toBeNull();
+  });
+
+  it('boshqa user refresh tokeni bilan logoutni rad etadi', async () => {
+    const auth = await service.register({
+      name: 'A',
+      phone: '+998901112233',
+      password: 'Secret123',
+    });
+
+    await expect(
+      service.logout('999', { refreshToken: auth.refreshToken }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
