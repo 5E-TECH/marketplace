@@ -1,7 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { Role } from '@app/common';
+import { of } from 'rxjs';
+import { Role, ShopStatus } from '@app/common';
 import { AuthService } from './auth.service';
 
 // C0.4: register hash, login JWT(sub,role), noto'g'ri parol 401, dublikat phone 409, soxta token 401
@@ -9,6 +10,9 @@ describe('AuthService (C0.4)', () => {
   let service: AuthService;
   let saveSpy: jest.Mock;
   let sessionStore: any[];
+  let managerQuery: jest.Mock;
+  let transaction: jest.Mock;
+  let notificationEmit: jest.Mock;
   const jwt = new JwtService({ secret: 'test-access-secret' });
   const config = {
     get: (key: string, def?: unknown) =>
@@ -61,8 +65,33 @@ describe('AuthService (C0.4)', () => {
         else sessionStore[index] = session;
         return session;
       }),
+      update: jest.fn(async (criteria: any, values: any) => {
+        let affected = 0;
+        for (const session of sessionStore) {
+          if (
+            session.userId === criteria.userId &&
+            session.revokedAt === null
+          ) {
+            Object.assign(session, values);
+            affected += 1;
+          }
+        }
+        return { affected };
+      }),
     };
-    service = new AuthService(users as any, sessions as any, jwt, config);
+    managerQuery = jest.fn();
+    transaction = jest.fn(async (callback: (manager: any) => unknown) =>
+      callback({ query: managerQuery }),
+    );
+    notificationEmit = jest.fn(() => of(undefined));
+    service = new AuthService(
+      users as any,
+      sessions as any,
+      jwt,
+      config,
+      { transaction } as any,
+      { emit: notificationEmit } as any,
+    );
   });
 
   it('TC1: register parolni hash qiladi (plain saqlamaydi)', async () => {
@@ -136,18 +165,22 @@ describe('AuthService (C0.4)', () => {
     expect(() => jwt.verify('soxta.token.qiymat')).toThrow();
   });
 
-  it('logout refresh sessionni bekor qiladi va null qaytaradi', async () => {
+  it('logout userning barcha refresh sessiyalarini bekor qiladi', async () => {
     const auth = await service.register({
       name: 'A',
       phone: '+998901112233',
       password: 'Secret123',
     });
+    await service.login({
+      phone: '+998901112233',
+      password: 'Secret123',
+    });
 
-    await expect(
-      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
-    ).resolves.toBeNull();
-    expect(sessionStore).toHaveLength(1);
-    expect(sessionStore[0].revokedAt).toBeInstanceOf(Date);
+    await expect(service.logout(auth.user.id)).resolves.toBeNull();
+    expect(sessionStore).toHaveLength(2);
+    expect(
+      sessionStore.every((session) => session.revokedAt instanceof Date),
+    ).toBe(true);
   });
 
   it('logout takror chaqirilsa ham idempotent', async () => {
@@ -156,22 +189,148 @@ describe('AuthService (C0.4)', () => {
       phone: '+998901112233',
       password: 'Secret123',
     });
-    await service.logout(auth.user.id, { refreshToken: auth.refreshToken });
+    await service.logout(auth.user.id);
 
-    await expect(
-      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
-    ).resolves.toBeNull();
+    await expect(service.logout(auth.user.id)).resolves.toBeNull();
   });
 
-  it('boshqa user refresh tokeni bilan logoutni rad etadi', async () => {
-    const auth = await service.register({
+  it('logout boshqa user sessiyasini bekor qilmaydi', async () => {
+    const first = await service.register({
       name: 'A',
       phone: '+998901112233',
       password: 'Secret123',
     });
+    const second = await service.register({
+      name: 'B',
+      phone: '+998901112234',
+      password: 'Secret123',
+    });
 
-    await expect(
-      service.logout('999', { refreshToken: auth.refreshToken }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await service.logout(first.user.id);
+
+    expect(
+      sessionStore.find((session) => session.userId === first.user.id)
+        .revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      sessionStore.find((session) => session.userId === second.user.id)
+        .revokedAt,
+    ).toBeNull();
+  });
+
+  describe('seller registration acceptance testlari', () => {
+    const dto = {
+      name: 'Ali Valiyev',
+      phone: '+998901234567',
+      password: 'Secret123',
+      shopName: 'Ali Market',
+      shopDescription: 'Test shop',
+      address: 'Toshkent',
+    };
+
+    it('TC1 register -> inactive SELLER va PENDING shop ikkalasi yaratiladi', async () => {
+      managerQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: '42',
+            name: dto.name,
+            phone: dto.phone,
+            role: Role.SELLER,
+            isActive: false,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '15',
+            name: dto.shopName,
+            slug: 'ali-market-1234567',
+            status: ShopStatus.PENDING,
+          },
+        ]);
+
+      const result = await service.registerSeller(dto);
+
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(result.user).toMatchObject({
+        role: Role.SELLER,
+        isActive: false,
+      });
+      expect(result.shop).toMatchObject({ status: ShopStatus.PENDING });
+    });
+
+    it('TC2 shop xato -> transaction rollback bo‘ladi', async () => {
+      let rolledBack = false;
+      transaction.mockImplementationOnce(async (callback: any) => {
+        try {
+          return await callback({ query: managerQuery });
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      });
+      managerQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: '42',
+            name: dto.name,
+            phone: dto.phone,
+            role: Role.SELLER,
+            isActive: false,
+          },
+        ])
+        .mockRejectedValueOnce(new Error('shop insert xato'));
+
+      await expect(service.registerSeller(dto)).rejects.toThrow(
+        'shop insert xato',
+      );
+      expect(rolledBack).toBe(true);
+      expect(notificationEmit).not.toHaveBeenCalled();
+    });
+
+    it('TC3 dublikat telefon -> 409', async () => {
+      managerQuery.mockResolvedValueOnce([{ exists: 1 }]);
+
+      await expect(service.registerSeller(dto)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(managerQuery).toHaveBeenCalledTimes(1);
+      expect(notificationEmit).not.toHaveBeenCalled();
+    });
+
+    it('TC4 muvaffaqiyatli register -> admin notification eventi', async () => {
+      managerQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: '42',
+            name: dto.name,
+            phone: dto.phone,
+            role: Role.SELLER,
+            isActive: false,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '15',
+            name: dto.shopName,
+            slug: 'ali-market-1234567',
+            status: ShopStatus.PENDING,
+          },
+        ]);
+
+      await service.registerSeller(dto);
+
+      expect(notificationEmit).toHaveBeenCalledWith(
+        'seller.registration.created',
+        expect.objectContaining({
+          sellerUserId: '42',
+          shopId: '15',
+          sellerName: dto.name,
+          shopName: dto.shopName,
+        }),
+      );
+    });
   });
 });

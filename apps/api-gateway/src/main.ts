@@ -10,6 +10,21 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.get<number>('API_GATEWAY_PORT', 3000);
 
+  // Lokal developmentda bir xil Wi‑Fi'dagi frontend API'ga ulana oladi.
+  // Productionda CORS_ORIGINS vergul bilan ajratilgan aniq domenlar bo'lishi kerak.
+  const configuredOrigins = config
+    .get<string>('CORS_ORIGINS', '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({
+    origin:
+      configuredOrigins.length > 0
+        ? configuredOrigins
+        : config.get<string>('NODE_ENV') !== 'production',
+    credentials: true,
+  });
+
   // API_CONTRACT.md §1.1 — barcha route /api/v1 prefiksi bilan
   app.setGlobalPrefix('api/v1');
 
@@ -34,7 +49,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   Logger.log(
     `🚀 API Gateway: http://localhost:${port}/api/v1  (Swagger: /api/docs)`,
     'Bootstrap',

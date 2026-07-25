@@ -1,6 +1,7 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { SelfGuard } from './self.guard';
 import { Role } from '../enums';
 
 // TC3: tokensiz -> 401, noto'g'ri rol -> 403
@@ -74,5 +75,31 @@ describe('RolesGuard (TC3 — 403)', () => {
   it('rol talab qilinmasa -> true', () => {
     const reflector = { getAllAndOverride: () => undefined } as any;
     expect(new RolesGuard(reflector).canActivate(ctx(Role.BUYER))).toBe(true);
+  });
+});
+
+describe('SelfGuard (shop ownership — 403)', () => {
+  const ctx = (userId: string, targetId?: string) =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: { sub: userId, role: Role.SELLER },
+          params: targetId ? { id: targetId } : {},
+        }),
+      }),
+    }) as any;
+
+  it('seller o‘z resursiga kira oladi', () => {
+    expect(new SelfGuard().canActivate(ctx('42', '42'))).toBe(true);
+  });
+
+  it('TC3 boshqa do‘kon egasi ID si -> ForbiddenException (403)', () => {
+    expect(() => new SelfGuard().canActivate(ctx('42', '999'))).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('/sellers/me targetni JWT dan olgani uchun ruxsat beradi', () => {
+    expect(new SelfGuard().canActivate(ctx('42'))).toBe(true);
   });
 });

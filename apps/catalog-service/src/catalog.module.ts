@@ -7,6 +7,8 @@ import { ProductVariant } from './entities/product-variant.entity';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
 import { CreateCatalogTables1721736000000 } from './migrations/1721736000000-create-catalog-tables';
+import { SellerShopController } from './seller-shop.controller';
+import { SellerShopService } from './seller-shop.service';
 
 const entities = [Shop, Category, Product, ProductVariant];
 
@@ -27,5 +29,7 @@ const entities = [Shop, Category, Product, ProductVariant];
     }),
     TypeOrmModule.forFeature(entities),
   ],
+  controllers: [SellerShopController],
+  providers: [SellerShopService],
 })
 export class CatalogModule {}

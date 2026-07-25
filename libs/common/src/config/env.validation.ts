@@ -11,6 +11,7 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
+  CORS_ORIGINS: Joi.string().allow('').optional(),
 
   // PostgreSQL
   DB_HOST: Joi.string().required(),

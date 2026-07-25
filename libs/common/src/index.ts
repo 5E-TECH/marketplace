@@ -18,10 +18,12 @@ export * from './database/typeorm.util';
 
 // DTO
 export * from './dto/auth.dto';
+export * from './dto/seller.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';
 export * from './filters/all-exceptions.filter';
+export * from './filters/rpc-http-exception.filter';
 export * from './exceptions/business.exception';
 
 // Auth: dekoratorlar, guard'lar, modul

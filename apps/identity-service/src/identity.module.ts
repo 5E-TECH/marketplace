@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonAuthModule,
   CommonConfigModule,
   ensureSchema,
+  RmqClient,
+  RmqQueue,
+  rmqOptions,
   typeOrmOptions,
 } from '@app/common';
 import { User } from './entities/user.entity';
@@ -20,6 +24,17 @@ const entities = [User, AuthSession];
   imports: [
     CommonConfigModule, // .env + Joi
     CommonAuthModule, // JwtService (JWT_SECRET)
+    ClientsModule.registerAsync([
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
