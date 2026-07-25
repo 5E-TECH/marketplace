@@ -1,12 +1,18 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { LoginDto, LogoutDto, RegisterDto } from '@app/common';
+import {
+  LoginDto,
+  LogoutDto,
+  RegisterDto,
+  RpcHttpExceptionFilter,
+} from '@app/common';
 import { AuthService } from './auth.service';
 
 /**
  * RMQ orqali gateway'dan keladigan auth so'rovlarini boshqaradi.
  */
 @Controller()
+@UseFilters(RpcHttpExceptionFilter)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

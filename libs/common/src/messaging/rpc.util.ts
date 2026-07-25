@@ -16,8 +16,13 @@ export function sendRpc<T = unknown>(
   return firstValueFrom(
     client.send<T>(pattern as any, data as any).pipe(
       catchError((err: any) => {
+        const candidateStatus = err?.statusCode ?? err?.status;
         const status =
-          err?.status ?? err?.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          typeof candidateStatus === 'number' &&
+          candidateStatus >= 100 &&
+          candidateStatus <= 599
+            ? candidateStatus
+            : HttpStatus.INTERNAL_SERVER_ERROR;
         const message = err?.message ?? 'Ichki xato';
         const response = err?.errorCode
           ? { message, errorCode: err.errorCode }

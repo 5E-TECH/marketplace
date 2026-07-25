@@ -22,6 +22,7 @@ export * from './dto/auth.dto';
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';
 export * from './filters/all-exceptions.filter';
+export * from './filters/rpc-http-exception.filter';
 export * from './exceptions/business.exception';
 
 // Auth: dekoratorlar, guard'lar, modul
