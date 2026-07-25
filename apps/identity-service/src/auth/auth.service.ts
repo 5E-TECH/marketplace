@@ -1,11 +1,26 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
-import { BusinessException, LoginDto, RegisterDto, Role } from '@app/common';
+import { firstValueFrom } from 'rxjs';
+import {
+  BusinessException,
+  LoginDto,
+  RegisterDto,
+  Role,
+  RmqClient,
+  SellerRegisterDto,
+  ShopStatus,
+} from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
 
@@ -13,12 +28,17 @@ const BCRYPT_ROUNDS = 10;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(AuthSession)
     private readonly sessions: Repository<AuthSession>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly dataSource: DataSource,
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notifications: ClientProxy,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -65,6 +85,83 @@ export class AuthService {
       { revokedAt: new Date() },
     );
     return null;
+  }
+
+  async registerSeller(dto: SellerRegisterDto) {
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const slug = `${
+      dto.shopName
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 220) || 'shop'
+    }-${dto.phone.replace(/\D/g, '').slice(-7)}`;
+
+    let result: any;
+    try {
+      result = await this.dataSource.transaction(async (manager) => {
+        const duplicate = await manager.query(
+          `SELECT 1 FROM "identity"."users" WHERE "phone"=$1 LIMIT 1`,
+          [dto.phone],
+        );
+        if (duplicate.length) {
+          throw BusinessException.conflict(
+            "Bu telefon raqam allaqachon ro'yxatdan o'tgan",
+          );
+        }
+        const [user] = await manager.query(
+          `INSERT INTO "identity"."users"
+           ("role","name","phone","email","password_hash","avatar_url","is_active","is_deleted")
+           VALUES ($1,$2,$3,$4,$5,NULL,FALSE,FALSE)
+           RETURNING "id","name","phone","role","is_active" AS "isActive"`,
+          [Role.SELLER, dto.name, dto.phone, dto.email ?? null, passwordHash],
+        );
+        const [shop] = await manager.query(
+          `INSERT INTO "catalog"."shop"
+           ("owner_user_id","name","slug","description","status","phone","address","rating","orders_count","is_deleted")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,FALSE)
+           RETURNING "id","name","slug","status"`,
+          [
+            user.id,
+            dto.shopName,
+            slug,
+            dto.shopDescription ?? null,
+            ShopStatus.PENDING,
+            dto.phone,
+            dto.address ?? null,
+          ],
+        );
+        return { user, shop };
+      });
+    } catch (error) {
+      if (error instanceof BusinessException) throw error;
+      if (
+        error instanceof QueryFailedError &&
+        (error as any).driverError?.code === '23505'
+      ) {
+        throw BusinessException.conflict(
+          "Telefon yoki do'kon allaqachon mavjud",
+        );
+      }
+      throw error;
+    }
+
+    try {
+      await firstValueFrom(
+        this.notifications.emit('seller.registration.created', {
+          sellerUserId: result.user.id,
+          shopId: result.shop.id,
+          sellerName: result.user.name,
+          shopName: result.shop.name,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Admin notification yuborilmadi: ${(error as Error).message}`,
+      );
+    }
+    return result;
   }
 
   private async buildAuthResult(user: User) {

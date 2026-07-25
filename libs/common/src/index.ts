@@ -18,6 +18,7 @@ export * from './database/typeorm.util';
 
 // DTO
 export * from './dto/auth.dto';
+export * from './dto/seller.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';

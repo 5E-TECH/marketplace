@@ -1,6 +1,11 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { LoginDto, RegisterDto, RpcHttpExceptionFilter } from '@app/common';
+import {
+  LoginDto,
+  RegisterDto,
+  RpcHttpExceptionFilter,
+  SellerRegisterDto,
+} from '@app/common';
 import { AuthService } from './auth.service';
 
 /**
@@ -29,5 +34,10 @@ export class AuthController {
   @MessagePattern({ cmd: 'auth.me' })
   me(@Payload() data: { userId: string }) {
     return this.authService.getById(data.userId);
+  }
+
+  @MessagePattern({ cmd: 'seller.register' })
+  registerSeller(@Payload() dto: SellerRegisterDto) {
+    return this.authService.registerSeller(dto);
   }
 }

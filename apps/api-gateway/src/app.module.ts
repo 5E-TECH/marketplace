@@ -15,6 +15,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
+import { SellersController } from './sellers/sellers.controller';
 
 @Module({
   imports: [
@@ -34,9 +35,20 @@ import { AuthController } from './auth/auth.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
       },
+      {
+        name: RmqClient.CATALOG,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
+      },
     ]),
   ],
-  controllers: [AppController, EchoController, AuthController],
+  controllers: [
+    AppController,
+    EchoController,
+    AuthController,
+    SellersController,
+  ],
   providers: [
     AppService,
     // Global auth: avval JWT (401), keyin rol (403)
