@@ -57,16 +57,6 @@ export class LoginDto {
   password: string;
 }
 
-export class LogoutDto {
-  @ApiProperty({
-    description: 'Login yoki refresh orqali olingan refresh token',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-  })
-  @IsString()
-  @MinLength(1)
-  refreshToken: string;
-}
-
 export class AuthUserDto {
   @ApiProperty({ example: '42' })
   id: string;
@@ -129,6 +119,14 @@ export class AuthSuccessResponseDto {
 
   @ApiProperty({ type: AuthTokensDto })
   data: AuthTokensDto;
+}
+
+export class LoginSuccessResponseDto {
+  @ApiProperty({
+    description: 'Himoyalangan endpointlar uchun Bearer access token',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken: string;
 }
 
 export class LogoutSuccessResponseDto {

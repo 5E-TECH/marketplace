@@ -2,16 +2,10 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
-import {
-  BusinessException,
-  LoginDto,
-  LogoutDto,
-  RegisterDto,
-  Role,
-} from '@app/common';
+import { BusinessException, LoginDto, RegisterDto, Role } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
 
@@ -65,29 +59,11 @@ export class AuthService {
     return this.sanitize(user);
   }
 
-  async logout(userId: string, dto: LogoutDto): Promise<null> {
-    let payload: { sub: string; jti: string };
-    try {
-      payload = await this.jwt.verifyAsync(dto.refreshToken, {
-        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-      });
-    } catch {
-      throw new UnauthorizedException('Refresh token yaroqsiz');
-    }
-    if (payload.sub !== userId || !payload.jti) {
-      throw new UnauthorizedException('Refresh token yaroqsiz');
-    }
-
-    const session = await this.sessions.findOne({
-      where: { id: payload.jti, userId },
-    });
-    if (!session || session.tokenHash !== this.hashToken(dto.refreshToken)) {
-      throw new UnauthorizedException('Refresh token yaroqsiz');
-    }
-    if (!session.revokedAt) {
-      session.revokedAt = new Date();
-      await this.sessions.save(session);
-    }
+  async logout(userId: string): Promise<null> {
+    await this.sessions.update(
+      { userId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
     return null;
   }
 

@@ -1,11 +1,6 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import {
-  LoginDto,
-  LogoutDto,
-  RegisterDto,
-  RpcHttpExceptionFilter,
-} from '@app/common';
+import { LoginDto, RegisterDto, RpcHttpExceptionFilter } from '@app/common';
 import { AuthService } from './auth.service';
 
 /**
@@ -27,8 +22,8 @@ export class AuthController {
   }
 
   @MessagePattern({ cmd: 'auth.logout' })
-  logout(@Payload() data: LogoutDto & { userId: string }) {
-    return this.authService.logout(data.userId, data);
+  logout(@Payload() data: { userId: string }) {
+    return this.authService.logout(data.userId);
   }
 
   @MessagePattern({ cmd: 'auth.me' })

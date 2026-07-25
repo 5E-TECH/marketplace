@@ -61,6 +61,19 @@ describe('AuthService (C0.4)', () => {
         else sessionStore[index] = session;
         return session;
       }),
+      update: jest.fn(async (criteria: any, values: any) => {
+        let affected = 0;
+        for (const session of sessionStore) {
+          if (
+            session.userId === criteria.userId &&
+            session.revokedAt === null
+          ) {
+            Object.assign(session, values);
+            affected += 1;
+          }
+        }
+        return { affected };
+      }),
     };
     service = new AuthService(users as any, sessions as any, jwt, config);
   });
@@ -136,18 +149,22 @@ describe('AuthService (C0.4)', () => {
     expect(() => jwt.verify('soxta.token.qiymat')).toThrow();
   });
 
-  it('logout refresh sessionni bekor qiladi va null qaytaradi', async () => {
+  it('logout userning barcha refresh sessiyalarini bekor qiladi', async () => {
     const auth = await service.register({
       name: 'A',
       phone: '+998901112233',
       password: 'Secret123',
     });
+    await service.login({
+      phone: '+998901112233',
+      password: 'Secret123',
+    });
 
-    await expect(
-      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
-    ).resolves.toBeNull();
-    expect(sessionStore).toHaveLength(1);
-    expect(sessionStore[0].revokedAt).toBeInstanceOf(Date);
+    await expect(service.logout(auth.user.id)).resolves.toBeNull();
+    expect(sessionStore).toHaveLength(2);
+    expect(
+      sessionStore.every((session) => session.revokedAt instanceof Date),
+    ).toBe(true);
   });
 
   it('logout takror chaqirilsa ham idempotent', async () => {
@@ -156,22 +173,32 @@ describe('AuthService (C0.4)', () => {
       phone: '+998901112233',
       password: 'Secret123',
     });
-    await service.logout(auth.user.id, { refreshToken: auth.refreshToken });
+    await service.logout(auth.user.id);
 
-    await expect(
-      service.logout(auth.user.id, { refreshToken: auth.refreshToken }),
-    ).resolves.toBeNull();
+    await expect(service.logout(auth.user.id)).resolves.toBeNull();
   });
 
-  it('boshqa user refresh tokeni bilan logoutni rad etadi', async () => {
-    const auth = await service.register({
+  it('logout boshqa user sessiyasini bekor qilmaydi', async () => {
+    const first = await service.register({
       name: 'A',
       phone: '+998901112233',
       password: 'Secret123',
     });
+    const second = await service.register({
+      name: 'B',
+      phone: '+998901112234',
+      password: 'Secret123',
+    });
 
-    await expect(
-      service.logout('999', { refreshToken: auth.refreshToken }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await service.logout(first.user.id);
+
+    expect(
+      sessionStore.find((session) => session.userId === first.user.id)
+        .revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      sessionStore.find((session) => session.userId === second.user.id)
+        .revokedAt,
+    ).toBeNull();
   });
 });
