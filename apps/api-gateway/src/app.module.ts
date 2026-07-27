@@ -16,6 +16,7 @@ import { AppService } from './app.service';
 import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
 import { SellersController } from './sellers/sellers.controller';
+import { CategoriesController } from './categories/categories.controller';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SellersController } from './sellers/sellers.controller';
     EchoController,
     AuthController,
     SellersController,
+    CategoriesController,
   ],
   providers: [
     AppService,
