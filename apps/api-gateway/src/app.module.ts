@@ -17,6 +17,7 @@ import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
 import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
+import { ProductsController } from './products/products.controller';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { CategoriesController } from './categories/categories.controller';
     AuthController,
     SellersController,
     CategoriesController,
+    ProductsController,
   ],
   providers: [
     AppService,

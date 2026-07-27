@@ -11,6 +11,8 @@ import { SellerShopController } from './seller-shop.controller';
 import { SellerShopService } from './seller-shop.service';
 import { CategoryController } from './category.controller';
 import { CategoryService } from './category.service';
+import { ProductController } from './product.controller';
+import { ProductService } from './product.service';
 
 const entities = [Shop, Category, Product, ProductVariant];
 
@@ -31,7 +33,7 @@ const entities = [Shop, Category, Product, ProductVariant];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [SellerShopController, CategoryController],
-  providers: [SellerShopService, CategoryService],
+  controllers: [SellerShopController, CategoryController, ProductController],
+  providers: [SellerShopService, CategoryService, ProductService],
 })
 export class CatalogModule {}
