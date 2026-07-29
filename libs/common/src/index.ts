@@ -23,6 +23,7 @@ export * from './dto/category.dto';
 export * from './dto/product.dto';
 export * from './dto/product-variant.dto';
 export * from './dto/file.dto';
+export * from './dto/inventory.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';
