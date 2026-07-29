@@ -12,6 +12,7 @@ export const RmqQueue = {
   INTEGRATION: 'integration_queue',
   NOTIFICATION: 'notification_queue',
   SEARCH: 'search_queue',
+  FILE: 'file_queue',
 } as const;
 
 /** Injection token'lari (gateway ClientsModule uchun). */
@@ -26,6 +27,7 @@ export const RmqClient = {
   INTEGRATION: 'INTEGRATION_SERVICE',
   NOTIFICATION: 'NOTIFICATION_SERVICE',
   SEARCH: 'SEARCH_SERVICE',
+  FILE: 'FILE_SERVICE',
 } as const;
 
 /**

@@ -115,6 +115,22 @@ export class ProductService {
     return this.getOwned(ownerUserId, id);
   }
 
+  async addImage(
+    ownerUserId: string,
+    id: string,
+    url: string,
+    isCover: boolean,
+  ): Promise<Product> {
+    const product = await this.getOwned(ownerUserId, id);
+    if (!product.images.includes(url)) {
+      product.images = [...product.images, url];
+    }
+    if (isCover) {
+      product.imageUrl = url;
+    }
+    return this.save(product);
+  }
+
   async update(
     ownerUserId: string,
     id: string,

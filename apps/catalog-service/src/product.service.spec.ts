@@ -124,6 +124,25 @@ describe('ProductService', () => {
     );
   });
 
+  it('productga rasm qo‘shadi va cover sifatida belgilaydi', async () => {
+    productRepo.findOne.mockResolvedValue({
+      id: '10',
+      ownerUserId: '42',
+      images: ['http://minio/old.jpg'],
+      imageUrl: null,
+      isDeleted: false,
+    });
+
+    await service.addImage('42', '10', 'http://minio/new.jpg', true);
+
+    expect(productRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: ['http://minio/old.jpg', 'http://minio/new.jpg'],
+        imageUrl: 'http://minio/new.jpg',
+      }),
+    );
+  });
+
   it('/products/my owner, filter, search va paginationni qo‘llaydi', async () => {
     const qb: Record<string, jest.Mock> = {};
     for (const method of [

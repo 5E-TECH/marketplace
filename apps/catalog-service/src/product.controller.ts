@@ -28,6 +28,24 @@ export class ProductController {
     return this.products.getOne(data.ownerUserId, data.id);
   }
 
+  @MessagePattern({ cmd: 'product.add-image' })
+  addImage(
+    @Payload()
+    data: {
+      ownerUserId: string;
+      id: string;
+      url: string;
+      isCover: boolean;
+    },
+  ) {
+    return this.products.addImage(
+      data.ownerUserId,
+      data.id,
+      data.url,
+      data.isCover,
+    );
+  }
+
   @MessagePattern({ cmd: 'product.update' })
   update(
     @Payload()
