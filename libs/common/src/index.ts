@@ -21,6 +21,7 @@ export * from './dto/auth.dto';
 export * from './dto/seller.dto';
 export * from './dto/category.dto';
 export * from './dto/product.dto';
+export * from './dto/product-variant.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';

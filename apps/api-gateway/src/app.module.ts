@@ -18,6 +18,7 @@ import { AuthController } from './auth/auth.controller';
 import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
 import { ProductsController } from './products/products.controller';
+import { ProductVariantsController } from './products/product-variants.controller';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { ProductsController } from './products/products.controller';
     SellersController,
     CategoriesController,
     ProductsController,
+    ProductVariantsController,
   ],
   providers: [
     AppService,

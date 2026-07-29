@@ -16,6 +16,7 @@ import {
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
+import { ProductVariant } from './entities/product-variant.entity';
 
 @Injectable()
 export class ProductService {
@@ -26,6 +27,8 @@ export class ProductService {
     private readonly shops: Repository<Shop>,
     @InjectRepository(Category)
     private readonly categories: Repository<Category>,
+    @InjectRepository(ProductVariant)
+    private readonly variants: Repository<ProductVariant>,
   ) {}
 
   async create(ownerUserId: string, dto: CreateProductDto): Promise<Product> {
@@ -48,7 +51,20 @@ export class ProductService {
       hasVariants: false,
       status: dto.status ?? ProductStatus.DRAFT,
     });
-    return this.save(product);
+    const createdProduct = await this.save(product);
+    const defaultVariant = this.variants.create({
+      productId: createdProduct.id,
+      sku: `PRODUCT-${createdProduct.id}-DEFAULT`,
+      name: 'Default',
+      attributes: {},
+      price: null,
+      oldPrice: null,
+      barcode: null,
+      imageUrl: null,
+      isActive: true,
+    });
+    await this.variants.save(defaultVariant);
+    return createdProduct;
   }
 
   async getMine(

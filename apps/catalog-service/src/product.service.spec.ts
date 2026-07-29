@@ -11,21 +11,27 @@ describe('ProductService', () => {
   };
   let shopRepo: { findOne: jest.Mock };
   let categoryRepo: { findOne: jest.Mock };
+  let variantRepo: { create: jest.Mock; save: jest.Mock };
   let service: ProductService;
 
   beforeEach(() => {
     productRepo = {
       findOne: jest.fn(),
       create: jest.fn((value) => value),
-      save: jest.fn(async (value) => value),
+      save: jest.fn(async (value) => ({ id: value.id ?? '10', ...value })),
       createQueryBuilder: jest.fn(),
     };
     shopRepo = { findOne: jest.fn() };
     categoryRepo = { findOne: jest.fn() };
+    variantRepo = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => ({ id: '100', ...value })),
+    };
     service = new ProductService(
       productRepo as any,
       shopRepo as any,
       categoryRepo as any,
+      variantRepo as any,
     );
   });
 
@@ -49,6 +55,16 @@ describe('ProductService', () => {
         status: ProductStatus.DRAFT,
       }),
     );
+    expect(variantRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: '10',
+        sku: 'PRODUCT-10-DEFAULT',
+        name: 'Default',
+        price: null,
+        isActive: true,
+      }),
+    );
+    expect(variantRepo.save).toHaveBeenCalledTimes(1);
   });
 
   it('bir shopdagi takroriy nom uchun unique slug yaratadi', async () => {
