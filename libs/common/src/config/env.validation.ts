@@ -28,9 +28,13 @@ export const envValidationSchema = Joi.object({
   // MinIO
   MINIO_ENDPOINT: Joi.string().required(),
   MINIO_PORT: Joi.number().port().default(9000),
+  MINIO_USE_SSL: Joi.boolean().default(false),
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET: Joi.string().default('marketplace-media'),
+  MINIO_PUBLIC_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .required(),
 
   // Auth (JWT)
   JWT_SECRET: Joi.string().min(16).required(),
