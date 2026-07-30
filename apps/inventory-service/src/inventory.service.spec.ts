@@ -289,11 +289,16 @@ describe('InventoryService', () => {
       warehouseId: '201',
       quantity: 10,
       reason: 'Yetkazib beruvchi kirimi',
+      actorId: '401',
       idempotencyKey: 'inbound-1',
     });
 
     expect(result).toMatchObject({ onHand: 15, reserved: 0 });
-    expect(db.movements[0].type).toBe(StockMovementType.INBOUND);
+    expect(db.movements[0]).toMatchObject({
+      type: StockMovementType.INBOUND,
+      actorId: '401',
+      reason: 'Yetkazib beruvchi kirimi',
+    });
   });
 
   it('TC6: invariant buzadigan adjustni rad etadi', async () => {

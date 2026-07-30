@@ -72,6 +72,15 @@
       "compilerOptions": {
         "tsConfigPath": "apps/inventory-service/tsconfig.app.json"
       }
+    },
+    "checkout-service": {
+      "type": "application",
+      "root": "apps/checkout-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/checkout-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/checkout-service/tsconfig.app.json"
+      }
     }
   }
 }
