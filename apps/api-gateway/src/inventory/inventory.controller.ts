@@ -29,6 +29,9 @@ import {
   Roles,
   sendRpc,
   StockPageDto,
+  StockAdjustDto,
+  StockInboundDto,
+  StockMutationResultDto,
   StockQueryDto,
   UpdateWarehouseDto,
   WarehouseDto,
@@ -114,6 +117,20 @@ export class InventoryController {
   @ApiOkResponse({ type: StockPageDto })
   listStock(@CurrentUser() user: JwtUser, @Query() query: StockQueryDto) {
     return this.call('inventory.stock.list', user, { query });
+  }
+
+  @Post('stock/inbound')
+  @ApiOperation({ summary: 'Tovarni omborga kirim qilish' })
+  @ApiOkResponse({ type: StockMutationResultDto })
+  inbound(@CurrentUser() user: JwtUser, @Body() dto: StockInboundDto) {
+    return this.call('inventory.stock.inbound', user, { dto });
+  }
+
+  @Post('stock/adjust')
+  @ApiOperation({ summary: 'Ombor qoldig‘ini sabab bilan tuzatish' })
+  @ApiOkResponse({ type: StockMutationResultDto })
+  adjust(@CurrentUser() user: JwtUser, @Body() dto: StockAdjustDto) {
+    return this.call('inventory.stock.adjust', user, { dto });
   }
 
   private call(cmd: string, user: JwtUser, data: Record<string, unknown> = {}) {

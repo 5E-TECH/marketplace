@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Warehouse } from './entities/warehouse.entity';
@@ -89,6 +93,21 @@ export class WarehouseService {
       throw new NotFoundException('Bunday ombor topilmadi');
     }
     return warehouse;
+  }
+
+  async assertOwned(shopId: string, warehouseId: string): Promise<void> {
+    const warehouse = await this.warehouses.findOne({
+      where: { id: warehouseId, isActive: true },
+    });
+    if (!warehouse) {
+      throw new NotFoundException('Bunday ombor topilmadi');
+    }
+    if (
+      warehouse.ownerType !== WarehouseOwnerType.SHOP ||
+      warehouse.ownerId !== shopId
+    ) {
+      throw new ForbiddenException('Bu ombor sizga tegishli emas');
+    }
   }
 
   async updateWarehouse(

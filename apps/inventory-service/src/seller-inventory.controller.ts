@@ -1,13 +1,17 @@
 import { Controller, Inject, UseFilters } from '@nestjs/common';
 import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
+import { randomUUID } from 'node:crypto';
 import {
   CreateWarehouseDto,
   RmqClient,
   RpcHttpExceptionFilter,
   sendRpc,
   StockQueryDto,
+  StockAdjustDto,
+  StockInboundDto,
   UpdateWarehouseDto,
 } from '@app/common';
+import { InventoryService, InventoryResult } from './inventory.service';
 import { StockQueryService } from './stock-query.service';
 import { WarehouseService } from './warehouse.service';
 
@@ -21,6 +25,7 @@ export class SellerInventoryController {
   constructor(
     private readonly warehouses: WarehouseService,
     private readonly stock: StockQueryService,
+    private readonly inventory: InventoryService,
     @Inject(RmqClient.CATALOG)
     private readonly catalog: ClientProxy,
   ) {}
@@ -84,6 +89,38 @@ export class SellerInventoryController {
     return this.stock.findLow(shopId, data.query);
   }
 
+  @MessagePattern({ cmd: 'inventory.stock.inbound' })
+  async inbound(
+    @Payload() data: { ownerUserId: string; dto: StockInboundDto },
+  ) {
+    const shopId = await this.shopId(data.ownerUserId);
+    await this.warehouses.assertOwned(shopId, data.dto.warehouseId);
+    const result = await this.inventory.inbound({
+      variantId: data.dto.variantId,
+      warehouseId: data.dto.warehouseId,
+      quantity: data.dto.quantity,
+      reason: data.dto.reason,
+      actorId: data.ownerUserId,
+      idempotencyKey: data.dto.idempotencyKey ?? randomUUID(),
+    });
+    return this.stockMutationResult(data.dto, result);
+  }
+
+  @MessagePattern({ cmd: 'inventory.stock.adjust' })
+  async adjust(@Payload() data: { ownerUserId: string; dto: StockAdjustDto }) {
+    const shopId = await this.shopId(data.ownerUserId);
+    await this.warehouses.assertOwned(shopId, data.dto.warehouseId);
+    const result = await this.inventory.adjust({
+      variantId: data.dto.variantId,
+      warehouseId: data.dto.warehouseId,
+      quantityDelta: data.dto.delta,
+      reason: data.dto.reason,
+      actorId: data.ownerUserId,
+      idempotencyKey: data.dto.idempotencyKey ?? randomUUID(),
+    });
+    return this.stockMutationResult(data.dto, result);
+  }
+
   private async shopId(ownerUserId: string): Promise<string> {
     const shop = await sendRpc<SellerShop>(
       this.catalog,
@@ -91,5 +128,18 @@ export class SellerInventoryController {
       { ownerUserId },
     );
     return shop.id;
+  }
+
+  private stockMutationResult(
+    target: { variantId: string; warehouseId: string },
+    result: InventoryResult,
+  ) {
+    return {
+      variantId: target.variantId,
+      warehouseId: target.warehouseId,
+      onHand: result.onHand,
+      reserved: result.reserved,
+      available: result.onHand! - result.reserved!,
+    };
   }
 }

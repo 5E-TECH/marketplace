@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  NotEquals,
 } from 'class-validator';
 
 export class CreateWarehouseDto {
@@ -192,4 +193,79 @@ export class StockPageDto {
 
   @ApiProperty({ example: 2 })
   totalPages: number;
+}
+
+export class StockInboundDto {
+  @ApiProperty({ example: '88' })
+  @Matches(/^[1-9]\d*$/, { message: "variantId musbat son bo'lishi kerak" })
+  variantId: string;
+
+  @ApiProperty({ example: '3' })
+  @Matches(/^[1-9]\d*$/, { message: "warehouseId musbat son bo'lishi kerak" })
+  warehouseId: string;
+
+  @ApiProperty({ example: 50, minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({ example: 'Yangi partiya' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  reason: string;
+
+  @ApiPropertyOptional({ example: 'po-2026-07-21-001', maxLength: 230 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(230)
+  idempotencyKey?: string;
+}
+
+export class StockAdjustDto {
+  @ApiProperty({ example: '88' })
+  @Matches(/^[1-9]\d*$/, { message: "variantId musbat son bo'lishi kerak" })
+  variantId: string;
+
+  @ApiProperty({ example: '3' })
+  @Matches(/^[1-9]\d*$/, { message: "warehouseId musbat son bo'lishi kerak" })
+  warehouseId: string;
+
+  @ApiProperty({ example: -5, description: 'Noldan farqli signed miqdor' })
+  @Type(() => Number)
+  @IsInt()
+  @NotEquals(0, { message: "delta noldan farqli bo'lishi kerak" })
+  delta: number;
+
+  @ApiProperty({ example: 'Yaroqsiz tovar' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  reason: string;
+
+  @ApiPropertyOptional({ example: 'adj-2026-07-21-001', maxLength: 230 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(230)
+  idempotencyKey?: string;
+}
+
+export class StockMutationResultDto {
+  @ApiProperty({ example: '88' })
+  variantId: string;
+
+  @ApiProperty({ example: '3' })
+  warehouseId: string;
+
+  @ApiProperty({ example: 45 })
+  onHand: number;
+
+  @ApiProperty({ example: 3 })
+  reserved: number;
+
+  @ApiProperty({ example: 42 })
+  available: number;
 }
