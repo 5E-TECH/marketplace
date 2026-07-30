@@ -20,6 +20,7 @@ import { CategoriesController } from './categories/categories.controller';
 import { ProductsController } from './products/products.controller';
 import { ProductVariantsController } from './products/product-variants.controller';
 import { FilesController } from './files/files.controller';
+import { InventoryController } from './inventory/inventory.controller';
 
 @Module({
   imports: [
@@ -51,6 +52,12 @@ import { FilesController } from './files/files.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.FILE),
       },
+      {
+        name: RmqClient.INVENTORY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.INVENTORY),
+      },
     ]),
   ],
   controllers: [
@@ -62,6 +69,7 @@ import { FilesController } from './files/files.controller';
     ProductsController,
     ProductVariantsController,
     FilesController,
+    InventoryController,
   ],
   providers: [
     AppService,

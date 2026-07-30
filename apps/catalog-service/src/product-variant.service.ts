@@ -206,6 +206,27 @@ export class ProductVariantService {
     return { id: variantId, deleted: true };
   }
 
+  async getInventoryDetails(shopId: string, variantIds: string[]) {
+    if (variantIds.length === 0) return [];
+
+    const variants = await this.productVariants
+      .createQueryBuilder('variant')
+      .innerJoinAndSelect('variant.product', 'product')
+      .where('variant.id IN (:...variantIds)', { variantIds })
+      .andWhere('variant.is_deleted = FALSE')
+      .andWhere('product.is_deleted = FALSE')
+      .andWhere('product.shop_id = :shopId', { shopId })
+      .getMany();
+
+    return variants.map((variant) => ({
+      variantId: variant.id,
+      productId: variant.productId,
+      productName: variant.product.name,
+      variantName: variant.name,
+      sku: variant.sku,
+    }));
+  }
+
   private defaultSku(productId: string): string {
     return `PRODUCT-${productId}-DEFAULT`;
   }
