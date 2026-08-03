@@ -104,6 +104,10 @@ services:
     <<: *app
     command: node dist/apps/file-service/apps/file-service/src/main.js
 
+  notification-service:
+    <<: *app
+    command: node dist/apps/notification-service/apps/notification-service/src/main.js
+
   nginx:
     image: nginx:1.28-alpine
     restart: unless-stopped

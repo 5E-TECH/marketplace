@@ -154,6 +154,8 @@ export class AuthService {
           shopId: result.shop.id,
           sellerName: result.user.name,
           shopName: result.shop.name,
+          email: dto.email ?? null,
+          phone: dto.phone,
         }),
       );
     } catch (error) {

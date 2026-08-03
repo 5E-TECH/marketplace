@@ -44,4 +44,9 @@ export const envValidationSchema = Joi.object({
 
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),
+
+  // Notification provider adapterlari (ixtiyoriy)
+  EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),
+  SMS_WEBHOOK_URL: Joi.string().uri().optional(),
+  TELEGRAM_BOT_TOKEN: Joi.string().optional(),
 });
