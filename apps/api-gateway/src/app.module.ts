@@ -22,6 +22,7 @@ import { ProductVariantsController } from './products/product-variants.controlle
 import { FilesController } from './files/files.controller';
 import { InventoryController } from './inventory/inventory.controller';
 import { SellerOrdersController } from './sellers/seller-orders.controller';
+import { NotificationsController } from './notifications/notifications.controller';
 
 @Module({
   imports: [
@@ -65,6 +66,15 @@ import { SellerOrdersController } from './sellers/seller-orders.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
       },
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
     ]),
   ],
   controllers: [
@@ -78,6 +88,7 @@ import { SellerOrdersController } from './sellers/seller-orders.controller';
     FilesController,
     InventoryController,
     SellerOrdersController,
+    NotificationsController,
   ],
   providers: [
     AppService,

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "nest build",
-    "build:all": "nest build api-gateway && nest build echo-service && nest build identity-service && nest build catalog-service && nest build inventory-service && nest build checkout-service && nest build file-service",
+    "build:all": "nest build api-gateway && nest build echo-service && nest build identity-service && nest build catalog-service && nest build inventory-service && nest build checkout-service && nest build file-service && nest build notification-service",
     "format": "prettier --write \"{apps,libs}/**/*.ts\"",
     "format:check": "prettier --check \"{apps,libs}/**/*.ts\"",
     "prepare": "husky",
@@ -21,6 +21,7 @@
     "start:inventory:dev": "nest start inventory-service --watch",
     "start:checkout:dev": "nest start checkout-service --watch",
     "start:file:dev": "nest start file-service --watch",
+    "start:notification:dev": "nest start notification-service --watch",
     "start:debug": "nest start api-gateway --debug --watch",
     "start:prod": "node dist/apps/api-gateway/apps/api-gateway/src/main",
     "lint": "eslint .",
