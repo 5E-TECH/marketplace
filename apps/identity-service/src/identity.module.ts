@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonAuthModule,
   CommonConfigModule,
   ensureSchema,
+  RmqClient,
+  RmqQueue,
+  rmqOptions,
   typeOrmOptions,
 } from '@app/common';
 import { User } from './entities/user.entity';
@@ -13,6 +17,7 @@ import { AuthService } from './auth/auth.service';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AuthSession } from './entities/auth-session.entity';
 import { CreateAuthSession1721908800000 } from './migrations/1721908800000-create-auth-session';
+import { CreateUsers1722776400000 } from './migrations/1722776400000-create-users';
 
 const entities = [User, AuthSession];
 
@@ -20,13 +25,27 @@ const entities = [User, AuthSession];
   imports: [
     CommonConfigModule, // .env + Joi
     CommonAuthModule, // JwtService (JWT_SECRET)
+    ClientsModule.registerAsync([
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'identity'); // schema mavjud bo'lsin
         return {
           ...typeOrmOptions(config, 'identity', entities),
-          migrations: [CreateAuthSession1721908800000],
+          migrations: [
+            CreateAuthSession1721908800000,
+            CreateUsers1722776400000,
+          ],
           migrationsRun: true,
         };
       },

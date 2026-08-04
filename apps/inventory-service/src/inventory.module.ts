@@ -26,6 +26,9 @@ import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-c
 import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
+import { SellerInventoryController } from './seller-inventory.controller';
+import { StockQueryService } from './stock-query.service';
+import { WarehouseService } from './warehouse.service';
 
 const entities = [
   Warehouse,
@@ -68,8 +71,11 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
+  controllers: [SellerInventoryController],
   providers: [
     InventoryService,
+    WarehouseService,
+    StockQueryService,
     ReservationSweeperService,
     OutboxService,
     InventoryOutboxRelayService,

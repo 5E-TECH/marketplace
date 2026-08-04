@@ -11,6 +11,7 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
+  CORS_ORIGINS: Joi.string().allow('').optional(),
 
   // PostgreSQL
   DB_HOST: Joi.string().required(),
@@ -27,9 +28,13 @@ export const envValidationSchema = Joi.object({
   // MinIO
   MINIO_ENDPOINT: Joi.string().required(),
   MINIO_PORT: Joi.number().port().default(9000),
+  MINIO_USE_SSL: Joi.boolean().default(false),
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET: Joi.string().default('marketplace-media'),
+  MINIO_PUBLIC_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .required(),
 
   // Auth (JWT)
   JWT_SECRET: Joi.string().min(16).required(),
@@ -39,4 +44,9 @@ export const envValidationSchema = Joi.object({
 
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),
+
+  // Notification provider adapterlari (ixtiyoriy)
+  EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),
+  SMS_WEBHOOK_URL: Joi.string().uri().optional(),
+  TELEGRAM_BOT_TOKEN: Joi.string().optional(),
 });

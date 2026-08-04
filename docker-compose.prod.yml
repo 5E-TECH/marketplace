@@ -1,0 +1,132 @@
+x-app: &app
+  image: elchi-marketplace:latest
+  restart: unless-stopped
+  env_file:
+    - ${APP_ENV_FILE:-.env.production}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  networks:
+    - backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mc",
+          "ready",
+          "local",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - backend
+
+  api-gateway:
+    <<: *app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: node dist/apps/api-gateway/apps/api-gateway/src/main.js
+    networks:
+      - backend
+      - frontend
+
+  echo-service:
+    <<: *app
+    command: node dist/apps/echo-service/apps/echo-service/src/main.js
+
+  identity-service:
+    <<: *app
+    command: node dist/apps/identity-service/apps/identity-service/src/main.js
+
+  catalog-service:
+    <<: *app
+    command: node dist/apps/catalog-service/apps/catalog-service/src/main.js
+
+  inventory-service:
+    <<: *app
+    command: node dist/apps/inventory-service/apps/inventory-service/src/main.js
+
+  checkout-service:
+    <<: *app
+    command: node dist/apps/checkout-service/apps/checkout-service/src/main.js
+
+  file-service:
+    <<: *app
+    command: node dist/apps/file-service/apps/file-service/src/main.js
+
+  notification-service:
+    <<: *app
+    command: node dist/apps/notification-service/apps/notification-service/src/main.js
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+      - minio
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
+
+networks:
+  frontend:
+  backend:

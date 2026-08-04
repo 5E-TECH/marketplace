@@ -15,6 +15,14 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
+import { SellersController } from './sellers/sellers.controller';
+import { CategoriesController } from './categories/categories.controller';
+import { ProductsController } from './products/products.controller';
+import { ProductVariantsController } from './products/product-variants.controller';
+import { FilesController } from './files/files.controller';
+import { InventoryController } from './inventory/inventory.controller';
+import { SellerOrdersController } from './sellers/seller-orders.controller';
+import { NotificationsController } from './notifications/notifications.controller';
 
 @Module({
   imports: [
@@ -34,9 +42,54 @@ import { AuthController } from './auth/auth.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
       },
+      {
+        name: RmqClient.CATALOG,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
+      },
+      {
+        name: RmqClient.FILE,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.FILE),
+      },
+      {
+        name: RmqClient.INVENTORY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.INVENTORY),
+      },
+      {
+        name: RmqClient.CHECKOUT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
+      },
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
     ]),
   ],
-  controllers: [AppController, EchoController, AuthController],
+  controllers: [
+    AppController,
+    EchoController,
+    AuthController,
+    SellersController,
+    CategoriesController,
+    ProductsController,
+    ProductVariantsController,
+    FilesController,
+    InventoryController,
+    SellerOrdersController,
+    NotificationsController,
+  ],
   providers: [
     AppService,
     // Global auth: avval JWT (401), keyin rol (403)

@@ -19,6 +19,24 @@
         "tsConfigPath": "apps/api-gateway/tsconfig.app.json"
       }
     },
+    "catalog-service": {
+      "type": "application",
+      "root": "apps/catalog-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/catalog-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/catalog-service/tsconfig.app.json"
+      }
+    },
+    "common": {
+      "type": "library",
+      "root": "libs/common",
+      "entryFile": "index",
+      "sourceRoot": "libs/common/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/common/tsconfig.lib.json"
+      }
+    },
     "echo-service": {
       "type": "application",
       "root": "apps/echo-service",
@@ -26,6 +44,15 @@
       "sourceRoot": "apps/echo-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/echo-service/tsconfig.app.json"
+      }
+    },
+    "file-service": {
+      "type": "application",
+      "root": "apps/file-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/file-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/file-service/tsconfig.app.json"
       }
     },
     "identity-service": {
@@ -37,15 +64,6 @@
         "tsConfigPath": "apps/identity-service/tsconfig.app.json"
       }
     },
-    "catalog-service": {
-      "type": "application",
-      "root": "apps/catalog-service",
-      "entryFile": "main",
-      "sourceRoot": "apps/catalog-service/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/catalog-service/tsconfig.app.json"
-      }
-    },
     "inventory-service": {
       "type": "application",
       "root": "apps/inventory-service",
@@ -55,13 +73,22 @@
         "tsConfigPath": "apps/inventory-service/tsconfig.app.json"
       }
     },
-    "common": {
-      "type": "library",
-      "root": "libs/common",
-      "entryFile": "index",
-      "sourceRoot": "libs/common/src",
+    "checkout-service": {
+      "type": "application",
+      "root": "apps/checkout-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/checkout-service/src",
       "compilerOptions": {
-        "tsConfigPath": "libs/common/tsconfig.lib.json"
+        "tsConfigPath": "apps/checkout-service/tsconfig.app.json"
+      }
+    },
+    "notification-service": {
+      "type": "application",
+      "root": "apps/notification-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/notification-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/notification-service/tsconfig.app.json"
       }
     }
   }
