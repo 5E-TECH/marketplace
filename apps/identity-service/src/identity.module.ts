@@ -17,6 +17,7 @@ import { AuthService } from './auth/auth.service';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AuthSession } from './entities/auth-session.entity';
 import { CreateAuthSession1721908800000 } from './migrations/1721908800000-create-auth-session';
+import { CreateUsers1722776400000 } from './migrations/1722776400000-create-users';
 
 const entities = [User, AuthSession];
 
@@ -41,7 +42,10 @@ const entities = [User, AuthSession];
         await ensureSchema(config, 'identity'); // schema mavjud bo'lsin
         return {
           ...typeOrmOptions(config, 'identity', entities),
-          migrations: [CreateAuthSession1721908800000],
+          migrations: [
+            CreateAuthSession1721908800000,
+            CreateUsers1722776400000,
+          ],
           migrationsRun: true,
         };
       },
