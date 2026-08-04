@@ -1,4 +1,4 @@
-import { ReservationStatus } from './entities/inventory.enums';
+import { ReservationStatus } from '@app/common';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 
 describe('ReservationSweeperService', () => {

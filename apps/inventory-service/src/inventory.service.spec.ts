@@ -1,9 +1,11 @@
-import { ErrorCode, OutboxEvent, OutboxStatus } from '@app/common';
-import { InventoryOperation } from './entities/inventory-operation.entity';
 import {
+  ErrorCode,
+  OutboxEvent,
+  OutboxStatus,
   ReservationStatus,
   StockMovementType,
-} from './entities/inventory.enums';
+} from '@app/common';
+import { InventoryOperation } from './entities/inventory-operation.entity';
 import { ReservationItem } from './entities/reservation-item.entity';
 import { Reservation } from './entities/reservation.entity';
 import { StockMovement } from './entities/stock-movement.entity';

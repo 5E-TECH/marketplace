@@ -1,19 +1,9 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  OneToMany,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ReservationStatus } from './inventory.enums';
+import { Column, Entity, OneToMany } from 'typeorm';
+import { BaseEntity, ReservationStatus } from '@app/common';
 import { ReservationItem } from './reservation-item.entity';
 
 @Entity('reservation')
-export class Reservation {
-  @PrimaryGeneratedColumn({ type: 'bigint' })
-  id: string;
-
+export class Reservation extends BaseEntity {
   @Column({ name: 'order_ref', type: 'bigint', unique: true })
   orderRef: string;
 
@@ -38,10 +28,4 @@ export class Reservation {
 
   @OneToMany(() => ReservationItem, (item) => item.reservation)
   items: ReservationItem[];
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

@@ -1,11 +1,5 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { BaseEntity } from '@app/common';
 import { Reservation } from './reservation.entity';
 import { Warehouse } from './warehouse.entity';
 
@@ -15,10 +9,7 @@ import { Warehouse } from './warehouse.entity';
   ['reservationId', 'variantId', 'warehouseId'],
   { unique: true },
 )
-export class ReservationItem {
-  @PrimaryGeneratedColumn({ type: 'bigint' })
-  id: string;
-
+export class ReservationItem extends BaseEntity {
   @Column({ name: 'reservation_id', type: 'bigint' })
   reservationId: string;
 
