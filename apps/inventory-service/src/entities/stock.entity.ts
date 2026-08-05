@@ -1,22 +1,12 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { BaseEntity } from '@app/common';
 import { Warehouse } from './warehouse.entity';
 
 @Entity('stock')
 @Index('uq_inventory_stock_variant_warehouse', ['variantId', 'warehouseId'], {
   unique: true,
 })
-export class Stock {
-  @PrimaryGeneratedColumn({ type: 'bigint' })
-  id: string;
-
+export class Stock extends BaseEntity {
   @Column({ name: 'variant_id', type: 'bigint' })
   variantId: string;
 
@@ -35,7 +25,4 @@ export class Stock {
 
   @Column({ name: 'low_stock_threshold', type: 'integer', default: 0 })
   lowStockThreshold: number;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

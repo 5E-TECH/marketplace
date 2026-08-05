@@ -1,87 +1,62 @@
 import { Injectable } from '@nestjs/common';
-import { BusinessException, OutboxEvent, OutboxStatus } from '@app/common';
-import { DataSource, EntityManager, MoreThan } from 'typeorm';
-import { InventoryOperation } from './entities/inventory-operation.entity';
 import {
+  BusinessException,
   ReservationStatus,
   StockMovementType,
-} from './entities/inventory.enums';
+} from '@app/common';
+import { DataSource, EntityManager } from 'typeorm';
 import { ReservationItem } from './entities/reservation-item.entity';
 import { Reservation } from './entities/reservation.entity';
-import { StockMovement } from './entities/stock-movement.entity';
 import { Stock } from './entities/stock.entity';
-
-export interface StockTarget {
-  variantId: string;
-  warehouseId: string;
-}
-
-export interface ReserveItem extends StockTarget {
-  quantity: number;
-}
-
-export interface ReserveInput {
-  orderRef: string;
-  items: ReserveItem[];
-  ttlMs?: number;
-  idempotencyKey: string;
-}
-
-export interface ReservationActionInput {
-  orderRef: string;
-  idempotencyKey: string;
-  reason?: string;
-  actorId?: string;
-}
-
-export interface StockIncreaseInput extends StockTarget {
-  quantity: number;
-  idempotencyKey: string;
-  reason: string;
-  actorId?: string;
-}
-
-export interface StockAdjustInput extends StockTarget {
-  quantityDelta: number;
-  idempotencyKey: string;
-  reason: string;
-  actorId: string;
-}
-
-export interface InventoryResult {
-  operation: StockMovementType;
-  orderRef?: string;
-  reservationId?: string;
-  stockId?: string;
-  onHand?: number;
-  reserved?: number;
-}
+import {
+  assertId,
+  assertIdempotencyKey,
+  assertPositive,
+  assertReason,
+  assertStockTarget,
+  assertUniqueItems,
+  sortedItems,
+} from './inventory.assertions';
+import {
+  emitStockDepletedIfNeeded,
+  lockStock,
+  runInTransaction,
+  saveMovement,
+  stockResult,
+} from './inventory.helpers';
+import {
+  InventoryResult,
+  ReservationActionInput,
+  ReserveInput,
+  StockAdjustInput,
+  StockIncreaseInput,
+} from './inventory.types';
 
 @Injectable()
 export class InventoryService {
   constructor(private readonly dataSource: DataSource) {}
 
   reserve(input: ReserveInput): Promise<InventoryResult> {
-    this.assertId(input.orderRef, 'orderRef');
-    this.assertIdempotencyKey(input.idempotencyKey);
+    assertId(input.orderRef, 'orderRef');
+    assertIdempotencyKey(input.idempotencyKey);
     if (input.items.length === 0) {
       throw BusinessException.invalidState(
         'Rezervatsiyada kamida bitta tovar bo‘lishi kerak',
       );
     }
-    this.assertUniqueItems(input.items);
-    for (const item of input.items) this.assertPositive(item.quantity);
+    assertUniqueItems(input.items);
+    for (const item of input.items) assertPositive(item.quantity);
     if (input.ttlMs !== undefined && input.ttlMs <= 0) {
       throw BusinessException.invalidState('ttlMs musbat bo‘lishi kerak');
     }
 
-    return this.inTransaction(
+    return runInTransaction(
+      this.dataSource,
       'reserve',
       input.idempotencyKey,
       async (manager) => {
         const reservationRepo = manager.getRepository(Reservation);
         const itemRepo = manager.getRepository(ReservationItem);
-        const movementRepo = manager.getRepository(StockMovement);
         const reservation = await reservationRepo.save(
           reservationRepo.create({
             orderRef: input.orderRef,
@@ -94,8 +69,8 @@ export class InventoryService {
           }),
         );
 
-        for (const item of this.sortedItems(input.items)) {
-          const stock = await this.lockStock(
+        for (const item of sortedItems(input.items)) {
+          const stock = await lockStock(
             manager,
             item.variantId,
             item.warehouseId,
@@ -111,16 +86,15 @@ export class InventoryService {
 
           stock.quantityReserved += item.quantity;
           await manager.getRepository(Stock).save(stock);
-          await movementRepo.save(
-            movementRepo.create(
-              this.movement(
-                stock,
-                StockMovementType.RESERVE,
-                item.quantity,
-                'RESERVATION',
-                reservation.id,
-              ),
-            ),
+          await saveMovement(
+            manager,
+            stock,
+            StockMovementType.RESERVE,
+            item.quantity,
+            undefined,
+            undefined,
+            'RESERVATION',
+            reservation.id,
           );
           await itemRepo.save(
             itemRepo.create({
@@ -161,7 +135,7 @@ export class InventoryService {
     reservationId: string,
     now = new Date(),
   ): Promise<boolean> {
-    this.assertId(reservationId, 'reservationId');
+    assertId(reservationId, 'reservationId');
     return this.dataSource.transaction(async (manager) => {
       const reservation = await manager
         .getRepository(Reservation)
@@ -187,16 +161,17 @@ export class InventoryService {
   }
 
   inbound(input: StockIncreaseInput): Promise<InventoryResult> {
-    this.assertStockTarget(input);
-    this.assertPositive(input.quantity);
-    this.assertReason(input.reason);
-    this.assertIdempotencyKey(input.idempotencyKey);
+    assertStockTarget(input);
+    assertPositive(input.quantity);
+    assertReason(input.reason);
+    assertIdempotencyKey(input.idempotencyKey);
 
-    return this.inTransaction(
+    return runInTransaction(
+      this.dataSource,
       'inbound',
       input.idempotencyKey,
       async (manager) => {
-        let stock = await this.lockStock(
+        let stock = await lockStock(
           manager,
           input.variantId,
           input.warehouseId,
@@ -216,7 +191,7 @@ export class InventoryService {
 
         stock.quantityOnHand += input.quantity;
         stock = await stockRepo.save(stock);
-        await this.saveMovement(
+        await saveMovement(
           manager,
           stock,
           StockMovementType.INBOUND,
@@ -224,27 +199,28 @@ export class InventoryService {
           input.reason,
           input.actorId,
         );
-        return this.stockResult(StockMovementType.INBOUND, stock);
+        return stockResult(StockMovementType.INBOUND, stock);
       },
     );
   }
 
   adjust(input: StockAdjustInput): Promise<InventoryResult> {
-    this.assertStockTarget(input);
+    assertStockTarget(input);
     if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) {
       throw BusinessException.invalidState(
         'quantityDelta noldan farqli butun son bo‘lishi kerak',
       );
     }
-    this.assertReason(input.reason);
-    this.assertId(input.actorId, 'actorId');
-    this.assertIdempotencyKey(input.idempotencyKey);
+    assertReason(input.reason);
+    assertId(input.actorId, 'actorId');
+    assertIdempotencyKey(input.idempotencyKey);
 
-    return this.inTransaction(
+    return runInTransaction(
+      this.dataSource,
       'adjust',
       input.idempotencyKey,
       async (manager) => {
-        const stock = await this.lockStock(
+        const stock = await lockStock(
           manager,
           input.variantId,
           input.warehouseId,
@@ -261,7 +237,7 @@ export class InventoryService {
         }
         stock.quantityOnHand = nextOnHand;
         await manager.getRepository(Stock).save(stock);
-        await this.saveMovement(
+        await saveMovement(
           manager,
           stock,
           StockMovementType.ADJUST,
@@ -269,7 +245,7 @@ export class InventoryService {
           input.reason,
           input.actorId,
         );
-        return this.stockResult(StockMovementType.ADJUST, stock);
+        return stockResult(StockMovementType.ADJUST, stock);
       },
     );
   }
@@ -279,10 +255,11 @@ export class InventoryService {
     input: ReservationActionInput,
     nextStatus: ReservationStatus,
   ): Promise<InventoryResult> {
-    this.assertId(input.orderRef, 'orderRef');
-    this.assertIdempotencyKey(input.idempotencyKey);
+    assertId(input.orderRef, 'orderRef');
+    assertIdempotencyKey(input.idempotencyKey);
 
-    return this.inTransaction(
+    return runInTransaction(
+      this.dataSource,
       type.toLowerCase(),
       input.idempotencyKey,
       async (manager) => {
@@ -331,12 +308,8 @@ export class InventoryService {
     const items = await manager.getRepository(ReservationItem).find({
       where: { reservationId: reservation.id },
     });
-    for (const item of this.sortedItems(items)) {
-      const stock = await this.lockStock(
-        manager,
-        item.variantId,
-        item.warehouseId,
-      );
+    for (const item of sortedItems(items)) {
+      const stock = await lockStock(manager, item.variantId, item.warehouseId);
       if (!stock || stock.quantityReserved < item.quantity) {
         throw BusinessException.invalidState(
           'Band qilingan qoldiq yozuvi mos emas',
@@ -348,7 +321,7 @@ export class InventoryService {
         stock.quantityOnHand -= item.quantity;
       }
       await manager.getRepository(Stock).save(stock);
-      await this.saveMovement(
+      await saveMovement(
         manager,
         stock,
         type,
@@ -359,201 +332,11 @@ export class InventoryService {
         reservation.id,
       );
       if (type === StockMovementType.COMMIT) {
-        await this.emitStockDepletedIfNeeded(manager, stock);
+        await emitStockDepletedIfNeeded(manager, stock);
       }
     }
 
     reservation.status = nextStatus;
     await manager.getRepository(Reservation).save(reservation);
-  }
-
-  private async emitStockDepletedIfNeeded(
-    manager: EntityManager,
-    stock: Stock,
-  ): Promise<void> {
-    if (stock.quantityOnHand !== 0) return;
-
-    const hasStockInAnotherWarehouse = await manager
-      .getRepository(Stock)
-      .exist({
-        where: {
-          variantId: stock.variantId,
-          quantityOnHand: MoreThan(0),
-        },
-      });
-    if (hasStockInAnotherWarehouse) return;
-
-    const repo = manager.getRepository(OutboxEvent);
-    await repo.save(
-      repo.create({
-        aggregateType: 'product_variant',
-        aggregateId: stock.variantId,
-        eventType: 'inventory.stock_depleted',
-        payload: {
-          variantId: stock.variantId,
-          warehouseId: stock.warehouseId,
-          status: 'OUT_OF_STOCK',
-        },
-        status: OutboxStatus.PENDING,
-      }),
-    );
-  }
-
-  private async inTransaction(
-    operation: string,
-    idempotencyKey: string,
-    work: (manager: EntityManager) => Promise<InventoryResult>,
-  ): Promise<InventoryResult> {
-    const key = `${operation}:${idempotencyKey}`;
-    return this.dataSource.transaction(async (manager) => {
-      await manager.query(
-        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [`inventory-operation:${key}`],
-      );
-      const operationRepo = manager.getRepository(InventoryOperation);
-      const existing = await operationRepo.findOne({ where: { key } });
-      if (existing) return existing.response as InventoryResult;
-
-      const result = await work(manager);
-      await operationRepo.save(operationRepo.create({ key, response: result }));
-      return result;
-    });
-  }
-
-  private async lockStock(
-    manager: EntityManager,
-    variantId: string,
-    warehouseId: string,
-  ): Promise<Stock | null> {
-    this.assertId(variantId, 'variantId');
-    this.assertId(warehouseId, 'warehouseId');
-    await manager.query(
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [`inventory-stock:${variantId}:${warehouseId}`],
-    );
-    return manager
-      .getRepository(Stock)
-      .createQueryBuilder('stock')
-      .setLock('pessimistic_write')
-      .where('stock.variant_id = :variantId', { variantId })
-      .andWhere('stock.warehouse_id = :warehouseId', { warehouseId })
-      .getOne();
-  }
-
-  private movement(
-    stock: Stock,
-    type: StockMovementType,
-    quantity: number,
-    referenceType: string | null = null,
-    referenceId: string | null = null,
-    reason: string | null = null,
-    actorId: string | null = null,
-  ): Partial<StockMovement> {
-    return {
-      stockId: stock.id,
-      variantId: stock.variantId,
-      warehouseId: stock.warehouseId,
-      type,
-      quantity,
-      onHandAfter: stock.quantityOnHand,
-      reservedAfter: stock.quantityReserved,
-      referenceType,
-      referenceId,
-      reason,
-      actorId,
-    };
-  }
-
-  private saveMovement(
-    manager: EntityManager,
-    stock: Stock,
-    type: StockMovementType,
-    quantity: number,
-    reason?: string,
-    actorId?: string,
-    referenceType: string | null = null,
-    referenceId: string | null = null,
-  ): Promise<StockMovement> {
-    const repo = manager.getRepository(StockMovement);
-    return repo.save(
-      repo.create(
-        this.movement(
-          stock,
-          type,
-          quantity,
-          referenceType,
-          referenceId,
-          reason ?? null,
-          actorId ?? null,
-        ),
-      ),
-    );
-  }
-
-  private stockResult(
-    operation: StockMovementType,
-    stock: Stock,
-  ): InventoryResult {
-    return {
-      operation,
-      stockId: stock.id,
-      onHand: stock.quantityOnHand,
-      reserved: stock.quantityReserved,
-    };
-  }
-
-  private sortedItems<T extends StockTarget>(items: T[]): T[] {
-    return [...items].sort((a, b) =>
-      `${a.warehouseId}:${a.variantId}`.localeCompare(
-        `${b.warehouseId}:${b.variantId}`,
-        'en',
-        { numeric: true },
-      ),
-    );
-  }
-
-  private assertUniqueItems(items: ReserveItem[]): void {
-    const keys = new Set<string>();
-    for (const item of items) {
-      this.assertStockTarget(item);
-      const key = `${item.variantId}:${item.warehouseId}`;
-      if (keys.has(key)) {
-        throw BusinessException.conflict(
-          'Bir variant va ombor rezervatsiyada takrorlangan',
-        );
-      }
-      keys.add(key);
-    }
-  }
-
-  private assertStockTarget(target: StockTarget): void {
-    this.assertId(target.variantId, 'variantId');
-    this.assertId(target.warehouseId, 'warehouseId');
-  }
-
-  private assertPositive(value: number): void {
-    if (!Number.isInteger(value) || value <= 0) {
-      throw BusinessException.invalidState(
-        'Miqdor musbat butun son bo‘lishi kerak',
-      );
-    }
-  }
-
-  private assertReason(reason: string): void {
-    if (!reason?.trim()) {
-      throw BusinessException.invalidState('Sabab majburiy');
-    }
-  }
-
-  private assertId(value: string, field: string): void {
-    if (!/^[1-9]\d*$/.test(value)) {
-      throw BusinessException.invalidState(`${field} noto‘g‘ri`);
-    }
-  }
-
-  private assertIdempotencyKey(key: string): void {
-    if (!key?.trim() || key.length > 230) {
-      throw BusinessException.invalidState('Idempotency key noto‘g‘ri');
-    }
   }
 }

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
-import { ReservationStatus } from './entities/inventory.enums';
+import { ReservationStatus } from '@app/common';
 import { Reservation } from './entities/reservation.entity';
 import { InventoryService } from './inventory.service';
 

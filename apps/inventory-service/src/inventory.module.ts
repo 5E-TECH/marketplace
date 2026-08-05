@@ -23,6 +23,7 @@ import { InventoryService } from './inventory.service';
 import { CreateInventoryTables1721822400000 } from './migrations/1721822400000-create-inventory-tables';
 import { CreateInventoryOperation1721822400001 } from './migrations/1721822400001-create-inventory-operation';
 import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-create-inventory-outbox';
+import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
 import { SellerInventoryController } from './seller-inventory.controller';
@@ -62,6 +63,7 @@ const entities = [
             CreateInventoryTables1721822400000,
             CreateInventoryOperation1721822400001,
             CreateInventoryOutbox1721822400002,
+            AddInventoryBaseColumns1721822400003,
           ],
           migrationsRun: true,
         };

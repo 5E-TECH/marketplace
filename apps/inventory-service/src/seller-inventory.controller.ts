@@ -11,7 +11,8 @@ import {
   StockInboundDto,
   UpdateWarehouseDto,
 } from '@app/common';
-import { InventoryService, InventoryResult } from './inventory.service';
+import { InventoryService } from './inventory.service';
+import { InventoryResult } from './inventory.types';
 import { StockQueryService } from './stock-query.service';
 import { WarehouseService } from './warehouse.service';
 

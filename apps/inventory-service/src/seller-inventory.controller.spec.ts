@@ -1,4 +1,4 @@
-import { StockMovementType } from './entities/inventory.enums';
+import { StockMovementType } from '@app/common';
 import { SellerInventoryController } from './seller-inventory.controller';
 import { of } from 'rxjs';
 
