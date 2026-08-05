@@ -23,4 +23,13 @@ export class SellerShopController {
   ) {
     return this.sellerShops.updateMine(data.ownerUserId, data.dto);
   }
+
+  /**
+   * Elchi market id'ni shopga yozadi (elchi-integration provisioningdan keyin
+   * chaqiradi). Idempotent — bir xil qiymat bilan qayta yozish xavfsiz.
+   */
+  @MessagePattern({ cmd: 'catalog.shop.set-elchi-market-id' })
+  setElchiMarketId(@Payload() data: { shopId: string; elchiMarketId: string }) {
+    return this.sellerShops.setElchiMarketId(data.shopId, data.elchiMarketId);
+  }
 }

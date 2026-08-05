@@ -99,6 +99,15 @@
       "compilerOptions": {
         "tsConfigPath": "apps/search-service/tsconfig.app.json"
       }
+    },
+    "elchi-integration": {
+      "type": "application",
+      "root": "apps/elchi-integration",
+      "entryFile": "main",
+      "sourceRoot": "apps/elchi-integration/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/elchi-integration/tsconfig.app.json"
+      }
     }
   }
 }

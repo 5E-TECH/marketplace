@@ -45,6 +45,13 @@ export const envValidationSchema = Joi.object({
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),
 
+  // Elchi Partner API (elchi-integration servisi) — ixtiyoriy (faqat o'sha
+  // servisga kerak; boshqa servislar bularsiz ham ishga tushadi).
+  ELCHI_PARTNER_API_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .optional(),
+  ELCHI_PARTNER_API_KEY: Joi.string().optional(),
+
   // Notification provider adapterlari (ixtiyoriy)
   EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),
   SMS_WEBHOOK_URL: Joi.string().uri().optional(),
