@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { ProductStatus } from '@app/common';
+import { ProductStatus, ShopStatus } from '@app/common';
+import { of } from 'rxjs';
 import { ProductService } from './product.service';
 
 describe('ProductService', () => {
@@ -13,6 +14,7 @@ describe('ProductService', () => {
   let categoryRepo: { findOne: jest.Mock };
   let variantRepo: { create: jest.Mock; save: jest.Mock };
   let service: ProductService;
+  let searchClient: { emit: jest.Mock };
 
   beforeEach(() => {
     productRepo = {
@@ -27,11 +29,40 @@ describe('ProductService', () => {
       create: jest.fn((value) => value),
       save: jest.fn(async (value) => ({ id: '100', ...value })),
     };
+    searchClient = { emit: jest.fn(() => of(undefined)) };
     service = new ProductService(
       productRepo as any,
       shopRepo as any,
       categoryRepo as any,
       variantRepo as any,
+      searchClient as any,
+    );
+  });
+
+  it('ACTIVE yangi mahsulot uchun search reindex event yuboradi', async () => {
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      name: 'Ali Market',
+      status: ShopStatus.ACTIVE,
+      isDeleted: false,
+    });
+    productRepo.findOne.mockResolvedValue(null);
+
+    await service.create('42', {
+      name: 'Telefon',
+      price: 1200000,
+      status: ProductStatus.ACTIVE,
+    });
+
+    expect(searchClient.emit).toHaveBeenCalledWith(
+      'catalog.product.changed',
+      expect.objectContaining({
+        productId: '10',
+        title: 'Telefon',
+        shopName: 'Ali Market',
+        active: true,
+      }),
     );
   });
 

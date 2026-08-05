@@ -53,7 +53,50 @@ describe('SellerOrdersService', () => {
     });
   });
 
-  it('TC2: buyurtma bo‘lmasa bo‘sh sahifa qaytaradi', async () => {
+  it('TC2: dashboard sotuv soni va daromadni test ma’lumotiga mos qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            ordersTotal: '5',
+            revenue: '1250000.50',
+            pendingShipments: '2',
+            delivered: '3',
+          },
+        ])
+        .mockResolvedValueOnce([
+          { productId: '88', name: 'Telefon', sold: '7' },
+          { productId: '91', name: 'G‘ilof', sold: '4' },
+        ])
+        .mockResolvedValueOnce([
+          { date: '2026-08-01', amount: '450000.25' },
+          { date: '2026-08-02', amount: '800000.25' },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.dashboard('15', 4)).resolves.toEqual({
+      ordersTotal: 5,
+      revenue: 1250000.5,
+      pendingShipments: 2,
+      delivered: 3,
+      lowStockCount: 4,
+      topProducts: [
+        { productId: '88', name: 'Telefon', sold: 7 },
+        { productId: '91', name: 'G‘ilof', sold: 4 },
+      ],
+      salesByDay: [
+        { date: '2026-08-01', amount: 450000.25 },
+        { date: '2026-08-02', amount: 800000.25 },
+      ],
+    });
+    for (const call of dataSource.query.mock.calls) {
+      expect(call[1]).toEqual(['15']);
+    }
+  });
+
+  it('TC3: buyurtma bo‘lmasa bo‘sh sahifa qaytaradi', async () => {
     const dataSource = {
       query: jest
         .fn()
@@ -73,7 +116,7 @@ describe('SellerOrdersService', () => {
     });
   });
 
-  it('TC3: dashboard aggregate va bo‘sh qiymatlarni to‘g‘ri map qiladi', async () => {
+  it('TC3: buyurtmasiz dashboard barcha qiymatlarni 0 qaytaradi', async () => {
     const dataSource = {
       query: jest
         .fn()
