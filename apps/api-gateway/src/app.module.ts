@@ -23,6 +23,8 @@ import { FilesController } from './files/files.controller';
 import { InventoryController } from './inventory/inventory.controller';
 import { SellerOrdersController } from './sellers/seller-orders.controller';
 import { NotificationsController } from './notifications/notifications.controller';
+import { StorefrontController } from './storefront/storefront.controller';
+import { SearchController } from './search/search.controller';
 
 @Module({
   imports: [
@@ -75,6 +77,12 @@ import { NotificationsController } from './notifications/notifications.controlle
             RmqQueue.NOTIFICATION,
           ),
       },
+      {
+        name: RmqClient.SEARCH,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.SEARCH),
+      },
     ]),
   ],
   controllers: [
@@ -89,6 +97,8 @@ import { NotificationsController } from './notifications/notifications.controlle
     InventoryController,
     SellerOrdersController,
     NotificationsController,
+    StorefrontController,
+    SearchController,
   ],
   providers: [
     AppService,
