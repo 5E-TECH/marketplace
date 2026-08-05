@@ -40,4 +40,12 @@ export class AuthController {
   registerSeller(@Payload() dto: SellerRegisterDto) {
     return this.authService.registerSeller(dto);
   }
+
+  @MessagePattern({ cmd: 'identity.user.set-active' })
+  setActive(@Payload() data: { userId: string; isActive: boolean }) {
+    return this.authService.setActive(
+      String(data.userId),
+      Boolean(data.isActive),
+    );
+  }
 }

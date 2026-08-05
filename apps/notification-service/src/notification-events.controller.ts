@@ -5,6 +5,7 @@ import {
   OrderCreatedEvent,
   SellerRegistrationCreatedEvent,
   ShopApprovedEvent,
+  ShopRejectedEvent,
 } from './notification.events';
 
 @Controller()
@@ -39,6 +40,24 @@ export class NotificationEventsController {
       type: 'shop_approved',
       title: 'Do‘kon tasdiqlandi',
       body: `${event.shopName} do‘koningiz faol holatga o‘tdi.`,
+      data: { shopId: event.shopId },
+    });
+  }
+
+  @EventPattern('shop.rejected')
+  shopRejected(@Payload() event: ShopRejectedEvent) {
+    return this.notifications.create({
+      recipient: {
+        userId: event.sellerUserId,
+        email: event.email,
+        phone: event.phone,
+        telegramChatId: event.telegramChatId,
+      },
+      type: 'shop_rejected',
+      title: 'Do‘kon rad etildi',
+      body: `${event.shopName} do‘koningiz rad etildi.${
+        event.reason ? ` Sabab: ${event.reason}` : ''
+      }`,
       data: { shopId: event.shopId },
     });
   }

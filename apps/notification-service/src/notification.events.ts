@@ -27,6 +27,16 @@ export interface ShopApprovedEvent {
   telegramChatId?: string | null;
 }
 
+export interface ShopRejectedEvent {
+  sellerUserId: string;
+  shopId: string;
+  shopName: string;
+  reason?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  telegramChatId?: string | null;
+}
+
 export interface OrderCreatedEvent {
   orderId: string;
   orderNumber?: string;

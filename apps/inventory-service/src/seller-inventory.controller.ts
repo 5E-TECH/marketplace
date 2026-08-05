@@ -53,6 +53,25 @@ export class SellerInventoryController {
     return this.warehouses.createWarehouse(shopId, data.dto);
   }
 
+  /** Admin approve: shop uchun default ombor (shopId bo'yicha, idempotent). */
+  @MessagePattern({ cmd: 'inventory.warehouse.ensure-default' })
+  ensureDefaultWarehouse(
+    @Payload()
+    data: {
+      shopId: string;
+      name?: string;
+      regionId?: string | null;
+      districtId?: string | null;
+    },
+  ) {
+    return this.warehouses.ensureDefaultWarehouse(
+      String(data.shopId),
+      data.name,
+      data.regionId,
+      data.districtId,
+    );
+  }
+
   @MessagePattern({ cmd: 'inventory.warehouse.update' })
   async updateWarehouse(
     @Payload()

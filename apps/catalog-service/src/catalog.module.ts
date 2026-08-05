@@ -17,6 +17,8 @@ import { Shop } from './entities/shop.entity';
 import { CreateCatalogTables1721736000000 } from './migrations/1721736000000-create-catalog-tables';
 import { SellerShopController } from './seller-shop.controller';
 import { SellerShopService } from './seller-shop.service';
+import { AdminShopController } from './admin-shop.controller';
+import { AdminShopService } from './admin-shop.service';
 import { CategoryController } from './category.controller';
 import { CategoryService } from './category.service';
 import { ProductController } from './product.controller';
@@ -38,6 +40,24 @@ const entities = [Shop, Category, Product, ProductVariant];
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.SEARCH),
       },
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -55,6 +75,7 @@ const entities = [Shop, Category, Product, ProductVariant];
   ],
   controllers: [
     SellerShopController,
+    AdminShopController,
     CategoryController,
     ProductController,
     ProductVariantController,
@@ -62,6 +83,7 @@ const entities = [Shop, Category, Product, ProductVariant];
   ],
   providers: [
     SellerShopService,
+    AdminShopService,
     CategoryService,
     ProductService,
     ProductVariantService,

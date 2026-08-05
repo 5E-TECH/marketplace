@@ -35,6 +35,34 @@ export class WarehouseService {
     return warehouses;
   }
 
+  /**
+   * Shop uchun default ombor borligini ta'minlaydi (admin approve chaqiradi).
+   * Idempotent — allaqachon default ombor bo'lsa qaytadi, yangi yaratmaydi.
+   */
+  async ensureDefaultWarehouse(
+    shopId: string,
+    name?: string,
+    regionId?: string | null,
+    districtId?: string | null,
+  ): Promise<Warehouse> {
+    const existing = await this.warehouses.findOne({
+      where: {
+        ownerType: WarehouseOwnerType.SHOP,
+        ownerId: shopId,
+        isDefault: true,
+        isActive: true,
+      },
+    });
+    if (existing) {
+      return existing;
+    }
+    return this.createWarehouse(shopId, {
+      name: name?.trim() || 'Asosiy ombor',
+      regionId: regionId ?? null,
+      districtId: districtId ?? null,
+    });
+  }
+
   async createWarehouse(
     shopId: string,
     dto: CreateWarehouseDto,

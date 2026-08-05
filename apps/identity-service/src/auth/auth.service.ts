@@ -79,6 +79,15 @@ export class AuthService {
     return this.sanitize(user);
   }
 
+  /** Foydalanuvchini faollashtiradi/o'chiradi (admin approve/reject). */
+  async setActive(userId: string, isActive: boolean) {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+    user.isActive = isActive;
+    const saved = await this.users.save(user);
+    return this.sanitize(saved);
+  }
+
   async logout(userId: string): Promise<null> {
     await this.sessions.update(
       { userId, revokedAt: IsNull() },
