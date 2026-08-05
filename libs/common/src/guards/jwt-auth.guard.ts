@@ -26,10 +26,9 @@ export class JwtAuthGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) return true;
-
     const req = context.switchToHttp().getRequest();
     const header: string | undefined = req.headers?.authorization;
+    if (isPublic && !header) return true;
     if (!header || !header.startsWith('Bearer ')) {
       throw new UnauthorizedException('Token berilmagan yoki formati xato');
     }
