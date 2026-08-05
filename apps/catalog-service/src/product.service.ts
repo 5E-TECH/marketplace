@@ -1,16 +1,23 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom } from 'rxjs';
 import { Brackets, QueryFailedError, Repository } from 'typeorm';
 import {
   CreateProductDto,
+  CatalogProductChangedEvent,
   MyProductsPageDto,
   MyProductsQueryDto,
   ProductStatus,
+  RmqClient,
+  ShopStatus,
   UpdateProductDto,
 } from '@app/common';
 import { Category } from './entities/category.entity';
@@ -20,6 +27,8 @@ import { ProductVariant } from './entities/product-variant.entity';
 
 @Injectable()
 export class ProductService {
+  private readonly logger = new Logger(ProductService.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly products: Repository<Product>,
@@ -29,6 +38,7 @@ export class ProductService {
     private readonly categories: Repository<Category>,
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
+    @Inject(RmqClient.SEARCH) private readonly search: ClientProxy,
   ) {}
 
   async create(ownerUserId: string, dto: CreateProductDto): Promise<Product> {
@@ -64,6 +74,7 @@ export class ProductService {
       isActive: true,
     });
     await this.variants.save(defaultVariant);
+    await this.publishChanged(createdProduct, shop);
     return createdProduct;
   }
 
@@ -128,7 +139,10 @@ export class ProductService {
     if (isCover) {
       product.imageUrl = url;
     }
-    return this.save(product);
+    const updated = await this.save(product);
+    const shop = await this.shops.findOne({ where: { id: product.shopId } });
+    if (shop) await this.publishChanged(updated, shop);
+    return updated;
   }
 
   async update(
@@ -156,7 +170,10 @@ export class ProductService {
     if (dto.attributes !== undefined) product.attributes = dto.attributes;
     if (dto.status !== undefined) product.status = dto.status;
 
-    return this.save(product);
+    const updated = await this.save(product);
+    const shop = await this.shops.findOne({ where: { id: product.shopId } });
+    if (shop) await this.publishChanged(updated, shop);
+    return updated;
   }
 
   async remove(
@@ -166,6 +183,7 @@ export class ProductService {
     const product = await this.getOwned(ownerUserId, id);
     product.isDeleted = true;
     await this.products.save(product);
+    await this.publishRemoved(product);
     return { id, deleted: true };
   }
 
@@ -243,6 +261,53 @@ export class ProductService {
         throw new ConflictException('Bunday slug bilan mahsulot mavjud');
       }
       throw error;
+    }
+  }
+
+  private async publishChanged(product: Product, shop: Shop): Promise<void> {
+    const event: CatalogProductChangedEvent = {
+      productId: product.id,
+      shopId: product.shopId,
+      categoryId: product.categoryId,
+      title: product.name,
+      content: product.description,
+      slug: product.slug,
+      imageUrl: product.imageUrl,
+      shopName: shop.name,
+      price: product.price,
+      attributes: product.attributes,
+      active:
+        !product.isDeleted &&
+        product.status === ProductStatus.ACTIVE &&
+        !shop.isDeleted &&
+        shop.status === ShopStatus.ACTIVE,
+    };
+    await this.emitChanged(event);
+  }
+
+  private publishRemoved(product: Product): Promise<void> {
+    return this.emitChanged({
+      productId: product.id,
+      shopId: product.shopId,
+      categoryId: product.categoryId,
+      title: product.name,
+      content: product.description,
+      slug: product.slug,
+      imageUrl: product.imageUrl,
+      shopName: '',
+      price: product.price,
+      attributes: product.attributes,
+      active: false,
+    });
+  }
+
+  private async emitChanged(event: CatalogProductChangedEvent): Promise<void> {
+    try {
+      await firstValueFrom(this.search.emit('catalog.product.changed', event));
+    } catch (error) {
+      this.logger.warn(
+        `Mahsulot ${event.productId} search event yuborilmadi: ${(error as Error).message}`,
+      );
     }
   }
 }
