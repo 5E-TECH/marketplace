@@ -15,6 +15,8 @@ import { ProductController } from './product.controller';
 import { ProductService } from './product.service';
 import { ProductVariantController } from './product-variant.controller';
 import { ProductVariantService } from './product-variant.service';
+import { StorefrontController } from './storefront.controller';
+import { StorefrontService } from './storefront.service';
 
 const entities = [Shop, Category, Product, ProductVariant];
 
@@ -40,12 +42,14 @@ const entities = [Shop, Category, Product, ProductVariant];
     CategoryController,
     ProductController,
     ProductVariantController,
+    StorefrontController,
   ],
   providers: [
     SellerShopService,
     CategoryService,
     ProductService,
     ProductVariantService,
+    StorefrontService,
   ],
 })
 export class CatalogModule {}
