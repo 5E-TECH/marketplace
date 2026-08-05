@@ -11,6 +11,7 @@ import { InventoryService } from './inventory.service';
 import { CreateInventoryTables1721822400000 } from './migrations/1721822400000-create-inventory-tables';
 import { CreateInventoryOperation1721822400001 } from './migrations/1721822400001-create-inventory-operation';
 import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-create-inventory-outbox';
+import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -50,6 +51,7 @@ describeWithPostgres('InventoryService PostgreSQL concurrency', () => {
         CreateInventoryTables1721822400000,
         CreateInventoryOperation1721822400001,
         CreateInventoryOutbox1721822400002,
+        AddInventoryBaseColumns1721822400003,
       ],
       migrationsRun: true,
       synchronize: false,
