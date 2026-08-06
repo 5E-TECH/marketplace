@@ -27,4 +27,8 @@ export class User extends BaseEntity {
 
   @Column({ name: 'is_active', type: 'boolean', default: false })
   isActive: boolean;
+
+  /** OPERATOR uchun — qaysi do'konga (catalog.shop.id) biriktirilgan. Boshqa rollar: null. */
+  @Column({ name: 'shop_id', type: 'bigint', nullable: true })
+  shopId: string | null;
 }

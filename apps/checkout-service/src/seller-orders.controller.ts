@@ -26,12 +26,38 @@ export class SellerOrdersController {
   async list(
     @Payload()
     data: {
-      ownerUserId: string;
+      ownerUserId?: string;
+      shopId?: string;
       query: SellerOrdersQueryDto;
     },
   ) {
-    const shop = await this.shop(data.ownerUserId);
-    return this.orders.findAll(shop.id, data.query);
+    const shopId = await this.resolveShopId(data);
+    return this.orders.findAll(shopId, data.query);
+  }
+
+  /** Buyurtma holatini yangilash (owner yoki operator; shop bo'yicha scope). */
+  @MessagePattern({ cmd: 'seller.orders.update-status' })
+  async updateStatus(
+    @Payload()
+    data: {
+      ownerUserId?: string;
+      shopId?: string;
+      orderId: string;
+      status: string;
+    },
+  ) {
+    const shopId = await this.resolveShopId(data);
+    return this.orders.updateStatus(shopId, String(data.orderId), data.status);
+  }
+
+  /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */
+  private async resolveShopId(data: {
+    ownerUserId?: string;
+    shopId?: string;
+  }): Promise<string> {
+    if (data.shopId) return String(data.shopId);
+    const shop = await this.shop(String(data.ownerUserId));
+    return shop.id;
   }
 
   @MessagePattern({ cmd: 'seller.dashboard.get' })

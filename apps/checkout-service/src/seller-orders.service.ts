@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   SellerDashboardDto,
   SellerOrdersPageDto,
@@ -136,5 +140,38 @@ export class SellerOrdersService {
         amount: Number(row.amount),
       })),
     };
+  }
+
+  /**
+   * Buyurtma (sales_order_seller) holatini yangilaydi — do'kon bo'yicha scope
+   * (shop_id). Boshqa do'kon buyurtmasi topilmaydi (403/404). Operator/owner.
+   */
+  async updateStatus(
+    shopId: string,
+    orderId: string,
+    status: string,
+  ): Promise<{ id: string; status: string }> {
+    const ALLOWED = [
+      'PENDING',
+      'SHIPMENT_CREATED',
+      'ON_THE_ROAD',
+      'DELIVERED',
+      'CANCELLED',
+      'RETURNED',
+    ];
+    if (!ALLOWED.includes(status)) {
+      throw new BadRequestException('status noto‘g‘ri');
+    }
+    const rows = await this.dataSource.query(
+      `UPDATE checkout.sales_order_seller
+         SET status = $1, updated_at = now()
+       WHERE id = $2 AND shop_id = $3 AND is_deleted = FALSE
+       RETURNING id, status`,
+      [status, String(orderId), String(shopId)],
+    );
+    if (!rows.length) {
+      throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
+    }
+    return { id: String(rows[0].id), status: String(rows[0].status) };
   }
 }
