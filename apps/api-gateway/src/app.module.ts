@@ -26,6 +26,7 @@ import { NotificationsController } from './notifications/notifications.controlle
 import { StorefrontController } from './storefront/storefront.controller';
 import { SearchController } from './search/search.controller';
 import { AdminShopsController } from './shops/admin-shops.controller';
+import { CartController } from './cart/cart.controller';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { AdminShopsController } from './shops/admin-shops.controller';
     StorefrontController,
     SearchController,
     AdminShopsController,
+    CartController,
   ],
   providers: [
     AppService,

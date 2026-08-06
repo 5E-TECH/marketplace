@@ -4,11 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  CreateProductVariantDto,
+  ProductStatus,
+  ShopStatus,
+  UpdateProductVariantDto,
+} from '@app/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
 import { Not, QueryFailedError, Repository } from 'typeorm';
 import { ProductVariant } from './entities/product-variant.entity';
-import { CreateProductVariantDto, UpdateProductVariantDto } from '@app/common';
 
 @Injectable()
 export class ProductVariantService {
@@ -225,6 +230,31 @@ export class ProductVariantService {
       variantName: variant.name,
       sku: variant.sku,
     }));
+  }
+
+  async getCartVariant(productId: string, variantId: string) {
+    const variant = await this.productVariants
+      .createQueryBuilder('variant')
+      .innerJoinAndSelect('variant.product', 'product')
+      .innerJoinAndSelect('product.shop', 'shop')
+      .where('variant.id = :variantId', { variantId })
+      .andWhere('variant.product_id = :productId', { productId })
+      .andWhere('variant.is_deleted = FALSE')
+      .andWhere('variant.is_active = TRUE')
+      .andWhere('product.is_deleted = FALSE')
+      .andWhere('product.status = :productStatus', {
+        productStatus: ProductStatus.ACTIVE,
+      })
+      .andWhere('shop.is_deleted = FALSE')
+      .andWhere('shop.status = :shopStatus', { shopStatus: ShopStatus.ACTIVE })
+      .getOne();
+    if (!variant) throw new NotFoundException('Sotuvdagi variant topilmadi');
+    return {
+      productId: variant.productId,
+      variantId: variant.id,
+      shopId: variant.product.shopId,
+      unitPrice: variant.price ?? variant.product.price,
+    };
   }
 
   private defaultSku(productId: string): string {

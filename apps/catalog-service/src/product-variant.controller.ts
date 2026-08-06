@@ -87,4 +87,9 @@ export class ProductVariantController {
   inventoryDetails(@Payload() data: { shopId: string; variantIds: string[] }) {
     return this.variants.getInventoryDetails(data.shopId, data.variantIds);
   }
+
+  @MessagePattern({ cmd: 'cart.variant.get' })
+  cartVariant(@Payload() data: { productId: string; variantId: string }) {
+    return this.variants.getCartVariant(data.productId, data.variantId);
+  }
 }
