@@ -28,6 +28,7 @@ export * from './dto/product-variant.dto';
 export * from './dto/file.dto';
 export * from './dto/inventory.dto';
 export * from './dto/notification.dto';
+export * from './dto/admin-shop.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';

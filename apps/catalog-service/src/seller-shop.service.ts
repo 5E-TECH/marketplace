@@ -28,4 +28,20 @@ export class SellerShopService {
     this.shops.merge(shop, dto);
     return this.shops.save(shop);
   }
+
+  /** Elchi market id'ni shopga yozadi (id bo'yicha; elchi-integration chaqiradi). */
+  async setElchiMarketId(
+    shopId: string,
+    elchiMarketId: string,
+  ): Promise<{ shopId: string; elchiMarketId: string }> {
+    const shop = await this.shops.findOne({
+      where: { id: shopId, isDeleted: false },
+    });
+    if (!shop) {
+      throw new NotFoundException('Do‘kon topilmadi');
+    }
+    shop.elchiMarketId = elchiMarketId;
+    await this.shops.save(shop);
+    return { shopId, elchiMarketId };
+  }
 }
