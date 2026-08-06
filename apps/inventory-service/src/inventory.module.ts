@@ -29,6 +29,7 @@ import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
 import { SellerInventoryController } from './seller-inventory.controller';
 import { StockQueryService } from './stock-query.service';
 import { WarehouseService } from './warehouse.service';
+import { InventoryOperationsController } from './inventory-operations.controller';
 
 const entities = [
   Warehouse,
@@ -71,7 +72,7 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [SellerInventoryController],
+  controllers: [SellerInventoryController, InventoryOperationsController],
   providers: [
     InventoryService,
     WarehouseService,
