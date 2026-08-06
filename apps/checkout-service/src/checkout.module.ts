@@ -13,6 +13,11 @@ import {
 import { SellerOrdersController } from './seller-orders.controller';
 import { SellerOrdersService } from './seller-orders.service';
 import { CreateCheckoutTables1722513600000 } from './migrations/1722513600000-create-checkout-tables';
+import { CreateCartTables1723032000000 } from './migrations/1723032000000-create-cart-tables';
+import { Cart } from './entities/cart.entity';
+import { CartItem } from './entities/cart-item.entity';
+import { CartController } from './cart.controller';
+import { CartService } from './cart.service';
 
 @Module({
   imports: [
@@ -36,15 +41,18 @@ import { CreateCheckoutTables1722513600000 } from './migrations/1722513600000-cr
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'checkout');
         return {
-          ...typeOrmOptions(config, 'checkout', []),
+          ...typeOrmOptions(config, 'checkout', [Cart, CartItem]),
           synchronize: false,
-          migrations: [CreateCheckoutTables1722513600000],
+          migrations: [
+            CreateCheckoutTables1722513600000,
+            CreateCartTables1723032000000,
+          ],
           migrationsRun: true,
         };
       },
     }),
   ],
-  controllers: [SellerOrdersController],
-  providers: [SellerOrdersService],
+  controllers: [SellerOrdersController, CartController],
+  providers: [SellerOrdersService, CartService],
 })
 export class CheckoutModule {}
