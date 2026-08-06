@@ -26,6 +26,7 @@ import { NotificationsController } from './notifications/notifications.controlle
 import { StorefrontController } from './storefront/storefront.controller';
 import { SearchController } from './search/search.controller';
 import { AdminShopsController } from './shops/admin-shops.controller';
+import { SellerOperatorsController } from './sellers/seller-operators.controller';
 import { CartController } from './cart/cart.controller';
 
 @Module({
@@ -102,6 +103,7 @@ import { CartController } from './cart/cart.controller';
     StorefrontController,
     SearchController,
     AdminShopsController,
+    SellerOperatorsController,
     CartController,
   ],
   providers: [

@@ -88,6 +88,64 @@ export class AuthService {
     return this.sanitize(saved);
   }
 
+  // ===== Market operatorlari (C1.38) — do'kon xodimlari =====
+
+  /** Sotuvchi o'z do'koniga operator qo'shadi (role=OPERATOR, shop_id, faol). */
+  async createOperator(
+    shopId: string,
+    dto: { name: string; phone: string; password: string },
+  ) {
+    if (!shopId) throw BusinessException.invalidState('shopId majburiy');
+    if (!dto?.name?.trim() || !dto?.phone?.trim() || !dto?.password) {
+      throw BusinessException.invalidState('name, phone, password majburiy');
+    }
+    const exists = await this.users.findOne({ where: { phone: dto.phone } });
+    if (exists) {
+      throw BusinessException.conflict(
+        'Bu telefon allaqachon ro‘yxatdan o‘tgan',
+      );
+    }
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const saved = await this.users.save(
+      this.users.create({
+        name: dto.name.trim(),
+        phone: dto.phone.trim(),
+        email: null,
+        passwordHash,
+        role: Role.OPERATOR,
+        shopId: String(shopId),
+        isActive: true,
+      }),
+    );
+    return this.sanitize(saved);
+  }
+
+  /** Do'kon operatorlari ro'yxati. */
+  async listOperators(shopId: string) {
+    const ops = await this.users.find({
+      where: { role: Role.OPERATOR, shopId: String(shopId), isDeleted: false },
+      order: { createdAt: 'DESC' },
+    });
+    return ops.map((u) => this.sanitize(u));
+  }
+
+  /** Operatorni o'chiradi — faqat SHU do'konning operatori bo'lsa. */
+  async removeOperator(shopId: string, operatorId: string) {
+    const op = await this.users.findOne({
+      where: {
+        id: String(operatorId),
+        role: Role.OPERATOR,
+        shopId: String(shopId),
+        isDeleted: false,
+      },
+    });
+    if (!op) throw BusinessException.conflict('Operator topilmadi');
+    op.isDeleted = true;
+    op.isActive = false;
+    await this.users.save(op);
+    return { id: String(operatorId), removed: true };
+  }
+
   async logout(userId: string): Promise<null> {
     await this.sessions.update(
       { userId, revokedAt: IsNull() },
@@ -176,7 +234,12 @@ export class AuthService {
   }
 
   private async buildAuthResult(user: User) {
-    const payload = { sub: user.id, role: user.role };
+    // OPERATOR uchun shopId ham JWT'ga — gateway shu bo'yicha scope qiladi.
+    const payload = {
+      sub: user.id,
+      role: user.role,
+      shopId: user.shopId ?? undefined,
+    };
     const accessToken = this.jwt.sign(payload, {
       expiresIn: this.config.get<string>('JWT_EXPIRES_IN', '1h') as any,
     });

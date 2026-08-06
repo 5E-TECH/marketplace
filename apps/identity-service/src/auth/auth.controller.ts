@@ -48,4 +48,29 @@ export class AuthController {
       Boolean(data.isActive),
     );
   }
+
+  // --- Market operatorlari (C1.38) ---
+  @MessagePattern({ cmd: 'identity.operator.create' })
+  createOperator(
+    @Payload()
+    data: {
+      shopId: string;
+      dto: { name: string; phone: string; password: string };
+    },
+  ) {
+    return this.authService.createOperator(String(data.shopId), data.dto);
+  }
+
+  @MessagePattern({ cmd: 'identity.operator.list' })
+  listOperators(@Payload() data: { shopId: string }) {
+    return this.authService.listOperators(String(data.shopId));
+  }
+
+  @MessagePattern({ cmd: 'identity.operator.remove' })
+  removeOperator(@Payload() data: { shopId: string; operatorId: string }) {
+    return this.authService.removeOperator(
+      String(data.shopId),
+      String(data.operatorId),
+    );
+  }
 }

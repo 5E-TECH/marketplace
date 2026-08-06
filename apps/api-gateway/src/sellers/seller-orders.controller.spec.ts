@@ -3,10 +3,22 @@ import { of } from 'rxjs';
 import { SellerOrdersController } from './seller-orders.controller';
 
 describe('SellerOrdersController', () => {
-  it('endpointlar faqat SELLER roli bilan himoyalangan', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, SellerOrdersController)).toEqual([
-      Role.SELLER,
-    ]);
+  it('orders/updateOrder SELLER+OPERATOR, dashboard faqat SELLER', () => {
+    expect(
+      Reflect.getMetadata(ROLES_KEY, SellerOrdersController.prototype.orders),
+    ).toEqual([Role.SELLER, Role.OPERATOR]);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        SellerOrdersController.prototype.updateOrder,
+      ),
+    ).toEqual([Role.SELLER, Role.OPERATOR]);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        SellerOrdersController.prototype.dashboard,
+      ),
+    ).toEqual([Role.SELLER]);
   });
 
   it('JWT actor ID sini orders RPC payloadga uzatadi', () => {

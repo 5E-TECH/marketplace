@@ -2,6 +2,7 @@
 
 export enum Role {
   SELLER = 'SELLER',
+  OPERATOR = 'OPERATOR',
   BUYER = 'BUYER',
   ADMIN = 'ADMIN',
   SUPERADMIN = 'SUPERADMIN',
