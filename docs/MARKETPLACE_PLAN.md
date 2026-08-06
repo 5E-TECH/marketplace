@@ -191,7 +191,8 @@ SalesOrderSellerStatus { PENDING, SHIPMENT_CREATED, ON_THE_ROAD, DELIVERED, CANC
 PaymentMethod { COD, PAYME, CLICK }
 PaymentProvider { PAYME, CLICK }
 PaymentStatus { CREATED, PENDING, PAID, CANCELLED, FAILED, REFUNDED }
-Roles { SELLER, BUYER, ADMIN, SUPERADMIN }
+Roles { SELLER, OPERATOR, BUYER, ADMIN, SUPERADMIN }
+// OPERATOR — do'kon xodimi (sotuvchi tomonidan qo'shiladi, faqat o'z do'koniga scope)
 Commission_type { PERCENT, FIXED }
 ```
 
@@ -303,6 +304,31 @@ region bo'yicha filialga yo'nalish **avtomat** (marketplace bilmaydi).
 3. Seller login → seller-cabinet.  (approve'gacha storefront'da ko'rinmaydi)
 ```
 
+### 12.1 Market operatorlari (do'kon xodimlari)
+
+Har do'kon (market) uchun **operatorlar** — sotuvchining xodimlari, buyurtmalarni
+tasdiqlaydi va ular ustida ishlaydi (kelgusida katalog/qoldiq ham).
+
+```
+1. Sotuvchi (owner) operator qo'shadi: POST /sellers/operators {name, phone, password}
+     → identity: user(role=OPERATOR, shop_id=owner.shop, active)
+2. Operator login → seller-cabinet (faqat o'z do'koni ma'lumoti — scope shop_id bo'yicha)
+3. Operator buyurtmalarni ko'radi/tasdiqlaydi/holatini yangilaydi (o'z do'koni);
+   boshqa do'kon → 403.
+```
+
+- **Scope:** operator `shop_id` do'kon egasining do'koniga bog'lanadi (identity `user.shop_id`).
+  Har seller-scope so'rov owner **yoki** shu shopning operatori uchun ochiladi.
+- **Ruxsat (MVP):** buyurtmalar (ko'rish/tasdiqlash/holat) + o'qish. ◻︎ Keyin: katalog/qoldiq,
+  granular ruxsat (permission matritsasi).
+- Owner operatorlarni CRUD qiladi (qo'shish/o'chirish/faollashtirish); operator o'zini o'chira olmaydi.
+
+### 12.2 Xaridor (buyer)
+
+- **Guest:** ro'yxatsiz, telefon bo'yicha lightweight buyer (checkout'da `identity.customer.create`).
+- **Ro'yxatdan o'tgan buyer:** `POST /auth/register` (role=BUYER, default) + `POST /auth/login`;
+  "Hisobim" + "Mening buyurtmalarim" (telefon/akkaunt bo'yicha). Storefront ikkalasini ham qo'llaydi.
+
 ---
 
 ## 13. API kontrakt (MVP — sotuvchi kabineti)
@@ -317,8 +343,12 @@ region bo'yicha filialga yo'nalish **avtomat** (marketplace bilmaydi).
 | GET/POST | `/inventory/warehouses` | seller | ombor |
 | GET | `/inventory/stock`, `/inventory/stock/low` | seller | qoldiq |
 | POST | `/inventory/stock/inbound`, `/adjust` | seller | kirim/tuzatish |
-| GET | `/seller/orders` | seller | o'z buyurtmalari (Elchi status bilan) |
+| GET | `/seller/orders` | seller/operator | o'z do'koni buyurtmalari (Elchi status bilan) |
+| PATCH | `/seller/orders/:id` | seller/operator | buyurtmani tasdiqlash/holat yangilash |
+| GET/POST/DELETE | `/sellers/operators[/:id]` | seller | operator (do'kon xodimi) CRUD |
 | GET | `/seller/dashboard` | seller | sotuv/daromad |
+| POST | `/auth/register`, `/auth/login` | public | xaridor (BUYER) ro'yxat/kirish |
+| GET | `/buyer/orders` | buyer | mening buyurtmalarim |
 | GET | `/admin/dashboard` | admin | platforma sanoqlari |
 | GET | `/admin/users`, `/admin/users/:id` | admin | account ko'rish |
 | POST | `/admin/users/:id/block\|unblock` | admin | bloklash |
