@@ -8,6 +8,7 @@ import { RmqClient } from '@app/common';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
 import { ElchiApiClient } from './elchi-api.client';
+import { CreateElchiShipmentInput } from './elchi-api.client';
 
 /** `shop.approved` event payloadi (loose contract — notification bilan bir xil shakl). */
 export interface ShopApprovedEvent {
@@ -134,6 +135,10 @@ export class ElchiIntegrationService {
     }
 
     return { regions: regions.length, districts: districts.length };
+  }
+
+  createShipment(input: CreateElchiShipmentInput) {
+    return this.elchi.createShipment(input);
   }
 
   private async upsertGeo(

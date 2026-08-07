@@ -11,6 +11,18 @@ export interface ElchiDistrict {
   region_id: string;
 }
 
+export interface CreateElchiShipmentInput {
+  external_order_id: string;
+  elchi_market_id: string;
+  customer: { name: string; phone: string };
+  address: string;
+  region_id?: string | null;
+  district_id?: string | null;
+  where_deliver?: string;
+  items: Array<{ name: string; quantity: number }>;
+  cod_amount: number;
+}
+
 /**
  * Elchi Partner API HTTP klienti (marketplace tomoni). Native `fetch`, autentifikatsiya
  * `X-Api-Key` header bilan (Elchi PartnerApiKeyGuard shu header'ni kutadi — C1.2).
@@ -47,6 +59,20 @@ export class ElchiApiClient {
       throw new Error('Elchi javobida elchi_market_id yo‘q');
     }
     return { elchi_market_id: String(id) };
+  }
+
+  /** POST /partner/shipments — external_order_id Elchi tomonida idempotency kaliti. */
+  async createShipment(
+    body: CreateElchiShipmentInput,
+  ): Promise<{ shipment_id: string; tracking_url?: string }> {
+    const res = await this.request('POST', '/partner/shipments', body);
+    const id = this.pluck(res, 'shipment_id');
+    if (!id) throw new Error('Elchi javobida shipment_id yo‘q');
+    const trackingUrl = this.pluck(res, 'tracking_url');
+    return {
+      shipment_id: String(id),
+      ...(trackingUrl ? { tracking_url: String(trackingUrl) } : {}),
+    };
   }
 
   /** GET /partner/regions → [{id, name}]. */

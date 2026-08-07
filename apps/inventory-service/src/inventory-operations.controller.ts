@@ -12,4 +12,16 @@ export class InventoryOperationsController {
   reserve(@Payload() input: CheckoutReserveInputDto) {
     return this.inventory.reserveAvailable(input);
   }
+
+  @MessagePattern({ cmd: 'inventory.commit' })
+  commit(
+    @Payload()
+    input: {
+      orderRef: string;
+      idempotencyKey: string;
+      actorId?: string;
+    },
+  ) {
+    return this.inventory.commit(input);
+  }
 }
