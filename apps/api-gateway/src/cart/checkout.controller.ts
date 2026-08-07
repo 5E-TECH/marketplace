@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Inject, Param, Post } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -33,6 +33,16 @@ export class CheckoutController {
         dto,
         idempotencyKey,
       },
+    );
+  }
+
+  @Post(':orderId/confirm')
+  @ApiOperation({ summary: 'COD buyurtmani tasdiqlash' })
+  confirm(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'checkout.confirm-cod' },
+      { orderId, customerId: user.sub },
     );
   }
 }

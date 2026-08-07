@@ -20,6 +20,14 @@ export class SellerShopService {
     return shop;
   }
 
+  async getById(shopId: string): Promise<Shop> {
+    const shop = await this.shops.findOne({
+      where: { id: shopId, isDeleted: false },
+    });
+    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
+    return shop;
+  }
+
   async updateMine(
     ownerUserId: string,
     dto: UpdateSellerShopDto,

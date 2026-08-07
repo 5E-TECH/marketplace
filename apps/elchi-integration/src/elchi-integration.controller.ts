@@ -20,4 +20,11 @@ export class ElchiIntegrationController {
   syncGeo() {
     return this.service.syncGeoCache();
   }
+
+  @MessagePattern({ cmd: 'integration.shipment.create' })
+  createShipment(
+    @Payload() input: Parameters<ElchiIntegrationService['createShipment']>[0],
+  ) {
+    return this.service.createShipment(input);
+  }
 }

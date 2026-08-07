@@ -32,4 +32,9 @@ export class SellerShopController {
   setElchiMarketId(@Payload() data: { shopId: string; elchiMarketId: string }) {
     return this.sellerShops.setElchiMarketId(data.shopId, data.elchiMarketId);
   }
+
+  @MessagePattern({ cmd: 'catalog.shop.get-by-id' })
+  getById(@Payload() data: { shopId: string }) {
+    return this.sellerShops.getById(data.shopId);
+  }
 }

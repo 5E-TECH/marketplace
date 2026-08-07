@@ -20,6 +20,7 @@ import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
 import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
+import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 
 @Module({
   imports: [
@@ -36,6 +37,24 @@ import { CheckoutService } from './checkout.service';
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.INVENTORY),
+      },
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
       },
     ]),
     TypeOrmModule.forRootAsync({
@@ -55,6 +74,11 @@ import { CheckoutService } from './checkout.service';
     }),
   ],
   controllers: [SellerOrdersController, CartController, CheckoutController],
-  providers: [SellerOrdersService, CartService, CheckoutService],
+  providers: [
+    SellerOrdersService,
+    CartService,
+    CheckoutService,
+    ConfirmSalesOrderService,
+  ],
 })
 export class CheckoutModule {}
