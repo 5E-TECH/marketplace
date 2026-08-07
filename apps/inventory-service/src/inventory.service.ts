@@ -115,6 +115,38 @@ export class InventoryService {
     );
   }
 
+  /** Checkout uchun variantni qoldig‘i mavjud omborga bog‘lab, atomik reserve qiladi. */
+  async reserveAvailable(input: {
+    orderRef: string;
+    items: Array<{ variantId: string; quantity: number }>;
+    ttlMs?: number;
+    idempotencyKey: string;
+  }): Promise<InventoryResult> {
+    const resolved = [] as ReserveInput['items'];
+    for (const item of input.items) {
+      const stock = await this.dataSource
+        .getRepository(Stock)
+        .createQueryBuilder('stock')
+        .where('stock.variantId = :variantId', { variantId: item.variantId })
+        .andWhere(
+          '(stock.quantityOnHand - stock.quantityReserved) >= :quantity',
+          {
+            quantity: item.quantity,
+          },
+        )
+        .orderBy('(stock.quantityOnHand - stock.quantityReserved)', 'DESC')
+        .addOrderBy('stock.id', 'ASC')
+        .getOne();
+      if (!stock) {
+        throw BusinessException.insufficientStock(
+          `Variant ${item.variantId} uchun qoldiq yetarli emas`,
+        );
+      }
+      resolved.push({ ...item, warehouseId: stock.warehouseId });
+    }
+    return this.reserve({ ...input, items: resolved });
+  }
+
   commit(input: ReservationActionInput): Promise<InventoryResult> {
     return this.finishReservation(
       StockMovementType.COMMIT,

@@ -18,6 +18,8 @@ import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
+import { CheckoutController } from './checkout.controller';
+import { CheckoutService } from './checkout.service';
 
 @Module({
   imports: [
@@ -52,7 +54,7 @@ import { CartService } from './cart.service';
       },
     }),
   ],
-  controllers: [SellerOrdersController, CartController],
-  providers: [SellerOrdersService, CartService],
+  controllers: [SellerOrdersController, CartController, CheckoutController],
+  providers: [SellerOrdersService, CartService, CheckoutService],
 })
 export class CheckoutModule {}

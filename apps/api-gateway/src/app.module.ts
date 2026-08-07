@@ -28,6 +28,7 @@ import { SearchController } from './search/search.controller';
 import { AdminShopsController } from './shops/admin-shops.controller';
 import { SellerOperatorsController } from './sellers/seller-operators.controller';
 import { CartController } from './cart/cart.controller';
+import { CheckoutController } from './cart/checkout.controller';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { CartController } from './cart/cart.controller';
     AdminShopsController,
     SellerOperatorsController,
     CartController,
+    CheckoutController,
   ],
   providers: [
     AppService,

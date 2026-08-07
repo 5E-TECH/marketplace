@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class AddCartItemDto {
   @ApiProperty({ example: '35' })
@@ -53,4 +61,66 @@ export interface CartCatalogVariantDto {
   variantId: string;
   shopId: string;
   unitPrice: number;
+}
+
+export enum CheckoutPaymentMethod {
+  ONLINE = 'online',
+  COD = 'cod',
+}
+
+export class CheckoutAddressDto {
+  @ApiProperty({ example: 'Dilshodbek Aliyev' })
+  @IsString()
+  recipientName: string;
+
+  @ApiProperty({ example: '+998901234567' })
+  @IsString()
+  phone: string;
+
+  @ApiProperty({ example: 'Toshkent shahri, Amir Temur ko‘chasi 1' })
+  @IsString()
+  address: string;
+
+  @ApiPropertyOptional({ example: '10' })
+  @IsOptional()
+  @IsString()
+  regionId?: string;
+
+  @ApiPropertyOptional({ example: '101' })
+  @IsOptional()
+  @IsString()
+  districtId?: string;
+}
+
+export class CreateCheckoutDto {
+  @ApiProperty({ enum: CheckoutPaymentMethod })
+  @IsEnum(CheckoutPaymentMethod)
+  paymentMethod: CheckoutPaymentMethod;
+
+  @ApiProperty({ type: CheckoutAddressDto })
+  @ValidateNested()
+  @Type(() => CheckoutAddressDto)
+  address: CheckoutAddressDto;
+}
+
+export interface CheckoutResultDto {
+  id: string;
+  status: 'pending_payment' | 'draft';
+  paymentMethod: CheckoutPaymentMethod;
+  totalAmount: number;
+  reservationId: string;
+  reservationExpiresAt: string;
+  sellerOrders: Array<{
+    id: string;
+    shopId: string;
+    subtotal: number;
+    status: string;
+  }>;
+}
+
+export interface CheckoutReserveInputDto {
+  orderRef: string;
+  items: Array<{ variantId: string; quantity: number }>;
+  ttlMs: number;
+  idempotencyKey: string;
 }
