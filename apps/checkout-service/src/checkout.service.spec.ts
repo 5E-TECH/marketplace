@@ -114,8 +114,8 @@ describe('CheckoutService (C2.9)', () => {
   });
 
   it.each([
-    [CheckoutPaymentMethod.ONLINE, 'pending_payment'],
-    [CheckoutPaymentMethod.COD, 'draft'],
+    [CheckoutPaymentMethod.ONLINE, 'PENDING_PAYMENT'],
+    [CheckoutPaymentMethod.COD, 'DRAFT'],
   ] as const)('TC4: %s uchun %s status beradi', async (method, status) => {
     const { service } = setup();
     await expect(service.create('5', dto(method))).resolves.toMatchObject({

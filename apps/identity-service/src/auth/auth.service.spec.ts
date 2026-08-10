@@ -144,6 +144,21 @@ describe('AuthService (C0.4)', () => {
     expect(res.refreshToken).toBeDefined();
   });
 
+  it('TC2b: operator login JWT ichida shopId claim bo‘ladi (C1.38)', async () => {
+    await service.createOperator('5', {
+      name: 'Operator',
+      phone: '+998901112299',
+      password: 'Secret123',
+    });
+    const res = await service.login({
+      phone: '+998901112299',
+      password: 'Secret123',
+    });
+    const payload: any = jwt.verify(res.accessToken);
+    expect(payload.role).toBe(Role.OPERATOR);
+    expect(payload.shopId).toBe('5'); // gateway shu bo'yicha scope qiladi
+  });
+
   it("TC3: noto'g'ri parol -> 401", async () => {
     await service.register({
       name: 'A',

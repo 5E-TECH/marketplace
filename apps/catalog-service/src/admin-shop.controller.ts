@@ -18,6 +18,19 @@ export class AdminShopController {
     return this.adminShops.adminApprove(String(data.shopId));
   }
 
+  @MessagePattern({ cmd: 'catalog.shop.publish-approved' })
+  publishApproved(
+    @Payload()
+    data: {
+      sellerUserId: string;
+      shopId: string;
+      shopName?: string;
+      phone?: string | null;
+    },
+  ) {
+    return this.adminShops.publishShopApproved(data);
+  }
+
   @MessagePattern({ cmd: 'catalog.shop.reject' })
   reject(@Payload() data: { shopId: string; reason?: string }) {
     return this.adminShops.adminReject(String(data.shopId), data.reason);

@@ -5,7 +5,7 @@ import { Role } from '../enums';
 export interface JwtUser {
   sub: string; // user id
   role: Role;
-  shopId?: string; // faqat SELLER
+  shopId?: string; // SELLER (owner) yoki OPERATOR do'kon scope'i
   iat?: number;
   exp?: number;
 }

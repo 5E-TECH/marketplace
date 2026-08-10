@@ -7,10 +7,11 @@ import { AdminShopsQueryDto, RmqClient, ShopStatus } from '@app/common';
 import { Shop } from './entities/shop.entity';
 
 /**
- * Admin do'kon moderatsiyasi (C1.7). list / approve / reject.
- * approve → status ACTIVE + `shop.approved` event (HAM notification, HAM
- * elchi-integration — har biri o'z queue'sida tinglaydi, shu bois IKKALASIGA
- * emit qilinadi). reject → REJECTED + `shop.rejected` (notification).
+ * Admin do'kon moderatsiyasi (C1.7). list / approve / publish-approved / reject.
+ * approve → status ACTIVE (event YO'Q). `shop.approved` event alohida
+ * `publishShopApproved` orqali — gateway uni approve orkestratsiyasi OXIRIDA
+ * (user faollashtirilib, default ombor tayyor bo'lgach) chaqiradi, shunda event
+ * tarqalganda lokal holat izchil bo'ladi. reject → REJECTED + `shop.rejected`.
  * User faollashtirish + default ombor — gateway orkestratsiyasida (bu yerda EMAS).
  */
 @Injectable()
@@ -57,17 +58,24 @@ export class AdminShopService {
       return shop; // idempotent
     }
     shop.status = ShopStatus.ACTIVE;
-    const saved = await this.shops.save(shop);
+    return this.shops.save(shop);
+  }
 
-    const event = {
-      sellerUserId: saved.ownerUserId,
-      shopId: saved.id,
-      shopName: saved.name,
-      phone: saved.phone,
-    };
-    await this.emit(this.notifications, 'shop.approved', event);
-    await this.emit(this.integration, 'shop.approved', event);
-    return saved;
+  /**
+   * `shop.approved` event'ni chiqaradi (HAM notification, HAM elchi-integration —
+   * har biri o'z queue'sida tinglaydi, shu bois IKKALASIGA emit qilinadi).
+   * Gateway buni approve OXIRIDA — user faollashtirilib, default ombor tayyor
+   * bo'lgach — chaqiradi (emit-after-consistency). Consumer'lar idempotent, shu
+   * bois qayta chaqirilsa ham xavfsiz (at-least-once).
+   */
+  async publishShopApproved(payload: {
+    sellerUserId: string;
+    shopId: string;
+    shopName?: string;
+    phone?: string | null;
+  }): Promise<void> {
+    await this.emit(this.notifications, 'shop.approved', payload);
+    await this.emit(this.integration, 'shop.approved', payload);
   }
 
   async adminReject(shopId: string, reason?: string): Promise<Shop> {

@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { Role, ROLES_KEY, SalesOrderSellerStatus } from '@app/common';
 import { SellerOrdersController } from './seller-orders.controller';
 
 describe('SellerOrdersController — operator scope (C1.38)', () => {
@@ -25,7 +25,7 @@ describe('SellerOrdersController — operator scope (C1.38)', () => {
     await ctrl.updateOrder(
       { role: Role.OPERATOR, shopId: '5', sub: '10' } as never,
       '7',
-      { status: 'SHIPMENT_CREATED' },
+      { status: SalesOrderSellerStatus.SHIPMENT_CREATED },
     );
     expect(send).toHaveBeenCalledWith(
       { cmd: 'seller.orders.update-status' },
@@ -33,7 +33,7 @@ describe('SellerOrdersController — operator scope (C1.38)', () => {
     );
 
     await ctrl.updateOrder({ role: Role.SELLER, sub: '42' } as never, '7', {
-      status: 'DELIVERED',
+      status: SalesOrderSellerStatus.DELIVERED,
     });
     expect(send).toHaveBeenCalledWith(
       { cmd: 'seller.orders.update-status' },

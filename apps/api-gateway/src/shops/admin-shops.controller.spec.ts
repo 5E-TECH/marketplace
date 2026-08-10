@@ -33,12 +33,13 @@ describe('AdminShopsController (C1.7)', () => {
     );
   });
 
-  it('TC2: approve -> catalog(approve) -> identity(set-active) -> inventory(ensure-default)', async () => {
+  it('TC2: approve -> catalog(approve) -> identity -> inventory -> catalog(publish-approved)', async () => {
     const catalog = jest.fn(() =>
       of({
         id: '9',
         ownerUserId: '42',
         name: 'Zamon',
+        phone: '+998901234567',
         regionId: '1',
         districtId: '10',
       }),
@@ -60,6 +61,21 @@ describe('AdminShopsController (C1.7)', () => {
     expect(inventory).toHaveBeenCalledWith(
       { cmd: 'inventory.warehouse.ensure-default' },
       expect.objectContaining({ shopId: '9', regionId: '1', districtId: '10' }),
+    );
+    // EMIT OXIRIDA: shop.approved faqat user+ombor tayyor bo'lgach chiqadi
+    expect(catalog).toHaveBeenNthCalledWith(
+      2,
+      { cmd: 'catalog.shop.publish-approved' },
+      {
+        sellerUserId: '42',
+        shopId: '9',
+        shopName: 'Zamon',
+        phone: '+998901234567',
+      },
+    );
+    // tartib: inventory (3-qadam) publish (4-qadam) dan OLDIN
+    expect(inventory.mock.invocationCallOrder[0]).toBeLessThan(
+      catalog.mock.invocationCallOrder[1],
     );
     expect(res.id).toBe('9');
   });

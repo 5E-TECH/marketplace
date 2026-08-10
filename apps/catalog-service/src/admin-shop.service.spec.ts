@@ -41,7 +41,7 @@ describe('AdminShopService (C1.7)', () => {
     expect(res).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
   });
 
-  it('TC2: approve -> ACTIVE + shop.approved event (HAM notification, HAM integration)', async () => {
+  it('TC2: approve -> ACTIVE + save (event YO‘Q — u publishShopApproved da)', async () => {
     const shop: any = {
       id: '9',
       ownerUserId: '42',
@@ -55,24 +55,34 @@ describe('AdminShopService (C1.7)', () => {
 
     expect(result.status).toBe(ShopStatus.ACTIVE);
     expect(shops.save).toHaveBeenCalled();
+    // approve endi emit qilmaydi — emit-after-consistency (gateway oxirida)
+    expect(notifEmit).not.toHaveBeenCalled();
+    expect(intgEmit).not.toHaveBeenCalled();
+  });
+
+  it('TC2 idempotent: allaqachon ACTIVE -> save chaqirilmaydi', async () => {
+    const shop: any = { id: '9', status: ShopStatus.ACTIVE };
+    const { service, shops } = makeService(shop);
+
+    const result = await service.adminApprove('9');
+
+    expect(result.status).toBe(ShopStatus.ACTIVE);
+    expect(shops.save).not.toHaveBeenCalled();
+  });
+
+  it('TC2b: publishShopApproved -> shop.approved HAM notification HAM integration', async () => {
+    const { service, notifEmit, intgEmit } = makeService();
     const event = {
       sellerUserId: '42',
       shopId: '9',
       shopName: 'Zamon',
       phone: '+998901234567',
     };
+
+    await service.publishShopApproved(event);
+
     expect(notifEmit).toHaveBeenCalledWith('shop.approved', event);
     expect(intgEmit).toHaveBeenCalledWith('shop.approved', event);
-  });
-
-  it('TC2 idempotent: allaqachon ACTIVE -> event yuborilmaydi', async () => {
-    const shop: any = { id: '9', status: ShopStatus.ACTIVE };
-    const { service, notifEmit, intgEmit } = makeService(shop);
-
-    await service.adminApprove('9');
-
-    expect(notifEmit).not.toHaveBeenCalled();
-    expect(intgEmit).not.toHaveBeenCalled();
   });
 
   it('TC3: reject -> REJECTED + shop.rejected (notification), integration EMAS', async () => {

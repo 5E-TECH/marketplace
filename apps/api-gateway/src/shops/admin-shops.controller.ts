@@ -30,6 +30,7 @@ interface ApprovedShop {
   id: string;
   ownerUserId: string;
   name: string;
+  phone?: string | null;
   regionId?: string | null;
   districtId?: string | null;
 }
@@ -69,7 +70,7 @@ export class AdminShopsController {
   })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async approve(@Param('id') id: string): Promise<ApprovedShop> {
-    // 1) catalog: shop ACTIVE + shop.approved event (notification + elchi-integration)
+    // 1) catalog: shop ACTIVE (event HALI emas — avval lokal holat izchil bo'lsin)
     const shop = await sendRpc<ApprovedShop>(
       this.catalog,
       { cmd: 'catalog.shop.approve' },
@@ -90,6 +91,19 @@ export class AdminShopsController {
         name: `${shop.name} ombori`,
         regionId: shop.regionId ?? null,
         districtId: shop.districtId ?? null,
+      },
+    );
+    // 4) EMIT OXIRIDA: user faol + ombor tayyor bo'lgach `shop.approved`
+    //    (notification + elchi-integration provisioning). Consumer'lar idempotent,
+    //    shu bois yarim-bajarilgan approve qayta chaqirilsa xavfsiz.
+    await sendRpc(
+      this.catalog,
+      { cmd: 'catalog.shop.publish-approved' },
+      {
+        sellerUserId: shop.ownerUserId,
+        shopId: shop.id,
+        shopName: shop.name,
+        phone: shop.phone ?? null,
       },
     );
     return shop;

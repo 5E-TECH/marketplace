@@ -36,7 +36,7 @@ interface ShopDetails {
 
 export interface ConfirmSalesOrderResult {
   id: string;
-  status: 'confirmed';
+  status: 'CONFIRMED';
   sellerOrders: Array<{
     id: string;
     elchiShipmentId: string;
@@ -80,7 +80,7 @@ export class ConfirmSalesOrderService {
         [orderId],
       )) as SellerOrderRow[];
 
-      if (order.status === 'confirmed') {
+      if (order.status === 'CONFIRMED') {
         return {
           result: this.result(orderId, sellers),
           notify: false,
@@ -88,7 +88,7 @@ export class ConfirmSalesOrderService {
           order,
         };
       }
-      if (order.status !== 'draft') {
+      if (order.status !== 'DRAFT') {
         throw new BadRequestException(
           `Buyurtmani ${order.status} holatidan tasdiqlab bo‘lmaydi`,
         );
@@ -149,7 +149,7 @@ export class ConfirmSalesOrderService {
         );
         await manager.query(
           `UPDATE checkout.sales_order_seller
-           SET elchi_shipment_id=$1, tracking_url=$2, status='confirmed', updated_at=now()
+           SET elchi_shipment_id=$1, tracking_url=$2, status='SHIPMENT_CREATED', updated_at=now()
            WHERE id=$3`,
           [shipment.shipment_id, shipment.tracking_url ?? null, seller.id],
         );
@@ -174,13 +174,13 @@ export class ConfirmSalesOrderService {
       );
       await manager.query(
         `UPDATE checkout.sales_order
-         SET status='confirmed', updated_at=now() WHERE id=$1`,
+         SET status='CONFIRMED', updated_at=now() WHERE id=$1`,
         [orderId],
       );
       return {
         result: {
           id: orderId,
-          status: 'confirmed' as const,
+          status: 'CONFIRMED' as const,
           sellerOrders: shipmentResults,
         },
         notify: true,
@@ -210,7 +210,7 @@ export class ConfirmSalesOrderService {
   ): ConfirmSalesOrderResult {
     return {
       id: orderId,
-      status: 'confirmed',
+      status: 'CONFIRMED',
       sellerOrders: sellers.map((seller) => ({
         id: seller.id,
         elchiShipmentId: String(seller.elchi_shipment_id),

@@ -105,7 +105,7 @@ export class CreateCheckoutDto {
 
 export interface CheckoutResultDto {
   id: string;
-  status: 'pending_payment' | 'draft';
+  status: 'PENDING_PAYMENT' | 'DRAFT';
   paymentMethod: CheckoutPaymentMethod;
   totalAmount: number;
   reservationId: string;
