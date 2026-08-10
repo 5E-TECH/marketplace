@@ -44,14 +44,14 @@ export class RegisterDto {
 export class LoginDto {
   @ApiProperty({
     example: '+998900000000',
-    description: 'Development SUPERADMIN telefon raqami',
+    description: 'Development SELLER telefon raqami',
   })
   @Matches(PHONE_REGEX, PHONE_MSG)
   phone: string;
 
   @ApiProperty({
     example: '0990',
-    description: 'Development SUPERADMIN paroli',
+    description: 'Development SELLER paroli',
   })
   @IsString()
   password: string;
