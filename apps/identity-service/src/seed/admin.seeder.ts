@@ -7,7 +7,7 @@ import { Role } from '@app/common';
 import { User } from '../entities/user.entity';
 
 /**
- * Boshlang'ich SUPERADMIN seed — FAQAT SEED_ADMIN_PHONE + SEED_ADMIN_PASSWORD
+ * Boshlang'ich SELLER seed — FAQAT SEED_ADMIN_PHONE + SEED_ADMIN_PASSWORD
  * env berilgan bo'lsa. Aks holda o'tkazib yuboriladi (hardcoded parol yo'q).
  */
 @Injectable()
@@ -29,14 +29,14 @@ export class AdminSeeder implements OnApplicationBootstrap {
 
     await this.users.save(
       this.users.create({
-        name: 'Super Admin',
+        name: 'Seller',
         phone,
         email: null,
         passwordHash: await bcrypt.hash(password, 10),
-        role: Role.SUPERADMIN,
+        role: Role.SELLER,
         isActive: true,
       }),
     );
-    this.logger.log(`SUPERADMIN seed qilindi: ${phone}`);
+    this.logger.log(`SELLER seed qilindi: ${phone}`);
   }
 }
