@@ -219,6 +219,12 @@ export class SellerOrdersQueryDto {
   limit = 20;
 }
 
+export class UpdateSellerOrderStatusDto {
+  @ApiProperty({ enum: SalesOrderSellerStatus })
+  @IsEnum(SalesOrderSellerStatus)
+  status: SalesOrderSellerStatus;
+}
+
 export class SellerOrderItemDto {
   @ApiProperty({ example: '31' })
   id: string;

@@ -42,8 +42,8 @@ export class CheckoutService {
 
       const status =
         dto.paymentMethod === CheckoutPaymentMethod.ONLINE
-          ? 'pending_payment'
-          : 'draft';
+          ? 'PENDING_PAYMENT'
+          : 'DRAFT';
       const total = cart.items.reduce(
         (sum, item) => sum + Number(item.unitPriceSnapshot) * item.quantity,
         0,
@@ -91,7 +91,7 @@ export class CheckoutService {
           id: seller.id,
           shopId,
           subtotal,
-          status: 'pending',
+          status: 'PENDING',
         });
       }
 
@@ -165,7 +165,7 @@ export class CheckoutService {
     const [seller] = await manager.query(
       `INSERT INTO checkout.sales_order_seller
        (sales_order_id,shop_id,subtotal,cod_amount,status)
-       VALUES ($1,$2,$3,$4,'pending') RETURNING id::text`,
+       VALUES ($1,$2,$3,$4,'PENDING') RETURNING id::text`,
       [
         orderId,
         shopId,

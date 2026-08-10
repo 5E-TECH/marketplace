@@ -17,7 +17,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
               id: '1',
               customer_id: '5',
               buyer_name: 'Ali',
-              status: 'draft',
+              status: 'DRAFT',
               payment_method: 'cod',
               total_amount: '500',
               delivery_address: 'Toshkent\n+998901234567',
@@ -93,8 +93,10 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       }),
     );
     expect(
-      queries.filter((entry) =>
-        entry.sql.includes('UPDATE checkout.sales_order_seller'),
+      queries.filter(
+        (entry) =>
+          entry.sql.includes('UPDATE checkout.sales_order_seller') &&
+          entry.sql.includes("status='SHIPMENT_CREATED'"),
       ),
     ).toHaveLength(2);
   });
@@ -114,7 +116,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       queries.some(
         (entry) =>
           entry.sql.includes('UPDATE checkout.sales_order\n         SET') &&
-          entry.sql.includes("status='confirmed'"),
+          entry.sql.includes("status='CONFIRMED'"),
       ),
     ).toBe(true);
   });
@@ -148,7 +150,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       queries.some(
         (entry) =>
           entry.sql.includes('UPDATE checkout.sales_order\n         SET') &&
-          entry.sql.includes("status='confirmed'"),
+          entry.sql.includes("status='CONFIRMED'"),
       ),
     ).toBe(false);
   });

@@ -23,6 +23,7 @@ import {
   SellerDashboardDto,
   SellerOrdersPageDto,
   SellerOrdersQueryDto,
+  UpdateSellerOrderStatusDto,
   sendRpc,
 } from '@app/common';
 
@@ -60,12 +61,12 @@ export class SellerOrdersController {
   updateOrder(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { status: string },
+    @Body() dto: UpdateSellerOrderStatusDto,
   ) {
     return sendRpc(
       this.checkout,
       { cmd: 'seller.orders.update-status' },
-      { ...this.scope(user), orderId: id, status: dto?.status },
+      { ...this.scope(user), orderId: id, status: dto.status },
     );
   }
 

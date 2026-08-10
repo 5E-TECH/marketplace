@@ -1,3 +1,4 @@
+import { BusinessException } from '@app/common';
 import { AuthService } from './auth.service';
 
 /** createOperator (C1.38) — prototip orqali (og'ir konstruktorsiz). */
@@ -54,12 +55,44 @@ describe('AuthService — market operator (C1.38)', () => {
         phone: '+998900000000',
         password: 'secret',
       }),
-    ).rejects.toBeTruthy();
+    ).rejects.toBeInstanceOf(BusinessException);
   });
 
   it('removeOperator: boshqa do‘kon operatori -> topilmadi', async () => {
     const users = { findOne: jest.fn(() => Promise.resolve(null)) };
     const svc = makeService(users as never);
-    await expect(svc.removeOperator('5', '99')).rejects.toBeTruthy();
+    await expect(svc.removeOperator('5', '99')).rejects.toBeInstanceOf(
+      BusinessException,
+    );
+  });
+
+  it('listOperators: faqat shu do‘kon operatorlari, sanitize qilingan', async () => {
+    const users = {
+      find: jest.fn(() =>
+        Promise.resolve([
+          {
+            id: '10',
+            role: 'OPERATOR',
+            shopId: '5',
+            name: 'Op1',
+            passwordHash: 'hash',
+          },
+        ]),
+      ),
+    };
+    const svc = makeService(users as never);
+    const res: any = await svc.listOperators('5');
+
+    expect(users.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          role: 'OPERATOR',
+          shopId: '5',
+          isDeleted: false,
+        }),
+      }),
+    );
+    expect(res).toHaveLength(1);
+    expect(res[0].passwordHash).toBeUndefined(); // sanitize
   });
 });
