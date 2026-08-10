@@ -46,8 +46,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = 'Ichki xato';
-      this.logger.error(exception.message, exception.stack);
+      const bodyParserError = exception as Error & {
+        status?: number;
+        statusCode?: number;
+        type?: string;
+      };
+      if (
+        bodyParserError.type === 'entity.too.large' ||
+        bodyParserError.status === HttpStatus.PAYLOAD_TOO_LARGE ||
+        bodyParserError.statusCode === HttpStatus.PAYLOAD_TOO_LARGE
+      ) {
+        status = HttpStatus.PAYLOAD_TOO_LARGE;
+        message =
+          'Request hajmi juda katta. Rasmlarni /api/v1/files/upload orqali yuboring';
+        errorCode = ErrorCode.PAYLOAD_TOO_LARGE;
+      } else {
+        message = 'Ichki xato';
+        this.logger.error(exception.message, exception.stack);
+      }
     }
 
     const body: ApiErrorResponse = { statusCode: status, message, errorCode };
