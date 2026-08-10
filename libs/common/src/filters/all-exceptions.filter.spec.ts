@@ -55,4 +55,22 @@ describe('AllExceptionsFilter (TC2)', () => {
       }),
     );
   });
+
+  it('body-parser katta request xatosi -> 413 PAYLOAD_TOO_LARGE', () => {
+    const { host, status, json } = makeHost();
+    const error = Object.assign(new Error('request entity too large'), {
+      type: 'entity.too.large',
+      status: 413,
+    });
+
+    new AllExceptionsFilter().catch(error, host);
+
+    expect(status).toHaveBeenCalledWith(413);
+    expect(json).toHaveBeenCalledWith({
+      statusCode: 413,
+      message:
+        'Request hajmi juda katta. Rasmlarni /api/v1/files/upload orqali yuboring',
+      errorCode: ErrorCode.PAYLOAD_TOO_LARGE,
+    });
+  });
 });

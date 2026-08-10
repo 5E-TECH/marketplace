@@ -57,6 +57,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @MaxLength(500, {
+    each: true,
+    message: 'images ichida faqat 500 belgigacha bo‘lgan rasm URL yuboriladi',
+  })
   images?: string[];
 
   @ApiPropertyOptional({
