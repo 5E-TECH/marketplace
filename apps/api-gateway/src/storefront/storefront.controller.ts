@@ -51,6 +51,23 @@ export class StorefrontController {
     );
   }
 
+  @Get('shops/:shopId/products')
+  @ApiOperation({
+    summary: 'Faol do‘kon mahsulotlarini ID bo‘yicha olish',
+  })
+  @ApiOkResponse({ type: StorefrontProductsPageDto })
+  @ApiNotFoundResponse({ type: AuthErrorResponseDto })
+  getShopProducts(
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Query() query: StorefrontProductsQueryDto,
+  ) {
+    return sendRpc(
+      this.catalog,
+      { cmd: 'storefront.shops.products.list' },
+      { shopId: String(shopId), query },
+    );
+  }
+
   @Get('shops/:slug')
   @ApiOperation({ summary: 'Faol do‘kon sahifasi va mahsulotlari' })
   @ApiOkResponse({ type: StorefrontShopPageDto })

@@ -119,4 +119,30 @@ describe('StorefrontService', () => {
       products: { total: 1 },
     });
   });
+  it('shop ID bo‘yicha faqat shu active shop mahsulotlarini qaytaradi', async () => {
+    shopRepo.findOne.mockResolvedValue({ id: '9', status: ShopStatus.ACTIVE });
+
+    await expect(service.getShopProducts('9', query())).resolves.toMatchObject({
+      items: [{ id: '1' }],
+      total: 1,
+    });
+    expect(shopRepo.findOne).toHaveBeenCalledWith({
+      where: {
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+      },
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('product.shop_id = :shopId', {
+      shopId: '9',
+    });
+  });
+
+  it('mavjud bo‘lmagan yoki faol bo‘lmagan shop ID uchun 404 qaytaradi', async () => {
+    shopRepo.findOne.mockResolvedValue(null);
+
+    await expect(
+      service.getShopProducts('404', query()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });

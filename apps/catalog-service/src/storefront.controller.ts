@@ -31,4 +31,15 @@ export class StorefrontController {
   ) {
     return this.storefront.getShop(data.slug, data.query);
   }
+
+  @MessagePattern({ cmd: 'storefront.shops.products.list' })
+  getShopProducts(
+    @Payload()
+    data: {
+      shopId: string;
+      query: StorefrontProductsQueryDto;
+    },
+  ) {
+    return this.storefront.getShopProducts(data.shopId, data.query);
+  }
 }
