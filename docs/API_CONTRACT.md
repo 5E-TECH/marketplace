@@ -200,6 +200,10 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 
 **`GET /products/:id` · SELLER** — to'liq product + variants[]. O'zganiki → `403`.
 
+**`GET /storefront/shops/:shopId/products` · PUBLIC** — faol do'konning faol
+mahsulotlari. `page, limit, search, categoryId, minPrice, maxPrice, sort`
+filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
+
 ### 5.2 Yaratish / tahrir
 **`POST /products` · SELLER**
 ```jsonc

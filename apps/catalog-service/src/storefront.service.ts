@@ -63,6 +63,27 @@ export class StorefrontService {
     return { shop, products };
   }
 
+  async getShopProducts(
+    shopId: string,
+    query: StorefrontProductsQueryDto,
+  ): Promise<StorefrontProductsPageDto> {
+    const shop = await this.shops.findOne({
+      where: {
+        id: shopId,
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+      },
+    });
+    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
+
+    return this.paginate(
+      this.activeProductsQuery().andWhere('product.shop_id = :shopId', {
+        shopId,
+      }),
+      query,
+    );
+  }
+
   private activeProductsQuery(): SelectQueryBuilder<Product> {
     return this.products
       .createQueryBuilder('product')
