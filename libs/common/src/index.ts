@@ -30,6 +30,7 @@ export * from './dto/inventory.dto';
 export * from './dto/notification.dto';
 export * from './dto/admin-shop.dto';
 export * from './dto/operator.dto';
+export * from './dto/payment.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';

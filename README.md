@@ -28,18 +28,19 @@ npm run infra:up              # postgres / rabbitmq / minio / adminer (docker)
 
 npm run start:dev             # api-gateway   → http://localhost:3000/api/v1
 npm run start:identity:dev    # identity-service (RMQ)
+npm run start:payment:dev     # payment-service (RMQ)
 ```
 
 Tekshirish: `http://localhost:3000/api/v1/health` · Swagger: `http://localhost:3000/api/docs`
 
 ### Foydali buyruqlar
 
-| Buyruq | Vazifa |
-|---|---|
-| `npm run build:all` | Barcha app'ni build qilish |
-| `npm test` | Unit testlar (Jest) |
-| `npm run lint` | ESLint tekshiruvi |
-| `npm run format` | Prettier bilan formatlash |
+| Buyruq               | Vazifa                        |
+| -------------------- | ----------------------------- |
+| `npm run build:all`  | Barcha app'ni build qilish    |
+| `npm test`           | Unit testlar (Jest)           |
+| `npm run lint`       | ESLint tekshiruvi             |
+| `npm run format`     | Prettier bilan formatlash     |
 | `npm run infra:down` | Docker xizmatlarni to'xtatish |
 
 ## Monorepo tuzilishi
@@ -49,6 +50,7 @@ apps/
   api-gateway/      HTTP kirish nuqtasi (JWT, Swagger, RMQ client)
   identity-service/ foydalanuvchi + auth (register/login)
   echo-service/     RMQ microservice shabloni
+  payment-service/ online to'lovlar va provider konfiguratsiyasi
 libs/
   common/           umumiy kod (BaseEntity, guards, filter, outbox, ...)
 docs/               PRD, API kontrakt, DB sxema, Trello
@@ -64,11 +66,11 @@ docs/               PRD, API kontrakt, DB sxema, Trello
 
 ## Asosiy qarorlar
 
-| Qaror | Tanlov |
-|---|---|
-| Model | Umumiy katalog + har sotuvchi alohida do'kon |
-| To'lov | Online (Payme/Click) + COD |
-| MVP | Sotuvchi kabineti birinchi |
-| Sklad | Ko'p ombor + rezervatsiya |
-| Pul | Aralash: online→escrow, COD→sotuvchiga (Elchi orqali) |
-| Elchi ulanish | Partner API + outbound webhook |
+| Qaror         | Tanlov                                                |
+| ------------- | ----------------------------------------------------- |
+| Model         | Umumiy katalog + har sotuvchi alohida do'kon          |
+| To'lov        | Online (Payme/Click) + COD                            |
+| MVP           | Sotuvchi kabineti birinchi                            |
+| Sklad         | Ko'p ombor + rezervatsiya                             |
+| Pul           | Aralash: online→escrow, COD→sotuvchiga (Elchi orqali) |
+| Elchi ulanish | Partner API + outbound webhook                        |

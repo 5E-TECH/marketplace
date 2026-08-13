@@ -29,6 +29,7 @@ import { AdminShopsController } from './shops/admin-shops.controller';
 import { SellerOperatorsController } from './sellers/seller-operators.controller';
 import { CartController } from './cart/cart.controller';
 import { CheckoutController } from './cart/checkout.controller';
+import { PaymentsController } from './payments/payments.controller';
 
 @Module({
   imports: [
@@ -73,6 +74,12 @@ import { CheckoutController } from './cart/checkout.controller';
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
       },
       {
+        name: RmqClient.PAYMENT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.PAYMENT),
+      },
+      {
         name: RmqClient.NOTIFICATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
@@ -107,6 +114,7 @@ import { CheckoutController } from './cart/checkout.controller';
     SellerOperatorsController,
     CartController,
     CheckoutController,
+    PaymentsController,
   ],
   providers: [
     AppService,

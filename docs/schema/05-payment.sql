@@ -35,6 +35,8 @@ CREATE TABLE provider_config (
     provider          VARCHAR(10)  NOT NULL,             -- PAYME | CLICK
     merchant_id       VARCHAR(255),
     secret_encrypted  TEXT,                              -- AES-encrypted
+    base_url          VARCHAR(1000),                     -- SSRF-guard bilan tekshiriladi
     is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
