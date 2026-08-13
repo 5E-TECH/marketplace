@@ -1,0 +1,34 @@
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
+import { Payment } from './entities/payment.entity';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
+import { ProviderConfig } from './entities/provider-config.entity';
+import { CreatePaymentTables1724241600000 } from './migrations/1724241600000-create-payment-tables';
+import { PaymentController } from './payment.controller';
+import { PaymentService } from './payment.service';
+
+const entities = [Payment, PaymentTransaction, ProviderConfig];
+
+@Module({
+  imports: [
+    CommonConfigModule,
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
+        await ensureSchema(config, 'payment');
+        return {
+          ...typeOrmOptions(config, 'payment', entities),
+          synchronize: false,
+          migrations: [CreatePaymentTables1724241600000],
+          migrationsRun: true,
+        };
+      },
+    }),
+    TypeOrmModule.forFeature(entities),
+  ],
+  controllers: [PaymentController],
+  providers: [PaymentService],
+})
+export class PaymentModule {}
