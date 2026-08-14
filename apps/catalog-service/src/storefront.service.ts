@@ -31,12 +31,6 @@ export class StorefrontService {
 
   async getProduct(id: string): Promise<Product> {
     const product = await this.activeProductsQuery()
-      .leftJoinAndSelect(
-        'product.variants',
-        'variant',
-        'variant.is_deleted = FALSE AND variant.is_active = TRUE',
-      )
-      .leftJoinAndSelect('product.category', 'category')
       .andWhere('product.id = :id', { id })
       .getOne();
 
@@ -92,6 +86,12 @@ export class StorefrontService {
         'shop',
         'shop.is_deleted = FALSE AND shop.status = :shopStatus',
         { shopStatus: ShopStatus.ACTIVE },
+      )
+      .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect(
+        'product.variants',
+        'variant',
+        'variant.is_deleted = FALSE AND variant.is_active = TRUE',
       )
       .where('product.is_deleted = FALSE')
       .andWhere('product.status = :productStatus', {

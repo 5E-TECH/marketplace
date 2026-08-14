@@ -15,6 +15,7 @@ import { ProductVariant } from './entities/product-variant.entity';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
 import { CreateCatalogTables1721736000000 } from './migrations/1721736000000-create-catalog-tables';
+import { DefaultProductActive1724414400000 } from './migrations/1724414400000-default-product-active';
 import { SellerShopController } from './seller-shop.controller';
 import { SellerShopService } from './seller-shop.service';
 import { AdminShopController } from './admin-shop.controller';
@@ -66,7 +67,10 @@ const entities = [Shop, Category, Product, ProductVariant];
         return {
           ...typeOrmOptions(config, 'catalog', entities),
           synchronize: false,
-          migrations: [CreateCatalogTables1721736000000],
+          migrations: [
+            CreateCatalogTables1721736000000,
+            DefaultProductActive1724414400000,
+          ],
           migrationsRun: true,
         };
       },
