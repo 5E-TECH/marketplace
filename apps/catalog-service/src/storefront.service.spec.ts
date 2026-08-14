@@ -49,6 +49,15 @@ describe('StorefrontService', () => {
       'product.status = :productStatus',
       { productStatus: ProductStatus.ACTIVE },
     );
+    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
+      'product.category',
+      'category',
+    );
+    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
+      'product.variants',
+      'variant',
+      'variant.is_deleted = FALSE AND variant.is_active = TRUE',
+    );
   });
 
   it('kategoriya, narx, qidiruv, sort va paginationni qo‘llaydi', async () => {

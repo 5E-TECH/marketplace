@@ -59,7 +59,8 @@ export class ProductService {
       images: dto.images ?? [],
       attributes: dto.attributes ?? {},
       hasVariants: false,
-      status: dto.status ?? ProductStatus.DRAFT,
+      // Seller yaratgan mahsulot faol marketda public katalogga darhol chiqadi.
+      status: dto.status ?? ProductStatus.ACTIVE,
     });
     const createdProduct = await this.save(product);
     const defaultVariant = this.variants.create({

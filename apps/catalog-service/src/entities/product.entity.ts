@@ -74,7 +74,7 @@ export class Product extends BaseEntity {
   @Column({ name: 'has_variants', type: 'boolean', default: false })
   hasVariants: boolean;
 
-  @Column({ type: 'varchar', length: 20, default: ProductStatus.DRAFT })
+  @Column({ type: 'varchar', length: 20, default: ProductStatus.ACTIVE })
   status: ProductStatus;
 
   @OneToMany(() => ProductVariant, (variant) => variant.product)

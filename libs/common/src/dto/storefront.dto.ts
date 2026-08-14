@@ -11,7 +11,30 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductDto } from './product.dto';
+import { ProductVariantDto } from './product-variant.dto';
 import { SellerShopDto } from './seller.dto';
+
+export class StorefrontCategoryDto {
+  @ApiProperty({ example: '7' }) id: string;
+  @ApiProperty({ example: 'Smartfonlar' }) name: string;
+  @ApiProperty({ example: 'smartfonlar' }) slug: string;
+  @ApiProperty({ example: '2', nullable: true }) parentId: string | null;
+  @ApiProperty({ example: null, nullable: true }) iconUrl: string | null;
+}
+
+export class StorefrontProductDto extends ProductDto {
+  @ApiProperty({
+    type: SellerShopDto,
+    description: 'Product qaysi marketga tegishli ekanini bildiradi',
+  })
+  shop: SellerShopDto;
+
+  @ApiProperty({ type: StorefrontCategoryDto, nullable: true })
+  category: StorefrontCategoryDto | null;
+
+  @ApiProperty({ type: [ProductVariantDto] })
+  variants: ProductVariantDto[];
+}
 
 export class StorefrontProductsQueryDto {
   @ApiPropertyOptional({ example: 'iphone' })
@@ -71,17 +94,12 @@ export class StorefrontProductsQueryDto {
 }
 
 export class StorefrontProductsPageDto {
-  @ApiProperty({ type: [ProductDto] }) items: ProductDto[];
+  @ApiProperty({ type: [StorefrontProductDto] })
+  items: StorefrontProductDto[];
   @ApiProperty({ example: 25 }) total: number;
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 2 }) totalPages: number;
-}
-
-export class StorefrontProductDto extends ProductDto {
-  @ApiProperty({ type: SellerShopDto }) shop: SellerShopDto;
-  @ApiProperty({ type: 'array', items: { type: 'object' } })
-  variants: unknown[];
 }
 
 export class StorefrontShopPageDto {

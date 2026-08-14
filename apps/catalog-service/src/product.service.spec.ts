@@ -83,7 +83,7 @@ describe('ProductService', () => {
         ownerUserId: '42',
         slug: 'oyin-telefoni',
         price: 1200000,
-        status: ProductStatus.DRAFT,
+        status: ProductStatus.ACTIVE,
       }),
     );
     expect(variantRepo.create).toHaveBeenCalledWith(
