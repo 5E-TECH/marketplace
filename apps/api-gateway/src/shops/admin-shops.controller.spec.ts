@@ -48,7 +48,11 @@ describe('AdminShopsController (C1.7)', () => {
     const inventory = jest.fn(() => of({}));
     const ctrl = makeController(catalog, identity, inventory);
 
-    const res: any = await ctrl.approve('9');
+    const res: any = await ctrl.approve(
+      '9',
+      { sub: '7', role: Role.ADMIN } as never,
+      '',
+    );
 
     expect(catalog).toHaveBeenCalledWith(
       { cmd: 'catalog.shop.approve' },
@@ -83,10 +87,43 @@ describe('AdminShopsController (C1.7)', () => {
   it('TC3: reject -> catalog.shop.reject (reason bilan)', async () => {
     const catalog = jest.fn(() => of({ id: '9', status: 'REJECTED' }));
     const ctrl = makeController(catalog);
-    await ctrl.reject('9', { reason: 'sabab' } as never);
+    await ctrl.reject(
+      '9',
+      { reason: 'sabab' } as never,
+      undefined as never,
+      '',
+    );
     expect(catalog).toHaveBeenCalledWith(
       { cmd: 'catalog.shop.reject' },
       { shopId: '9', reason: 'sabab' },
+    );
+  });
+
+  it('C1.31: approve -> identity.audit.log (actor, shop.approve, ip)', async () => {
+    const catalog = jest.fn(() =>
+      of({
+        id: '9',
+        ownerUserId: '42',
+        name: 'Zamon',
+        phone: '+998901234567',
+        regionId: '1',
+        districtId: '10',
+      }),
+    );
+    const identity = jest.fn(() => of({}));
+    const ctrl = makeController(catalog, identity);
+
+    await ctrl.approve('9', { sub: '7', role: Role.ADMIN } as never, '1.2.3.4');
+
+    expect(identity).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: '7',
+        action: 'shop.approve',
+        entityType: 'Shop',
+        entityId: '9',
+        meta: { ip: '1.2.3.4' },
+      },
     );
   });
 });

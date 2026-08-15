@@ -38,7 +38,7 @@ describe('AdminUsersController (C1.29)', () => {
   it('block -> set-blocked{actorId=joriy admin, blocked:true}', async () => {
     const send = jest.fn(() => of({}));
     const ctrl = makeController(send);
-    await ctrl.block({ sub: '1', role: Role.ADMIN } as never, '9');
+    await ctrl.block({ sub: '1', role: Role.ADMIN } as never, '9', '');
     expect(send).toHaveBeenCalledWith(
       { cmd: 'identity.user.set-blocked' },
       { actorId: '1', userId: '9', blocked: true },
@@ -48,10 +48,26 @@ describe('AdminUsersController (C1.29)', () => {
   it('unblock -> set-blocked{blocked:false}', async () => {
     const send = jest.fn(() => of({}));
     const ctrl = makeController(send);
-    await ctrl.unblock({ sub: '1', role: Role.ADMIN } as never, '9');
+    await ctrl.unblock({ sub: '1', role: Role.ADMIN } as never, '9', '');
     expect(send).toHaveBeenCalledWith(
       { cmd: 'identity.user.set-blocked' },
       { actorId: '1', userId: '9', blocked: false },
+    );
+  });
+
+  it('C1.31: block -> audit.log ham yuboriladi (actor=admin, ip, resource)', async () => {
+    const send = jest.fn(() => of({}));
+    const ctrl = makeController(send);
+    await ctrl.block({ sub: '1', role: Role.ADMIN } as never, '9', '1.2.3.4');
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: '1',
+        action: 'user.block',
+        entityType: 'User',
+        entityId: '9',
+        meta: { ip: '1.2.3.4' },
+      },
     );
   });
 });

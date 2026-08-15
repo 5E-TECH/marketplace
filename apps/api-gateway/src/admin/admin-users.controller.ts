@@ -1,4 +1,12 @@
-import { Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Inject,
+  Ip,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
@@ -64,12 +72,19 @@ export class AdminUsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchini bloklash (o‘zini → 409)' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  block(@CurrentUser() admin: JwtUser, @Param('id') id: string) {
-    return sendRpc(
+  async block(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Ip() ip: string,
+  ) {
+    const res = await sendRpc(
       this.identity,
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: true },
     );
+    // C1.31 — audit (best-effort): amal muvaffaqiyatidan so'ng yoziladi.
+    this.audit(admin.sub, 'user.block', 'User', id, ip);
+    return res;
   }
 
   @Post('admin/users/:id/unblock')
@@ -77,11 +92,32 @@ export class AdminUsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchini blokdan chiqarish' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  unblock(@CurrentUser() admin: JwtUser, @Param('id') id: string) {
-    return sendRpc(
+  async unblock(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Ip() ip: string,
+  ) {
+    const res = await sendRpc(
       this.identity,
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: false },
     );
+    this.audit(admin.sub, 'user.unblock', 'User', id, ip);
+    return res;
+  }
+
+  /** C1.31 — audit sink'ga best-effort yozadi (xatoda amalни buzmaydi). */
+  private audit(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    ip?: string,
+  ): void {
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      { actorId, action, entityType, entityId, meta: { ip: ip ?? null } },
+    ).catch(() => undefined);
   }
 }
