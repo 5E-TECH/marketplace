@@ -349,3 +349,52 @@ describe('AuthService (C0.4)', () => {
     });
   });
 });
+
+// C1.28 — countUsersByRole: faqat `this.users` ishlatadi, shu bois prototip
+// orqali (og'ir konstruktorsiz) sinaladi.
+describe('AuthService.countUsersByRole (C1.28)', () => {
+  function makeQb(rows: Array<{ role: string; count: string }>) {
+    return {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn(() => Promise.resolve(rows)),
+    } as any;
+  }
+
+  it('rol bo‘yicha sanaydi (yo‘q rol = 0)', async () => {
+    const qb = makeQb([
+      { role: 'SELLER', count: '12' },
+      { role: 'BUYER', count: '25' },
+      { role: 'ADMIN', count: '2' },
+    ]);
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await expect(svc.countUsersByRole()).resolves.toEqual({
+      total: 39,
+      SELLER: 12,
+      BUYER: 25,
+      ADMIN: 2,
+      OPERATOR: 0,
+      SUPERADMIN: 0,
+    });
+    expect(qb.groupBy).toHaveBeenCalledWith('u.role');
+  });
+
+  it('yangi platforma -> hammasi 0', async () => {
+    const qb = makeQb([]);
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await expect(svc.countUsersByRole()).resolves.toEqual({
+      total: 0,
+      SELLER: 0,
+      BUYER: 0,
+      ADMIN: 0,
+      OPERATOR: 0,
+      SUPERADMIN: 0,
+    });
+  });
+});

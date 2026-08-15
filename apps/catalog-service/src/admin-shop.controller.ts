@@ -13,6 +13,11 @@ export class AdminShopController {
     return this.adminShops.adminList(data?.query ?? ({} as AdminShopsQueryDto));
   }
 
+  @MessagePattern({ cmd: 'catalog.shop.count-by-status' })
+  countByStatus() {
+    return this.adminShops.countByStatus();
+  }
+
   @MessagePattern({ cmd: 'catalog.shop.approve' })
   approve(@Payload() data: { shopId: string }) {
     return this.adminShops.adminApprove(String(data.shopId));

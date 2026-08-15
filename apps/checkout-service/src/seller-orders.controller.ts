@@ -60,6 +60,11 @@ export class SellerOrdersController {
     return shop.id;
   }
 
+  @MessagePattern({ cmd: 'checkout.admin.stats' })
+  adminStats() {
+    return this.orders.adminStats();
+  }
+
   @MessagePattern({ cmd: 'seller.dashboard.get' })
   async dashboard(@Payload() data: { ownerUserId: string }) {
     const shop = await this.shop(data.ownerUserId);

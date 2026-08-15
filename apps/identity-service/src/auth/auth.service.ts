@@ -88,6 +88,38 @@ export class AuthService {
     return this.sanitize(saved);
   }
 
+  /**
+   * C1.28 — foydalanuvchilar sonini rol bo'yicha (admin dashboard uchun). Yangi
+   * platformada barcha son 0.
+   */
+  async countUsersByRole(): Promise<{
+    total: number;
+    SELLER: number;
+    BUYER: number;
+    ADMIN: number;
+    OPERATOR: number;
+    SUPERADMIN: number;
+  }> {
+    const rows = await this.users
+      .createQueryBuilder('u')
+      .select('u.role', 'role')
+      .addSelect('COUNT(*)', 'count')
+      .where('u.is_deleted = FALSE')
+      .groupBy('u.role')
+      .getRawMany<{ role: string; count: string }>();
+
+    const base = { SELLER: 0, BUYER: 0, ADMIN: 0, OPERATOR: 0, SUPERADMIN: 0 };
+    let total = 0;
+    for (const row of rows) {
+      const n = Number(row.count);
+      total += n;
+      if (row.role in base) {
+        base[row.role as keyof typeof base] = n;
+      }
+    }
+    return { total, ...base };
+  }
+
   // ===== Market operatorlari (C1.38) — do'kon xodimlari =====
 
   /** Sotuvchi o'z do'koniga operator qo'shadi (role=OPERATOR, shop_id, faol). */

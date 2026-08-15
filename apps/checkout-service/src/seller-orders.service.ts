@@ -143,6 +143,45 @@ export class SellerOrdersService {
   }
 
   /**
+   * C1.28 — platforma darajasidagi buyurtma statistikasi (admin dashboard).
+   * `sales_order` (do'kon bo'yicha emas, butun platforma). GMV = tasdiqlangan
+   * buyurtmalar (`CONFIRMED`+) `total_amount` yig'indisi. "Bugun" — Asia/Tashkent
+   * kuni bo'yicha (bitta AT TIME ZONE konversiyasi). Yangi platformada hamma 0.
+   * Daromad = GMV × PLATFORM_COMMISSION_RATE (default 0 — bazada komissiya manbai
+   * yo'q, config bilan beriladi).
+   */
+  async adminStats(): Promise<{
+    ordersTotal: number;
+    ordersToday: number;
+    gmv: number;
+    revenue: number;
+  }> {
+    const rows = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS "ordersTotal",
+              COUNT(*) FILTER (
+                WHERE (created_at AT TIME ZONE 'Asia/Tashkent')::date
+                      = (now() AT TIME ZONE 'Asia/Tashkent')::date
+              )::int AS "ordersToday",
+              COALESCE(
+                SUM(total_amount) FILTER (
+                  WHERE status IN ('CONFIRMED', 'PARTIALLY_FULFILLED', 'FULFILLED')
+                ), 0
+              ) AS gmv
+         FROM checkout.sales_order`,
+    );
+    const row = rows[0] ?? {};
+    const gmv = Number(row.gmv ?? 0);
+    const rate = Number(process.env.PLATFORM_COMMISSION_RATE ?? 0);
+    const revenue = Math.round(gmv * (Number.isFinite(rate) ? rate : 0));
+    return {
+      ordersTotal: Number(row.ordersTotal ?? 0),
+      ordersToday: Number(row.ordersToday ?? 0),
+      gmv,
+      revenue,
+    };
+  }
+
+  /**
    * Buyurtma (sales_order_seller) holatini yangilaydi — do'kon bo'yicha scope
    * (shop_id). Boshqa do'kon buyurtmasi topilmaydi (403/404). Operator/owner.
    */

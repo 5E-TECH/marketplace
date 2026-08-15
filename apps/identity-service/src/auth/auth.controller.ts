@@ -49,6 +49,11 @@ export class AuthController {
     );
   }
 
+  @MessagePattern({ cmd: 'identity.user.count-by-role' })
+  countUsersByRole() {
+    return this.authService.countUsersByRole();
+  }
+
   // --- Market operatorlari (C1.38) ---
   @MessagePattern({ cmd: 'identity.operator.create' })
   createOperator(

@@ -147,3 +147,75 @@ describe('SellerOrdersService', () => {
     }
   });
 });
+
+describe('SellerOrdersService.adminStats (C1.28)', () => {
+  const prevRate = process.env.PLATFORM_COMMISSION_RATE;
+  afterEach(() => {
+    if (prevRate === undefined) delete process.env.PLATFORM_COMMISSION_RATE;
+    else process.env.PLATFORM_COMMISSION_RATE = prevRate;
+  });
+
+  it('TC4: GMV = tasdiqlangan buyurtmalar summasi + sanoqlar', async () => {
+    delete process.env.PLATFORM_COMMISSION_RATE;
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { ordersTotal: '5', ordersToday: '2', gmv: '54000000.00' },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.adminStats()).resolves.toEqual({
+      ordersTotal: 5,
+      ordersToday: 2,
+      gmv: 54000000,
+      revenue: 0,
+    });
+    // GMV faqat tasdiqlangan (CONFIRMED+) statuslardan olinadi
+    expect(dataSource.query).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "status IN ('CONFIRMED', 'PARTIALLY_FULFILLED', 'FULFILLED')",
+      ),
+    );
+    // "bugun" — Asia/Tashkent kuni bo'yicha (bitta AT TIME ZONE)
+    expect(dataSource.query).toHaveBeenCalledWith(
+      expect.stringContaining("AT TIME ZONE 'Asia/Tashkent'"),
+    );
+  });
+
+  it('daromad = GMV × PLATFORM_COMMISSION_RATE', async () => {
+    process.env.PLATFORM_COMMISSION_RATE = '0.05';
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { ordersTotal: '1', ordersToday: '0', gmv: '1000000' },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.adminStats()).resolves.toMatchObject({
+      gmv: 1000000,
+      revenue: 50000,
+    });
+  });
+
+  it('TC3: yangi platforma -> adminStats hammasi 0', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { ordersTotal: '0', ordersToday: '0', gmv: '0' },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.adminStats()).resolves.toEqual({
+      ordersTotal: 0,
+      ordersToday: 0,
+      gmv: 0,
+      revenue: 0,
+    });
+  });
+});
