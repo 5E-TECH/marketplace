@@ -54,6 +54,38 @@ export class AuthController {
     return this.authService.countUsersByRole();
   }
 
+  @MessagePattern({ cmd: 'identity.user.admin-list' })
+  adminListUsers(
+    @Payload()
+    data: {
+      query?: {
+        role?: string;
+        blocked?: boolean;
+        search?: string;
+        page?: number;
+        limit?: number;
+      };
+    },
+  ) {
+    return this.authService.adminListUsers(data?.query ?? {});
+  }
+
+  @MessagePattern({ cmd: 'identity.user.admin-get' })
+  adminGetUser(@Payload() data: { userId: string }) {
+    return this.authService.adminGetUser(String(data.userId));
+  }
+
+  @MessagePattern({ cmd: 'identity.user.set-blocked' })
+  setBlocked(
+    @Payload() data: { actorId: string; userId: string; blocked: boolean },
+  ) {
+    return this.authService.setBlocked(
+      String(data.actorId),
+      String(data.userId),
+      Boolean(data.blocked),
+    );
+  }
+
   // --- Market operatorlari (C1.38) ---
   @MessagePattern({ cmd: 'identity.operator.create' })
   createOperator(

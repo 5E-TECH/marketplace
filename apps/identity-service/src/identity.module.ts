@@ -19,6 +19,7 @@ import { AuthSession } from './entities/auth-session.entity';
 import { CreateAuthSession1721908800000 } from './migrations/1721908800000-create-auth-session';
 import { CreateUsers1722776400000 } from './migrations/1722776400000-create-users';
 import { AddUserShopOperator1722950000000 } from './migrations/1722950000000-add-user-shop-operator';
+import { AddUserIsBlocked1722950000001 } from './migrations/1722950000001-add-user-is-blocked';
 
 const entities = [User, AuthSession];
 
@@ -47,6 +48,7 @@ const entities = [User, AuthSession];
             CreateAuthSession1721908800000,
             CreateUsers1722776400000,
             AddUserShopOperator1722950000000,
+            AddUserIsBlocked1722950000001,
           ],
           migrationsRun: true,
         };
