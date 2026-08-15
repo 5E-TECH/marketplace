@@ -182,6 +182,182 @@ export class SellerOrdersService {
   }
 
   /**
+   * C1.30 — admin: butun platformadagi buyurtmalar (sales_order) ro'yxati.
+   * Filtr: status / to'lov usuli / do'kon (sub-order bor bo'lsa) / sana. Faqat
+   * o'qish. Do'kon filtri EXISTS orqali (bitta order ko'p do'konli bo'lishi mumkin).
+   */
+  async adminListOrders(query: {
+    status?: string;
+    paymentMethod?: string;
+    shopId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(query?.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query?.limit ?? 20)));
+
+    const params: unknown[] = [];
+    const conditions: string[] = ['1 = 1'];
+    if (query?.status) {
+      params.push(query.status);
+      conditions.push(`so.status = $${params.length}`);
+    }
+    if (query?.paymentMethod) {
+      params.push(query.paymentMethod);
+      conditions.push(`so.payment_method = $${params.length}`);
+    }
+    if (query?.shopId) {
+      params.push(query.shopId);
+      conditions.push(
+        `EXISTS (SELECT 1 FROM checkout.sales_order_seller x
+                 WHERE x.sales_order_id = so.id AND x.shop_id = $${params.length})`,
+      );
+    }
+    if (query?.dateFrom) {
+      params.push(query.dateFrom);
+      conditions.push(`so.created_at >= $${params.length}::date`);
+    }
+    if (query?.dateTo) {
+      params.push(query.dateTo);
+      conditions.push(
+        `so.created_at < ($${params.length}::date + INTERVAL '1 day')`,
+      );
+    }
+    const where = conditions.join(' AND ');
+
+    const countRows = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total FROM checkout.sales_order so WHERE ${where}`,
+      params,
+    );
+    const total = Number(countRows[0]?.total ?? 0);
+
+    const listParams = [...params, limit, (page - 1) * limit];
+    const rows = await this.dataSource.query(
+      `SELECT so.id,
+              so.buyer_name AS "buyerName",
+              so.status,
+              so.payment_method AS "paymentMethod",
+              so.total_amount AS "totalAmount",
+              so.created_at AS "createdAt",
+              (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
+                 WHERE s.sales_order_id = so.id) AS "sellersCount"
+         FROM checkout.sales_order so
+        WHERE ${where}
+        ORDER BY so.created_at DESC
+        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
+      listParams,
+    );
+
+    return {
+      items: rows.map((r: Record<string, unknown>) => ({
+        id: String(r.id),
+        buyerName: (r.buyerName as string) ?? null,
+        status: r.status,
+        paymentMethod: r.paymentMethod,
+        totalAmount: Number(r.totalAmount),
+        sellersCount: Number(r.sellersCount),
+        createdAt: r.createdAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * C1.30 — admin: bitta buyurtma to'liq (drill-in): sub-buyurtmalar
+   * (do'kon bo'yicha) + itemlar + shipment (elchi id/tracking) + to'lov usuli.
+   * Topilmasa 404.
+   */
+  async adminGetOrder(orderId: string) {
+    const orderRows = await this.dataSource.query(
+      `SELECT so.id,
+              so.buyer_name AS "buyerName",
+              so.customer_id AS "customerId",
+              so.status,
+              so.payment_method AS "paymentMethod",
+              so.total_amount AS "totalAmount",
+              so.delivery_address AS "deliveryAddress",
+              so.created_at AS "createdAt",
+              so.updated_at AS "updatedAt"
+         FROM checkout.sales_order so WHERE so.id = $1`,
+      [orderId],
+    );
+    const order = orderRows[0];
+    if (!order) {
+      throw new NotFoundException(`Buyurtma #${orderId} topilmadi`);
+    }
+
+    const [sellers, items] = await Promise.all([
+      this.dataSource.query(
+        `SELECT sos.id,
+                sos.shop_id AS "shopId",
+                sos.subtotal,
+                sos.cod_amount AS "codAmount",
+                sos.status,
+                sos.elchi_shipment_id AS "elchiShipmentId",
+                sos.tracking_url AS "trackingUrl"
+           FROM checkout.sales_order_seller sos
+          WHERE sos.sales_order_id = $1 ORDER BY sos.id`,
+        [orderId],
+      ),
+      this.dataSource.query(
+        `SELECT i.sales_order_seller_id AS "sellerOrderId",
+                i.product_id AS "productId",
+                i.product_name AS "productName",
+                i.variant_id AS "variantId",
+                i.quantity,
+                i.unit_price AS "unitPrice",
+                i.line_total AS "lineTotal"
+           FROM checkout.sales_order_item i
+           JOIN checkout.sales_order_seller sos ON sos.id = i.sales_order_seller_id
+          WHERE sos.sales_order_id = $1 ORDER BY i.id`,
+        [orderId],
+      ),
+    ]);
+
+    const itemsBySeller = new Map<string, Record<string, unknown>[]>();
+    for (const it of items as Record<string, unknown>[]) {
+      const key = String(it.sellerOrderId);
+      const list = itemsBySeller.get(key) ?? [];
+      list.push({
+        productId: String(it.productId),
+        productName: it.productName,
+        variantId: String(it.variantId),
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+        lineTotal: Number(it.lineTotal),
+      });
+      itemsBySeller.set(key, list);
+    }
+
+    return {
+      id: String(order.id),
+      buyerName: order.buyerName ?? null,
+      customerId: String(order.customerId),
+      status: order.status,
+      paymentMethod: order.paymentMethod,
+      totalAmount: Number(order.totalAmount),
+      deliveryAddress: order.deliveryAddress ?? null,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      sellerOrders: (sellers as Record<string, unknown>[]).map((s) => ({
+        id: String(s.id),
+        shopId: String(s.shopId),
+        subtotal: Number(s.subtotal),
+        codAmount: Number(s.codAmount),
+        status: s.status,
+        elchiShipmentId: s.elchiShipmentId ? String(s.elchiShipmentId) : null,
+        trackingUrl: (s.trackingUrl as string) ?? null,
+        items: itemsBySeller.get(String(s.id)) ?? [],
+      })),
+    };
+  }
+
+  /**
    * Buyurtma (sales_order_seller) holatini yangilaydi — do'kon bo'yicha scope
    * (shop_id). Boshqa do'kon buyurtmasi topilmaydi (403/404). Operator/owner.
    */
