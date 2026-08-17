@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Inject,
+  Ip,
   Param,
   Post,
   Query,
@@ -19,6 +20,8 @@ import {
 import {
   AdminShopsQueryDto,
   AuthErrorResponseDto,
+  CurrentUser,
+  JwtUser,
   RejectShopDto,
   Role,
   Roles,
@@ -69,7 +72,11 @@ export class AdminShopsController {
     summary: 'Do‘konni tasdiqlash (active + user active + default ombor)',
   })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  async approve(@Param('id') id: string): Promise<ApprovedShop> {
+  async approve(
+    @Param('id') id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<ApprovedShop> {
     // 1) catalog: shop ACTIVE (event HALI emas — avval lokal holat izchil bo'lsin)
     const shop = await sendRpc<ApprovedShop>(
       this.catalog,
@@ -106,6 +113,8 @@ export class AdminShopsController {
         phone: shop.phone ?? null,
       },
     );
+    // C1.31 — audit (best-effort): approve muvaffaqiyatidan so'ng.
+    this.audit(admin?.sub, 'shop.approve', 'Shop', id, ip);
     return shop;
   }
 
@@ -114,11 +123,42 @@ export class AdminShopsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Do‘konni rad etish (+ sotuvchiga xabar)' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  reject(@Param('id') id: string, @Body() dto: RejectShopDto) {
-    return sendRpc(
+  async reject(
+    @Param('id') id: string,
+    @Body() dto: RejectShopDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const res = await sendRpc(
       this.catalog,
       { cmd: 'catalog.shop.reject' },
       { shopId: id, reason: dto?.reason },
     );
+    this.audit(admin?.sub, 'shop.reject', 'Shop', id, ip, {
+      reason: dto?.reason ?? null,
+    });
+    return res;
+  }
+
+  /** C1.31 — audit sink'ga best-effort yozadi (xatoda amalни buzmaydi). */
+  private audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string,
+    ip?: string,
+    extra?: Record<string, unknown>,
+  ): void {
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: actorId ?? null,
+        action,
+        entityType,
+        entityId,
+        meta: { ip: ip ?? null, ...(extra ?? {}) },
+      },
+    ).catch(() => undefined);
   }
 }

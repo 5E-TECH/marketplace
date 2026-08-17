@@ -9,7 +9,11 @@ function makeService(shop?: any) {
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn(() => Promise.resolve([[{ id: '1' }], 1])),
+    getRawMany: jest.fn(() => Promise.resolve([])),
   };
   const shops: any = {
     findOne: jest.fn(() => Promise.resolve(shop ?? null)),
@@ -39,6 +43,39 @@ describe('AdminShopService (C1.7)', () => {
       status: ShopStatus.PENDING,
     });
     expect(res).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
+  });
+
+  it('C1.28: countByStatus holatlar bo‘yicha sanaydi (yo‘q holat = 0)', async () => {
+    const { service, qb } = makeService();
+    qb.getRawMany.mockResolvedValueOnce([
+      { status: 'PENDING', count: '3' },
+      { status: 'ACTIVE', count: '8' },
+      { status: 'REJECTED', count: '1' },
+    ]);
+
+    const res = await service.countByStatus();
+
+    expect(res).toEqual({
+      total: 12,
+      PENDING: 3,
+      ACTIVE: 8,
+      SUSPENDED: 0,
+      REJECTED: 1,
+    });
+    expect(qb.groupBy).toHaveBeenCalledWith('shop.status');
+  });
+
+  it('C1.28: yangi platforma -> countByStatus hammasi 0', async () => {
+    const { service, qb } = makeService();
+    qb.getRawMany.mockResolvedValueOnce([]);
+
+    await expect(service.countByStatus()).resolves.toEqual({
+      total: 0,
+      PENDING: 0,
+      ACTIVE: 0,
+      SUSPENDED: 0,
+      REJECTED: 0,
+    });
   });
 
   it('TC2: approve -> ACTIVE + save (event YO‘Q — u publishShopApproved da)', async () => {

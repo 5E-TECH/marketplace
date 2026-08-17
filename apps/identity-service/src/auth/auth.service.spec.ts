@@ -144,6 +144,46 @@ describe('AuthService (C0.4)', () => {
     expect(res.refreshToken).toBeDefined();
   });
 
+  it('C1.29 TC2/TC3: block -> login 401; unblock -> login ishlaydi', async () => {
+    const reg: any = await service.register({
+      name: 'A',
+      phone: '+998901110000',
+      password: 'Secret123',
+      role: Role.BUYER,
+    });
+    const userId = reg.user.id;
+
+    // TC2: bloklangan -> login 401
+    await service.setBlocked('999', userId, true);
+    await expect(
+      service.login({ phone: '+998901110000', password: 'Secret123' }),
+    ).rejects.toThrow('bloklangan');
+
+    // TC3: unblock -> login qaytadan ishlaydi
+    await service.setBlocked('999', userId, false);
+    const res: any = await service.login({
+      phone: '+998901110000',
+      password: 'Secret123',
+    });
+    expect(res.accessToken).toBeDefined();
+  });
+
+  it('C1.29 TC4: admin o‘zini bloklay olmaydi -> 409', async () => {
+    const reg: any = await service.register({
+      name: 'Admin',
+      phone: '+998901110001',
+      password: 'Secret123',
+      role: Role.ADMIN,
+    });
+    const adminId = reg.user.id;
+    try {
+      await service.setBlocked(adminId, adminId, true);
+      throw new Error("kutilgan xato bo'lmadi");
+    } catch (e: any) {
+      expect(e.getStatus()).toBe(409);
+    }
+  });
+
   it('TC2b: operator login JWT ichida shopId claim bo‘ladi (C1.38)', async () => {
     await service.createOperator('5', {
       name: 'Operator',
@@ -346,6 +386,107 @@ describe('AuthService (C0.4)', () => {
           shopName: dto.shopName,
         }),
       );
+    });
+  });
+});
+
+// C1.28 — countUsersByRole: faqat `this.users` ishlatadi, shu bois prototip
+// orqali (og'ir konstruktorsiz) sinaladi.
+describe('AuthService.countUsersByRole (C1.28)', () => {
+  function makeQb(rows: Array<{ role: string; count: string }>) {
+    return {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn(() => Promise.resolve(rows)),
+    } as any;
+  }
+
+  it('rol bo‘yicha sanaydi (yo‘q rol = 0)', async () => {
+    const qb = makeQb([
+      { role: 'SELLER', count: '12' },
+      { role: 'BUYER', count: '25' },
+      { role: 'ADMIN', count: '2' },
+    ]);
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await expect(svc.countUsersByRole()).resolves.toEqual({
+      total: 39,
+      SELLER: 12,
+      BUYER: 25,
+      ADMIN: 2,
+      OPERATOR: 0,
+      SUPERADMIN: 0,
+    });
+    expect(qb.groupBy).toHaveBeenCalledWith('u.role');
+  });
+
+  it('yangi platforma -> hammasi 0', async () => {
+    const qb = makeQb([]);
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await expect(svc.countUsersByRole()).resolves.toEqual({
+      total: 0,
+      SELLER: 0,
+      BUYER: 0,
+      ADMIN: 0,
+      OPERATOR: 0,
+      SUPERADMIN: 0,
+    });
+  });
+});
+
+// C1.29 — adminListUsers: createQueryBuilder ishlatadi, prototip orqali sinaladi.
+describe('AuthService.adminListUsers (C1.29)', () => {
+  it('TC1: role filtri qo‘llaydi + parol hash chiqmaydi (sanitize)', async () => {
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn(() =>
+        Promise.resolve([
+          [{ id: '1', role: 'SELLER', name: 'Ali', passwordHash: 'h' }],
+          1,
+        ]),
+      ),
+    };
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    const res = await svc.adminListUsers({
+      role: 'SELLER',
+      page: 1,
+      limit: 20,
+    });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('u.role = :role', {
+      role: 'SELLER',
+    });
+    expect(res).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
+    expect((res.items[0] as any).passwordHash).toBeUndefined();
+  });
+
+  it('blocked filtri qo‘llaydi', async () => {
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn(() => Promise.resolve([[], 0])),
+    };
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await svc.adminListUsers({ blocked: true });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('u.is_blocked = :blocked', {
+      blocked: true,
     });
   });
 });

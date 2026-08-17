@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule } from '@nestjs/microservices';
 import {
+  ActivityLog,
+  ActivityLogService,
   CommonAuthModule,
   CommonConfigModule,
   ensureSchema,
@@ -14,13 +16,16 @@ import {
 import { User } from './entities/user.entity';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
+import { AuditController } from './audit/audit.controller';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AuthSession } from './entities/auth-session.entity';
 import { CreateAuthSession1721908800000 } from './migrations/1721908800000-create-auth-session';
 import { CreateUsers1722776400000 } from './migrations/1722776400000-create-users';
 import { AddUserShopOperator1722950000000 } from './migrations/1722950000000-add-user-shop-operator';
+import { AddUserIsBlocked1722950000001 } from './migrations/1722950000001-add-user-is-blocked';
+import { CreateActivityLog1722950000002 } from './migrations/1722950000002-create-activity-log';
 
-const entities = [User, AuthSession];
+const entities = [User, AuthSession, ActivityLog];
 
 @Module({
   imports: [
@@ -47,6 +52,8 @@ const entities = [User, AuthSession];
             CreateAuthSession1721908800000,
             CreateUsers1722776400000,
             AddUserShopOperator1722950000000,
+            AddUserIsBlocked1722950000001,
+            CreateActivityLog1722950000002,
           ],
           migrationsRun: true,
         };
@@ -54,7 +61,7 @@ const entities = [User, AuthSession];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, AdminSeeder],
+  controllers: [AuthController, AuditController],
+  providers: [AuthService, AdminSeeder, ActivityLogService],
 })
 export class IdentityModule {}

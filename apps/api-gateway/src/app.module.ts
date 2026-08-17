@@ -26,6 +26,9 @@ import { NotificationsController } from './notifications/notifications.controlle
 import { StorefrontController } from './storefront/storefront.controller';
 import { SearchController } from './search/search.controller';
 import { AdminShopsController } from './shops/admin-shops.controller';
+import { AdminDashboardController } from './admin/admin-dashboard.controller';
+import { AdminUsersController } from './admin/admin-users.controller';
+import { AdminOrdersController } from './admin/admin-orders.controller';
 import { SellerOperatorsController } from './sellers/seller-operators.controller';
 import { CartController } from './cart/cart.controller';
 import { CheckoutController } from './cart/checkout.controller';
@@ -111,6 +114,9 @@ import { PaymentsController } from './payments/payments.controller';
     StorefrontController,
     SearchController,
     AdminShopsController,
+    AdminDashboardController,
+    AdminUsersController,
+    AdminOrdersController,
     SellerOperatorsController,
     CartController,
     CheckoutController,

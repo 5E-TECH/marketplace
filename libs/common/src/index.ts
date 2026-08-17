@@ -29,6 +29,9 @@ export * from './dto/file.dto';
 export * from './dto/inventory.dto';
 export * from './dto/notification.dto';
 export * from './dto/admin-shop.dto';
+export * from './dto/admin-dashboard.dto';
+export * from './dto/admin-user.dto';
+export * from './dto/admin-order.dto';
 export * from './dto/operator.dto';
 export * from './dto/payment.dto';
 

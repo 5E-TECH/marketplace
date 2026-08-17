@@ -52,6 +52,37 @@ export class AdminShopService {
     };
   }
 
+  /**
+   * C1.28 — do'konlar sonini holat bo'yicha (admin dashboard uchun). Yangi
+   * platformada barcha son 0 (groupBy hech nima qaytarmaydi → base 0'lar).
+   */
+  async countByStatus(): Promise<{
+    total: number;
+    PENDING: number;
+    ACTIVE: number;
+    SUSPENDED: number;
+    REJECTED: number;
+  }> {
+    const rows = await this.shops
+      .createQueryBuilder('shop')
+      .select('shop.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('shop.is_deleted = FALSE')
+      .groupBy('shop.status')
+      .getRawMany<{ status: string; count: string }>();
+
+    const base = { PENDING: 0, ACTIVE: 0, SUSPENDED: 0, REJECTED: 0 };
+    let total = 0;
+    for (const row of rows) {
+      const n = Number(row.count);
+      total += n;
+      if (row.status in base) {
+        base[row.status as keyof typeof base] = n;
+      }
+    }
+    return { total, ...base };
+  }
+
   async adminApprove(shopId: string): Promise<Shop> {
     const shop = await this.getById(shopId);
     if (shop.status === ShopStatus.ACTIVE) {

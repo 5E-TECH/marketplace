@@ -60,6 +60,34 @@ export class SellerOrdersController {
     return shop.id;
   }
 
+  @MessagePattern({ cmd: 'checkout.admin.stats' })
+  adminStats() {
+    return this.orders.adminStats();
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.orders-list' })
+  adminListOrders(
+    @Payload()
+    data: {
+      query?: {
+        status?: string;
+        paymentMethod?: string;
+        shopId?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        page?: number;
+        limit?: number;
+      };
+    },
+  ) {
+    return this.orders.adminListOrders(data?.query ?? {});
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.order-get' })
+  adminGetOrder(@Payload() data: { orderId: string }) {
+    return this.orders.adminGetOrder(String(data.orderId));
+  }
+
   @MessagePattern({ cmd: 'seller.dashboard.get' })
   async dashboard(@Payload() data: { ownerUserId: string }) {
     const shop = await this.shop(data.ownerUserId);

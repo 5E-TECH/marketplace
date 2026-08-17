@@ -70,6 +70,10 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Telefon yoki parol xato');
     }
+    // C1.29 — bloklangan foydalanuvchi tizimga kira olmaydi.
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Hisobingiz bloklangan');
+    }
     return this.buildAuthResult(user);
   }
 
@@ -85,6 +89,110 @@ export class AuthService {
     if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
     user.isActive = isActive;
     const saved = await this.users.save(user);
+    return this.sanitize(saved);
+  }
+
+  /**
+   * C1.28 — foydalanuvchilar sonini rol bo'yicha (admin dashboard uchun). Yangi
+   * platformada barcha son 0.
+   */
+  async countUsersByRole(): Promise<{
+    total: number;
+    SELLER: number;
+    BUYER: number;
+    ADMIN: number;
+    OPERATOR: number;
+    SUPERADMIN: number;
+  }> {
+    const rows = await this.users
+      .createQueryBuilder('u')
+      .select('u.role', 'role')
+      .addSelect('COUNT(*)', 'count')
+      .where('u.is_deleted = FALSE')
+      .groupBy('u.role')
+      .getRawMany<{ role: string; count: string }>();
+
+    const base = { SELLER: 0, BUYER: 0, ADMIN: 0, OPERATOR: 0, SUPERADMIN: 0 };
+    let total = 0;
+    for (const row of rows) {
+      const n = Number(row.count);
+      total += n;
+      if (row.role in base) {
+        base[row.role as keyof typeof base] = n;
+      }
+    }
+    return { total, ...base };
+  }
+
+  /**
+   * C1.29 — admin: foydalanuvchilar ro'yxati (rol/blok/qidiruv filtri +
+   * pagination). Qidiruv ism yoki telefon bo'yicha. Parol hash chiqmaydi.
+   */
+  async adminListUsers(query: {
+    role?: string;
+    blocked?: boolean;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(query?.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query?.limit ?? 20)));
+
+    const qb = this.users.createQueryBuilder('u').where('u.is_deleted = FALSE');
+    if (query?.role) {
+      qb.andWhere('u.role = :role', { role: query.role });
+    }
+    if (query?.blocked !== undefined) {
+      qb.andWhere('u.is_blocked = :blocked', { blocked: query.blocked });
+    }
+    if (query?.search?.trim()) {
+      qb.andWhere('(u.name ILIKE :s OR u.phone ILIKE :s)', {
+        s: `%${query.search.trim()}%`,
+      });
+    }
+    qb.orderBy('u.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [rows, total] = await qb.getManyAndCount();
+    return {
+      items: rows.map((u) => this.sanitize(u)),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  /** C1.29 — admin: bitta foydalanuvchi profili (parol hash chiqmaydi). */
+  async adminGetUser(userId: string) {
+    const user = await this.users.findOne({
+      where: { id: String(userId), isDeleted: false },
+    });
+    if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+    return this.sanitize(user);
+  }
+
+  /**
+   * C1.29 — admin foydalanuvchini bloklaydi/blokdan chiqaradi. O'zini bloklab
+   * bo'lmaydi (409). Bloklangan user login qila olmaydi (auth.login 401). Har
+   * amal audit sifatida log'ga yoziladi.
+   */
+  async setBlocked(actorId: string, userId: string, blocked: boolean) {
+    if (blocked && String(actorId) === String(userId)) {
+      throw BusinessException.conflict("O'zingizni bloklay olmaysiz");
+    }
+    const user = await this.users.findOne({
+      where: { id: String(userId), isDeleted: false },
+    });
+    if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+
+    user.isBlocked = blocked;
+    const saved = await this.users.save(user);
+    // Audit: kim kimni qachon (structured log).
+    this.logger.log(
+      `admin ${actorId} ${blocked ? 'blocked' : 'unblocked'} user ${userId}`,
+    );
     return this.sanitize(saved);
   }
 
