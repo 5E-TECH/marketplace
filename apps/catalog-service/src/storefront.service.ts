@@ -141,7 +141,7 @@ export class StorefrontService {
       'asc' | 'desc',
     ];
     const columns = {
-      createdAt: 'product.created_at',
+      createdAt: 'product.createdAt',
       price: 'product.price',
       name: 'product.name',
     } as const;
