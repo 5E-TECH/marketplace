@@ -89,6 +89,12 @@ describe('StorefrontService', () => {
     expect(qb.skip).toHaveBeenCalledWith(10);
   });
 
+  it('default sort uchun entity property nomidan foydalanadi', async () => {
+    await service.listProducts(query());
+
+    expect(qb.orderBy).toHaveBeenCalledWith('product.createdAt', 'DESC');
+  });
+
   it('noto‘g‘ri narx oralig‘ini rad etadi', async () => {
     await expect(
       service.listProducts(query({ minPrice: 500, maxPrice: 100 })),
