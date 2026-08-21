@@ -109,6 +109,35 @@ describe('AuthService (C0.4)', () => {
     expect(saved.isActive).toBe(false); // SELLER — tasdiqqacha nofaol
   });
 
+  it('admin profil parolini eski parolsiz yangilaydi va sessiyalarni bekor qiladi', async () => {
+    const registered = await service.register({
+      name: 'Admin',
+      phone: '+998901112233',
+      password: 'OldSecret123',
+      role: Role.ADMIN,
+    });
+    expect(sessionStore[0].revokedAt).toBeNull();
+
+    const updated = await service.updateProfile(registered.user.id, {
+      password: 'NewSecret123',
+    });
+
+    expect((updated as any).passwordHash).toBeUndefined();
+    expect(sessionStore[0].revokedAt).toBeInstanceOf(Date);
+    await expect(
+      service.login({
+        phone: '+998901112233',
+        password: 'NewSecret123',
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      service.login({
+        phone: '+998901112233',
+        password: 'OldSecret123',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it('TC4: dublikat telefon -> 409', async () => {
     await service.register({
       name: 'A',

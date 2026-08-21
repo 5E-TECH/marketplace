@@ -49,6 +49,18 @@ export class PaymentTransaction {
   @Column({ type: 'jsonb', nullable: true })
   raw: Record<string, unknown> | null;
 
+  @Column({ name: 'create_time', type: 'bigint' })
+  createTime: string;
+
+  @Column({ name: 'perform_time', type: 'bigint', nullable: true })
+  performTime: string | null;
+
+  @Column({ name: 'cancel_time', type: 'bigint', nullable: true })
+  cancelTime: string | null;
+
+  @Column({ type: 'integer', nullable: true })
+  reason: number | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }
