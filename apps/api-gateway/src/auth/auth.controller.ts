@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Patch,
   Post,
   Res,
 } from '@nestjs/common';
@@ -32,6 +33,7 @@ import {
   Public,
   RegisterDto,
   RmqClient,
+  UpdateProfileDto,
   rawResponse,
   sendRpc,
 } from '@app/common';
@@ -136,6 +138,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Joriy foydalanuvchini olish' })
   me(@CurrentUser() user: JwtUser) {
     return sendRpc(this.identity, { cmd: 'auth.me' }, { userId: user.sub });
+  }
+
+  @ApiBearerAuth()
+  @Patch('profile')
+  @ApiOperation({
+    summary: 'Joriy foydalanuvchi o‘z profili yoki parolini yangilashi',
+  })
+  @ApiOkResponse({ description: 'Yangilangan profil (passwordHash qaytmaydi)' })
+  updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
+    return sendRpc(
+      this.identity,
+      { cmd: 'auth.profile.update' },
+      { userId: user.sub, dto },
+    );
   }
 
   @ApiBearerAuth()

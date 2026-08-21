@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Headers,
   Inject,
   Param,
   ParseEnumPipe,
   Post,
   Put,
+  Res,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -18,12 +20,14 @@ import {
   CreatePaymentDto,
   PaymentProvider,
   PaymentResultDto,
+  Public,
   Role,
   Roles,
   RmqClient,
   sendRpc,
   UpsertProviderConfigDto,
 } from '@app/common';
+import { Response } from 'express';
 
 @ApiTags('payments')
 @ApiBearerAuth()
@@ -38,6 +42,22 @@ export class PaymentsController {
   @ApiCreatedResponse({ type: PaymentResultDto })
   create(@Body() dto: CreatePaymentDto) {
     return sendRpc(this.payment, { cmd: 'payment.create' }, dto);
+  }
+
+  @Public()
+  @Post('payments/payme/callback')
+  @ApiOperation({ summary: 'Payme Merchant API JSON-RPC callback' })
+  async paymeCallback(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const result = await sendRpc(
+      this.payment,
+      { cmd: 'payment.payme.callback' },
+      { authorization, body },
+    );
+    return response.status(200).json(result);
   }
 
   @Put('admin/payments/providers/:provider')

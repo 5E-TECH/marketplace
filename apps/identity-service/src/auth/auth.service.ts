@@ -20,6 +20,7 @@ import {
   RmqClient,
   SellerRegisterDto,
   ShopStatus,
+  UpdateProfileDto,
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
@@ -171,6 +172,43 @@ export class AuthService {
     });
     if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
     return this.sanitize(user);
+  }
+
+  /** Admin profil/user ma'lumotlarini, zarur bo'lsa eski parolsiz yangilaydi. */
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.users.findOne({
+      where: { id: String(userId), isDeleted: false },
+    });
+    if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+
+    if (dto.phone && dto.phone !== user.phone) {
+      const duplicate = await this.users.findOne({
+        where: { phone: dto.phone },
+      });
+      if (duplicate && String(duplicate.id) !== String(userId)) {
+        throw BusinessException.conflict(
+          "Bu telefon raqam allaqachon ro'yxatdan o'tgan",
+        );
+      }
+      user.phone = dto.phone;
+    }
+    if (dto.name !== undefined) user.name = dto.name.trim();
+    if (dto.email !== undefined) user.email = dto.email;
+    if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
+
+    if (dto.password) {
+      user.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    }
+    const saved = await this.users.save(user);
+
+    // Yangi parol o'rnatilgach o'g'irlangan/eski refresh tokenlar ishlamasin.
+    if (dto.password) {
+      await this.sessions.update(
+        { userId: String(userId), revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+    }
+    return this.sanitize(saved);
   }
 
   /**

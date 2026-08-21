@@ -440,7 +440,19 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
 ---
 
-## 12. Keyingi fazalar (placeholder — hozir yozilmaydi)
-- **Faza 2:** `GET /storefront/products|shops/:slug`, `/cart/*`, `POST /checkout` (split, reserve).
-- **Faza 3:** `POST /payments/payme/callback` (JSON-RPC), `/payments/click/prepare|complete`.
-- Ular boshlanganda shu faylga §13/§14 bo'lib qo'shiladi (bir xil konvensiya).
+## 12. Payme Merchant API
+
+**`POST /payments/payme/callback` · public (Basic auth bilan himoyalangan)**
+- Header: `Authorization: Basic base64(Paycom:<provider-secret>)`.
+- JSON-RPC 2.0 metodlari: `CheckPerformTransaction`, `CreateTransaction`,
+  `PerformTransaction`, `CancelTransaction`, `CheckTransaction`, `GetStatement`.
+- Summa Payme talabi bo‘yicha tiyinlarda yuboriladi; marketplace payment summasi
+  bilan mos kelmasa `-31001` qaytariladi.
+- `CreateTransaction`, `PerformTransaction` va `CancelTransaction` takroriy
+  chaqirilganda mavjud holat qaytariladi (idempotent).
+- Javob oddiy JSON-RPC formatida va har doim HTTP `200`; standart marketplace
+  response envelope qo‘shilmaydi.
+
+## 13. Keyingi faza
+
+- Click: `/payments/click/prepare|complete`.

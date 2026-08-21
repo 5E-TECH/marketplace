@@ -5,6 +5,7 @@ import {
   RegisterDto,
   RpcHttpExceptionFilter,
   SellerRegisterDto,
+  UpdateProfileDto,
 } from '@app/common';
 import { AuthService } from './auth.service';
 
@@ -73,6 +74,11 @@ export class AuthController {
   @MessagePattern({ cmd: 'identity.user.admin-get' })
   adminGetUser(@Payload() data: { userId: string }) {
     return this.authService.adminGetUser(String(data.userId));
+  }
+
+  @MessagePattern({ cmd: 'auth.profile.update' })
+  updateProfile(@Payload() data: { userId: string; dto: UpdateProfileDto }) {
+    return this.authService.updateProfile(String(data.userId), data.dto);
   }
 
   @MessagePattern({ cmd: 'identity.user.set-blocked' })

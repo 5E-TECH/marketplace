@@ -57,6 +57,39 @@ export class LoginDto {
   password: string;
 }
 
+/** Barcha autentifikatsiyalangan rollar uchun o'z profilini tahrirlash DTO'si. */
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'Ali Valiyev' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  name?: string;
+
+  @ApiPropertyOptional({ example: '+998901234567' })
+  @IsOptional()
+  @Matches(PHONE_REGEX, PHONE_MSG)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: 'ali@example.com' })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(255)
+  email?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/avatar.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  avatarUrl?: string;
+
+  @ApiPropertyOptional({ example: 'NewSecret123', minLength: 8 })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
+}
+
 export class AuthUserDto {
   @ApiProperty({ example: '42' })
   id: string;
