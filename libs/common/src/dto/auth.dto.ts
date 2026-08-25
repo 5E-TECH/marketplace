@@ -104,12 +104,6 @@ export class UpdateProfileDto {
   @Matches(PHONE_REGEX, PHONE_MSG)
   phone?: string;
 
-  @ApiPropertyOptional({ example: 'ali@example.com' })
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(255)
-  email?: string;
-
   @ApiPropertyOptional({ example: 'https://cdn.example.com/avatar.jpg' })
   @IsOptional()
   @IsString()

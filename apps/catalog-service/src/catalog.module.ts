@@ -28,8 +28,12 @@ import { ProductVariantController } from './product-variant.controller';
 import { ProductVariantService } from './product-variant.service';
 import { StorefrontController } from './storefront.controller';
 import { StorefrontService } from './storefront.service';
+import { Favorite } from './entities/favorite.entity';
+import { FavoriteController } from './favorite.controller';
+import { FavoriteService } from './favorite.service';
+import { CreateFavorites1723300000000 } from './migrations/1723300000000-create-favorites';
 
-const entities = [Shop, Category, Product, ProductVariant];
+const entities = [Shop, Category, Product, ProductVariant, Favorite];
 
 @Module({
   imports: [
@@ -70,6 +74,7 @@ const entities = [Shop, Category, Product, ProductVariant];
           migrations: [
             CreateCatalogTables1721736000000,
             DefaultProductActive1724414400000,
+            CreateFavorites1723300000000,
           ],
           migrationsRun: true,
         };
@@ -84,6 +89,7 @@ const entities = [Shop, Category, Product, ProductVariant];
     ProductController,
     ProductVariantController,
     StorefrontController,
+    FavoriteController,
   ],
   providers: [
     SellerShopService,
@@ -92,6 +98,7 @@ const entities = [Shop, Category, Product, ProductVariant];
     ProductService,
     ProductVariantService,
     StorefrontService,
+    FavoriteService,
   ],
 })
 export class CatalogModule {}
