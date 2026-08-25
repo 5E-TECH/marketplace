@@ -76,6 +76,18 @@ services:
       context: .
       dockerfile: Dockerfile
     command: node dist/apps/api-gateway/apps/api-gateway/src/main.js
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks:
       - backend
       - frontend
@@ -112,8 +124,10 @@ services:
     image: nginx:1.28-alpine
     restart: unless-stopped
     depends_on:
-      - api-gateway
-      - minio
+      api-gateway:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     ports:
       - "80:80"
     volumes:

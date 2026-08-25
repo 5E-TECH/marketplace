@@ -51,6 +51,12 @@ jobs:
       - name: Format tekshiruvi (Prettier)
         run: npm run format:check
 
+      - name: Nginx konfiguratsiyasini tekshirish
+        run: >-
+          docker run --rm
+          -v "$PWD/deploy/nginx.conf:/etc/nginx/nginx.conf:ro"
+          nginx:1.28-alpine nginx -t
+
       - name: Build (barcha app)
         run: npm run build:all
 
@@ -106,6 +112,38 @@ jobs:
             --env-file .env.production \
             -f docker-compose.prod.yml \
             up -d --build --remove-orphans
+
+          # Bind-mount qilingan nginx.conf o'zgarsa Compose konteynerni har doim
+          # recreate qilmaydi. Config'ni tekshirib, downtime'siz reload qilamiz.
+          docker compose \
+            --env-file .env.production \
+            -f docker-compose.prod.yml \
+            exec -T nginx nginx -t
+          docker compose \
+            --env-file .env.production \
+            -f docker-compose.prod.yml \
+            exec -T nginx nginx -s reload
+
+          # Deploy muvaffaqiyatli deyilishidan oldin public API Nginx orqali
+          # javob berayotganini tekshiramiz.
+          healthy=false
+          for attempt in $(seq 1 12); do
+            if docker compose \
+              --env-file .env.production \
+              -f docker-compose.prod.yml \
+              exec -T nginx wget -q -O /dev/null http://127.0.0.1/api/v1/health; then
+              healthy=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$healthy" != true ]; then
+            docker compose \
+              --env-file .env.production \
+              -f docker-compose.prod.yml \
+              logs --tail=100 api-gateway nginx
+            exit 1
+          fi
           docker image prune -f
           docker compose \
             --env-file .env.production \
