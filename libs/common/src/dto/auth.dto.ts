@@ -116,13 +116,13 @@ export class UpdateProfileDto {
   @MaxLength(500)
   avatarUrl?: string;
 
-  @ApiPropertyOptional({ example: 'NewSecret123', minLength: 8 })
+  @ApiPropertyOptional({ example: '1234', minLength: 4 })
   @Transform(({ value }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsOptional()
   @IsString()
-  @MinLength(8)
+  @MinLength(4)
   password?: string;
 }
 
