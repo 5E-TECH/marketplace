@@ -5,6 +5,7 @@ import {
   Inject,
   Param,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -21,6 +22,7 @@ import {
   Role,
   Roles,
   SellerDashboardDto,
+  CreateShipmentDto,
   SellerOrdersPageDto,
   SellerOrdersQueryDto,
   UpdateSellerOrderStatusDto,
@@ -52,6 +54,100 @@ export class SellerOrdersController {
       this.checkout,
       { cmd: 'seller.orders.list' },
       { ...this.scope(user), query },
+    );
+  }
+
+  @Get('orders/:id') @Roles(Role.SELLER, Role.OPERATOR) getOrder(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.orders.get' },
+      { ...this.scope(u), orderId: id },
+    );
+  }
+  @Get('orders/:id/items') @Roles(Role.SELLER, Role.OPERATOR) items(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.orders.items' },
+      { ...this.scope(u), orderId: id },
+    );
+  }
+  @Get('orders/:id/history') @Roles(Role.SELLER, Role.OPERATOR) history(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.orders.history' },
+      { ...this.scope(u), orderId: id },
+    );
+  }
+  @Post('orders/:id/cancel') @Roles(Role.SELLER, Role.OPERATOR) cancel(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.orders.update-status' },
+      { ...this.scope(u), orderId: id, status: 'CANCELLED' },
+    );
+  }
+  @Post('orders/:id/confirm') @Roles(Role.SELLER, Role.OPERATOR) confirm(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.orders.update-status' },
+      { ...this.scope(u), orderId: id, status: 'CONFIRMED' },
+    );
+  }
+  @Post('orders/:id/shipment')
+  @Roles(Role.SELLER, Role.OPERATOR)
+  createShipment(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: CreateShipmentDto,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.shipments.create' },
+      { ...this.scope(u), orderId: id, customerPhone: dto.customerPhone },
+    );
+  }
+  @Get('shipments') @Roles(Role.SELLER, Role.OPERATOR) listShipments(
+    @CurrentUser() u: JwtUser,
+    @Query() query: SellerOrdersQueryDto,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.shipments.list' },
+      { ...this.scope(u), query },
+    );
+  }
+  @Get('shipments/:id') @Roles(Role.SELLER, Role.OPERATOR) shipment(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.shipments.get' },
+      { ...this.scope(u), shipmentId: id },
+    );
+  }
+  @Get('shipments/:id/tracking') @Roles(Role.SELLER, Role.OPERATOR) tracking(
+    @CurrentUser() u: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'seller.shipments.tracking' },
+      { ...this.scope(u), shipmentId: id },
     );
   }
 

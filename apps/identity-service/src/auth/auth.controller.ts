@@ -2,10 +2,14 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   LoginDto,
+  CreateSupportTicketDto,
+  ForgotPasswordDto,
   RegisterDto,
+  ResetPasswordDto,
   RpcHttpExceptionFilter,
   SellerRegisterDto,
   UpdateProfileDto,
+  VerifyPhoneDto,
 } from '@app/common';
 import { AuthService } from './auth.service';
 
@@ -25,6 +29,61 @@ export class AuthController {
   @MessagePattern({ cmd: 'auth.login' })
   login(@Payload() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+  @MessagePattern({ cmd: 'auth.refresh' }) refresh(
+    @Payload() d: { refreshToken: string },
+  ) {
+    return this.authService.refresh(d.refreshToken);
+  }
+  @MessagePattern({ cmd: 'auth.forgot-password' }) forgot(
+    @Payload() d: ForgotPasswordDto,
+  ) {
+    return this.authService.createVerificationCode(d);
+  }
+  @MessagePattern({ cmd: 'auth.reset-password' }) reset(
+    @Payload() d: ResetPasswordDto,
+  ) {
+    return this.authService.resetPassword(d);
+  }
+  @MessagePattern({ cmd: 'auth.verify-phone' }) verify(
+    @Payload() d: VerifyPhoneDto,
+  ) {
+    return this.authService.verifyPhone(d);
+  }
+  @MessagePattern({ cmd: 'auth.resend-code' }) resend(
+    @Payload() d: ForgotPasswordDto,
+  ) {
+    return this.authService.createVerificationCode(d, 'PHONE_VERIFY');
+  }
+  @MessagePattern({ cmd: 'auth.sessions.list' }) sessions(
+    @Payload() d: { userId: string },
+  ) {
+    return this.authService.listSessions(d.userId);
+  }
+  @MessagePattern({ cmd: 'auth.sessions.revoke' }) revoke(
+    @Payload() d: { userId: string; sessionId: string },
+  ) {
+    return this.authService.revokeSession(d.userId, d.sessionId);
+  }
+  @MessagePattern({ cmd: 'support.ticket.create' }) createTicket(
+    @Payload() d: { userId: string; dto: CreateSupportTicketDto },
+  ) {
+    return this.authService.createTicket(d.userId, d.dto);
+  }
+  @MessagePattern({ cmd: 'support.ticket.list' }) listTickets(
+    @Payload() d: { userId: string; query: any },
+  ) {
+    return this.authService.listTickets(d.userId, d.query);
+  }
+  @MessagePattern({ cmd: 'support.ticket.get' }) getTicket(
+    @Payload() d: { userId: string; id: string },
+  ) {
+    return this.authService.getTicket(d.userId, d.id);
+  }
+  @MessagePattern({ cmd: 'support.ticket.message' }) addMessage(
+    @Payload() d: { userId: string; id: string; message: string },
+  ) {
+    return this.authService.addTicketMessage(d.userId, d.id, d.message);
   }
 
   @MessagePattern({ cmd: 'auth.logout' })

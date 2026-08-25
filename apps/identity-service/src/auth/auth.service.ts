@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -14,13 +15,17 @@ import { createHash, randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import {
   BusinessException,
+  CreateSupportTicketDto,
+  ForgotPasswordDto,
   LoginDto,
   RegisterDto,
+  ResetPasswordDto,
   Role,
   RmqClient,
   SellerRegisterDto,
   ShopStatus,
   UpdateProfileDto,
+  VerifyPhoneDto,
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
@@ -298,6 +303,188 @@ export class AuthService {
       { revokedAt: new Date() },
     );
     return null;
+  }
+
+  async refresh(refreshToken: string) {
+    if (!refreshToken)
+      throw new UnauthorizedException('Refresh token topilmadi');
+    let payload: { sub: string; jti: string; role: Role; shopId?: string };
+    try {
+      payload = await this.jwt.verifyAsync(refreshToken, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Refresh token yaroqsiz yoki muddati tugagan',
+      );
+    }
+    const session = await this.sessions.findOne({ where: { id: payload.jti } });
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      session.tokenHash !== this.hashToken(refreshToken)
+    ) {
+      throw new UnauthorizedException('Sessiya bekor qilingan');
+    }
+    session.revokedAt = new Date(); // rotation: eski token qayta ishlatilmaydi
+    await this.sessions.save(session);
+    const user = await this.users.findOne({
+      where: { id: payload.sub, isDeleted: false },
+    });
+    if (!user || !user.isActive || user.isBlocked)
+      throw new UnauthorizedException('Hisob faol emas');
+    return this.buildAuthResult(user);
+  }
+
+  async createVerificationCode(
+    dto: ForgotPasswordDto,
+    purpose = 'PASSWORD_RESET',
+  ) {
+    const user = await this.users.findOne({
+      where: { phone: dto.phone, isDeleted: false },
+    });
+    // Enumerationdan himoya: user topilmasa ham bir xil javob.
+    if (!user) return { sent: true, expiresIn: 300 };
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await this.dataSource.query(
+      `INSERT INTO identity.verification_code(id, phone, purpose, code_hash, expires_at)
+       VALUES ($1,$2,$3,$4,now() + interval '5 minutes')`,
+      [randomUUID(), dto.phone, purpose, this.hashToken(code)],
+    );
+    this.notifications.emit('auth.verification-code.requested', {
+      phone: dto.phone,
+      code,
+      purpose,
+    });
+    return { sent: true, expiresIn: 300 };
+  }
+
+  private async consumeCode(phone: string, code: string, purpose: string) {
+    const rows = await this.dataSource.query(
+      `UPDATE identity.verification_code SET used_at=now() WHERE id=(
+       SELECT id FROM identity.verification_code WHERE phone=$1 AND purpose=$2 AND used_at IS NULL
+       AND expires_at>now() ORDER BY created_at DESC LIMIT 1) AND code_hash=$3 RETURNING id`,
+      [phone, purpose, this.hashToken(code)],
+    );
+    if (!rows.length)
+      throw new BadRequestException(
+        'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
+      );
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    await this.consumeCode(dto.phone, dto.code, 'PASSWORD_RESET');
+    const user = await this.users.findOne({
+      where: { phone: dto.phone, isDeleted: false },
+    });
+    if (!user)
+      throw new BadRequestException(
+        'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
+      );
+    user.passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+    await this.users.save(user);
+    await this.logout(user.id);
+    return { reset: true };
+  }
+
+  async verifyPhone(dto: VerifyPhoneDto) {
+    await this.consumeCode(dto.phone, dto.code, 'PHONE_VERIFY');
+    await this.dataSource.query(
+      `UPDATE identity.users SET phone_verified_at=now(), updated_at=now() WHERE phone=$1 AND is_deleted=FALSE`,
+      [dto.phone],
+    );
+    return { verified: true };
+  }
+
+  async listSessions(userId: string) {
+    const rows = await this.sessions.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      current: false,
+      active: !s.revokedAt && s.expiresAt > new Date(),
+    }));
+  }
+
+  async revokeSession(userId: string, id: string) {
+    const result = await this.sessions.update(
+      { id, userId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
+    if (!result.affected) throw new BadRequestException('Sessiya topilmadi');
+    return { id, revoked: true };
+  }
+
+  async createTicket(userId: string, dto: CreateSupportTicketDto) {
+    return this.dataSource.transaction(async (m) => {
+      const [ticket] = await m.query(
+        `INSERT INTO identity.support_ticket(user_id,subject,order_id) VALUES($1,$2,$3) RETURNING id,subject,order_id AS "orderId",status,created_at AS "createdAt",updated_at AS "updatedAt"`,
+        [userId, dto.subject.trim(), dto.orderId ?? null],
+      );
+      const [message] = await m.query(
+        `INSERT INTO identity.support_message(ticket_id,sender_user_id,message) VALUES($1,$2,$3) RETURNING id,message,created_at AS "createdAt"`,
+        [ticket.id, userId, dto.message.trim()],
+      );
+      return { ...ticket, message };
+    });
+  }
+  async listTickets(
+    userId: string,
+    query: { status?: string; page?: number; limit?: number },
+  ) {
+    const page = query.page ?? 1,
+      limit = query.limit ?? 20,
+      params: unknown[] = [userId];
+    let where = 'user_id=$1';
+    if (query.status) {
+      params.push(query.status);
+      where += ` AND status=$${params.length}`;
+    }
+    const [count] = await this.dataSource.query(
+      `SELECT COUNT(*)::int total FROM identity.support_ticket WHERE ${where}`,
+      params,
+    );
+    const rows = await this.dataSource.query(
+      `SELECT id,subject,order_id AS "orderId",status,created_at AS "createdAt",updated_at AS "updatedAt" FROM identity.support_ticket WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, (page - 1) * limit],
+    );
+    const total = Number(count?.total ?? 0);
+    return {
+      items: rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+  async getTicket(userId: string, id: string) {
+    const [ticket] = await this.dataSource.query(
+      `SELECT id,subject,order_id AS "orderId",status,created_at AS "createdAt",updated_at AS "updatedAt" FROM identity.support_ticket WHERE id=$1 AND user_id=$2`,
+      [id, userId],
+    );
+    if (!ticket) throw new BadRequestException('Murojaat topilmadi');
+    ticket.messages = await this.dataSource.query(
+      `SELECT id,sender_user_id AS "senderUserId",message,created_at AS "createdAt" FROM identity.support_message WHERE ticket_id=$1 ORDER BY created_at`,
+      [id],
+    );
+    return ticket;
+  }
+  async addTicketMessage(userId: string, id: string, message: string) {
+    await this.getTicket(userId, id);
+    const [row] = await this.dataSource.query(
+      `INSERT INTO identity.support_message(ticket_id,sender_user_id,message) VALUES($1,$2,$3) RETURNING id,message,created_at AS "createdAt"`,
+      [id, userId, message.trim()],
+    );
+    await this.dataSource.query(
+      `UPDATE identity.support_ticket SET updated_at=now() WHERE id=$1`,
+      [id],
+    );
+    return row;
   }
 
   async registerSeller(dto: SellerRegisterDto) {

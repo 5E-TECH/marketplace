@@ -34,6 +34,7 @@ export * from './dto/admin-user.dto';
 export * from './dto/admin-order.dto';
 export * from './dto/operator.dto';
 export * from './dto/payment.dto';
+export * from './dto/support.dto';
 
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';

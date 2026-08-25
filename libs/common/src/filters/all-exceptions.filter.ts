@@ -42,7 +42,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if (r.errorCode) errorCode = r.errorCode; // custom (BusinessException)
         // class-validator ro'yxati → details
         if (Array.isArray(r.message)) {
-          details = r.message.map((m: string) => ({ field: '', error: m }));
+          details = r.message.map((m: string) => ({
+            field: this.validationField(m),
+            error: m,
+          }));
         }
       }
     } else if (exception instanceof Error) {
@@ -76,5 +79,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     response.status(status).json(body);
+  }
+
+  /** class-validator standart xabarining boshidagi property nomini ajratadi. */
+  private validationField(message: string): string {
+    const property = message.match(/^property\s+([^\s]+)\s+/)?.[1];
+    if (property) return property;
+    return message.match(/^([A-Za-z_$][\w$]*)\s+/)?.[1] ?? '';
   }
 }

@@ -8,6 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { Role } from '../enums';
 
 const PHONE_REGEX = /^\+998\d{9}$/;
@@ -57,6 +58,38 @@ export class LoginDto {
   password: string;
 }
 
+export class RefreshTokenDto {
+  @ApiPropertyOptional({
+    description: 'Cookie ishlatilmasa refresh token body orqali yuboriladi',
+  })
+  @IsOptional()
+  @IsString()
+  refreshToken?: string;
+}
+
+export class ForgotPasswordDto {
+  @ApiProperty({ example: '+998901112233' })
+  @Matches(PHONE_REGEX, PHONE_MSG)
+  phone: string;
+}
+
+export class ResetPasswordDto extends ForgotPasswordDto {
+  @ApiProperty({ example: '123456' })
+  @Matches(/^\d{6}$/, { message: 'code 6 xonali bo‘lishi kerak' })
+  code: string;
+
+  @ApiProperty({ example: 'NewSecret123', minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
+export class VerifyPhoneDto extends ForgotPasswordDto {
+  @ApiProperty({ example: '123456' })
+  @Matches(/^\d{6}$/, { message: 'code 6 xonali bo‘lishi kerak' })
+  code: string;
+}
+
 /** Barcha autentifikatsiyalangan rollar uchun o'z profilini tahrirlash DTO'si. */
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Ali Valiyev' })
@@ -83,10 +116,13 @@ export class UpdateProfileDto {
   @MaxLength(500)
   avatarUrl?: string;
 
-  @ApiPropertyOptional({ example: '1234', minLength: 4 })
+  @ApiPropertyOptional({ example: 'NewSecret123', minLength: 8 })
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsOptional()
   @IsString()
-  @MinLength(4)
+  @MinLength(8)
   password?: string;
 }
 

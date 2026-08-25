@@ -18,6 +18,7 @@ import { AuthController } from './auth/auth.controller';
 import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
 import { ProductsController } from './products/products.controller';
+import { PublicProductsController } from './products/public-products.controller';
 import { ProductVariantsController } from './products/product-variants.controller';
 import { FilesController } from './files/files.controller';
 import { InventoryController } from './inventory/inventory.controller';
@@ -33,6 +34,7 @@ import { SellerOperatorsController } from './sellers/seller-operators.controller
 import { CartController } from './cart/cart.controller';
 import { CheckoutController } from './cart/checkout.controller';
 import { PaymentsController } from './payments/payments.controller';
+import { SupportController } from './support/support.controller';
 
 @Module({
   imports: [
@@ -106,6 +108,7 @@ import { PaymentsController } from './payments/payments.controller';
     SellersController,
     CategoriesController,
     ProductsController,
+    PublicProductsController,
     ProductVariantsController,
     FilesController,
     InventoryController,
@@ -121,6 +124,7 @@ import { PaymentsController } from './payments/payments.controller';
     CartController,
     CheckoutController,
     PaymentsController,
+    SupportController,
   ],
   providers: [
     AppService,

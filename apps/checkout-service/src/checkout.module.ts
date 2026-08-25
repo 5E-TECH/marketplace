@@ -21,6 +21,7 @@ import { CartService } from './cart.service';
 import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
+import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-create-order-history';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { ConfirmSalesOrderService } from './confirm-sales-order.service';
           migrations: [
             CreateCheckoutTables1722513600000,
             CreateCartTables1723032000000,
+            CreateOrderHistory1723200000000,
           ],
           migrationsRun: true,
         };
