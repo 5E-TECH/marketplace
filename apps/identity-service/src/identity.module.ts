@@ -24,6 +24,7 @@ import { CreateUsers1722776400000 } from './migrations/1722776400000-create-user
 import { AddUserShopOperator1722950000000 } from './migrations/1722950000000-add-user-shop-operator';
 import { AddUserIsBlocked1722950000001 } from './migrations/1722950000001-add-user-is-blocked';
 import { CreateActivityLog1722950000002 } from './migrations/1722950000002-create-activity-log';
+import { CreateRecoverySupport1723100000000 } from './migrations/1723100000000-create-recovery-support';
 
 const entities = [User, AuthSession, ActivityLog];
 
@@ -54,6 +55,7 @@ const entities = [User, AuthSession, ActivityLog];
             AddUserShopOperator1722950000000,
             AddUserIsBlocked1722950000001,
             CreateActivityLog1722950000002,
+            CreateRecoverySupport1723100000000,
           ],
           migrationsRun: true,
         };

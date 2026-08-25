@@ -50,6 +50,59 @@ export class SellerOrdersController {
     return this.orders.updateStatus(shopId, String(data.orderId), data.status);
   }
 
+  @MessagePattern({ cmd: 'seller.orders.get' }) async get(@Payload() d: any) {
+    return this.orders.getSellerOrder(
+      await this.resolveShopId(d),
+      String(d.orderId),
+    );
+  }
+  @MessagePattern({ cmd: 'seller.orders.items' }) async items(
+    @Payload() d: any,
+  ) {
+    return this.orders.getItems(await this.resolveShopId(d), String(d.orderId));
+  }
+  @MessagePattern({ cmd: 'seller.orders.history' }) async history(
+    @Payload() d: any,
+  ) {
+    return this.orders.history(await this.resolveShopId(d), String(d.orderId));
+  }
+  @MessagePattern({ cmd: 'seller.shipments.list' }) async shipments(
+    @Payload() d: any,
+  ) {
+    return this.orders.shipments(await this.resolveShopId(d), d.query);
+  }
+  @MessagePattern({ cmd: 'seller.shipments.get' }) async shipment(
+    @Payload() d: any,
+  ) {
+    return this.orders.getSellerOrder(
+      await this.resolveShopId(d),
+      String(d.shipmentId),
+    );
+  }
+  @MessagePattern({ cmd: 'seller.shipments.tracking' }) async tracking(
+    @Payload() d: any,
+  ) {
+    const o: any = await this.orders.getSellerOrder(
+      await this.resolveShopId(d),
+      String(d.shipmentId),
+    );
+    return {
+      shipmentId: o.elchiShipmentId,
+      status: o.status,
+      trackingUrl: o.trackingUrl,
+      updatedAt: o.updatedAt,
+    };
+  }
+  @MessagePattern({ cmd: 'seller.shipments.create' }) async createShipment(
+    @Payload() d: any,
+  ) {
+    return this.orders.createShipment(
+      await this.resolveShopId(d),
+      String(d.orderId),
+      d.customerPhone,
+    );
+  }
+
   /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */
   private async resolveShopId(data: {
     ownerUserId?: string;

@@ -1,17 +1,20 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
+  Param,
   Patch,
   Post,
+  Req,
   Res,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -25,15 +28,19 @@ import {
 import {
   AuthErrorResponseDto,
   AuthSuccessResponseDto,
+  ForgotPasswordDto,
   CurrentUser,
   JwtUser,
   LoginDto,
+  RefreshTokenDto,
+  ResetPasswordDto,
   LoginSuccessResponseDto,
   LogoutSuccessResponseDto,
   Public,
   RegisterDto,
   RmqClient,
   UpdateProfileDto,
+  VerifyPhoneDto,
   rawResponse,
   sendRpc,
 } from '@app/common';
@@ -131,6 +138,68 @@ export class AuthController {
     return rawResponse({
       accessToken: result.accessToken,
     });
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const cookie = req.headers.cookie
+      ?.split(';')
+      .map((v) => v.trim())
+      .find((v) => v.startsWith('refreshToken='))
+      ?.slice('refreshToken='.length);
+    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
+      this.identity,
+      { cmd: 'auth.refresh' },
+      {
+        refreshToken:
+          dto.refreshToken ?? (cookie ? decodeURIComponent(cookie) : ''),
+      },
+    );
+    this.setRefreshCookie(res, result.refreshToken);
+    return rawResponse({ accessToken: result.accessToken });
+  }
+  @Public() @Post('forgot-password') @HttpCode(HttpStatus.OK) forgot(
+    @Body() dto: ForgotPasswordDto,
+  ) {
+    return sendRpc(this.identity, { cmd: 'auth.forgot-password' }, dto);
+  }
+  @Public() @Post('reset-password') @HttpCode(HttpStatus.OK) reset(
+    @Body() dto: ResetPasswordDto,
+  ) {
+    return sendRpc(this.identity, { cmd: 'auth.reset-password' }, dto);
+  }
+  @Public() @Post('verify-phone') @HttpCode(HttpStatus.OK) verify(
+    @Body() dto: VerifyPhoneDto,
+  ) {
+    return sendRpc(this.identity, { cmd: 'auth.verify-phone' }, dto);
+  }
+  @Public() @Post('resend-code') @HttpCode(HttpStatus.OK) resend(
+    @Body() dto: ForgotPasswordDto,
+  ) {
+    return sendRpc(this.identity, { cmd: 'auth.resend-code' }, dto);
+  }
+  @Get('sessions') sessions(@CurrentUser() user: JwtUser) {
+    return sendRpc(
+      this.identity,
+      { cmd: 'auth.sessions.list' },
+      { userId: user.sub },
+    );
+  }
+  @Delete('sessions/:id') revoke(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return sendRpc(
+      this.identity,
+      { cmd: 'auth.sessions.revoke' },
+      { userId: user.sub, sessionId: id },
+    );
   }
 
   @ApiBearerAuth()

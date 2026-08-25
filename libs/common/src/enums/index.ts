@@ -57,6 +57,7 @@ export enum SalesOrderStatus {
 
 export enum SalesOrderSellerStatus {
   PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
   SHIPMENT_CREATED = 'SHIPMENT_CREATED',
   ON_THE_ROAD = 'ON_THE_ROAD',
   DELIVERED = 'DELIVERED',

@@ -225,6 +225,13 @@ export class UpdateSellerOrderStatusDto {
   status: SalesOrderSellerStatus;
 }
 
+export class CreateShipmentDto {
+  @ApiPropertyOptional({ example: '+998901112233' })
+  @IsOptional()
+  @Matches(/^\+998\d{9}$/)
+  customerPhone?: string;
+}
+
 export class SellerOrderItemDto {
   @ApiProperty({ example: '31' })
   id: string;

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   SellerDashboardDto,
@@ -9,6 +11,8 @@ import {
   SellerOrdersQueryDto,
 } from '@app/common';
 import { DataSource } from 'typeorm';
+import { ClientProxy } from '@nestjs/microservices';
+import { RmqClient, sendRpc } from '@app/common';
 
 interface CountRow {
   total: string | number;
@@ -16,16 +20,23 @@ interface CountRow {
 
 @Injectable()
 export class SellerOrdersService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    @Optional()
+    @Inject(RmqClient.INTEGRATION)
+    private readonly integration?: ClientProxy,
+  ) {}
 
   async findAll(
     shopId: string,
     query: SellerOrdersQueryDto,
+    shipmentOnly = false,
   ): Promise<SellerOrdersPageDto> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const params: unknown[] = [shopId];
     const conditions = ['s.shop_id = $1'];
+    if (shipmentOnly) conditions.push('s.elchi_shipment_id IS NOT NULL');
 
     if (query.status) {
       params.push(query.status);
@@ -368,6 +379,7 @@ export class SellerOrdersService {
   ): Promise<{ id: string; status: string }> {
     const ALLOWED = [
       'PENDING',
+      'CONFIRMED',
       'SHIPMENT_CREATED',
       'ON_THE_ROAD',
       'DELIVERED',
@@ -380,13 +392,114 @@ export class SellerOrdersService {
     const rows = await this.dataSource.query(
       `UPDATE checkout.sales_order_seller
          SET status = $1, updated_at = now()
-       WHERE id = $2 AND shop_id = $3 AND is_deleted = FALSE
+       WHERE id = $2 AND shop_id = $3
        RETURNING id, status`,
       [status, String(orderId), String(shopId)],
     );
     if (!rows.length) {
       throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
     }
+    await this.dataSource.query(
+      `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status) VALUES($1,$2)`,
+      [orderId, status],
+    );
     return { id: String(rows[0].id), status: String(rows[0].status) };
+  }
+
+  async getSellerOrder(shopId: string, id: string) {
+    const rows = await this.dataSource.query(
+      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
+      [id, shopId],
+    );
+    if (!rows[0])
+      throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
+    const r = rows[0];
+    return {
+      ...r,
+      id: String(r.id),
+      salesOrderId: String(r.salesOrderId),
+      subtotal: Number(r.subtotal),
+      codAmount: Number(r.codAmount),
+    };
+  }
+  async getItems(shopId: string, id: string) {
+    await this.getSellerOrder(shopId, id);
+    const rows = await this.dataSource.query(
+      `SELECT i.id,i.product_id AS "productId",i.product_name AS "productName",i.variant_id AS "variantId",i.quantity,i.unit_price AS "unitPrice",i.line_total AS "lineTotal" FROM checkout.sales_order_item i WHERE i.sales_order_seller_id=$1 ORDER BY i.id`,
+      [id],
+    );
+    return rows.map((r: any) => ({
+      ...r,
+      id: String(r.id),
+      productId: String(r.productId),
+      variantId: String(r.variantId),
+      quantity: Number(r.quantity),
+      unitPrice: Number(r.unitPrice),
+      lineTotal: Number(r.lineTotal),
+    }));
+  }
+  async history(shopId: string, id: string) {
+    const order = await this.getSellerOrder(shopId, id);
+    const rows = await this.dataSource.query(
+      `SELECT id,status,comment,created_at AS "createdAt" FROM checkout.sales_order_seller_history WHERE sales_order_seller_id=$1 ORDER BY created_at`,
+      [id],
+    );
+    return rows.length
+      ? rows
+      : [
+          {
+            id: null,
+            status: order.status,
+            comment: null,
+            createdAt: order.createdAt,
+          },
+        ];
+  }
+  async shipments(shopId: string, q: SellerOrdersQueryDto) {
+    return this.findAll(shopId, q, true);
+  }
+  async createShipment(shopId: string, id: string, customerPhone?: string) {
+    const order: any = await this.getSellerOrder(shopId, id);
+    if (order.elchiShipmentId) return order;
+    if (!['PENDING', 'CONFIRMED'].includes(order.status))
+      throw new BadRequestException(
+        'Shipment faqat yangi yoki tasdiqlangan buyurtma uchun yaratiladi',
+      );
+    const items: any[] = await this.getItems(shopId, id);
+    if (!this.integration)
+      throw new BadRequestException('Yetkazib berish servisi mavjud emas');
+    const result = await sendRpc<{
+      shipment_id: string;
+      tracking_url?: string;
+    }>(
+      this.integration,
+      { cmd: 'integration.shipment.create' },
+      {
+        external_order_id: `seller-order-${id}`,
+        elchi_market_id: String(order.shopId),
+        customer: {
+          name: order.buyerName ?? 'Mijoz',
+          phone: customerPhone ?? '',
+        },
+        address: order.deliveryAddress ?? '',
+        region_id: order.regionId,
+        district_id: order.districtId,
+        where_deliver: order.whereDeliver,
+        items: items.map((x) => ({
+          name: x.productName,
+          quantity: x.quantity,
+        })),
+        cod_amount: order.codAmount,
+      },
+    );
+    await this.dataSource.query(
+      `UPDATE checkout.sales_order_seller SET elchi_shipment_id=$1,tracking_url=$2,status='SHIPMENT_CREATED',updated_at=now() WHERE id=$3 AND shop_id=$4`,
+      [result.shipment_id, result.tracking_url ?? null, id, shopId],
+    );
+    await this.dataSource.query(
+      `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status,comment) VALUES($1,'SHIPMENT_CREATED','Yetkazib berish yaratildi')`,
+      [id],
+    );
+    return this.getSellerOrder(shopId, id);
   }
 }
