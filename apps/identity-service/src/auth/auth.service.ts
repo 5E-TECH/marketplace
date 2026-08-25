@@ -198,7 +198,6 @@ export class AuthService {
       user.phone = dto.phone;
     }
     if (dto.name !== undefined) user.name = dto.name.trim();
-    if (dto.email !== undefined) user.email = dto.email;
     if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
 
     if (dto.password) {

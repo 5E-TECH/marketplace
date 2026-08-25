@@ -35,6 +35,7 @@ import { CartController } from './cart/cart.controller';
 import { CheckoutController } from './cart/checkout.controller';
 import { PaymentsController } from './payments/payments.controller';
 import { SupportController } from './support/support.controller';
+import { FavoritesController } from './favorites/favorites.controller';
 
 @Module({
   imports: [
@@ -125,6 +126,7 @@ import { SupportController } from './support/support.controller';
     CheckoutController,
     PaymentsController,
     SupportController,
+    FavoritesController,
   ],
   providers: [
     AppService,
