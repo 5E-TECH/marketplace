@@ -113,8 +113,15 @@ jobs:
             -f docker-compose.prod.yml \
             up -d --build --remove-orphans
 
-          # Bind-mount qilingan nginx.conf o'zgarsa Compose konteynerni har doim
-          # recreate qilmaydi. Config'ni tekshirib, downtime'siz reload qilamiz.
+          # rsync nginx.conf faylini almashtirganda mavjud bind-mount eski inode'da
+          # qolishi mumkin. Shunda oddiy reload eski upstream IP/config bilan 502
+          # qaytaradi. Har deployda nginx'ni recreate qilib yangi mountni olamiz.
+          docker compose \
+            --env-file .env.production \
+            -f docker-compose.prod.yml \
+            up -d --force-recreate --no-deps nginx
+
+          # Yangi konteynerdagi config'ni tekshirib, keyin reload qilamiz.
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
