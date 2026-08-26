@@ -1,6 +1,14 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { catchError, firstValueFrom, throwError } from 'rxjs';
+import {
+  catchError,
+  firstValueFrom,
+  throwError,
+  timeout,
+  TimeoutError,
+} from 'rxjs';
+
+export const RPC_TIMEOUT_MS = 10_000;
 
 /**
  * Gateway'dan microservice'ga RMQ orqali so'rov yuboradi va javobni kutadi.
@@ -15,7 +23,18 @@ export function sendRpc<T = unknown>(
 ): Promise<T> {
   return firstValueFrom(
     client.send<T>(pattern as any, data as any).pipe(
+      timeout(RPC_TIMEOUT_MS),
       catchError((err: any) => {
+        if (err instanceof TimeoutError) {
+          return throwError(
+            () =>
+              new HttpException(
+                'Mikroservis belgilangan vaqtda javob bermadi',
+                HttpStatus.GATEWAY_TIMEOUT,
+              ),
+          );
+        }
+
         const candidateStatus = err?.statusCode ?? err?.status;
         const status =
           typeof candidateStatus === 'number' &&
