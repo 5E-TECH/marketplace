@@ -15,8 +15,8 @@ export class CreateOperatorDto {
   })
   phone!: string;
 
-  @ApiProperty({ example: 'Secret123', minLength: 8 })
+  @ApiProperty({ example: '1234', minLength: 4 })
   @IsString()
-  @MinLength(8)
+  @MinLength(4)
   password!: string;
 }
