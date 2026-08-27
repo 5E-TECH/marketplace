@@ -343,6 +343,120 @@ describe('InventoryService', () => {
     expect(db.movements).toHaveLength(1);
   });
 
+  it('C2.4 TC3: returned order committed qoldiqni asl omborga qaytaradi', async () => {
+    db.addStock(10);
+    await reserve('return-reserve', 5);
+    await service.commit({
+      orderRef: '301',
+      idempotencyKey: 'return-commit',
+    });
+
+    const result = await service.returnOrderItems({
+      orderRef: '301',
+      items: [{ variantId: '101', quantity: 3 }],
+      reason: 'Elchi returned: evt_1',
+      idempotencyKey: 'elchi-return:evt_1',
+    });
+
+    expect(result).toMatchObject({
+      operation: StockMovementType.INBOUND,
+      orderRef: '301',
+    });
+    expect(db.stocks[0].quantityOnHand).toBe(8);
+    expect(db.movements.at(-1)).toMatchObject({
+      type: StockMovementType.INBOUND,
+      quantity: 3,
+      reason: 'Elchi returned: evt_1',
+      referenceType: 'RESERVATION',
+    });
+  });
+
+  it('C2.4: bir return idempotency key qoldiqni ikki marta oshirmaydi', async () => {
+    db.addStock(5);
+    await reserve('return-idem-reserve', 5);
+    await service.commit({
+      orderRef: '301',
+      idempotencyKey: 'return-idem-commit',
+    });
+    const input = {
+      orderRef: '301',
+      items: [{ variantId: '101', quantity: 5 }],
+      reason: 'Elchi returned',
+      idempotencyKey: 'elchi-return:same-event',
+    };
+
+    const first = await service.returnOrderItems(input);
+    const second = await service.returnOrderItems(input);
+
+    expect(second).toEqual(first);
+    expect(db.stocks[0].quantityOnHand).toBe(5);
+    expect(
+      db.movements.filter((item) => item.type === StockMovementType.INBOUND),
+    ).toHaveLength(1);
+  });
+
+  it('C2.4: rezervatsiyadan ortiq qaytarishni rollback qiladi', async () => {
+    db.addStock(10);
+    await reserve('return-over-reserve', 2);
+    await service.commit({
+      orderRef: '301',
+      idempotencyKey: 'return-over-commit',
+    });
+
+    await expect(
+      service.returnOrderItems({
+        orderRef: '301',
+        items: [{ variantId: '101', quantity: 3 }],
+        reason: 'Elchi returned',
+        idempotencyKey: 'elchi-return:too-many',
+      }),
+    ).rejects.toMatchObject({ errorCode: ErrorCode.INVALID_STATE });
+    expect(db.stocks[0].quantityOnHand).toBe(8);
+  });
+
+  it('C2.4: committed rezervatsiyasiz returnni rad etadi', async () => {
+    db.addStock(10);
+
+    await expect(
+      service.returnOrderItems({
+        orderRef: '301',
+        items: [{ variantId: '101', quantity: 1 }],
+        reason: 'Elchi returned',
+        idempotencyKey: 'elchi-return:no-reservation',
+      }),
+    ).rejects.toMatchObject({ errorCode: ErrorCode.INVALID_STATE });
+  });
+
+  it('C2.4: bo‘sh return ro‘yxatini rad etadi', () => {
+    expect(() =>
+      service.returnOrderItems({
+        orderRef: '301',
+        items: [],
+        reason: 'Elchi returned',
+        idempotencyKey: 'elchi-return:empty',
+      }),
+    ).toThrow(expect.objectContaining({ errorCode: ErrorCode.INVALID_STATE }));
+  });
+
+  it('C2.4: rezervatsiya stock yozuvi yo‘qolgan bo‘lsa rollback qiladi', async () => {
+    db.addStock(5);
+    await reserve('return-stock-reserve', 5);
+    await service.commit({
+      orderRef: '301',
+      idempotencyKey: 'return-stock-commit',
+    });
+    db.stocks = [];
+
+    await expect(
+      service.returnOrderItems({
+        orderRef: '301',
+        items: [{ variantId: '101', quantity: 1 }],
+        reason: 'Elchi returned',
+        idempotencyKey: 'elchi-return:no-stock',
+      }),
+    ).rejects.toMatchObject({ errorCode: ErrorCode.INVALID_STATE });
+  });
+
   it('TC8: adjust signed miqdor va actor bilan movement yozadi', async () => {
     db.addStock(10);
 
