@@ -20,6 +20,19 @@ describe('FavoriteService guest favorites', () => {
         transaction: jest.fn(async (run) => run(manager)),
       },
     };
+    const favoriteBuilder = {
+      innerJoinAndSelect: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+    Object.assign(favorites, {
+      createQueryBuilder: jest.fn(() => favoriteBuilder),
+    });
     const productBuilder = {
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -32,6 +45,7 @@ describe('FavoriteService guest favorites', () => {
     return {
       service: new FavoriteService(favorites as never, products as never),
       favorites,
+      favoriteBuilder,
       queries,
     };
   }
@@ -65,5 +79,17 @@ describe('FavoriteService guest favorites', () => {
     expect(queries[0].sql).toContain('ON CONFLICT');
     expect(queries[0].params).toEqual(['42', 'guest-uuid']);
     expect(queries[1].sql).toContain('DELETE FROM catalog.favorite');
+  });
+
+  it('pagination bilan relation yuklanganda entity property bo‘yicha saralaydi', async () => {
+    const { service, favoriteBuilder } = setup();
+
+    await expect(
+      service.list({ sessionId: 'guest-uuid' }, { page: 1, limit: 20 }),
+    ).resolves.toMatchObject({ items: [], total: 0, totalPages: 0 });
+    expect(favoriteBuilder.orderBy).toHaveBeenCalledWith(
+      'favorite.createdAt',
+      'DESC',
+    );
   });
 });

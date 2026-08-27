@@ -85,7 +85,7 @@ export class FavoriteService {
         'variant.is_deleted=FALSE AND variant.is_active=TRUE',
       )
       .where(`${ownerColumn}=:ownerValue`, { ownerValue })
-      .orderBy('favorite.created_at', 'DESC')
+      .orderBy('favorite.createdAt', 'DESC')
       .addOrderBy('favorite.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
