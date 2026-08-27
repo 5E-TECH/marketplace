@@ -10,13 +10,13 @@ describe('FavoritesController', () => {
 
   it('token userId va productId bilan favorite qo‘shadi', async () => {
     catalog.send.mockReturnValue(of({ productId: '85', isFavorite: true }));
-    await expect(controller.add(user, '85')).resolves.toEqual({
+    await expect(controller.add(user, undefined, '85')).resolves.toEqual({
       productId: '85',
       isFavorite: true,
     });
     expect(catalog.send).toHaveBeenCalledWith(
       { cmd: 'favorite.add' },
-      { userId: '42', productId: '85' },
+      { owner: { userId: '42' }, productId: '85' },
     );
   });
 
@@ -24,11 +24,20 @@ describe('FavoritesController', () => {
     const page = { items: [], total: 0, page: 1, limit: 20, totalPages: 0 };
     catalog.send.mockReturnValue(of(page));
     await expect(
-      controller.list(user, { page: 1, limit: 20 }),
+      controller.list(user, undefined, { page: 1, limit: 20 }),
     ).resolves.toEqual(page);
     expect(catalog.send).toHaveBeenCalledWith(
       { cmd: 'favorite.list' },
-      { userId: '42', query: { page: 1, limit: 20 } },
+      { owner: { userId: '42' }, query: { page: 1, limit: 20 } },
+    );
+  });
+
+  it('guest session bilan favorite qo‘shadi', async () => {
+    catalog.send.mockReturnValue(of({ productId: '85', isFavorite: true }));
+    await controller.add(undefined, 'guest-uuid', '85');
+    expect(catalog.send).toHaveBeenCalledWith(
+      { cmd: 'favorite.add' },
+      { owner: { sessionId: 'guest-uuid' }, productId: '85' },
     );
   });
 });
