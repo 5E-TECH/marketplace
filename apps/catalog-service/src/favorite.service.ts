@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ProductStatus,
   ShopStatus,
   FavoritesPageDto,
   FavoritesQueryDto,
+  FavoriteOwnerDto,
 } from '@app/common';
 import { QueryFailedError, Repository } from 'typeorm';
 import { Favorite } from './entities/favorite.entity';
@@ -18,14 +23,13 @@ export class FavoriteService {
     @InjectRepository(Product) private readonly products: Repository<Product>,
   ) {}
 
-  async add(userId: string, productId: string) {
+  async add(owner: FavoriteOwnerDto, productId: string) {
+    const where = this.ownerWhere(owner, productId);
     await this.activeProduct(productId);
-    const existing = await this.favorites.findOne({
-      where: { userId, productId },
-    });
+    const existing = await this.favorites.findOne({ where });
     if (existing) return { productId, isFavorite: true };
     try {
-      await this.favorites.save(this.favorites.create({ userId, productId }));
+      await this.favorites.save(this.favorites.create(where));
     } catch (error) {
       if (
         !(error instanceof QueryFailedError) ||
@@ -36,24 +40,30 @@ export class FavoriteService {
     return { productId, isFavorite: true };
   }
 
-  async remove(userId: string, productId: string) {
-    await this.favorites.delete({ userId, productId });
+  async remove(owner: FavoriteOwnerDto, productId: string) {
+    await this.favorites.delete(this.ownerWhere(owner, productId));
     return { productId, isFavorite: false };
   }
 
-  async check(userId: string, productId: string) {
+  async check(owner: FavoriteOwnerDto, productId: string) {
     const exists = await this.favorites.exists({
-      where: { userId, productId },
+      where: this.ownerWhere(owner, productId),
     });
     return { productId, isFavorite: exists };
   }
 
   async list(
-    userId: string,
+    owner: FavoriteOwnerDto,
     query: FavoritesQueryDto,
   ): Promise<FavoritesPageDto> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    const ownerColumn = owner.userId
+      ? 'favorite.user_id'
+      : 'favorite.session_id';
+    const ownerValue = owner.userId ?? owner.sessionId;
+    if (!ownerValue)
+      throw new BadRequestException('x-session-id yoki login talab qilinadi');
     const [items, total] = await this.favorites
       .createQueryBuilder('favorite')
       .innerJoinAndSelect(
@@ -74,7 +84,7 @@ export class FavoriteService {
         'variant',
         'variant.is_deleted=FALSE AND variant.is_active=TRUE',
       )
-      .where('favorite.user_id=:userId', { userId })
+      .where(`${ownerColumn}=:ownerValue`, { ownerValue })
       .orderBy('favorite.created_at', 'DESC')
       .addOrderBy('favorite.id', 'DESC')
       .skip((page - 1) * limit)
@@ -87,6 +97,35 @@ export class FavoriteService {
       limit,
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     } as FavoritesPageDto;
+  }
+
+  async merge(userId: string, sessionId: string) {
+    if (!userId || !sessionId)
+      throw new BadRequestException('userId va sessionId majburiy');
+    await this.favorites.manager.transaction(async (manager) => {
+      await manager.query(
+        `INSERT INTO catalog.favorite(user_id, product_id, created_at)
+         SELECT $1, product_id, created_at
+           FROM catalog.favorite
+          WHERE session_id=$2
+         ON CONFLICT (user_id, product_id) WHERE user_id IS NOT NULL DO NOTHING`,
+        [userId, sessionId],
+      );
+      await manager.query(`DELETE FROM catalog.favorite WHERE session_id=$1`, [
+        sessionId,
+      ]);
+    });
+    return { merged: true };
+  }
+
+  private ownerWhere(owner: FavoriteOwnerDto, productId: string) {
+    if (owner.userId) {
+      return { userId: owner.userId, productId };
+    }
+    if (owner.sessionId) {
+      return { sessionId: owner.sessionId, productId };
+    }
+    throw new BadRequestException('x-session-id yoki login talab qilinadi');
   }
 
   private async activeProduct(productId: string): Promise<Product> {

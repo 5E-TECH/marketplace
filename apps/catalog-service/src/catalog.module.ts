@@ -32,6 +32,7 @@ import { Favorite } from './entities/favorite.entity';
 import { FavoriteController } from './favorite.controller';
 import { FavoriteService } from './favorite.service';
 import { CreateFavorites1723300000000 } from './migrations/1723300000000-create-favorites';
+import { AddGuestFavorites1724500800000 } from './migrations/1724500800000-add-guest-favorites';
 
 const entities = [Shop, Category, Product, ProductVariant, Favorite];
 
@@ -75,6 +76,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite];
             CreateCatalogTables1721736000000,
             DefaultProductActive1724414400000,
             CreateFavorites1723300000000,
+            AddGuestFavorites1724500800000,
           ],
           migrationsRun: true,
         };

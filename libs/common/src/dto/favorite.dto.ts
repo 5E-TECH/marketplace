@@ -22,10 +22,17 @@ export class FavoritesQueryDto {
 
 export class FavoriteDto {
   @ApiProperty({ example: '12' }) id: string;
-  @ApiProperty({ example: '42' }) userId: string;
+  @ApiProperty({ example: '42', nullable: true }) userId: string | null;
+  @ApiProperty({ example: 'guest-session-uuid', nullable: true }) sessionId:
+    string | null;
   @ApiProperty({ example: '85' }) productId: string;
   @ApiProperty({ type: StorefrontProductDto }) product: StorefrontProductDto;
   @ApiProperty({ example: '2026-08-25T10:00:00.000Z' }) createdAt: Date;
+}
+
+export interface FavoriteOwnerDto {
+  userId?: string;
+  sessionId?: string;
 }
 
 export class FavoritesPageDto {

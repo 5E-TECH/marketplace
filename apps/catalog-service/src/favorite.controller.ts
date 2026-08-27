@@ -1,6 +1,10 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { FavoritesQueryDto, RpcHttpExceptionFilter } from '@app/common';
+import {
+  FavoriteOwnerDto,
+  FavoritesQueryDto,
+  RpcHttpExceptionFilter,
+} from '@app/common';
 import { FavoriteService } from './favorite.service';
 
 @Controller()
@@ -8,23 +12,28 @@ import { FavoriteService } from './favorite.service';
 export class FavoriteController {
   constructor(private readonly favorites: FavoriteService) {}
   @MessagePattern({ cmd: 'favorite.add' }) add(
-    @Payload() d: { userId: string; productId: string },
+    @Payload() d: { owner: FavoriteOwnerDto; productId: string },
   ) {
-    return this.favorites.add(d.userId, d.productId);
+    return this.favorites.add(d.owner, d.productId);
   }
   @MessagePattern({ cmd: 'favorite.remove' }) remove(
-    @Payload() d: { userId: string; productId: string },
+    @Payload() d: { owner: FavoriteOwnerDto; productId: string },
   ) {
-    return this.favorites.remove(d.userId, d.productId);
+    return this.favorites.remove(d.owner, d.productId);
   }
   @MessagePattern({ cmd: 'favorite.check' }) check(
-    @Payload() d: { userId: string; productId: string },
+    @Payload() d: { owner: FavoriteOwnerDto; productId: string },
   ) {
-    return this.favorites.check(d.userId, d.productId);
+    return this.favorites.check(d.owner, d.productId);
   }
   @MessagePattern({ cmd: 'favorite.list' }) list(
-    @Payload() d: { userId: string; query: FavoritesQueryDto },
+    @Payload() d: { owner: FavoriteOwnerDto; query: FavoritesQueryDto },
   ) {
-    return this.favorites.list(d.userId, d.query);
+    return this.favorites.list(d.owner, d.query);
+  }
+  @MessagePattern({ cmd: 'favorite.merge' }) merge(
+    @Payload() d: { userId: string; sessionId: string },
+  ) {
+    return this.favorites.merge(d.userId, d.sessionId);
   }
 }
