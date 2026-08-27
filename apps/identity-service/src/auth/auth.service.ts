@@ -279,6 +279,56 @@ export class AuthService {
     return ops.map((u) => this.sanitize(u));
   }
 
+  /** Faqat shu do‘konga tegishli operator profilini yangilaydi. */
+  async updateOperator(
+    shopId: string,
+    operatorId: string,
+    dto: {
+      name?: string;
+      phone?: string;
+      password?: string;
+      isActive?: boolean;
+    },
+  ) {
+    const operator = await this.users.findOne({
+      where: {
+        id: String(operatorId),
+        role: Role.OPERATOR,
+        shopId: String(shopId),
+        isDeleted: false,
+      },
+    });
+    if (!operator) throw BusinessException.conflict('Operator topilmadi');
+    if (!dto || Object.values(dto).every((value) => value === undefined)) {
+      throw BusinessException.invalidState(
+        'Kamida bitta o‘zgartiriladigan maydon kerak',
+      );
+    }
+
+    if (dto.phone !== undefined && dto.phone.trim() !== operator.phone) {
+      const phoneOwner = await this.users.findOne({
+        where: { phone: dto.phone.trim() },
+      });
+      if (phoneOwner) {
+        throw BusinessException.conflict(
+          'Bu telefon allaqachon ro‘yxatdan o‘tgan',
+        );
+      }
+      operator.phone = dto.phone.trim();
+    }
+    if (dto.name !== undefined) operator.name = dto.name.trim();
+    if (dto.password !== undefined) {
+      operator.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+      await this.sessions.update(
+        { userId: operator.id, revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+    }
+    if (dto.isActive !== undefined) operator.isActive = dto.isActive;
+
+    return this.sanitize(await this.users.save(operator));
+  }
+
   /** Operatorni o'chiradi — faqat SHU do'konning operatori bo'lsa. */
   async removeOperator(shopId: string, operatorId: string) {
     const op = await this.users.findOne({

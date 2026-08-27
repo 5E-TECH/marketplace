@@ -168,6 +168,27 @@ export class AuthController {
     return this.authService.listOperators(String(data.shopId));
   }
 
+  @MessagePattern({ cmd: 'identity.operator.update' })
+  updateOperator(
+    @Payload()
+    data: {
+      shopId: string;
+      operatorId: string;
+      dto: {
+        name?: string;
+        phone?: string;
+        password?: string;
+        isActive?: boolean;
+      };
+    },
+  ) {
+    return this.authService.updateOperator(
+      String(data.shopId),
+      String(data.operatorId),
+      data.dto,
+    );
+  }
+
   @MessagePattern({ cmd: 'identity.operator.remove' })
   removeOperator(@Payload() data: { shopId: string; operatorId: string }) {
     return this.authService.removeOperator(

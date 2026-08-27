@@ -27,6 +27,7 @@ import {
 import {
   InventoryResult,
   ReservationActionInput,
+  ReturnOrderItemsInput,
   ReserveInput,
   StockAdjustInput,
   StockIncreaseInput,
@@ -232,6 +233,84 @@ export class InventoryService {
           input.actorId,
         );
         return stockResult(StockMovementType.INBOUND, stock);
+      },
+    );
+  }
+
+  returnOrderItems(input: ReturnOrderItemsInput): Promise<InventoryResult> {
+    assertId(input.orderRef, 'orderRef');
+    assertIdempotencyKey(input.idempotencyKey);
+    assertReason(input.reason);
+    if (!input.items.length) {
+      throw BusinessException.invalidState('Qaytariladigan tovarlar topilmadi');
+    }
+    assertUniqueItems(
+      input.items.map((item) => ({ ...item, warehouseId: '1' })),
+    );
+    for (const item of input.items) assertPositive(item.quantity);
+
+    return runInTransaction(
+      this.dataSource,
+      'return-order-items',
+      input.idempotencyKey,
+      async (manager) => {
+        const reservation = await manager.getRepository(Reservation).findOne({
+          where: {
+            orderRef: input.orderRef,
+            status: ReservationStatus.COMMITTED,
+          },
+        });
+        if (!reservation) {
+          throw BusinessException.invalidState(
+            'Committed rezervatsiya topilmadi',
+          );
+        }
+        const allocations = await manager.getRepository(ReservationItem).find({
+          where: { reservationId: reservation.id },
+          order: { id: 'ASC' },
+        });
+
+        for (const requested of input.items) {
+          let remaining = requested.quantity;
+          for (const allocation of allocations.filter(
+            (item) => item.variantId === requested.variantId,
+          )) {
+            if (remaining === 0) break;
+            const quantity = Math.min(remaining, allocation.quantity);
+            const stock = await lockStock(
+              manager,
+              allocation.variantId,
+              allocation.warehouseId,
+            );
+            if (!stock) {
+              throw BusinessException.invalidState('Stock topilmadi');
+            }
+            stock.quantityOnHand += quantity;
+            await manager.getRepository(Stock).save(stock);
+            await saveMovement(
+              manager,
+              stock,
+              StockMovementType.INBOUND,
+              quantity,
+              input.reason,
+              undefined,
+              'RESERVATION',
+              reservation.id,
+            );
+            remaining -= quantity;
+          }
+          if (remaining > 0) {
+            throw BusinessException.invalidState(
+              `Variant ${requested.variantId} qaytarish miqdori rezervatsiyadan katta`,
+            );
+          }
+        }
+
+        return {
+          operation: StockMovementType.INBOUND,
+          orderRef: input.orderRef,
+          reservationId: reservation.id,
+        };
       },
     );
   }

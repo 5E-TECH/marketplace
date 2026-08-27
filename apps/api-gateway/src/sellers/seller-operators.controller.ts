@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -17,6 +18,7 @@ import {
   Role,
   Roles,
   sendRpc,
+  UpdateOperatorDto,
 } from '@app/common';
 
 /**
@@ -62,6 +64,21 @@ export class SellerOperatorsController {
       this.identity,
       { cmd: 'identity.operator.list' },
       { shopId },
+    );
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Do‘kon operatorini yangilash' })
+  async update(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateOperatorDto,
+  ) {
+    const shopId = await this.shopId(user);
+    return sendRpc(
+      this.identity,
+      { cmd: 'identity.operator.update' },
+      { shopId, operatorId: id, dto },
     );
   }
 

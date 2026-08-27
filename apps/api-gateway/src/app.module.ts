@@ -37,6 +37,7 @@ import { PaymentsController } from './payments/payments.controller';
 import { SupportController } from './support/support.controller';
 import { FavoritesController } from './favorites/favorites.controller';
 import { GuestController } from './guest/guest.controller';
+import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 
 @Module({
   imports: [
@@ -129,6 +130,7 @@ import { GuestController } from './guest/guest.controller';
     SupportController,
     FavoritesController,
     GuestController,
+    ElchiWebhookController,
   ],
   providers: [
     AppService,

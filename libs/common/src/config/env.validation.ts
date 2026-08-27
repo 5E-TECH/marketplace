@@ -51,6 +51,7 @@ export const envValidationSchema = Joi.object({
     .uri({ scheme: ['http', 'https'] })
     .optional(),
   ELCHI_PARTNER_API_KEY: Joi.string().optional(),
+  ELCHI_WEBHOOK_SECRET: Joi.string().min(16).optional(),
 
   // Notification provider adapterlari (ixtiyoriy)
   EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),

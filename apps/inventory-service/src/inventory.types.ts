@@ -37,6 +37,13 @@ export interface StockAdjustInput extends StockTarget {
   actorId: string;
 }
 
+export interface ReturnOrderItemsInput {
+  orderRef: string;
+  items: Array<{ variantId: string; quantity: number }>;
+  idempotencyKey: string;
+  reason: string;
+}
+
 export interface InventoryResult {
   operation: StockMovementType;
   orderRef?: string;

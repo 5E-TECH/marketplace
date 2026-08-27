@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 function makeService(users: Record<string, jest.Mock>) {
   const svc = Object.create(AuthService.prototype) as any;
   svc.users = users;
+  svc.sessions = { update: jest.fn().mockResolvedValue({ affected: 1 }) };
   return svc as AuthService;
 }
 
@@ -94,5 +95,45 @@ describe('AuthService — market operator (C1.38)', () => {
     );
     expect(res).toHaveLength(1);
     expect(res[0].passwordHash).toBeUndefined(); // sanitize
+  });
+
+  it('updateOperator: faqat shu do‘kon operatorini yangilaydi', async () => {
+    const operator = {
+      id: '10',
+      role: 'OPERATOR',
+      shopId: '5',
+      name: 'Eski ism',
+      phone: '+998900000000',
+      passwordHash: 'old-hash',
+      isActive: true,
+      isDeleted: false,
+    };
+    const users = {
+      findOne: jest.fn().mockResolvedValueOnce(operator),
+      save: jest.fn(async (value) => value),
+    };
+    const svc = makeService(users);
+
+    const result: any = await svc.updateOperator('5', '10', {
+      name: 'Yangi ism',
+      isActive: false,
+    });
+
+    expect(users.findOne).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: '10', shopId: '5' }),
+    });
+    expect(users.save).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Yangi ism', isActive: false }),
+    );
+    expect(result.passwordHash).toBeUndefined();
+  });
+
+  it('updateOperator: boshqa do‘kon operatorini rad etadi', async () => {
+    const users = { findOne: jest.fn().mockResolvedValue(null) };
+    const svc = makeService(users);
+
+    await expect(
+      svc.updateOperator('5', '99', { name: 'Yangi ism' }),
+    ).rejects.toBeInstanceOf(BusinessException);
   });
 });
