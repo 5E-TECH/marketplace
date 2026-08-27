@@ -6,7 +6,7 @@ import { AllExceptionsFilter, TransformInterceptor } from '@app/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
   const port = config.get<number>('API_GATEWAY_PORT', 3000);
 

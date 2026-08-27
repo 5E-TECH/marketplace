@@ -1,6 +1,10 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { CheckoutReserveInputDto, RpcHttpExceptionFilter } from '@app/common';
+import {
+  CheckoutReserveInputDto,
+  ReturnOrderItemsDto,
+  RpcHttpExceptionFilter,
+} from '@app/common';
 import { InventoryService } from './inventory.service';
 
 @Controller()
@@ -23,5 +27,10 @@ export class InventoryOperationsController {
     },
   ) {
     return this.inventory.commit(input);
+  }
+
+  @MessagePattern({ cmd: 'inventory.return-order-items' })
+  returnOrderItems(@Payload() input: ReturnOrderItemsDto) {
+    return this.inventory.returnOrderItems(input);
   }
 }

@@ -22,6 +22,8 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-create-order-history';
+import { CreateElchiWebhookEvent1724587200000 } from './migrations/1724587200000-create-elchi-webhook-event';
+import { ElchiWebhookService } from './elchi-webhook.service';
 
 @Module({
   imports: [
@@ -57,6 +59,12 @@ import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-crea
             RmqQueue.NOTIFICATION,
           ),
       },
+      {
+        name: RmqClient.FINANCE,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.FINANCE),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -69,6 +77,7 @@ import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-crea
             CreateCheckoutTables1722513600000,
             CreateCartTables1723032000000,
             CreateOrderHistory1723200000000,
+            CreateElchiWebhookEvent1724587200000,
           ],
           migrationsRun: true,
         };
@@ -81,6 +90,7 @@ import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-crea
     CartService,
     CheckoutService,
     ConfirmSalesOrderService,
+    ElchiWebhookService,
   ],
 })
 export class CheckoutModule {}

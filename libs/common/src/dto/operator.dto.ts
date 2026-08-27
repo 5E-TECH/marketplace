@@ -1,5 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 /** Sotuvchi o'z do'koniga operator (xodim) qo'shadi. */
 export class CreateOperatorDto {
@@ -19,4 +26,31 @@ export class CreateOperatorDto {
   @IsString()
   @MinLength(4)
   password!: string;
+}
+
+export class UpdateOperatorDto {
+  @ApiPropertyOptional({ example: 'Yangi operator ismi' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  name?: string;
+
+  @ApiPropertyOptional({ example: '+998901234567' })
+  @IsOptional()
+  @Matches(/^\+998\d{9}$/, {
+    message: "phone +998XXXXXXXXX formatida bo'lishi kerak",
+  })
+  phone?: string;
+
+  @ApiPropertyOptional({ example: '1234', minLength: 4 })
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  password?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
