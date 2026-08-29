@@ -453,6 +453,17 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 - Javob oddiy JSON-RPC formatida va har doim HTTP `200`; standart marketplace
   response envelope qo‘shilmaydi.
 
-## 13. Keyingi faza
+## 13. Click Merchant API
 
-- Click: `/payments/click/prepare|complete`.
+**`POST /payments/click/prepare` · public**
+**`POST /payments/click/complete` · public**
+- Click callback maydonlari `application/x-www-form-urlencoded` yoki JSON body orqali
+  qabul qilinadi.
+- `sign_string` Click protokoli bo‘yicha MD5 bilan tekshiriladi; `service_id`
+  provider konfiguratsiyasidagi `merchantId`ga teng bo‘lishi kerak.
+- `merchant_trans_id` sifatida marketplace `payment.id` (yoki `salesOrderId`)
+  yuboriladi. Click summasi so‘mda va marketplace payment summasiga aynan teng
+  bo‘lishi kerak.
+- Prepare muvaffaqiyatli bo‘lsa `merchant_prepare_id`, Complete muvaffaqiyatli
+  bo‘lsa `merchant_confirm_id` qaytariladi va payment `PAID` holatiga o‘tadi.
+- Prepare va Complete takroriy chaqiriqlari idempotent; javob har doim HTTP `200`.

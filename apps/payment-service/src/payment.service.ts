@@ -89,12 +89,21 @@ export class PaymentService {
   }
 
   async getProviderSecret(provider: PaymentProvider): Promise<string | null> {
+    return (await this.getProviderCredentials(provider))?.secret ?? null;
+  }
+
+  async getProviderCredentials(
+    provider: PaymentProvider,
+  ): Promise<{ merchantId: string | null; secret: string } | null> {
     const entity = await this.providerConfigs.findOne({
       where: { provider, isActive: true },
-      select: { id: true, secretEncrypted: true },
+      select: { id: true, merchantId: true, secretEncrypted: true },
     });
     if (!entity?.secretEncrypted) return null;
-    return decryptSecret(entity.secretEncrypted, this.encryptionKey());
+    return {
+      merchantId: entity.merchantId,
+      secret: decryptSecret(entity.secretEncrypted, this.encryptionKey()),
+    };
   }
 
   private encryptionKey(): string {
