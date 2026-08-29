@@ -9,6 +9,8 @@ import {
 import { PaymentService } from './payment.service';
 import { PaymeService } from './payme.service';
 import { PaymeRpcPayload } from './payme.types';
+import { ClickService } from './click.service';
+import { ClickRpcPayload } from './click.types';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -16,6 +18,7 @@ export class PaymentController {
   constructor(
     private readonly service: PaymentService,
     private readonly payme: PaymeService,
+    private readonly click: ClickService,
   ) {}
 
   @MessagePattern({ cmd: 'payment.create' })
@@ -37,5 +40,15 @@ export class PaymentController {
   @MessagePattern({ cmd: 'payment.payme.callback' })
   paymeCallback(@Payload() payload: PaymeRpcPayload) {
     return this.payme.callback(payload);
+  }
+
+  @MessagePattern({ cmd: 'payment.click.prepare' })
+  clickPrepare(@Payload() payload: ClickRpcPayload) {
+    return this.click.prepare(payload.body);
+  }
+
+  @MessagePattern({ cmd: 'payment.click.complete' })
+  clickComplete(@Payload() payload: ClickRpcPayload) {
+    return this.click.complete(payload.body);
   }
 }

@@ -10,6 +10,7 @@ import { AddPaymeTransactionState1724328000000 } from './migrations/172432800000
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { PaymeService } from './payme.service';
+import { ClickService } from './click.service';
 
 const entities = [Payment, PaymentTransaction, ProviderConfig];
 
@@ -34,6 +35,6 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
     TypeOrmModule.forFeature(entities),
   ],
   controllers: [PaymentController],
-  providers: [PaymentService, PaymeService],
+  providers: [PaymentService, PaymeService, ClickService],
 })
 export class PaymentModule {}

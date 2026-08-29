@@ -60,6 +60,36 @@ export class PaymentsController {
     return response.status(200).json(result);
   }
 
+  @Public()
+  @Post('payments/click/prepare')
+  @ApiOperation({ summary: 'Click Merchant API Prepare callback' })
+  async clickPrepare(
+    @Body() body: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const result = await sendRpc(
+      this.payment,
+      { cmd: 'payment.click.prepare' },
+      { body },
+    );
+    return response.status(200).json(result);
+  }
+
+  @Public()
+  @Post('payments/click/complete')
+  @ApiOperation({ summary: 'Click Merchant API Complete callback' })
+  async clickComplete(
+    @Body() body: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const result = await sendRpc(
+      this.payment,
+      { cmd: 'payment.click.complete' },
+      { body },
+    );
+    return response.status(200).json(result);
+  }
+
   @Put('admin/payments/providers/:provider')
   @Roles(Role.SUPERADMIN)
   @ApiOperation({ summary: 'To‘lov provayderi konfiguratsiyasini saqlash' })
