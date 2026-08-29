@@ -112,6 +112,10 @@ services:
     <<: *app
     command: node dist/apps/checkout-service/apps/checkout-service/src/main.js
 
+  payment-service:
+    <<: *app
+    command: node dist/apps/payment-service/apps/payment-service/src/main.js
+
   file-service:
     <<: *app
     command: node dist/apps/file-service/apps/file-service/src/main.js
