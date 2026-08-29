@@ -34,6 +34,13 @@ interface ShopDetails {
   elchiMarketId: string | null;
 }
 
+interface ConfirmOptions {
+  customerId?: string;
+  prepaid: boolean;
+  paymentId?: string;
+  paidAmount?: number;
+}
+
 export interface ConfirmSalesOrderResult {
   id: string;
   status: 'CONFIRMED';
@@ -59,17 +66,50 @@ export class ConfirmSalesOrderService {
     orderId: string,
     customerId?: string,
   ): Promise<ConfirmSalesOrderResult> {
+    return this.confirmOrder(orderId, { customerId, prepaid: false });
+  }
+
+  async confirmPaid(
+    orderId: string,
+    paymentId: string,
+    paidAmount: number,
+  ): Promise<ConfirmSalesOrderResult> {
+    return this.confirmOrder(orderId, {
+      prepaid: true,
+      paymentId,
+      paidAmount,
+    });
+  }
+
+  private async confirmOrder(
+    orderId: string,
+    options: ConfirmOptions,
+  ): Promise<ConfirmSalesOrderResult> {
     const confirmed = await this.dataSource.transaction(async (manager) => {
       const [order] = (await manager.query(
         `SELECT * FROM checkout.sales_order WHERE id=$1 FOR UPDATE`,
         [orderId],
       )) as OrderRow[];
       if (!order) throw new NotFoundException('Buyurtma topilmadi');
-      if (customerId && String(order.customer_id) !== String(customerId)) {
+      if (
+        options.customerId &&
+        String(order.customer_id) !== String(options.customerId)
+      ) {
         throw new NotFoundException('Buyurtma topilmadi');
       }
-      if (order.payment_method !== 'cod') {
-        throw new BadRequestException('Bu amal faqat COD buyurtma uchun');
+      const expectedMethod = options.prepaid ? 'online' : 'cod';
+      if (order.payment_method !== expectedMethod) {
+        throw new BadRequestException(
+          options.prepaid
+            ? 'To‘lov faqat online buyurtmani tasdiqlashi mumkin'
+            : 'Bu amal faqat COD buyurtma uchun',
+        );
+      }
+      if (
+        options.prepaid &&
+        Number(order.total_amount) !== Number(options.paidAmount)
+      ) {
+        throw new BadRequestException('To‘lov summasi buyurtmaga mos emas');
       }
 
       const sellers = (await manager.query(
@@ -88,7 +128,8 @@ export class ConfirmSalesOrderService {
           order,
         };
       }
-      if (order.status !== 'DRAFT') {
+      const expectedStatus = options.prepaid ? 'PENDING_PAYMENT' : 'DRAFT';
+      if (order.status !== expectedStatus) {
         throw new BadRequestException(
           `Buyurtmani ${order.status} holatidan tasdiqlab bo‘lmaydi`,
         );
@@ -144,7 +185,7 @@ export class ConfirmSalesOrderService {
               name: item.product_name || `product-${item.product_id}`,
               quantity: item.quantity,
             })),
-            cod_amount: Number(seller.subtotal),
+            cod_amount: options.prepaid ? 0 : Number(seller.subtotal),
           },
         );
         await manager.query(
@@ -169,13 +210,14 @@ export class ConfirmSalesOrderService {
         {
           orderRef: orderId,
           idempotencyKey: `confirm:${orderId}`,
-          actorId: customerId,
+          actorId: options.customerId,
         },
       );
       await manager.query(
         `UPDATE checkout.sales_order
-         SET status='CONFIRMED', updated_at=now() WHERE id=$1`,
-        [orderId],
+         SET status='CONFIRMED', payment_id=COALESCE(payment_id,$2), updated_at=now()
+         WHERE id=$1`,
+        [orderId, options.paymentId ?? null],
       );
       return {
         result: {

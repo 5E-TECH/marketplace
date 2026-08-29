@@ -72,3 +72,11 @@ export class PaymentResultDto {
   @ApiProperty()
   createdAt: Date;
 }
+
+export interface PaymentPaidEvent {
+  paymentId: string;
+  salesOrderId: string;
+  provider: PaymentProvider;
+  amount: number;
+  paidAt: string;
+}

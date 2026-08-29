@@ -1,8 +1,9 @@
 import { Controller, UseFilters } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreateCheckoutDto,
   ElchiWebhookDto,
+  PaymentPaidEvent,
   RpcHttpExceptionFilter,
 } from '@app/common';
 import { CheckoutService } from './checkout.service';
@@ -33,6 +34,15 @@ export class CheckoutController {
   @MessagePattern({ cmd: 'checkout.confirm-cod' })
   confirmCod(@Payload() data: { orderId: string; customerId?: string }) {
     return this.confirmer.confirm(data.orderId, data.customerId);
+  }
+
+  @EventPattern('payment.paid')
+  paymentPaid(@Payload() event: PaymentPaidEvent) {
+    return this.confirmer.confirmPaid(
+      event.salesOrderId,
+      event.paymentId,
+      event.amount,
+    );
   }
 
   @MessagePattern({ cmd: 'checkout.elchi-webhook.process' })
