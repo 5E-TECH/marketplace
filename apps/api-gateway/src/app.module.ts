@@ -38,6 +38,7 @@ import { SupportController } from './support/support.controller';
 import { FavoritesController } from './favorites/favorites.controller';
 import { GuestController } from './guest/guest.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
+import { AdminFinanceController } from './admin/admin-finance.controller';
 
 @Module({
   imports: [
@@ -88,6 +89,12 @@ import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.PAYMENT),
       },
       {
+        name: RmqClient.FINANCE,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.FINANCE),
+      },
+      {
         name: RmqClient.NOTIFICATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
@@ -131,6 +138,7 @@ import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
     FavoritesController,
     GuestController,
     ElchiWebhookController,
+    AdminFinanceController,
   ],
   providers: [
     AppService,
