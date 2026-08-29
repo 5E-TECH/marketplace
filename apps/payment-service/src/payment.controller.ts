@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreatePaymentDto,
   PaymentProvider,
+  RefundPaymentDto,
   RpcHttpExceptionFilter,
   UpsertProviderConfigDto,
 } from '@app/common';
@@ -11,6 +12,7 @@ import { PaymeService } from './payme.service';
 import { PaymeRpcPayload } from './payme.types';
 import { ClickService } from './click.service';
 import { ClickRpcPayload } from './click.types';
+import { PaymentRefundService } from './payment-refund.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -19,7 +21,13 @@ export class PaymentController {
     private readonly service: PaymentService,
     private readonly payme: PaymeService,
     private readonly click: ClickService,
+    private readonly refunds: PaymentRefundService,
   ) {}
+
+  @MessagePattern({ cmd: 'payment.refund' })
+  refund(@Payload() dto: RefundPaymentDto) {
+    return this.refunds.refund(dto);
+  }
 
   @MessagePattern({ cmd: 'payment.create' })
   create(@Payload() dto: CreatePaymentDto) {

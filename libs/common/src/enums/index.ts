@@ -89,3 +89,18 @@ export enum CommissionType {
   PERCENT = 'PERCENT',
   FIXED = 'FIXED',
 }
+
+export enum FinanceLedgerEntryType {
+  SALE = 'SALE',
+  COMMISSION = 'COMMISSION',
+  PAYOUT = 'PAYOUT',
+  REFUND = 'REFUND',
+  ADJUST = 'ADJUST',
+}
+
+export enum FinancePayoutStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  HELD = 'HELD',
+  PAID = 'PAID',
+}

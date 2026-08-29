@@ -116,6 +116,10 @@ services:
     <<: *app
     command: node dist/apps/payment-service/apps/payment-service/src/main.js
 
+  finance-service:
+    <<: *app
+    command: node dist/apps/finance-service/apps/finance-service/src/main.js
+
   file-service:
     <<: *app
     command: node dist/apps/file-service/apps/file-service/src/main.js

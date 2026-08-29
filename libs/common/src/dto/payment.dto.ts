@@ -80,3 +80,20 @@ export interface PaymentPaidEvent {
   amount: number;
   paidAt: string;
 }
+
+export interface RefundPaymentDto {
+  paymentId?: string;
+  salesOrderId: string;
+  sellerOrderId: string;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface RefundPaymentResult {
+  paymentId: string;
+  salesOrderId: string;
+  provider: PaymentProvider;
+  status: PaymentStatus.REFUNDED;
+  providerTransactionId: string | null;
+  idempotent: boolean;
+}

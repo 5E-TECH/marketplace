@@ -20,6 +20,7 @@ import { PaymentService } from './payment.service';
 import { PaymeService } from './payme.service';
 import { ClickService } from './click.service';
 import { PaymentEventsService } from './payment-events.service';
+import { PaymentRefundService } from './payment-refund.service';
 
 const entities = [Payment, PaymentTransaction, ProviderConfig];
 
@@ -52,6 +53,12 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
     TypeOrmModule.forFeature(entities),
   ],
   controllers: [PaymentController],
-  providers: [PaymentService, PaymeService, ClickService, PaymentEventsService],
+  providers: [
+    PaymentService,
+    PaymeService,
+    ClickService,
+    PaymentEventsService,
+    PaymentRefundService,
+  ],
 })
 export class PaymentModule {}
