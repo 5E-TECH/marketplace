@@ -60,6 +60,12 @@ import { ElchiWebhookService } from './elchi-webhook.service';
           ),
       },
       {
+        name: RmqClient.PAYMENT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.PAYMENT),
+      },
+      {
         name: RmqClient.FINANCE,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>

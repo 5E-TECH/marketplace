@@ -4,7 +4,7 @@ import { ElchiWebhookService } from './elchi-webhook.service';
 
 describe('ElchiWebhookService (C2.4)', () => {
   const event = (
-    status: 'on_the_road' | 'returned' | 'sold' = 'on_the_road',
+    status: 'on_the_road' | 'returned' | 'sold' | 'cancelled' = 'on_the_road',
   ) => ({
     eventId: `evt_${status}`,
     type: 'shipment.status_changed',
@@ -34,6 +34,7 @@ describe('ElchiWebhookService (C2.4)', () => {
               sales_order_id: '10',
               shop_id: '7',
               subtotal: '499000',
+              payment_id: '91',
               elchi_shipment_id: '77012',
               payment_method:
                 options.paymentMethod ?? CheckoutPaymentMethod.COD,
@@ -50,14 +51,17 @@ describe('ElchiWebhookService (C2.4)', () => {
       transaction: jest.fn(async (run) => run(manager)),
     };
     const inventory = { send: jest.fn(() => of({ operation: 'INBOUND' })) };
+    const payment = { send: jest.fn(() => of({ status: 'REFUNDED' })) };
     const finance = { emit: jest.fn(() => of(undefined)) };
     return {
       service: new ElchiWebhookService(
         dataSource as never,
         inventory as never,
+        payment as never,
         finance as never,
       ),
       inventory,
+      payment,
       finance,
       queries,
     };
@@ -86,18 +90,60 @@ describe('ElchiWebhookService (C2.4)', () => {
   });
 
   it('TC4: bir event ikkinchi marta kelganda side effect qilmaydi', async () => {
-    const { service, inventory, finance, queries } = setup({ duplicate: true });
+    const { service, inventory, payment, finance, queries } = setup({
+      duplicate: true,
+    });
     await expect(service.process(event())).resolves.toEqual({
       received: true,
       duplicate: true,
     });
     expect(inventory.send).not.toHaveBeenCalled();
+    expect(payment.send).not.toHaveBeenCalled();
     expect(finance.emit).not.toHaveBeenCalled();
     expect(
       queries.some((entry) =>
         entry.sql.includes('UPDATE checkout.sales_order_seller'),
       ),
     ).toBe(false);
+  });
+
+  it('C3.6 TC1-TC3: online returned payment, inventory va ledger refund qiladi', async () => {
+    const { service, inventory, payment, finance } = setup({
+      paymentMethod: CheckoutPaymentMethod.ONLINE,
+    });
+    await service.process(event('returned'));
+
+    expect(inventory.send).toHaveBeenCalledWith(
+      { cmd: 'inventory.return-order-items' },
+      expect.objectContaining({ idempotencyKey: 'elchi-return:evt_returned' }),
+    );
+    expect(payment.send).toHaveBeenCalledWith(
+      { cmd: 'payment.refund' },
+      expect.objectContaining({
+        paymentId: '91',
+        salesOrderId: '10',
+        sellerOrderId: '55',
+        idempotencyKey: 'elchi-refund:evt_returned',
+      }),
+    );
+    expect(finance.emit).toHaveBeenCalledWith(
+      'finance.refund.requested',
+      expect.objectContaining({ sellerOrderId: '55', shopId: '7' }),
+    );
+  });
+
+  it('C3.6: online cancelled paymentni refund qiladi, inbound qilmaydi', async () => {
+    const { service, inventory, payment, finance } = setup({
+      paymentMethod: CheckoutPaymentMethod.ONLINE,
+    });
+    await service.process(event('cancelled'));
+
+    expect(payment.send).toHaveBeenCalledWith(
+      { cmd: 'payment.refund' },
+      expect.objectContaining({ idempotencyKey: 'elchi-refund:evt_cancelled' }),
+    );
+    expect(inventory.send).not.toHaveBeenCalled();
+    expect(finance.emit).not.toHaveBeenCalled();
   });
 
   it('delivered online order uchun payout event chiqaradi', async () => {

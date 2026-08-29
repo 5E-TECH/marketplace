@@ -11,6 +11,7 @@ import {
   ElchiWebhookDto,
   CheckoutPaymentMethod,
   ReturnOrderItemsDto,
+  RefundPaymentDto,
   RmqClient,
   SalesOrderSellerStatus,
   sendRpc,
@@ -22,6 +23,7 @@ interface SellerOrderWebhookRow {
   shop_id: string;
   subtotal: string;
   payment_method: CheckoutPaymentMethod;
+  payment_id: string | null;
   elchi_shipment_id: string | null;
 }
 
@@ -40,6 +42,7 @@ export class ElchiWebhookService {
   constructor(
     private readonly dataSource: DataSource,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    @Inject(RmqClient.PAYMENT) private readonly payment: ClientProxy,
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
   ) {}
 
@@ -63,6 +66,14 @@ export class ElchiWebhookService {
 
       if (status === SalesOrderSellerStatus.RETURNED) {
         await this.restoreInventory(manager, sellerOrder, event);
+        if (sellerOrder.payment_method !== CheckoutPaymentMethod.COD) {
+          await this.refundOnlinePayment(sellerOrder, event, true);
+        }
+      } else if (
+        status === SalesOrderSellerStatus.CANCELLED &&
+        sellerOrder.payment_method !== CheckoutPaymentMethod.COD
+      ) {
+        await this.refundOnlinePayment(sellerOrder, event, false);
       }
 
       await manager.query(
@@ -118,7 +129,7 @@ export class ElchiWebhookService {
   ): Promise<SellerOrderWebhookRow> {
     const [row] = (await manager.query(
       `SELECT s.id::text,s.sales_order_id::text,s.shop_id::text,s.subtotal::text,
-              s.elchi_shipment_id::text,o.payment_method
+              s.elchi_shipment_id::text,o.payment_method,o.payment_id::text
          FROM checkout.sales_order_seller s
          JOIN checkout.sales_order o ON o.id=s.sales_order_id
         WHERE s.id=$1
@@ -150,5 +161,29 @@ export class ElchiWebhookService {
       reason: `Elchi returned: ${event.eventId}`,
       idempotencyKey: `elchi-return:${event.eventId}`,
     } satisfies ReturnOrderItemsDto);
+  }
+
+  private async refundOnlinePayment(
+    sellerOrder: SellerOrderWebhookRow,
+    event: ElchiWebhookDto,
+    reverseLedger: boolean,
+  ): Promise<void> {
+    await sendRpc(this.payment, { cmd: 'payment.refund' }, {
+      paymentId: sellerOrder.payment_id ?? undefined,
+      salesOrderId: sellerOrder.sales_order_id,
+      sellerOrderId: sellerOrder.id,
+      reason: `Elchi returned: ${event.eventId}`,
+      idempotencyKey: `elchi-refund:${event.eventId}`,
+    } satisfies RefundPaymentDto);
+    if (reverseLedger) {
+      await firstValueFrom(
+        this.finance.emit('finance.refund.requested', {
+          eventId: event.eventId,
+          sellerOrderId: sellerOrder.id,
+          shopId: sellerOrder.shop_id,
+          occurredAt: event.occurredAt,
+        }),
+      );
+    }
   }
 }

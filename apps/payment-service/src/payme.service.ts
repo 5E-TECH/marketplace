@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PaymentProvider, PaymentStatus } from '@app/common';
 import { timingSafeEqual } from 'crypto';
@@ -60,6 +64,29 @@ export class PaymeService {
     private readonly paymentService: PaymentService,
     private readonly events: PaymentEventsService,
   ) {}
+
+  async cancelPaidPayment(
+    payment: Payment,
+    reason = 5,
+  ): Promise<PaymentTransaction> {
+    const transaction = await this.transactions.findOne({
+      where: { paymentId: payment.id },
+      order: { createdAt: 'DESC' },
+    });
+    if (!transaction)
+      throw new NotFoundException('Payme tranzaksiyasi topilmadi');
+    if (transaction.state === -2) return transaction;
+    if (transaction.state !== 2)
+      throw new BadRequestException(
+        'Faqat bajarilgan Payme tranzaksiyasini refund qilish mumkin',
+      );
+
+    transaction.state = -2;
+    transaction.cancelTime = String(Date.now());
+    transaction.reason = reason;
+    transaction.action = 'CancelTransaction';
+    return this.transactions.save(transaction);
+  }
 
   async callback(payload: PaymeRpcPayload): Promise<PaymeResponse> {
     const request = payload?.body ?? {};
