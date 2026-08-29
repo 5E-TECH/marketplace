@@ -49,15 +49,18 @@ describe('ClickService (C3.3)', () => {
         secret,
       }),
     };
+    const events = { paid: jest.fn().mockResolvedValue(undefined) };
     return {
       service: new ClickService(
         payments as never,
         transactions as never,
         paymentService as never,
+        events as never,
       ),
       payment,
       payments,
       transactionRows,
+      events,
     };
   }
 
@@ -93,7 +96,7 @@ describe('ClickService (C3.3)', () => {
   }
 
   it('TC1: Prepare → Complete paymentni PAID qiladi', async () => {
-    const { service, payment } = setup();
+    const { service, payment, events } = setup();
 
     await expect(service.prepare(signed(0))).resolves.toMatchObject({
       merchant_prepare_id: '77',
@@ -105,14 +108,16 @@ describe('ClickService (C3.3)', () => {
     });
     expect(payment.status).toBe(PaymentStatus.PAID);
     expect(payment.paidAt).toBeInstanceOf(Date);
+    expect(events.paid).toHaveBeenCalledWith(payment);
   });
 
   it('TC2: noto‘g‘ri sign_string -1 bilan rad etiladi', async () => {
-    const { service } = setup();
+    const { service, events } = setup();
 
     await expect(
       service.prepare({ ...signed(0), sign_string: 'invalid' }),
     ).resolves.toMatchObject({ error: -1, error_note: 'SIGN CHECK FAILED!' });
+    expect(events.paid).not.toHaveBeenCalled();
   });
 
   it('TC3: Complete summasi mos kelmasa -2 bilan rad etiladi', async () => {
@@ -126,7 +131,7 @@ describe('ClickService (C3.3)', () => {
   });
 
   it('Prepare va Complete takroriy chaqirilsa idempotent', async () => {
-    const { service, payments } = setup();
+    const { service, payments, events } = setup();
     await service.prepare(signed(0));
     await expect(service.prepare(signed(0))).resolves.toMatchObject({
       merchant_prepare_id: '77',
@@ -139,10 +144,11 @@ describe('ClickService (C3.3)', () => {
       error: 0,
     });
     expect(payments.save).toHaveBeenCalledTimes(savesAfterComplete);
+    expect(events.paid).toHaveBeenCalledTimes(2);
   });
 
   it('Click yuborgan xato Complete transactionni bekor qiladi', async () => {
-    const { service, payment, transactionRows } = setup();
+    const { service, payment, transactionRows, events } = setup();
     await service.prepare(signed(0));
 
     await expect(
@@ -150,5 +156,6 @@ describe('ClickService (C3.3)', () => {
     ).resolves.toMatchObject({ error: -9 });
     expect(payment.status).toBe(PaymentStatus.CANCELLED);
     expect(transactionRows[0].state).toBe(-1);
+    expect(events.paid).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,7 @@ import {
   PaymeResponse,
   PaymeRpcPayload,
 } from './payme.types';
+import { PaymentEventsService } from './payment-events.service';
 
 const errors = {
   auth: [
@@ -57,6 +58,7 @@ export class PaymeService {
     @InjectRepository(PaymentTransaction)
     private readonly transactions: Repository<PaymentTransaction>,
     private readonly paymentService: PaymentService,
+    private readonly events: PaymentEventsService,
   ) {}
 
   async callback(payload: PaymeRpcPayload): Promise<PaymeResponse> {
@@ -139,8 +141,15 @@ export class PaymeService {
   ): Promise<PaymeResponse> {
     const transaction = await this.findTransaction(request);
     if (!transaction) return this.fail(request, errors.transaction, 'id');
-    if (transaction.state === 2)
+    if (transaction.state === 2) {
+      const paidPayment = await this.payments.findOne({
+        where: { id: transaction.paymentId },
+      });
+      if (paidPayment?.status === PaymentStatus.PAID) {
+        await this.events.paid(paidPayment);
+      }
       return this.ok(request, this.transactionResult(transaction));
+    }
     if (transaction.state !== 1)
       return this.fail(request, errors.perform, 'id');
 
@@ -156,6 +165,7 @@ export class PaymeService {
     payment.status = PaymentStatus.PAID;
     payment.paidAt = new Date(now);
     await this.payments.save(payment);
+    await this.events.paid(payment);
     return this.ok(request, this.transactionResult(transaction));
   }
 

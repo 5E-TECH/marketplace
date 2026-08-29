@@ -7,6 +7,7 @@ import { ClickRequest, ClickResponse } from './click.types';
 import { Payment } from './entities/payment.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import { PaymentService } from './payment.service';
+import { PaymentEventsService } from './payment-events.service';
 
 const clickErrors = {
   success: [0, 'Success'],
@@ -28,6 +29,7 @@ export class ClickService {
     @InjectRepository(PaymentTransaction)
     private readonly transactions: Repository<PaymentTransaction>,
     private readonly paymentService: PaymentService,
+    private readonly events: PaymentEventsService,
   ) {}
 
   async prepare(request: ClickRequest): Promise<ClickResponse> {
@@ -109,8 +111,10 @@ export class ClickService {
     )
       return this.fail(request, clickErrors.amount);
 
-    if (transaction.state === 2 && payment.status === PaymentStatus.PAID)
+    if (transaction.state === 2 && payment.status === PaymentStatus.PAID) {
+      await this.events.paid(payment);
       return this.success(request, { merchant_confirm_id: transaction.id });
+    }
     if (Number(request.error) < 0) {
       transaction.state = -1;
       transaction.action = 'CompleteCancelled';
@@ -134,6 +138,7 @@ export class ClickService {
     payment.status = PaymentStatus.PAID;
     payment.paidAt = new Date(now);
     await this.payments.save(payment);
+    await this.events.paid(payment);
     return this.success(request, { merchant_confirm_id: transaction.id });
   }
 

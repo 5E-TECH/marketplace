@@ -48,16 +48,19 @@ describe('PaymeService (C3.2)', () => {
     const paymentService = {
       getProviderSecret: jest.fn().mockResolvedValue('sandbox-key'),
     };
+    const events = { paid: jest.fn().mockResolvedValue(undefined) };
     return {
       service: new PaymeService(
         payments as never,
         transactions as never,
         paymentService as never,
+        events as never,
       ),
       payment,
       payments,
       transactions,
       transactionRows,
+      events,
     };
   }
 
@@ -69,7 +72,7 @@ describe('PaymeService (C3.2)', () => {
   ) => service.callback({ authorization, body: { id: 1, method, params } });
 
   it('TC1: CheckPerform → Create → Perform paymentni PAID qiladi', async () => {
-    const { service, payment } = setup();
+    const { service, payment, events } = setup();
     const base = { amount: 12500000, account: { order_id: '10' } };
     await expect(
       call(service, 'CheckPerformTransaction', base),
@@ -88,16 +91,18 @@ describe('PaymeService (C3.2)', () => {
     ).resolves.toMatchObject({ result: { state: 2 } });
     expect(payment.status).toBe(PaymentStatus.PAID);
     expect(payment.paidAt).toBeInstanceOf(Date);
+    expect(events.paid).toHaveBeenCalledWith(payment);
   });
 
   it('TC2: noto‘g‘ri summa -31001 qaytaradi', async () => {
-    const { service } = setup();
+    const { service, events } = setup();
     await expect(
       call(service, 'CheckPerformTransaction', {
         amount: 1,
         account: { order_id: '10' },
       }),
     ).resolves.toMatchObject({ error: { code: -31001, data: 'amount' } });
+    expect(events.paid).not.toHaveBeenCalled();
   });
 
   it('TC3: noto‘g‘ri Basic authni rad etadi', async () => {
@@ -108,7 +113,7 @@ describe('PaymeService (C3.2)', () => {
   });
 
   it('TC4: bajarilgan transaction cancel qilinsa state -2 va payment CANCELLED', async () => {
-    const { service, payment } = setup();
+    const { service, payment, events } = setup();
     const base = { amount: 12500000, account: { order_id: '10' } };
     await call(service, 'CreateTransaction', { ...base, id: 'payme-1' });
     await call(service, 'PerformTransaction', { id: 'payme-1' });
@@ -116,10 +121,11 @@ describe('PaymeService (C3.2)', () => {
       call(service, 'CancelTransaction', { id: 'payme-1', reason: 5 }),
     ).resolves.toMatchObject({ result: { state: -2, reason: 5 } });
     expect(payment.status).toBe(PaymentStatus.CANCELLED);
+    expect(events.paid).toHaveBeenCalledTimes(1);
   });
 
   it('TC5: Perform ikki marta chaqirilsa idempotent', async () => {
-    const { service, payments } = setup();
+    const { service, payments, events } = setup();
     const base = { amount: 12500000, account: { order_id: '10' } };
     await call(service, 'CreateTransaction', { ...base, id: 'payme-1' });
     await call(service, 'PerformTransaction', { id: 'payme-1' });
@@ -128,6 +134,7 @@ describe('PaymeService (C3.2)', () => {
       call(service, 'PerformTransaction', { id: 'payme-1' }),
     ).resolves.toMatchObject({ result: { state: 2 } });
     expect(payments.save).toHaveBeenCalledTimes(savesAfterFirstPerform);
+    expect(events.paid).toHaveBeenCalledTimes(2);
   });
 
   it('CheckTransaction mavjud transaction holatini qaytaradi', async () => {
