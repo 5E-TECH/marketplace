@@ -9,6 +9,7 @@ import {
 import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { ElchiWebhookService } from './elchi-webhook.service';
+import { ReviewEligibilityService } from './review-eligibility.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -17,7 +18,24 @@ export class CheckoutController {
     private readonly service: CheckoutService,
     private readonly confirmer: ConfirmSalesOrderService,
     private readonly elchiWebhook: ElchiWebhookService,
+    private readonly reviewEligibility: ReviewEligibilityService,
   ) {}
+
+  @MessagePattern({ cmd: 'checkout.review.verify' })
+  verifyReview(
+    @Payload()
+    data: {
+      customerId: string;
+      orderItemId: string;
+      productId: string;
+    },
+  ) {
+    return this.reviewEligibility.verify(
+      data.customerId,
+      data.orderItemId,
+      data.productId,
+    );
+  }
 
   @MessagePattern({ cmd: 'checkout.create' })
   create(

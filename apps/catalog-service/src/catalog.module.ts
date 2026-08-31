@@ -33,13 +33,23 @@ import { FavoriteController } from './favorite.controller';
 import { FavoriteService } from './favorite.service';
 import { CreateFavorites1723300000000 } from './migrations/1723300000000-create-favorites';
 import { AddGuestFavorites1724500800000 } from './migrations/1724500800000-add-guest-favorites';
+import { Review } from './entities/review.entity';
+import { CreateReviews1724846400000 } from './migrations/1724846400000-create-reviews';
+import { ReviewController } from './review.controller';
+import { ReviewService } from './review.service';
 
-const entities = [Shop, Category, Product, ProductVariant, Favorite];
+const entities = [Shop, Category, Product, ProductVariant, Favorite, Review];
 
 @Module({
   imports: [
     CommonConfigModule,
     ClientsModule.registerAsync([
+      {
+        name: RmqClient.CHECKOUT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
+      },
       {
         name: RmqClient.SEARCH,
         inject: [ConfigService],
@@ -77,6 +87,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite];
             DefaultProductActive1724414400000,
             CreateFavorites1723300000000,
             AddGuestFavorites1724500800000,
+            CreateReviews1724846400000,
           ],
           migrationsRun: true,
         };
@@ -92,6 +103,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite];
     ProductVariantController,
     StorefrontController,
     FavoriteController,
+    ReviewController,
   ],
   providers: [
     SellerShopService,
@@ -101,6 +113,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite];
     ProductVariantService,
     StorefrontService,
     FavoriteService,
+    ReviewService,
   ],
 })
 export class CatalogModule {}

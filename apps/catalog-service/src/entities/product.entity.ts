@@ -77,6 +77,15 @@ export class Product extends BaseEntity {
   @Column({ type: 'varchar', length: 20, default: ProductStatus.ACTIVE })
   status: ProductStatus;
 
+  @Column({
+    type: 'numeric',
+    precision: 3,
+    scale: 2,
+    default: 0,
+    transformer: numericTransformer,
+  })
+  rating: number;
+
   @OneToMany(() => ProductVariant, (variant) => variant.product)
   variants: ProductVariant[];
 }
