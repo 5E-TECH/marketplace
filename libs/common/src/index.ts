@@ -35,6 +35,7 @@ export * from './dto/admin-order.dto';
 export * from './dto/operator.dto';
 export * from './dto/payment.dto';
 export * from './dto/finance.dto';
+export * from './dto/review.dto';
 export * from './dto/support.dto';
 export * from './dto/favorite.dto';
 export * from './dto/elchi-webhook.dto';

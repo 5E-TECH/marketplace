@@ -128,6 +128,7 @@ export class ProductDto {
   attributes: Record<string, unknown>;
   @ApiProperty({ example: false }) hasVariants: boolean;
   @ApiProperty({ enum: ProductStatus }) status: ProductStatus;
+  @ApiProperty({ example: 4.75 }) rating: number;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) createdAt: Date;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) updatedAt: Date;
 }

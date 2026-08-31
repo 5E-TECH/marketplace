@@ -24,6 +24,7 @@ import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-create-order-history';
 import { CreateElchiWebhookEvent1724587200000 } from './migrations/1724587200000-create-elchi-webhook-event';
 import { ElchiWebhookService } from './elchi-webhook.service';
+import { ReviewEligibilityService } from './review-eligibility.service';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { ElchiWebhookService } from './elchi-webhook.service';
     CheckoutService,
     ConfirmSalesOrderService,
     ElchiWebhookService,
+    ReviewEligibilityService,
   ],
 })
 export class CheckoutModule {}

@@ -39,6 +39,7 @@ import { FavoritesController } from './favorites/favorites.controller';
 import { GuestController } from './guest/guest.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
+import { ReviewsController } from './storefront/reviews.controller';
 
 @Module({
   imports: [
@@ -139,6 +140,7 @@ import { AdminFinanceController } from './admin/admin-finance.controller';
     GuestController,
     ElchiWebhookController,
     AdminFinanceController,
+    ReviewsController,
   ],
   providers: [
     AppService,
