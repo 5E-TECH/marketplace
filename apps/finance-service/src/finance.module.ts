@@ -5,11 +5,13 @@ import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
 import { Commission } from './entities/commission.entity';
 import { Payout } from './entities/payout.entity';
 import { SellerLedger } from './entities/seller-ledger.entity';
+import { CodReconciliation } from './entities/cod-reconciliation.entity';
+import { CreateCodReconciliation1724932800000 } from './migrations/1724932800000-create-cod-reconciliation';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
 import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
 
-const entities = [SellerLedger, Payout, Commission];
+const entities = [SellerLedger, Payout, Commission, CodReconciliation];
 
 @Module({
   imports: [
@@ -21,7 +23,10 @@ const entities = [SellerLedger, Payout, Commission];
         return {
           ...typeOrmOptions(config, 'finance', entities),
           synchronize: false,
-          migrations: [CreateFinanceTables1724673600000],
+          migrations: [
+            CreateFinanceTables1724673600000,
+            CreateCodReconciliation1724932800000,
+          ],
           migrationsRun: true,
         };
       },

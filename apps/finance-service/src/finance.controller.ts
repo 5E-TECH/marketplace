@@ -2,10 +2,12 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreateCommissionDto,
+  FinanceCodSettledEvent,
   FinancePageQueryDto,
   FinancePayoutQueryDto,
   FinancePayoutRequestedEvent,
   FinanceRefundRequestedEvent,
+  FinanceReconciliationQueryDto,
   RpcHttpExceptionFilter,
   UpdateCommissionDto,
 } from '@app/common';
@@ -24,6 +26,18 @@ export class FinanceController {
   @EventPattern('finance.refund.requested')
   refundRequested(@Payload() event: FinanceRefundRequestedEvent) {
     return this.finance.refund(event);
+  }
+
+  @EventPattern('finance.cod.settled')
+  codSettled(@Payload() event: FinanceCodSettledEvent) {
+    return this.finance.processCodSettled(event);
+  }
+
+  @MessagePattern({ cmd: 'finance.reconciliation.report' })
+  reconciliationReport(
+    @Payload() data: { query: FinanceReconciliationQueryDto },
+  ) {
+    return this.finance.reconciliationReport(data.query);
   }
 
   @MessagePattern({ cmd: 'finance.ledger.list' })

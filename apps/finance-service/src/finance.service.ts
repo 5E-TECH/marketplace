@@ -9,11 +9,13 @@ import {
   CommissionType,
   CreateCommissionDto,
   FinanceLedgerEntryType,
+  FinanceCodSettledEvent,
   FinancePageQueryDto,
   FinancePayoutQueryDto,
   FinancePayoutRequestedEvent,
   FinancePayoutStatus,
   FinanceRefundRequestedEvent,
+  FinanceReconciliationQueryDto,
   UpdateCommissionDto,
 } from '@app/common';
 
@@ -78,6 +80,7 @@ export class FinanceService {
       const commission = await this.commissionFor(manager, event.shopId);
       const commissionAmount = this.commissionAmount(saleAmount, commission);
       let balance = await this.balance(manager, event.shopId);
+      const codDebt = Math.max(0, -balance);
       balance = this.money(balance + saleAmount);
       await this.insertLedger(manager, {
         shopId: event.shopId,
@@ -97,6 +100,12 @@ export class FinanceService {
         referenceId: event.sellerOrderId,
       });
 
+      const onlineNet = this.money(saleAmount - commissionAmount);
+      const netted = this.money(Math.min(codDebt, onlineNet));
+      if (netted > 0) {
+        await this.allocateCodNetting(manager, event.shopId, netted);
+      }
+
       const [payout] = (await manager.query(
         `INSERT INTO finance.payout
           (shop_id,amount,status,method,reference_id)
@@ -107,7 +116,7 @@ export class FinanceService {
                    "updated_at" AS "updatedAt"`,
         [
           event.shopId,
-          this.money(saleAmount - commissionAmount),
+          this.money(onlineNet - netted),
           FinancePayoutStatus.PENDING,
           null,
           event.sellerOrderId,
@@ -115,6 +124,119 @@ export class FinanceService {
       )) as PayoutRow[];
       return { payout, balance, idempotent: false };
     });
+  }
+
+  processCodSettled(event: FinanceCodSettledEvent): Promise<{
+    balance: number;
+    commission: number;
+    difference: number;
+    idempotent: boolean;
+  }> {
+    if (
+      !event?.sellerOrderId ||
+      !event?.shopId ||
+      Number(event.expectedAmount) <= 0 ||
+      Number(event.collectedAmount) < 0
+    ) {
+      throw new BadRequestException('COD settlement eventi noto‘g‘ri');
+    }
+    return this.dataSource.transaction(async (manager) => {
+      await this.lockShop(manager, event.shopId);
+      const [existing] = await manager.query(
+        `SELECT commission_amount::float8 AS commission,
+                (collected_cod_amount-expected_cod_amount)::float8 AS difference
+           FROM finance.cod_reconciliation WHERE seller_order_id=$1`,
+        [event.sellerOrderId],
+      );
+      if (existing) {
+        return {
+          balance: await this.balance(manager, event.shopId),
+          commission: Number(existing.commission),
+          difference: Number(existing.difference),
+          idempotent: true,
+        };
+      }
+
+      const expected = this.money(event.expectedAmount);
+      const collected = this.money(event.collectedAmount);
+      const commissionRule = await this.commissionFor(manager, event.shopId);
+      const commission = this.commissionAmount(expected, commissionRule);
+      let balance = await this.balance(manager, event.shopId);
+      balance = this.money(balance + expected);
+      await this.insertLedger(manager, {
+        shopId: event.shopId,
+        entryType: FinanceLedgerEntryType.COD_SALE,
+        amount: expected,
+        balance,
+        referenceType: 'cod_seller_order',
+        referenceId: event.sellerOrderId,
+      });
+      balance = this.money(balance - expected);
+      await this.insertLedger(manager, {
+        shopId: event.shopId,
+        entryType: FinanceLedgerEntryType.COD_SETTLEMENT,
+        amount: -expected,
+        balance,
+        referenceType: 'cod_seller_order',
+        referenceId: event.sellerOrderId,
+      });
+      balance = this.money(balance - commission);
+      await this.insertLedger(manager, {
+        shopId: event.shopId,
+        entryType: FinanceLedgerEntryType.COMMISSION,
+        amount: -commission,
+        balance,
+        referenceType: 'cod_seller_order',
+        referenceId: event.sellerOrderId,
+      });
+      await manager.query(
+        `INSERT INTO finance.cod_reconciliation
+          (event_id,seller_order_id,sales_order_id,shop_id,expected_cod_amount,
+           collected_cod_amount,commission_amount,settled_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          event.eventId,
+          event.sellerOrderId,
+          event.salesOrderId,
+          event.shopId,
+          expected,
+          collected,
+          commission,
+          event.occurredAt,
+        ],
+      );
+      return {
+        balance,
+        commission,
+        difference: this.money(collected - expected),
+        idempotent: false,
+      };
+    });
+  }
+
+  async reconciliationReport(query: FinanceReconciliationQueryDto) {
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+    if (query.shopId) conditions.push(`shop_id=$${params.push(query.shopId)}`);
+    if (query.dateFrom)
+      conditions.push(`settled_at >= $${params.push(query.dateFrom)}`);
+    if (query.dateTo)
+      conditions.push(
+        `settled_at < ($${params.push(query.dateTo)}::date + INTERVAL '1 day')`,
+      );
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [summary] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS "settlementsCount",
+              COALESCE(SUM(expected_cod_amount),0)::float8 AS "expectedCodAmount",
+              COALESCE(SUM(collected_cod_amount),0)::float8 AS "collectedCodAmount",
+              COALESCE(SUM(collected_cod_amount-expected_cod_amount),0)::float8 AS difference,
+              COALESCE(SUM(commission_amount),0)::float8 AS "expectedCommission",
+              COALESCE(SUM(netted_amount),0)::float8 AS "nettedCommission",
+              COALESCE(SUM(commission_amount-netted_amount),0)::float8 AS "outstandingCommission"
+         FROM finance.cod_reconciliation ${where}`,
+      params,
+    );
+    return summary;
   }
 
   refund(
@@ -475,6 +597,30 @@ export class FinanceService {
       [id],
     )) as PayoutRow[];
     return row ?? null;
+  }
+
+  private async allocateCodNetting(
+    manager: EntityManager,
+    shopId: string,
+    amount: number,
+  ): Promise<void> {
+    await manager.query(
+      `WITH debts AS (
+         SELECT id,commission_amount-netted_amount AS outstanding,
+                COALESCE(SUM(commission_amount-netted_amount) OVER (
+                  ORDER BY settled_at,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),0) AS debt_before
+           FROM finance.cod_reconciliation
+          WHERE shop_id=$1 AND netted_amount<commission_amount
+       ), allocation AS (
+         SELECT id,LEAST(outstanding,GREATEST(0,$2-debt_before)) AS amount
+           FROM debts WHERE debt_before<$2
+       )
+       UPDATE finance.cod_reconciliation r
+          SET netted_amount=r.netted_amount+a.amount,updated_at=now()
+         FROM allocation a WHERE r.id=a.id AND a.amount>0`,
+      [shopId, amount],
+    );
   }
 
   private page(items: unknown[], total: number, page: number, limit: number) {

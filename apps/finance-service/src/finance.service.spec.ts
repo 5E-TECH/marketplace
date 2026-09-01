@@ -9,11 +9,27 @@ describe('FinanceService (C3.5)', () => {
   function setup(commission = { type: CommissionType.PERCENT, value: 10 }) {
     const ledgers: any[] = [];
     const payouts: any[] = [];
+    const reconciliations: any[] = [];
     let nextLedgerId = 1;
     let nextPayoutId = 1;
 
     const query = jest.fn(async (sql: string, params: any[] = []) => {
       if (sql.includes('pg_advisory_xact_lock')) return [];
+      if (
+        sql.includes('FROM finance.cod_reconciliation WHERE seller_order_id')
+      ) {
+        const row = reconciliations.find(
+          (item) => item.sellerOrderId === params[0],
+        );
+        return row
+          ? [
+              {
+                commission: row.commissionAmount,
+                difference: row.collectedAmount - row.expectedAmount,
+              },
+            ]
+          : [];
+      }
       if (
         sql.includes('FROM finance.payout WHERE reference_id=$1 FOR UPDATE')
       ) {
@@ -59,6 +75,63 @@ describe('FinanceService (C3.5)', () => {
         };
         payouts.push(row);
         return [row];
+      }
+      if (sql.includes('INSERT INTO finance.cod_reconciliation')) {
+        reconciliations.push({
+          eventId: params[0],
+          sellerOrderId: params[1],
+          salesOrderId: params[2],
+          shopId: params[3],
+          expectedAmount: Number(params[4]),
+          collectedAmount: Number(params[5]),
+          commissionAmount: Number(params[6]),
+          nettedAmount: 0,
+        });
+        return [];
+      }
+      if (sql.includes('WITH debts AS')) {
+        let remaining = Number(params[1]);
+        for (const row of reconciliations.filter(
+          (item) => item.shopId === params[0],
+        )) {
+          const outstanding = row.commissionAmount - row.nettedAmount;
+          const allocated = Math.min(outstanding, remaining);
+          row.nettedAmount += allocated;
+          remaining -= allocated;
+          if (remaining <= 0) break;
+        }
+        return [];
+      }
+      if (sql.includes('AS "settlementsCount"')) {
+        return [
+          {
+            settlementsCount: reconciliations.length,
+            expectedCodAmount: reconciliations.reduce(
+              (sum, row) => sum + row.expectedAmount,
+              0,
+            ),
+            collectedCodAmount: reconciliations.reduce(
+              (sum, row) => sum + row.collectedAmount,
+              0,
+            ),
+            difference: reconciliations.reduce(
+              (sum, row) => sum + row.collectedAmount - row.expectedAmount,
+              0,
+            ),
+            expectedCommission: reconciliations.reduce(
+              (sum, row) => sum + row.commissionAmount,
+              0,
+            ),
+            nettedCommission: reconciliations.reduce(
+              (sum, row) => sum + row.nettedAmount,
+              0,
+            ),
+            outstandingCommission: reconciliations.reduce(
+              (sum, row) => sum + row.commissionAmount - row.nettedAmount,
+              0,
+            ),
+          },
+        ];
       }
       if (
         sql.includes('FROM finance.seller_ledger') &&
@@ -119,6 +192,7 @@ describe('FinanceService (C3.5)', () => {
       service: new FinanceService(dataSource as never),
       ledgers,
       payouts,
+      reconciliations,
       query,
     };
   }
@@ -204,5 +278,67 @@ describe('FinanceService (C3.5)', () => {
       balanceAfter: 0,
     });
     expect(payouts[0].status).toBe(FinancePayoutStatus.HELD);
+  });
+
+  it('C4.3 TC1: COD settled sale, settlement va commission ledger yozadi', async () => {
+    const { service, ledgers } = setup();
+    await expect(
+      service.processCodSettled({
+        eventId: 'settled-1',
+        sellerOrderId: '77',
+        salesOrderId: '70',
+        shopId: '7',
+        expectedAmount: 1000,
+        collectedAmount: 1000,
+        occurredAt: new Date().toISOString(),
+      }),
+    ).resolves.toMatchObject({
+      balance: -100,
+      commission: 100,
+      difference: 0,
+    });
+    expect(ledgers.map((row) => [row.entryType, row.amount])).toEqual([
+      [FinanceLedgerEntryType.COD_SALE, 1000],
+      [FinanceLedgerEntryType.COD_SETTLEMENT, -1000],
+      [FinanceLedgerEntryType.COMMISSION, -100],
+    ]);
+  });
+
+  it('C4.3 TC2: COD komissiyani keyingi online payoutdan netting qiladi', async () => {
+    const { service, payouts, reconciliations } = setup();
+    await service.processCodSettled({
+      eventId: 'settled-1',
+      sellerOrderId: '77',
+      salesOrderId: '70',
+      shopId: '7',
+      expectedAmount: 1000,
+      collectedAmount: 1000,
+      occurredAt: new Date().toISOString(),
+    });
+    await service.processPayoutRequested(delivered);
+    expect(payouts[0].amount).toBe(800);
+    expect(reconciliations[0].nettedAmount).toBe(100);
+  });
+
+  it('C4.3 TC3: recon hisobotda COD farqi 0', async () => {
+    const { service } = setup();
+    await service.processCodSettled({
+      eventId: 'settled-1',
+      sellerOrderId: '77',
+      salesOrderId: '70',
+      shopId: '7',
+      expectedAmount: 1000,
+      collectedAmount: 1000,
+      occurredAt: new Date().toISOString(),
+    });
+    await expect(
+      service.reconciliationReport({ shopId: '7' }),
+    ).resolves.toMatchObject({
+      settlementsCount: 1,
+      expectedCodAmount: 1000,
+      collectedCodAmount: 1000,
+      difference: 0,
+      expectedCommission: 100,
+    });
   });
 });

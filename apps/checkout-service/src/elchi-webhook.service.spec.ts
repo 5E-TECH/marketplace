@@ -4,7 +4,12 @@ import { ElchiWebhookService } from './elchi-webhook.service';
 
 describe('ElchiWebhookService (C2.4)', () => {
   const event = (
-    status: 'on_the_road' | 'returned' | 'sold' | 'cancelled' = 'on_the_road',
+    status:
+      | 'on_the_road'
+      | 'returned'
+      | 'sold'
+      | 'cancelled'
+      | 'settled' = 'on_the_road',
   ) => ({
     eventId: `evt_${status}`,
     type: 'shipment.status_changed',
@@ -157,6 +162,21 @@ describe('ElchiWebhookService (C2.4)', () => {
         eventId: 'evt_sold',
         shopId: '7',
         amount: 499000,
+      }),
+    );
+  });
+
+  it('C4.3 TC1: COD settled finance reconciliation event chiqaradi', async () => {
+    const { service, finance } = setup({
+      paymentMethod: CheckoutPaymentMethod.COD,
+    });
+    await service.process({ ...event('settled'), codCollected: 499000 });
+    expect(finance.emit).toHaveBeenCalledWith(
+      'finance.cod.settled',
+      expect.objectContaining({
+        sellerOrderId: '55',
+        expectedAmount: 499000,
+        collectedAmount: 499000,
       }),
     );
   });

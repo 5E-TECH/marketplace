@@ -35,6 +35,7 @@ const STATUS_MAP: Record<string, SalesOrderSellerStatus> = {
   cancelled: SalesOrderSellerStatus.CANCELLED,
   canceled: SalesOrderSellerStatus.CANCELLED,
   returned: SalesOrderSellerStatus.RETURNED,
+  settled: SalesOrderSellerStatus.DELIVERED,
 };
 
 @Injectable()
@@ -63,6 +64,10 @@ export class ElchiWebhookService {
       if (!status)
         throw new BadRequestException('Elchi statusi qo‘llab-quvvatlanmaydi');
       const sellerOrder = await this.sellerOrder(manager, event);
+
+      if (event.status === 'settled' && event.codCollected === undefined) {
+        throw new BadRequestException('settled event uchun codCollected kerak');
+      }
 
       if (status === SalesOrderSellerStatus.RETURNED) {
         await this.restoreInventory(manager, sellerOrder, event);
@@ -114,6 +119,22 @@ export class ElchiWebhookService {
             shopId: sellerOrder.shop_id,
             amount: Number(sellerOrder.subtotal),
             paymentMethod: sellerOrder.payment_method,
+            occurredAt: event.occurredAt,
+          }),
+        );
+      }
+      if (
+        event.status === 'settled' &&
+        sellerOrder.payment_method === CheckoutPaymentMethod.COD
+      ) {
+        await firstValueFrom(
+          this.finance.emit('finance.cod.settled', {
+            eventId: event.eventId,
+            sellerOrderId: sellerOrder.id,
+            salesOrderId: sellerOrder.sales_order_id,
+            shopId: sellerOrder.shop_id,
+            expectedAmount: Number(sellerOrder.subtotal),
+            collectedAmount: Number(event.codCollected),
             occurredAt: event.occurredAt,
           }),
         );
