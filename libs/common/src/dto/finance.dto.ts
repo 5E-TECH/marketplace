@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -27,6 +28,33 @@ export interface FinanceRefundRequestedEvent {
   sellerOrderId: string;
   shopId: string;
   occurredAt: string;
+}
+
+export interface FinanceCodSettledEvent {
+  eventId: string;
+  sellerOrderId: string;
+  salesOrderId: string;
+  shopId: string;
+  expectedAmount: number;
+  collectedAmount: number;
+  occurredAt: string;
+}
+
+export class FinanceReconciliationQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  shopId?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-01' })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
 }
 
 export class FinancePageQueryDto {

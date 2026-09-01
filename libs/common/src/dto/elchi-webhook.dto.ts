@@ -18,6 +18,7 @@ export const ELCHI_WEBHOOK_STATUSES = [
   'cancelled',
   'canceled',
   'returned',
+  'settled',
 ] as const;
 
 export class ElchiWebhookDto {
@@ -29,7 +30,7 @@ export class ElchiWebhookDto {
 
   @ApiProperty({ example: 'shipment.status_changed' })
   @IsString()
-  @IsIn(['shipment.status_changed'])
+  @IsIn(['shipment.status_changed', 'shipment.settled'])
   type: string;
 
   @ApiProperty({ example: '77012' })

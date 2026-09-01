@@ -92,6 +92,8 @@ export enum CommissionType {
 
 export enum FinanceLedgerEntryType {
   SALE = 'SALE',
+  COD_SALE = 'COD_SALE',
+  COD_SETTLEMENT = 'COD_SETTLEMENT',
   COMMISSION = 'COMMISSION',
   PAYOUT = 'PAYOUT',
   REFUND = 'REFUND',

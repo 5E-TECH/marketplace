@@ -14,6 +14,7 @@ import {
   CreateCommissionDto,
   FinancePageQueryDto,
   FinancePayoutQueryDto,
+  FinanceReconciliationQueryDto,
   Role,
   Roles,
   RmqClient,
@@ -41,6 +42,17 @@ export class AdminFinanceController {
   @ApiOperation({ summary: 'Payoutlar ro‘yxati' })
   payouts(@Query() query: FinancePayoutQueryDto) {
     return sendRpc(this.finance, { cmd: 'finance.payouts.list' }, { query });
+  }
+
+  @Get(['reports', 'reports/reconciliation'])
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiOperation({ summary: 'COD reconciliation va netting hisoboti' })
+  reconciliation(@Query() query: FinanceReconciliationQueryDto) {
+    return sendRpc(
+      this.finance,
+      { cmd: 'finance.reconciliation.report' },
+      { query },
+    );
   }
 
   @Post('payouts/:id/approve')
