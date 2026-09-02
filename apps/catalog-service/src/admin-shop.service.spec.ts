@@ -1,4 +1,5 @@
 import { of } from 'rxjs';
+import { ConflictException } from '@nestjs/common';
 import { ShopStatus } from '@app/common';
 import { AdminShopService } from './admin-shop.service';
 
@@ -20,14 +21,16 @@ function makeService(shop?: any) {
     save: jest.fn((s: unknown) => Promise.resolve(s)),
     createQueryBuilder: jest.fn(() => qb),
   };
+  const products: any = { count: jest.fn(() => Promise.resolve(4)) };
   const notifEmit = jest.fn(() => of(undefined));
   const intgEmit = jest.fn(() => of(undefined));
   const service = new AdminShopService(
     shops,
+    products,
     { emit: notifEmit } as never,
     { emit: intgEmit } as never,
   );
-  return { service, shops, qb, notifEmit, intgEmit };
+  return { service, shops, products, qb, notifEmit, intgEmit };
 }
 
 describe('AdminShopService (C1.7)', () => {
@@ -140,5 +143,43 @@ describe('AdminShopService (C1.7)', () => {
       expect.objectContaining({ shopId: '9', reason: 'Hujjat yetarli emas' }),
     );
     expect(intgEmit).not.toHaveBeenCalled();
+  });
+
+  it('C1.32 TC1: detail profil va product count qaytaradi', async () => {
+    const shop: any = { id: '9', status: ShopStatus.ACTIVE };
+    const { service, products } = makeService(shop);
+
+    await expect(service.adminDetail('9')).resolves.toEqual({
+      shop,
+      products: 4,
+    });
+    expect(products.count).toHaveBeenCalledWith({
+      where: { shopId: '9', isDeleted: false },
+    });
+  });
+
+  it('C1.32 TC2/TC3: ACTIVE suspend bo‘ladi, SUSPENDED activate bo‘ladi', async () => {
+    const active: any = { id: '9', status: ShopStatus.ACTIVE };
+    const first = makeService(active);
+    await expect(first.service.adminSuspend('9')).resolves.toMatchObject({
+      status: ShopStatus.SUSPENDED,
+    });
+
+    const second = makeService({ id: '9', status: ShopStatus.SUSPENDED });
+    await expect(second.service.adminActivate('9')).resolves.toMatchObject({
+      status: ShopStatus.ACTIVE,
+    });
+  });
+
+  it('C1.32 TC4: PENDING do‘konni suspend qilish 409', async () => {
+    const { service, shops } = makeService({
+      id: '9',
+      status: ShopStatus.PENDING,
+    });
+
+    await expect(service.adminSuspend('9')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(shops.save).not.toHaveBeenCalled();
   });
 });

@@ -34,6 +34,10 @@
     "test:inventory": "jest apps/inventory-service --runInBand",
     "test:inventory:integration": "jest apps/inventory-service/src/inventory.concurrency.spec.ts --runInBand",
     "test:inventory:coverage": "jest apps/inventory-service --runInBand --coverage --collectCoverageFrom=apps/inventory-service/src/inventory.service.ts --collectCoverageFrom=apps/inventory-service/src/reservation-sweeper.service.ts --coverageThreshold='{\"global\":{\"branches\":55,\"functions\":90,\"lines\":85,\"statements\":85}}'",
+    "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "ops:monitor": "node scripts/health-monitor.mjs",
+    "ops:backup": "sh scripts/db-backup.sh",
+    "ops:restore-test": "sh scripts/db-restore-test.sh",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f"

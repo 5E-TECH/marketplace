@@ -40,6 +40,7 @@ import { GuestController } from './guest/guest.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
+import { AdminProductsController } from './admin/admin-products.controller';
 
 @Module({
   imports: [
@@ -141,6 +142,7 @@ import { ReviewsController } from './storefront/reviews.controller';
     ElchiWebhookController,
     AdminFinanceController,
     ReviewsController,
+    AdminProductsController,
   ],
   providers: [
     AppService,

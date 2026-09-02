@@ -128,8 +128,33 @@ services:
     <<: *app
     command: node dist/apps/notification-service/apps/notification-service/src/main.js
 
-  nginx:
-    image: nginx:1.28-alpine
+  search-service:
+    <<: *app
+    command: node dist/apps/search-service/apps/search-service/src/main.js
+
+  elchi-integration:
+    <<: *app
+    command: node dist/apps/elchi-integration/apps/elchi-integration/src/main.js
+
+  monitor:
+    <<: *app
+    command: node scripts/health-monitor.mjs
+    environment:
+      MONITOR_API_URL: http://api-gateway:3000/api/v1/health
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      MONITOR_INTERVAL_MS: ${MONITOR_INTERVAL_MS:-30000}
+      MONITOR_FAILURE_THRESHOLD: ${MONITOR_FAILURE_THRESHOLD:-3}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10-alpine
     restart: unless-stopped
     depends_on:
       api-gateway:
@@ -138,8 +163,15 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      TLS_EMAIL: ${TLS_EMAIL}
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - frontend
       - backend
@@ -148,6 +180,8 @@ volumes:
   postgres_data:
   rabbitmq_data:
   minio_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   frontend:

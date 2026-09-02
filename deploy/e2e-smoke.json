@@ -1,0 +1,45 @@
+{
+  "steps": [
+    {
+      "name": "API health",
+      "path": "/health",
+      "expectStatus": 200
+    },
+    {
+      "name": "Admin login",
+      "method": "POST",
+      "path": "/auth/login",
+      "body": { "phone": "${E2E_ADMIN_PHONE}", "password": "${E2E_ADMIN_PASSWORD}" },
+      "capture": { "ADMIN_TOKEN": "data.accessToken" }
+    },
+    {
+      "name": "Seller login",
+      "method": "POST",
+      "path": "/auth/login",
+      "body": { "phone": "${E2E_SELLER_PHONE}", "password": "${E2E_SELLER_PASSWORD}" },
+      "capture": { "SELLER_TOKEN": "data.accessToken" }
+    },
+    {
+      "name": "Buyer login",
+      "method": "POST",
+      "path": "/auth/login",
+      "body": { "phone": "${E2E_BUYER_PHONE}", "password": "${E2E_BUYER_PASSWORD}" },
+      "capture": { "BUYER_TOKEN": "data.accessToken" }
+    },
+    {
+      "name": "Storefront katalog",
+      "path": "/storefront/products?page=1&limit=20",
+      "assert": [{ "path": "data.items", "nonEmpty": true }]
+    },
+    {
+      "name": "Seller orders",
+      "path": "/seller/orders?page=1&limit=20",
+      "bearer": "${SELLER_TOKEN}"
+    },
+    {
+      "name": "Payout monitoring",
+      "path": "/admin/finance/payouts?page=1&limit=20",
+      "bearer": "${ADMIN_TOKEN}"
+    }
+  ]
+}

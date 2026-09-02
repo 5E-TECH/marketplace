@@ -72,6 +72,11 @@ export class SellerInventoryController {
     );
   }
 
+  @MessagePattern({ cmd: 'inventory.warehouse.count-by-shop' })
+  countWarehouses(@Payload() data: { shopId: string }) {
+    return this.warehouses.countByShop(String(data.shopId));
+  }
+
   @MessagePattern({ cmd: 'inventory.warehouse.update' })
   async updateWarehouse(
     @Payload()

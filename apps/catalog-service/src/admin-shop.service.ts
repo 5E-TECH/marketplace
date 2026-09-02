@@ -1,10 +1,17 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 import { AdminShopsQueryDto, RmqClient, ShopStatus } from '@app/common';
 import { Shop } from './entities/shop.entity';
+import { Product } from './entities/product.entity';
 
 /**
  * Admin do'kon moderatsiyasi (C1.7). list / approve / publish-approved / reject.
@@ -20,6 +27,7 @@ export class AdminShopService {
 
   constructor(
     @InjectRepository(Shop) private readonly shops: Repository<Shop>,
+    @InjectRepository(Product) private readonly products: Repository<Product>,
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
@@ -87,6 +95,36 @@ export class AdminShopService {
     const shop = await this.getById(shopId);
     if (shop.status === ShopStatus.ACTIVE) {
       return shop; // idempotent
+    }
+    shop.status = ShopStatus.ACTIVE;
+    return this.shops.save(shop);
+  }
+
+  async adminDetail(shopId: string) {
+    const shop = await this.getById(shopId);
+    const products = await this.products.count({
+      where: { shopId: shop.id, isDeleted: false },
+    });
+    return { shop, products };
+  }
+
+  async adminSuspend(shopId: string): Promise<Shop> {
+    const shop = await this.getById(shopId);
+    if (shop.status !== ShopStatus.ACTIVE) {
+      throw new ConflictException(
+        'Faqat ACTIVE do‘konni suspend qilish mumkin',
+      );
+    }
+    shop.status = ShopStatus.SUSPENDED;
+    return this.shops.save(shop);
+  }
+
+  async adminActivate(shopId: string): Promise<Shop> {
+    const shop = await this.getById(shopId);
+    if (shop.status !== ShopStatus.SUSPENDED) {
+      throw new ConflictException(
+        'Faqat SUSPENDED do‘konni qayta faollashtirish mumkin',
+      );
     }
     shop.status = ShopStatus.ACTIVE;
     return this.shops.save(shop);

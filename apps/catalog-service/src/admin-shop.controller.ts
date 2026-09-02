@@ -23,6 +23,21 @@ export class AdminShopController {
     return this.adminShops.adminApprove(String(data.shopId));
   }
 
+  @MessagePattern({ cmd: 'catalog.shop.admin-detail' })
+  detail(@Payload() data: { shopId: string }) {
+    return this.adminShops.adminDetail(String(data.shopId));
+  }
+
+  @MessagePattern({ cmd: 'catalog.shop.suspend' })
+  suspend(@Payload() data: { shopId: string }) {
+    return this.adminShops.adminSuspend(String(data.shopId));
+  }
+
+  @MessagePattern({ cmd: 'catalog.shop.activate' })
+  activate(@Payload() data: { shopId: string }) {
+    return this.adminShops.adminActivate(String(data.shopId));
+  }
+
   @MessagePattern({ cmd: 'catalog.shop.publish-approved' })
   publishApproved(
     @Payload()

@@ -94,6 +94,7 @@ export class StorefrontService {
         'variant.is_deleted = FALSE AND variant.is_active = TRUE',
       )
       .where('product.is_deleted = FALSE')
+      .andWhere('product.is_blocked = FALSE')
       .andWhere('product.status = :productStatus', {
         productStatus: ProductStatus.ACTIVE,
       });

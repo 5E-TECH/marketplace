@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProductStatus, ShopStatus } from '@app/common';
 import { of } from 'rxjs';
 import { ProductService } from './product.service';
@@ -152,6 +156,64 @@ describe('ProductService', () => {
     });
     expect(productRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ isDeleted: true }),
+    );
+  });
+
+  it('C4.5: admin suspend mahsulotni bloklaydi va searchdan yashiradi', async () => {
+    const product = {
+      id: '10',
+      shopId: '5',
+      ownerUserId: '42',
+      name: 'Telefon',
+      status: ProductStatus.ACTIVE,
+      isBlocked: false,
+      isDeleted: false,
+    };
+    productRepo.findOne.mockResolvedValue(product);
+
+    await expect(service.adminSuspend('10')).resolves.toMatchObject({
+      isBlocked: true,
+    });
+    expect(searchClient.emit).toHaveBeenCalledWith(
+      'catalog.product.changed',
+      expect.objectContaining({ productId: '10', active: false }),
+    );
+  });
+
+  it('C4.5: admin reactivate mahsulotni qayta indekslaydi', async () => {
+    const product = {
+      id: '10',
+      shopId: '5',
+      name: 'Telefon',
+      status: ProductStatus.ACTIVE,
+      isBlocked: true,
+      isDeleted: false,
+    };
+    productRepo.findOne.mockResolvedValue(product);
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      name: 'Market',
+      status: ShopStatus.ACTIVE,
+      isDeleted: false,
+    });
+
+    await expect(service.adminReactivate('10')).resolves.toMatchObject({
+      isBlocked: false,
+    });
+    expect(searchClient.emit).toHaveBeenCalledWith(
+      'catalog.product.changed',
+      expect.objectContaining({ productId: '10', active: true }),
+    );
+  });
+
+  it('C4.5: noto‘g‘ri product moderatsiya holati 409', async () => {
+    productRepo.findOne.mockResolvedValue({
+      id: '10',
+      isBlocked: true,
+      isDeleted: false,
+    });
+    await expect(service.adminSuspend('10')).rejects.toBeInstanceOf(
+      ConflictException,
     );
   });
 

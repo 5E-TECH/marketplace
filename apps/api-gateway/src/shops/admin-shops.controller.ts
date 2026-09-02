@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminShopsQueryDto,
+  AdminShopDetailDto,
   AuthErrorResponseDto,
   CurrentUser,
   JwtUser,
@@ -52,6 +53,7 @@ export class AdminShopsController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
   ) {}
 
   @Get('admin/shops')
@@ -63,6 +65,71 @@ export class AdminShopsController {
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminShopsQueryDto) {
     return sendRpc(this.catalog, { cmd: 'catalog.shop.admin-list' }, { query });
+  }
+
+  @Get('admin/shops/:id')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: AdminShopDetailDto })
+  @ApiOperation({ summary: 'Do‘kon profili va asosiy statistikasi' })
+  async detail(@Param('id') id: string) {
+    const [catalog, orders, warehouses] = await Promise.all([
+      sendRpc<{ shop: Omit<AdminShopDetailDto, 'stats'>; products: number }>(
+        this.catalog,
+        { cmd: 'catalog.shop.admin-detail' },
+        { shopId: id },
+      ),
+      sendRpc<number>(
+        this.checkout,
+        { cmd: 'checkout.orders.count-by-shop' },
+        { shopId: id },
+      ),
+      sendRpc<number>(
+        this.inventory,
+        { cmd: 'inventory.warehouse.count-by-shop' },
+        { shopId: id },
+      ),
+    ]);
+    return {
+      ...catalog.shop,
+      stats: { products: catalog.products, orders, warehouses },
+    };
+  }
+
+  @Post('admin/shops/:id/suspend')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ACTIVE do‘konni vaqtincha to‘xtatish' })
+  async suspend(
+    @Param('id') id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const result = await sendRpc(
+      this.catalog,
+      { cmd: 'catalog.shop.suspend' },
+      { shopId: id },
+    );
+    this.audit(admin?.sub, 'shop.suspend', 'Shop', id, ip);
+    return result;
+  }
+
+  @Post('admin/shops/:id/activate')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'SUSPENDED do‘konni qayta faollashtirish' })
+  async activate(
+    @Param('id') id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const result = await sendRpc(
+      this.catalog,
+      { cmd: 'catalog.shop.activate' },
+      { shopId: id },
+    );
+    this.audit(admin?.sub, 'shop.activate', 'Shop', id, ip);
+    return result;
   }
 
   @Post('admin/shops/:id/approve')
