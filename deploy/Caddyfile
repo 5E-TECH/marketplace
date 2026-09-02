@@ -1,0 +1,27 @@
+{
+	email {$TLS_EMAIL}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	handle_path /media/* {
+		reverse_proxy minio:9000
+	}
+
+	handle {
+		reverse_proxy api-gateway:3000 {
+			health_uri /api/v1/health
+			health_interval 10s
+			health_timeout 3s
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

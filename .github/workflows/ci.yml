@@ -51,11 +51,19 @@ jobs:
       - name: Format tekshiruvi (Prettier)
         run: npm run format:check
 
-      - name: Nginx konfiguratsiyasini tekshirish
+      - name: Caddy konfiguratsiyasini tekshirish
         run: >-
           docker run --rm
-          -v "$PWD/deploy/nginx.conf:/etc/nginx/nginx.conf:ro"
-          nginx:1.28-alpine nginx -t
+          -e DOMAIN=api.example.com -e TLS_EMAIL=ops@example.com
+          -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Ops script sintaksisi
+        run: |
+          node --check scripts/health-monitor.mjs
+          node --check scripts/e2e-smoke.mjs
+          sh -n scripts/db-backup.sh
+          sh -n scripts/db-restore-test.sh
 
       - name: Build (barcha app)
         run: npm run build:all
@@ -77,6 +85,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -97,6 +106,7 @@ jobs:
             --exclude 'node_modules/' \
             --exclude 'dist/' \
             --exclude 'coverage/' \
+            --exclude 'backups/' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:/srv/marketplace/"
 
@@ -113,23 +123,13 @@ jobs:
             -f docker-compose.prod.yml \
             up -d --build --remove-orphans
 
-          # rsync nginx.conf faylini almashtirganda mavjud bind-mount eski inode'da
-          # qolishi mumkin. Shunda oddiy reload eski upstream IP/config bilan 502
-          # qaytaradi. Har deployda nginx'ni recreate qilib yangi mountni olamiz.
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
-            up -d --force-recreate --no-deps nginx
+            up -d --force-recreate --no-deps caddy
 
-          # Yangi konteynerdagi config'ni tekshirib, keyin reload qilamiz.
-          docker compose \
-            --env-file .env.production \
-            -f docker-compose.prod.yml \
-            exec -T nginx nginx -t
-          docker compose \
-            --env-file .env.production \
-            -f docker-compose.prod.yml \
-            exec -T nginx nginx -s reload
+          docker compose --env-file .env.production -f docker-compose.prod.yml \
+            exec -T caddy caddy validate --config /etc/caddy/Caddyfile
 
           # Deploy muvaffaqiyatli deyilishidan oldin public API Nginx orqali
           # javob berayotganini tekshiramiz.
@@ -138,7 +138,8 @@ jobs:
             if docker compose \
               --env-file .env.production \
               -f docker-compose.prod.yml \
-              exec -T nginx wget -q -O /dev/null http://127.0.0.1/api/v1/health; then
+              exec -T api-gateway node -e \
+              "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
               healthy=true
               break
             fi
@@ -148,12 +149,20 @@ jobs:
             docker compose \
               --env-file .env.production \
               -f docker-compose.prod.yml \
-              logs --tail=100 api-gateway nginx
+              logs --tail=100 api-gateway caddy monitor
             exit 1
           fi
+
+          # Har muvaffaqiyatli deployda backup olinadi va vaqtinchalik PostgreSQL
+          # konteynerida tiklab ko'riladi. Buzuq backup saqlanib qolmaydi.
+          sh scripts/db-backup.sh
+          sh scripts/db-restore-test.sh
           docker image prune -f
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
             ps
           REMOTE
+
+      - name: Public HTTPS smoke
+        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://$DEPLOY_DOMAIN/api/v1/health"

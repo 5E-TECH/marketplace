@@ -35,6 +35,16 @@ export class WarehouseService {
     return warehouses;
   }
 
+  countByShop(shopId: string): Promise<number> {
+    return this.warehouses.count({
+      where: {
+        ownerType: WarehouseOwnerType.SHOP,
+        ownerId: shopId,
+        isActive: true,
+      },
+    });
+  }
+
   /**
    * Shop uchun default ombor borligini ta'minlaydi (admin approve chaqiradi).
    * Idempotent — allaqachon default ombor bo'lsa qaytadi, yangi yaratmaydi.

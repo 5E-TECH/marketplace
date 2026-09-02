@@ -2,6 +2,7 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreateProductDto,
+  AdminProductsQueryDto,
   MyProductsQueryDto,
   RpcHttpExceptionFilter,
   UpdateProductDto,
@@ -61,5 +62,25 @@ export class ProductController {
   @MessagePattern({ cmd: 'product.delete' })
   remove(@Payload() data: { ownerUserId: string; id: string }) {
     return this.products.remove(data.ownerUserId, data.id);
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-list' })
+  adminList(@Payload() data: { query: AdminProductsQueryDto }) {
+    return this.products.adminList(data.query);
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-get' })
+  adminGet(@Payload() data: { productId: string }) {
+    return this.products.adminGet(String(data.productId));
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-suspend' })
+  adminSuspend(@Payload() data: { productId: string }) {
+    return this.products.adminSuspend(String(data.productId));
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-reactivate' })
+  adminReactivate(@Payload() data: { productId: string }) {
+    return this.products.adminReactivate(String(data.productId));
   }
 }

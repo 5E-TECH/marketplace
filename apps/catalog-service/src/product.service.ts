@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { Brackets, QueryFailedError, Repository } from 'typeorm';
 import {
   CreateProductDto,
+  AdminProductsQueryDto,
   CatalogProductChangedEvent,
   MyProductsPageDto,
   MyProductsQueryDto,
@@ -188,6 +189,70 @@ export class ProductService {
     return { id, deleted: true };
   }
 
+  async adminList(query: AdminProductsQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const qb = this.products
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.shop', 'shop')
+      .where('product.is_deleted = FALSE');
+    if (query.status) {
+      qb.andWhere('product.status = :status', { status: query.status });
+    }
+    if (query.blocked !== undefined) {
+      qb.andWhere('product.is_blocked = :blocked', { blocked: query.blocked });
+    }
+    if (query.shopId) {
+      qb.andWhere('product.shop_id = :shopId', { shopId: query.shopId });
+    }
+    if (query.search?.trim()) {
+      qb.andWhere('product.name ILIKE :search', {
+        search: `%${query.search.trim()}%`,
+      });
+    }
+    const [items, total] = await qb
+      .orderBy('product.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
+  }
+
+  adminGet(id: string): Promise<Product> {
+    return this.getAdminProduct(id);
+  }
+
+  async adminSuspend(id: string): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    if (product.isBlocked) {
+      throw new ConflictException('Mahsulot allaqachon bloklangan');
+    }
+    product.isBlocked = true;
+    const saved = await this.products.save(product);
+    await this.publishRemoved(saved);
+    return saved;
+  }
+
+  async adminReactivate(id: string): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    if (!product.isBlocked) {
+      throw new ConflictException('Mahsulot bloklanmagan');
+    }
+    product.isBlocked = false;
+    const saved = await this.products.save(product);
+    const shop = await this.shops.findOne({
+      where: { id: saved.shopId, isDeleted: false },
+    });
+    if (shop) await this.publishChanged(saved, shop);
+    return saved;
+  }
+
   private async getShop(ownerUserId: string): Promise<Shop> {
     const shop = await this.shops.findOne({
       where: { ownerUserId, isDeleted: false },
@@ -206,6 +271,15 @@ export class ProductService {
         'Boshqa sotuvchining mahsulotini boshqarish mumkin emas',
       );
     }
+    return product;
+  }
+
+  private async getAdminProduct(id: string): Promise<Product> {
+    const product = await this.products.findOne({
+      where: { id, isDeleted: false },
+      relations: { shop: true },
+    });
+    if (!product) throw new NotFoundException('Mahsulot topilmadi');
     return product;
   }
 
@@ -279,6 +353,7 @@ export class ProductService {
       attributes: product.attributes,
       active:
         !product.isDeleted &&
+        !product.isBlocked &&
         product.status === ProductStatus.ACTIVE &&
         !shop.isDeleted &&
         shop.status === ShopStatus.ACTIVE,

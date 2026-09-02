@@ -118,6 +118,11 @@ export class SellerOrdersController {
     return this.orders.adminStats();
   }
 
+  @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
+  countByShop(@Payload() data: { shopId: string }) {
+    return this.orders.countByShop(String(data.shopId));
+  }
+
   @MessagePattern({ cmd: 'checkout.admin.orders-list' })
   adminListOrders(
     @Payload()

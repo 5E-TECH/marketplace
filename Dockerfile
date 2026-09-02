@@ -17,6 +17,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chown=node:node scripts/health-monitor.mjs ./scripts/health-monitor.mjs
 
 USER node
 CMD ["node", "dist/apps/api-gateway/apps/api-gateway/src/main.js"]

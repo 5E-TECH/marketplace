@@ -101,6 +101,16 @@ export class SellerOrdersService {
     };
   }
 
+  async countByShop(shopId: string): Promise<number> {
+    const rows = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total
+       FROM checkout.sales_order_seller
+       WHERE shop_id = $1`,
+      [shopId],
+    );
+    return Number((rows[0] as CountRow | undefined)?.total ?? 0);
+  }
+
   async dashboard(
     shopId: string,
     lowStockCount: number,
