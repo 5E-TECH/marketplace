@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -74,7 +75,9 @@ export class CheckoutAddressDto {
   recipientName: string;
 
   @ApiProperty({ example: '+998901234567' })
-  @IsString()
+  @Matches(/^\+998\d{9}$/, {
+    message: "phone +998XXXXXXXXX formatida bo'lishi kerak",
+  })
   phone: string;
 
   @ApiProperty({ example: 'Toshkent shahri, Amir Temur ko‘chasi 1' })
@@ -103,17 +106,43 @@ export class CreateCheckoutDto {
   address: CheckoutAddressDto;
 }
 
+export class DeliveryPreviewDto {
+  @ApiProperty({ type: CheckoutAddressDto })
+  @ValidateNested()
+  @Type(() => CheckoutAddressDto)
+  address: CheckoutAddressDto;
+}
+
+export interface DeliveryPackageQuoteDto {
+  shopId: string;
+  itemsCount: number;
+  subtotal: number;
+  deliveryFee: number;
+  totalAmount: number;
+}
+
+export interface DeliveryPreviewResultDto {
+  subtotal: number;
+  deliveryFee: number;
+  totalAmount: number;
+  packages: DeliveryPackageQuoteDto[];
+}
+
 export interface CheckoutResultDto {
   id: string;
   status: 'PENDING_PAYMENT' | 'DRAFT';
   paymentMethod: CheckoutPaymentMethod;
   totalAmount: number;
+  subtotal: number;
+  deliveryFee: number;
   reservationId: string;
   reservationExpiresAt: string;
   sellerOrders: Array<{
     id: string;
     shopId: string;
     subtotal: number;
+    deliveryFee: number;
+    totalAmount: number;
     status: string;
   }>;
 }

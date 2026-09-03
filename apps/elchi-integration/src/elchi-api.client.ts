@@ -23,6 +23,12 @@ export interface CreateElchiShipmentInput {
   cod_amount: number;
 }
 
+export interface ElchiTariffInput {
+  region_id?: string | null;
+  district_id?: string | null;
+  packages?: number;
+}
+
 /**
  * Elchi Partner API HTTP klienti (marketplace tomoni). Native `fetch`, autentifikatsiya
  * `X-Api-Key` header bilan (Elchi PartnerApiKeyGuard shu header'ni kutadi — C1.2).
@@ -95,6 +101,25 @@ export class ElchiApiClient {
       name: String(d.name),
       region_id: String(d.region_id),
     }));
+  }
+
+  /** GET /partner/tariff — bitta yoki bir nechta posilka yetkazish narxi. */
+  async getTariff(input: ElchiTariffInput): Promise<{ amount: number }> {
+    const query = new URLSearchParams();
+    if (input.region_id) query.set('region_id', input.region_id);
+    if (input.district_id) query.set('district_id', input.district_id);
+    query.set('packages', String(input.packages ?? 1));
+    const res = await this.request('GET', `/partner/tariff?${query}`);
+    const raw =
+      this.pluck(res, 'amount') ??
+      this.pluck(res, 'price') ??
+      this.pluck(res, 'tariff') ??
+      this.pluck(res, 'delivery_price');
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error('Elchi javobida yaroqli tarif summasi yo‘q');
+    }
+    return { amount };
   }
 
   private async request(

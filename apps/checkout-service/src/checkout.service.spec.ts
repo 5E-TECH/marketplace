@@ -54,12 +54,15 @@ describe('CheckoutService (C2.9)', () => {
         if (sql.includes('INSERT INTO checkout.sales_order\n'))
           return [{ id: String(++orderId) }];
         if (sql.includes('INSERT INTO checkout.sales_order_seller'))
-          return [{ id: String(++sellerId) }];
+          return [{ id: String(++sellerId), deliveryFee: Number(params[3]) }];
         return [];
       }),
     };
     const dataSource = {
       transaction: jest.fn(async (run) => run(manager)),
+      getRepository: jest.fn(() => ({
+        findOne: jest.fn().mockResolvedValue(cart),
+      })),
     };
     const inventory = {
       send: jest.fn(() =>
@@ -68,11 +71,19 @@ describe('CheckoutService (C2.9)', () => {
           : of({ reservationId: '55' }),
       ),
     };
+    const integration = {
+      send: jest.fn(() => of({ amount: 20 })),
+    };
     return {
-      service: new CheckoutService(dataSource as never, inventory as never),
+      service: new CheckoutService(
+        dataSource as never,
+        inventory as never,
+        integration as never,
+      ),
       queries,
       inventory,
       cart,
+      integration,
     };
   }
 
@@ -84,7 +95,17 @@ describe('CheckoutService (C2.9)', () => {
       '7',
       '8',
     ]);
-    expect(result.totalAmount).toBe(500);
+    expect(result).toMatchObject({
+      subtotal: 500,
+      deliveryFee: 40,
+      totalAmount: 540,
+    });
+    expect(result.sellerOrders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ shopId: '7', deliveryFee: 20 }),
+        expect.objectContaining({ shopId: '8', deliveryFee: 20 }),
+      ]),
+    );
   });
 
   it('TC2: inventory.reserve ni 30 daqiqalik TTL bilan chaqiradi', async () => {
@@ -121,5 +142,36 @@ describe('CheckoutService (C2.9)', () => {
     await expect(service.create('5', dto(method))).resolves.toMatchObject({
       status,
     });
+  });
+
+  it('C2.19 TC3: guest session savatidan buyer customer_id bilan order yaratadi', async () => {
+    const { service, queries, cart } = setup();
+    cart.customerId = null as never;
+    (cart as typeof cart & { sessionId: string }).sessionId = 'guest-session';
+
+    await service.create('77', dto(), 'guest-checkout-1', 'guest-session');
+
+    const insert = queries.find((entry) =>
+      entry.sql.includes('INSERT INTO checkout.sales_order\n'),
+    );
+    expect(insert?.params[0]).toBe('77');
+    expect(cart.status).toBe('converted');
+  });
+
+  it('C2.20 TC3: storefront preview har shop uchun alohida posilka qaytaradi', async () => {
+    const { service, integration } = setup();
+
+    await expect(
+      service.preview('5', undefined, dto().address),
+    ).resolves.toMatchObject({
+      subtotal: 500,
+      deliveryFee: 40,
+      totalAmount: 540,
+      packages: [
+        { shopId: '7', subtotal: 200, deliveryFee: 20, totalAmount: 220 },
+        { shopId: '8', subtotal: 300, deliveryFee: 20, totalAmount: 320 },
+      ],
+    });
+    expect(integration.send).toHaveBeenCalledTimes(2);
   });
 });

@@ -30,6 +30,7 @@ function makeService(
     provisionMarket: jest.fn(() => Promise.resolve({ elchi_market_id: '500' })),
     getRegions: jest.fn(() => Promise.resolve([])),
     getDistricts: jest.fn(() => Promise.resolve([])),
+    getTariff: jest.fn(() => Promise.resolve({ amount: 15000 })),
     ...(overrides.elchi ?? {}),
   };
   const service = new ElchiIntegrationService(
@@ -42,6 +43,17 @@ function makeService(
 }
 
 describe('ElchiIntegrationService (C1.6)', () => {
+  it('C2.20: delivery tarifini Elchi clientdan oladi', async () => {
+    const { service, elchi } = makeService();
+    await expect(
+      service.getTariff({ regionId: '1', districtId: '10' }),
+    ).resolves.toEqual({ amount: 15000 });
+    expect(elchi.getTariff).toHaveBeenCalledWith({
+      region_id: '1',
+      district_id: '10',
+      packages: 1,
+    });
+  });
   it('TC1: shop.approved -> Elchi market ochiladi va shop.elchi_market_id yoziladi', async () => {
     const { service, catalogSend, elchi, provisionRepo } = makeService();
 

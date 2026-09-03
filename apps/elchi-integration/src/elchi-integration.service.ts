@@ -141,6 +141,14 @@ export class ElchiIntegrationService {
     return this.elchi.createShipment(input);
   }
 
+  getTariff(input: { regionId?: string | null; districtId?: string | null }) {
+    return this.elchi.getTariff({
+      region_id: input.regionId,
+      district_id: input.districtId,
+      packages: 1,
+    });
+  }
+
   private async upsertGeo(
     kind: 'region' | 'district',
     elchiId: string,
