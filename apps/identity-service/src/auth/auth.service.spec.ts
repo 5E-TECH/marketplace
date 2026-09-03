@@ -109,6 +109,26 @@ describe('AuthService (C0.4)', () => {
     expect(saved.isActive).toBe(false); // SELLER — tasdiqqacha nofaol
   });
 
+  it('C2.19 TC1/TC2: guest telefon uchun buyer yaratadi va qayta ishlatadi', async () => {
+    const first = await service.createGuestCustomer(
+      '+998901234567',
+      'Guest Buyer',
+    );
+    const second = await service.createGuestCustomer(
+      '+998901234567',
+      'Boshqa ism',
+    );
+
+    expect(first).toMatchObject({
+      role: Role.BUYER,
+      phone: '+998901234567',
+      isActive: true,
+    });
+    expect(second.id).toBe(first.id);
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveProperty('passwordHash');
+  });
+
   it('admin profil parolini eski parolsiz yangilaydi va sessiyalarni bekor qiladi', async () => {
     const registered = await service.register({
       name: 'Admin',

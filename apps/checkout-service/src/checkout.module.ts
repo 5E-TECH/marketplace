@@ -25,6 +25,7 @@ import { CreateOrderHistory1723200000000 } from './migrations/1723200000000-crea
 import { CreateElchiWebhookEvent1724587200000 } from './migrations/1724587200000-create-elchi-webhook-event';
 import { ElchiWebhookService } from './elchi-webhook.service';
 import { ReviewEligibilityService } from './review-eligibility.service';
+import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-delivery-fee';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { ReviewEligibilityService } from './review-eligibility.service';
             CreateCartTables1723032000000,
             CreateOrderHistory1723200000000,
             CreateElchiWebhookEvent1724587200000,
+            AddDeliveryFee1725192000000,
           ],
           migrationsRun: true,
         };

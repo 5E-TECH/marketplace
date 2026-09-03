@@ -70,6 +70,50 @@ export class AuthService {
     return this.buildAuthResult(user);
   }
 
+  /** C2.19 — guest checkout uchun telefon bo'yicha idempotent lightweight buyer. */
+  async createGuestCustomer(phone: string, name: string) {
+    const existing = await this.users.findOne({ where: { phone } });
+    if (existing) {
+      if (existing.role !== Role.BUYER || existing.isDeleted) {
+        throw BusinessException.conflict(
+          'Bu telefon boshqa turdagi hisobga tegishli',
+        );
+      }
+      if (existing.isBlocked) {
+        throw BusinessException.invalidState('Xaridor hisobi bloklangan');
+      }
+      return this.sanitize(existing);
+    }
+
+    // Guest parolni bilmaydi. Keyinchalik telefon tasdiqlash/reset-password
+    // orqali o'z parolini o'rnatib, shu hisobga kirishi mumkin.
+    const passwordHash = await bcrypt.hash(randomUUID(), BCRYPT_ROUNDS);
+    try {
+      const created = await this.users.save(
+        this.users.create({
+          name: name.trim(),
+          phone,
+          email: null,
+          passwordHash,
+          role: Role.BUYER,
+          isActive: true,
+        }),
+      );
+      return this.sanitize(created);
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        (error.driverError as { code?: string })?.code === '23505'
+      ) {
+        const concurrent = await this.users.findOne({ where: { phone } });
+        if (concurrent?.role === Role.BUYER && !concurrent.isDeleted) {
+          return this.sanitize(concurrent);
+        }
+      }
+      throw error;
+    }
+  }
+
   async login(dto: LoginDto) {
     const user = await this.users.findOne({ where: { phone: dto.phone } });
     // Bir xil xabar — foydalanuvchi mavjudligini oshkor qilmaslik uchun

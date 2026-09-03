@@ -71,7 +71,8 @@ export class SellerOrdersService {
     const listParams = [...params, limit, (page - 1) * limit];
     const rows = await this.dataSource.query(
       `SELECT s.id, s.sales_order_id AS "salesOrderId",
-              o.buyer_name AS "buyerName", s.subtotal, s.cod_amount AS "codAmount",
+              o.buyer_name AS "buyerName", s.subtotal,
+              s.delivery_fee AS "deliveryFee", s.cod_amount AS "codAmount",
               s.status, s.elchi_shipment_id AS "elchiShipmentId",
               s.tracking_url AS "trackingUrl",
               COALESCE(SUM(i.quantity), 0)::int AS "itemsCount",
@@ -91,6 +92,7 @@ export class SellerOrdersService {
       items: rows.map((row: Record<string, unknown>) => ({
         ...row,
         subtotal: Number(row.subtotal),
+        deliveryFee: Number(row.deliveryFee),
         codAmount: Number(row.codAmount),
         itemsCount: Number(row.itemsCount),
       })) as SellerOrdersPageDto['items'],
@@ -261,6 +263,7 @@ export class SellerOrdersService {
               so.status,
               so.payment_method AS "paymentMethod",
               so.total_amount AS "totalAmount",
+              so.delivery_fee AS "deliveryFee",
               so.created_at AS "createdAt",
               (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
                  WHERE s.sales_order_id = so.id) AS "sellersCount"
@@ -278,6 +281,7 @@ export class SellerOrdersService {
         status: r.status,
         paymentMethod: r.paymentMethod,
         totalAmount: Number(r.totalAmount),
+        deliveryFee: Number(r.deliveryFee),
         sellersCount: Number(r.sellersCount),
         createdAt: r.createdAt,
       })),
@@ -301,6 +305,7 @@ export class SellerOrdersService {
               so.status,
               so.payment_method AS "paymentMethod",
               so.total_amount AS "totalAmount",
+              so.delivery_fee AS "deliveryFee",
               so.delivery_address AS "deliveryAddress",
               so.created_at AS "createdAt",
               so.updated_at AS "updatedAt"
@@ -317,6 +322,7 @@ export class SellerOrdersService {
         `SELECT sos.id,
                 sos.shop_id AS "shopId",
                 sos.subtotal,
+                sos.delivery_fee AS "deliveryFee",
                 sos.cod_amount AS "codAmount",
                 sos.status,
                 sos.elchi_shipment_id AS "elchiShipmentId",
@@ -362,6 +368,7 @@ export class SellerOrdersService {
       status: order.status,
       paymentMethod: order.paymentMethod,
       totalAmount: Number(order.totalAmount),
+      deliveryFee: Number(order.deliveryFee),
       deliveryAddress: order.deliveryAddress ?? null,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
@@ -369,6 +376,7 @@ export class SellerOrdersService {
         id: String(s.id),
         shopId: String(s.shopId),
         subtotal: Number(s.subtotal),
+        deliveryFee: Number(s.deliveryFee),
         codAmount: Number(s.codAmount),
         status: s.status,
         elchiShipmentId: s.elchiShipmentId ? String(s.elchiShipmentId) : null,
@@ -418,7 +426,7 @@ export class SellerOrdersService {
 
   async getSellerOrder(shopId: string, id: string) {
     const rows = await this.dataSource.query(
-      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
+      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.delivery_fee AS "deliveryFee",s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
       [id, shopId],
     );
     if (!rows[0])

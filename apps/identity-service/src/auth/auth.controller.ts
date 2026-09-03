@@ -30,6 +30,11 @@ export class AuthController {
   login(@Payload() dto: LoginDto) {
     return this.authService.login(dto);
   }
+
+  @MessagePattern({ cmd: 'identity.customer.create' })
+  createGuestCustomer(@Payload() data: { phone: string; name: string }) {
+    return this.authService.createGuestCustomer(data.phone, data.name);
+  }
   @MessagePattern({ cmd: 'auth.refresh' }) refresh(
     @Payload() d: { refreshToken: string },
   ) {

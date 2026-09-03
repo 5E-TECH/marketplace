@@ -9,6 +9,7 @@ import {
   CheckoutPaymentMethod,
   CheckoutResultDto,
   CreateCheckoutDto,
+  DeliveryPreviewResultDto,
   RmqClient,
   sendRpc,
 } from '@app/common';
@@ -23,37 +24,42 @@ export class CheckoutService {
     private readonly dataSource: DataSource,
     @Inject(RmqClient.INVENTORY)
     private readonly inventory: ClientProxy,
+    @Inject(RmqClient.INTEGRATION)
+    private readonly integration: ClientProxy,
   ) {}
 
   async create(
     customerId: string,
     dto: CreateCheckoutDto,
     idempotencyKey?: string,
+    sessionId?: string,
   ): Promise<CheckoutResultDto> {
     if (!customerId) throw new BadRequestException('Login talab qilinadi');
     return this.dataSource.transaction(async (manager) => {
       const cart = await manager.getRepository(Cart).findOne({
-        where: { customerId, status: 'active' },
+        where: sessionId
+          ? { sessionId, status: 'active' }
+          : { customerId, status: 'active' },
         relations: { items: true },
         lock: { mode: 'pessimistic_write' },
       });
       if (!cart) throw new NotFoundException('Faol savat topilmadi');
       if (!cart.items.length) throw new BadRequestException('Savat bo‘sh');
 
+      const quote = await this.quote(cart.items, dto.address);
+
       const status =
         dto.paymentMethod === CheckoutPaymentMethod.ONLINE
           ? 'PENDING_PAYMENT'
           : 'DRAFT';
-      const total = cart.items.reduce(
-        (sum, item) => sum + Number(item.unitPriceSnapshot) * item.quantity,
-        0,
-      );
+      const total = quote.totalAmount;
       const order = await this.insertOrder(
         manager,
         customerId,
         dto,
         status,
         total,
+        quote.deliveryFee,
       );
       const sellerOrders = [] as CheckoutResultDto['sellerOrders'];
       const groups = new Map<string, typeof cart.items>();
@@ -71,6 +77,8 @@ export class CheckoutService {
           shopId,
           subtotal,
           dto.paymentMethod,
+          quote.packages.find((item) => item.shopId === shopId)?.deliveryFee ??
+            0,
         );
         for (const item of items) {
           await manager.query(
@@ -91,6 +99,8 @@ export class CheckoutService {
           id: seller.id,
           shopId,
           subtotal,
+          deliveryFee: seller.deliveryFee,
+          totalAmount: subtotal + seller.deliveryFee,
           status: 'PENDING',
         });
       }
@@ -121,6 +131,8 @@ export class CheckoutService {
         status,
         paymentMethod: dto.paymentMethod,
         totalAmount: total,
+        subtotal: quote.subtotal,
+        deliveryFee: quote.deliveryFee,
         reservationId: reservation.reservationId,
         reservationExpiresAt: new Date(
           Date.now() + RESERVATION_TTL_MS,
@@ -130,23 +142,93 @@ export class CheckoutService {
     });
   }
 
+  async preview(
+    customerId: string | undefined,
+    sessionId: string | undefined,
+    address: CreateCheckoutDto['address'],
+  ): Promise<DeliveryPreviewResultDto> {
+    if (!customerId && !sessionId) {
+      throw new BadRequestException('customer yoki x-session-id majburiy');
+    }
+    const cart = await this.dataSource.getRepository(Cart).findOne({
+      where: customerId
+        ? { customerId, status: 'active' }
+        : { sessionId, status: 'active' },
+      relations: { items: true },
+    });
+    if (!cart?.items.length)
+      throw new NotFoundException('Faol savat topilmadi');
+    return this.quote(cart.items, address);
+  }
+
+  private async quote(
+    items: Cart['items'],
+    address: CreateCheckoutDto['address'],
+  ): Promise<DeliveryPreviewResultDto> {
+    const groups = new Map<string, Cart['items']>();
+    for (const item of items) {
+      groups.set(item.shopId, [...(groups.get(item.shopId) ?? []), item]);
+    }
+    const packages = await Promise.all(
+      [...groups.entries()].map(async ([shopId, shopItems]) => {
+        const subtotal = shopItems.reduce(
+          (sum, item) => sum + Number(item.unitPriceSnapshot) * item.quantity,
+          0,
+        );
+        const tariff = await sendRpc<{ amount: number }>(
+          this.integration,
+          { cmd: 'integration.tariff.get' },
+          {
+            shopId,
+            regionId: address.regionId ?? null,
+            districtId: address.districtId ?? null,
+          },
+        );
+        const deliveryFee = Number(tariff.amount);
+        if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+          throw new BadRequestException('Yaroqsiz dostavka tarifi');
+        }
+        return {
+          shopId,
+          itemsCount: shopItems.reduce((sum, item) => sum + item.quantity, 0),
+          subtotal,
+          deliveryFee,
+          totalAmount: subtotal + deliveryFee,
+        };
+      }),
+    );
+    const subtotal = packages.reduce((sum, item) => sum + item.subtotal, 0);
+    const deliveryFee = packages.reduce(
+      (sum, item) => sum + item.deliveryFee,
+      0,
+    );
+    return {
+      subtotal,
+      deliveryFee,
+      totalAmount: subtotal + deliveryFee,
+      packages,
+    };
+  }
+
   private async insertOrder(
     manager: EntityManager,
     customerId: string,
     dto: CreateCheckoutDto,
     status: string,
     total: number,
+    deliveryFee: number,
   ) {
     const [order] = await manager.query(
       `INSERT INTO checkout.sales_order
-       (customer_id,buyer_name,status,payment_method,total_amount,delivery_address,region_id,district_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id::text`,
+       (customer_id,buyer_name,status,payment_method,total_amount,delivery_fee,delivery_address,region_id,district_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id::text`,
       [
         customerId,
         dto.address.recipientName,
         status,
         dto.paymentMethod,
         total,
+        deliveryFee,
         `${dto.address.address}\n${dto.address.phone}`,
         dto.address.regionId || null,
         dto.address.districtId || null,
@@ -161,18 +243,22 @@ export class CheckoutService {
     shopId: string,
     subtotal: number,
     paymentMethod: CheckoutPaymentMethod,
+    deliveryFee: number,
   ) {
     const [seller] = await manager.query(
       `INSERT INTO checkout.sales_order_seller
-       (sales_order_id,shop_id,subtotal,cod_amount,status)
-       VALUES ($1,$2,$3,$4,'PENDING') RETURNING id::text`,
+       (sales_order_id,shop_id,subtotal,delivery_fee,cod_amount,status)
+       VALUES ($1,$2,$3,$4,$5,'PENDING') RETURNING id::text,"delivery_fee" AS "deliveryFee"`,
       [
         orderId,
         shopId,
         subtotal,
-        paymentMethod === CheckoutPaymentMethod.COD ? subtotal : 0,
+        deliveryFee,
+        paymentMethod === CheckoutPaymentMethod.COD
+          ? subtotal + deliveryFee
+          : 0,
       ],
     );
-    return seller as { id: string };
+    return seller as { id: string; deliveryFee: number };
   }
 }

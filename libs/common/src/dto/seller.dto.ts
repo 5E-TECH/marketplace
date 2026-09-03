@@ -245,6 +245,9 @@ export class SellerOrderItemDto {
   @ApiProperty({ example: 450000 })
   subtotal: number;
 
+  @ApiProperty({ example: 25000 })
+  deliveryFee: number;
+
   @ApiProperty({ example: 450000 })
   codAmount: number;
 
