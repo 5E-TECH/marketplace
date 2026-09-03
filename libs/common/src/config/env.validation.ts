@@ -12,6 +12,16 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
   CORS_ORIGINS: Joi.string().allow('').optional(),
+  // Reverse proxy (Caddy) qatlamlari soni — haqiqiy mijoz IP'sini aniqlash uchun.
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(1),
+
+  // Rate limiting — umumiy chegara (auth endpointlarida qattiqroq).
+  THROTTLE_TTL_MS: Joi.number().integer().min(1000).default(60000),
+  THROTTLE_LIMIT: Joi.number().integer().min(1).default(300),
+
+  // Migratsiya konteyner ko'tarilishida avtomat ishlasinmi. Productionda
+  // nazoratli rollout uchun `false` qilib, alohida qadamda ishga tushiriladi.
+  DB_AUTO_MIGRATE: Joi.boolean().default(true),
 
   // PostgreSQL
   DB_HOST: Joi.string().required(),

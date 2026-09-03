@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
+import {
+  CommonConfigModule,
+  ensureSchema,
+  shouldRunMigrations,
+  typeOrmOptions,
+} from '@app/common';
 import { EmailAdapter } from './adapters/email.adapter';
 import { NOTIFICATION_ADAPTERS } from './adapters/notification-adapter';
 import { SmsAdapter } from './adapters/sms.adapter';
@@ -28,7 +33,7 @@ const entities = [Notification, NotificationDelivery];
         return {
           ...typeOrmOptions(config, 'notification', entities),
           migrations: [CreateNotificationTables1722686400000],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

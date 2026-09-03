@@ -35,6 +35,7 @@
     "test:inventory:integration": "jest apps/inventory-service/src/inventory.concurrency.spec.ts --runInBand",
     "test:inventory:coverage": "jest apps/inventory-service --runInBand --coverage --collectCoverageFrom=apps/inventory-service/src/inventory.service.ts --collectCoverageFrom=apps/inventory-service/src/reservation-sweeper.service.ts --coverageThreshold='{\"global\":{\"branches\":55,\"functions\":90,\"lines\":85,\"statements\":85}}'",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "contract:export": "node scripts/export-openapi.mjs",
     "ops:monitor": "node scripts/health-monitor.mjs",
     "ops:backup": "sh scripts/db-backup.sh",
     "ops:restore-test": "sh scripts/db-restore-test.sh",
@@ -51,12 +52,14 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.0.0",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.4",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "helmet": "^8.3.0",
     "joi": "^17.13.3",
     "minio": "^8.0.7",
     "pg": "^8.13.1",
@@ -95,5 +98,8 @@
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "overrides": {
+    "decode-uri-component": "^0.5.0"
   }
 }

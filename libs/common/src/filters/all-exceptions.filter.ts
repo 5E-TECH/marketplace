@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ErrorCode, STATUS_TO_ERROR_CODE } from '../constants/error-codes';
+import { RequestContext } from '../context/request-context';
 import { ApiErrorResponse } from '../interfaces/api-response.interface';
 
 /**
@@ -69,12 +70,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
+    const requestId = RequestContext.requestId();
     const body: ApiErrorResponse = { statusCode: status, message, errorCode };
     if (details) body.details = details;
+    if (requestId) body.requestId = requestId;
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
-        `${request?.method} ${request?.url} → ${status} ${errorCode}`,
+        `[${requestId ?? '-'}] ${request?.method} ${request?.url} → ${status} ${errorCode}`,
       );
     }
 

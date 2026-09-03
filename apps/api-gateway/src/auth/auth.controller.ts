@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import {
   ApiBadRequestResponse,
@@ -84,6 +85,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
   @ApiOperation({ summary: 'Yangi foydalanuvchini ro‘yxatdan o‘tkazish' })
   @ApiCreatedResponse({
@@ -103,6 +105,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Telefon va parol orqali tizimga kirish' })
   @ApiCreatedResponse({
@@ -141,6 +144,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
@@ -164,24 +168,32 @@ export class AuthController {
     this.setRefreshCookie(res, result.refreshToken);
     return rawResponse({ accessToken: result.accessToken });
   }
-  @Public() @Post('forgot-password') @HttpCode(HttpStatus.OK) forgot(
-    @Body() dto: ForgotPasswordDto,
-  ) {
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgot(@Body() dto: ForgotPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.forgot-password' }, dto);
   }
-  @Public() @Post('reset-password') @HttpCode(HttpStatus.OK) reset(
-    @Body() dto: ResetPasswordDto,
-  ) {
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  reset(@Body() dto: ResetPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.reset-password' }, dto);
   }
-  @Public() @Post('verify-phone') @HttpCode(HttpStatus.OK) verify(
-    @Body() dto: VerifyPhoneDto,
-  ) {
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('verify-phone')
+  @HttpCode(HttpStatus.OK)
+  verify(@Body() dto: VerifyPhoneDto) {
     return sendRpc(this.identity, { cmd: 'auth.verify-phone' }, dto);
   }
-  @Public() @Post('resend-code') @HttpCode(HttpStatus.OK) resend(
-    @Body() dto: ForgotPasswordDto,
-  ) {
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('resend-code')
+  @HttpCode(HttpStatus.OK)
+  resend(@Body() dto: ForgotPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.resend-code' }, dto);
   }
   @Get('sessions') sessions(@CurrentUser() user: JwtUser) {

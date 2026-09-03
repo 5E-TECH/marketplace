@@ -54,7 +54,8 @@ jobs:
       - name: Caddy konfiguratsiyasini tekshirish
         run: >-
           docker run --rm
-          -e DOMAIN=api.example.com -e TLS_EMAIL=ops@example.com
+          -e DOMAIN=api.example.com -e APP_DOMAIN=app.example.com
+          -e TLS_EMAIL=ops@example.com
           -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
           caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 
@@ -62,6 +63,7 @@ jobs:
         run: |
           node --check scripts/health-monitor.mjs
           node --check scripts/e2e-smoke.mjs
+          node --check scripts/export-openapi.mjs
           sh -n scripts/db-backup.sh
           sh -n scripts/db-restore-test.sh
 
@@ -73,6 +75,23 @@ jobs:
 
       - name: Inventory coverage
         run: npm run test:inventory:coverage
+
+      # Frontend kontrakt tekshiruvi shu faylga qaraydi. Repodagi nusxa
+      # eskirgan bo'lsa CI yiqiladi — kontrakt o'zgarishi e'tibordan qolmaydi.
+      - name: OpenAPI kontrakti yangimi
+        run: |
+          npm run contract:export
+          if ! git diff --quiet -- docs/openapi.json; then
+            echo "::error::docs/openapi.json eskirgan. Lokalda 'npm run build:all && npm run contract:export' ishlatib, natijani commit qiling."
+            git --no-pager diff --stat -- docs/openapi.json
+            exit 1
+          fi
+
+      - name: OpenAPI'ni artefakt sifatida saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: docs/openapi.json
 
   deploy-production:
     name: Deploy production

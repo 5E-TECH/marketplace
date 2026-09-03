@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
+import {
+  CommonConfigModule,
+  ensureSchema,
+  shouldRunMigrations,
+  typeOrmOptions,
+} from '@app/common';
 import { Commission } from './entities/commission.entity';
 import { Payout } from './entities/payout.entity';
 import { SellerLedger } from './entities/seller-ledger.entity';
@@ -27,7 +32,7 @@ const entities = [SellerLedger, Payout, Commission, CodReconciliation];
             CreateFinanceTables1724673600000,
             CreateCodReconciliation1724932800000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

@@ -26,6 +26,15 @@ export function typeOrmOptions(
 }
 
 /**
+ * Migratsiya dastur ko'tarilishida avtomat ishlasinmi.
+ * `DB_AUTO_MIGRATE=false` bo'lsa — yo'q; migratsiya deploy'da alohida
+ * qadam sifatida boshqariladi (katta jadvalda lock'ni nazorat qilish uchun).
+ */
+export function shouldRunMigrations(config: ConfigService): boolean {
+  return config.get<boolean>('DB_AUTO_MIGRATE', true) !== false;
+}
+
+/**
  * Servis schema'si mavjudligini ta'minlaydi (dev qulayligi).
  * TypeORM synchronize schema'ni o'zi yaratmaydi — shuning uchun oldindan yaratamiz.
  */

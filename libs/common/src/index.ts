@@ -40,6 +40,11 @@ export * from './dto/support.dto';
 export * from './dto/favorite.dto';
 export * from './dto/elchi-webhook.dto';
 
+// So'rov konteksti / kuzatuv
+export * from './context/request-context';
+export * from './middleware/request-id.middleware';
+export * from './interceptors/http-logger.interceptor';
+
 // Javob qobig'i / xato
 export * from './interceptors/transform.interceptor';
 export * from './filters/all-exceptions.filter';

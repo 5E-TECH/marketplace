@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   RmqClient,
   RmqQueue,
   rmqOptions,
@@ -88,7 +89,7 @@ import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-deli
             CreateElchiWebhookEvent1724587200000,
             AddDeliveryFee1725192000000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

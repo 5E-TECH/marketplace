@@ -140,7 +140,7 @@ services:
     <<: *app
     command: node scripts/health-monitor.mjs
     environment:
-      MONITOR_API_URL: http://api-gateway:3000/api/v1/health
+      MONITOR_API_URL: http://api-gateway:3000/api/v1/health/ready
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
@@ -167,6 +167,7 @@ services:
       - "443:443/udp"
     environment:
       DOMAIN: ${DOMAIN}
+      APP_DOMAIN: ${APP_DOMAIN}
       TLS_EMAIL: ${TLS_EMAIL}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -184,5 +185,8 @@ volumes:
   caddy_config:
 
 networks:
+  # Aniq nom: frontend compose'i shu tarmoqqa `external` sifatida ulanadi
+  # (Marketplace-FrontEnd/docker-compose.prod.yml).
   frontend:
+    name: marketplace_edge
   backend:

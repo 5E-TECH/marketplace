@@ -5,6 +5,7 @@ import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   RmqClient,
   RmqQueue,
   rmqOptions,
@@ -46,7 +47,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
             CreatePaymentTables1724241600000,
             AddPaymeTransactionState1724328000000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

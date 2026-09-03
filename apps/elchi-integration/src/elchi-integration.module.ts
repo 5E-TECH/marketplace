@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   RmqClient,
   RmqQueue,
   rmqOptions,
@@ -40,7 +41,7 @@ const entities = [ElchiMarketProvision, GeoCache];
           ...typeOrmOptions(config, 'integration', entities),
           synchronize: false,
           migrations: [CreateIntegrationTables1722900000000],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),
