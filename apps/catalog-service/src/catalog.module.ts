@@ -8,6 +8,7 @@ import {
   shouldRunMigrations,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -39,12 +40,14 @@ import { CreateReviews1724846400000 } from './migrations/1724846400000-create-re
 import { AddProductModeration1725105600000 } from './migrations/1725105600000-add-product-moderation';
 import { ReviewController } from './review.controller';
 import { ReviewService } from './review.service';
+import { CategorySeeder } from './seed/category.seeder';
 
 const entities = [Shop, Category, Product, ProductVariant, Favorite, Review];
 
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('catalog-service'),
     ClientsModule.registerAsync([
       {
         name: RmqClient.CHECKOUT,
@@ -117,6 +120,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite, Review];
     StorefrontService,
     FavoriteService,
     ReviewService,
+    CategorySeeder,
   ],
 })
 export class CatalogModule {}

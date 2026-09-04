@@ -8,6 +8,7 @@ import {
   shouldRunMigrations,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -31,6 +32,7 @@ import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-deli
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('checkout-service'),
     ClientsModule.registerAsync([
       {
         name: RmqClient.CATALOG,

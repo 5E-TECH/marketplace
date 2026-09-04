@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  ServiceHealthModule,
   shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
@@ -21,6 +22,7 @@ const entities = [SellerLedger, Payout, Commission, CodReconciliation];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('finance-service'),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {

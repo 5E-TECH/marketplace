@@ -1,16 +1,21 @@
-import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
-import { CurrentUser, JwtUser, Public, rawResponse } from '@app/common';
+import { CurrentUser, JwtUser, Public } from '@app/common';
 import { AppService } from './app.service';
+import { ReadinessService } from './readiness.service';
 
 @ApiTags('health')
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly readinessService: ReadinessService,
+  ) {}
 
-  // GET /api/v1/health — ochiq, tiriklik (Docker healthcheck shuni chaqiradi)
+  // GET /api/v1/health — ochiq, tiriklik (Docker healthcheck shuni chaqiradi).
+  // Bog'liqlik vaqtincha yiqilganda konteynerni qayta ishga tushirish
+  // muammoni hal qilmaydi, shuning uchun bu yerda ular tekshirilmaydi.
   @Public()
   @SkipThrottle()
   @Get('health')
@@ -19,20 +24,17 @@ export class AppController {
     return this.appService.health();
   }
 
-  // GET /api/v1/health/ready — bog'liqliklar bilan birga tekshiradi
+  // GET /api/v1/health/readiness — har bir mikroservisni RMQ orqali so'roqlaydi;
+  // servis o'z Postgres ulanishini ham tekshiradi (ServiceHealthModule).
+  // Birortasi javob bermasa 503 qaytadi.
   @Public()
   @SkipThrottle()
-  @Get('health/ready')
-  @HttpCode(HttpStatus.OK)
+  @Get('health/readiness')
   @ApiOperation({
-    summary: 'Tayyorlik tekshiruvi — Postgres va RabbitMQ javob beryaptimi',
+    summary: 'Tayyorlik tekshiruvi — barcha servis va ularning DB ulanishi',
   })
-  async ready(@Res({ passthrough: true }) response: Response) {
-    const result = await this.appService.readiness();
-    if (result.status !== 'ok') {
-      response.status(HttpStatus.SERVICE_UNAVAILABLE);
-    }
-    return rawResponse(result);
+  readiness() {
+    return this.readinessService.check();
   }
 
   // GET /api/v1/whoami — himoyalangan (tokensiz → 401), joriy user'ni qaytaradi

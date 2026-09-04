@@ -43,6 +43,7 @@ import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { ReadinessService } from './readiness.service';
 
 @Module({
   imports: [
@@ -56,8 +57,8 @@ import { AdminProductsController } from './admin/admin-products.controller';
         throttlers: [
           {
             name: 'default',
-            ttl: config.get<number>('THROTTLE_TTL_MS', 60_000),
-            limit: config.get<number>('THROTTLE_LIMIT', 300),
+            ttl: config.get<number>('RATE_LIMIT_WINDOW_MS', 60_000),
+            limit: config.get<number>('RATE_LIMIT_MAX', 300),
           },
         ],
       }),
@@ -127,6 +128,15 @@ import { AdminProductsController } from './admin/admin-products.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.SEARCH),
       },
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
     ]),
   ],
   controllers: [
@@ -162,6 +172,7 @@ import { AdminProductsController } from './admin/admin-products.controller';
   ],
   providers: [
     AppService,
+    ReadinessService,
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },

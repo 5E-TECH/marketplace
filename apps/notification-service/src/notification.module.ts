@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  ServiceHealthModule,
   shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
@@ -25,6 +26,7 @@ const entities = [Notification, NotificationDelivery];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('notification-service'),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

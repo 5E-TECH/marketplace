@@ -138,13 +138,14 @@ jobs:
           cd /srv/marketplace
           test -f .env.production
 
+          # Env auditi: placeholder qolmaganini va majburiy kalitlar borligini
+          # tekshiradi.
+          sh scripts/validate-production-env.sh .env.production
+
           # Caddy ikkala domenning TLS'ini ushlab turadi. Konfiguratsiya xato
           # bo'lsa u ko'tarilmaydi va API ham birga yiqiladi — shuning uchun
           # hech narsaga tegmasdan oldin bir martalik konteynerda tekshiramiz.
           set -a; . ./.env.production; set +a
-          : "${DOMAIN:?DOMAIN .env.production da yo'q}"
-          : "${APP_DOMAIN:?APP_DOMAIN .env.production da yo'q}"
-          : "${TLS_EMAIL:?TLS_EMAIL .env.production da yo'q}"
 
           docker run --rm \
             -e DOMAIN -e APP_DOMAIN -e TLS_EMAIL \
@@ -169,7 +170,7 @@ jobs:
               --env-file .env.production \
               -f docker-compose.prod.yml \
               exec -T api-gateway node -e \
-              "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              "fetch('http://127.0.0.1:3000/api/v1/health/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
               healthy=true
               break
             fi
@@ -195,4 +196,4 @@ jobs:
           REMOTE
 
       - name: Public HTTPS smoke
-        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://$DEPLOY_DOMAIN/api/v1/health"
+        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://$DEPLOY_DOMAIN/api/v1/health/readiness"

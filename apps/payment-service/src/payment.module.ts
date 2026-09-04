@@ -8,6 +8,7 @@ import {
   shouldRunMigrations,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -28,6 +29,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('payment-service'),
     ClientsModule.registerAsync([
       {
         name: RmqClient.CHECKOUT,

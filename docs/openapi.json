@@ -16,16 +16,16 @@
         ]
       }
     },
-    "/api/v1/health/ready": {
+    "/api/v1/health/readiness": {
       "get": {
-        "operationId": "AppController_ready",
+        "operationId": "AppController_readiness",
         "parameters": [],
         "responses": {
           "200": {
             "description": ""
           }
         },
-        "summary": "Tayyorlik tekshiruvi — Postgres va RabbitMQ javob beryaptimi",
+        "summary": "Tayyorlik tekshiruvi — barcha servis va ularning DB ulanishi",
         "tags": [
           "health"
         ]

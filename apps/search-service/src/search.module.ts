@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  ServiceHealthModule,
   shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
@@ -15,6 +16,7 @@ import { SearchIndexService } from './search-index.service';
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('search-service'),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {

@@ -1,3 +1,5 @@
+import { ThrottlerException } from '@nestjs/throttler';
+import { AllExceptionsFilter, ErrorCode } from '@app/common';
 import { AuthController } from './auth.controller';
 import { SellersController } from '../sellers/sellers.controller';
 
@@ -41,5 +43,29 @@ describe('Rate limiting — nozik endpointlar', () => {
   it('sellers.register ham cheklangan', () => {
     expect(limitOf(SellersController.prototype, 'register')).toBe(5);
     expect(ttlOf(SellersController.prototype, 'register')).toBe(60_000);
+  });
+
+  // C4.7 TC4 — limitdan oshganda javob shakli o'zgarmasligi kerak:
+  // ThrottlerException 429 tashlaydi, AllExceptionsFilter uni kontraktdagi
+  // RATE_LIMITED kodiga aylantiradi.
+  it('limitdan oshganda 429 + errorCode RATE_LIMITED qaytaradi', () => {
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+    const host = {
+      switchToHttp: () => ({
+        getResponse: () => ({ status }),
+        getRequest: () => ({ method: 'POST', url: '/api/v1/auth/login' }),
+      }),
+    } as never;
+
+    new AllExceptionsFilter().catch(new ThrottlerException(), host);
+
+    expect(status).toHaveBeenCalledWith(429);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 429,
+        errorCode: ErrorCode.RATE_LIMITED,
+      }),
+    );
   });
 });

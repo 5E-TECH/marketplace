@@ -33,7 +33,7 @@ npm run start:payment:dev     # payment-service (RMQ)
 ```
 
 Tekshirish: `http://localhost:3000/api/v1/health` · Swagger: `http://localhost:3000/api/docs`
-Bog'liqliklar bilan birga: `http://localhost:3000/api/v1/health/ready` (Postgres + RabbitMQ)
+Bog'liqliklar bilan birga: `http://localhost:3000/api/v1/health/readiness` (barcha servis + DB)
 
 ### Foydali buyruqlar
 
@@ -68,7 +68,7 @@ docs/               PRD, API kontrakt, DB sxema, Trello
 
 | Qatlam            | Nima qilingan                                                        |
 | ----------------- | -------------------------------------------------------------------- |
-| Rate limiting     | Umumiy 300 so'rov/daqiqa; login va parol tiklash 3–5 so'rov/daqiqa   |
+| Rate limiting     | Umumiy `RATE_LIMIT_MAX`/daqiqa; login va parol tiklash 3–5 so'rov/daqiqa |
 | Sarlavhalar       | `helmet` (API) + Caddy'da HSTS, CSP, `X-Frame-Options`               |
 | CORS              | `CORS_ORIGINS` — productionda aniq domenlar, `credentials: true`     |
 | Kuzatuv           | Har so'rovga `X-Request-Id`; xato javobida ham qaytadi               |

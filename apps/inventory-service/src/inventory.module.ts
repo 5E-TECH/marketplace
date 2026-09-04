@@ -11,6 +11,7 @@ import {
   OutboxService,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -45,6 +46,7 @@ const entities = [
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('inventory-service'),
     ScheduleModule.forRoot(),
     ClientsModule.registerAsync([
       {
