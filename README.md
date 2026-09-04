@@ -16,6 +16,7 @@ berish **Elchi pochta** bilan Partner API orqali integratsiya qilingan.
 - API kontrakt (endpoint DTO): [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md)
 - DB sxema: [`docs/schema/`](./docs/schema/) · Hissa qo'shish: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 - Elchi integratsiya kontrakti: `../Elchi-Backend/docs/PARTNER_API.md`
+- Sotuvchi kabineti (frontend): [`Marketplace-FrontEnd`](https://github.com/5E-TECH/Marketplace-FrontEnd)
 
 ## Ishga tushirish (dev)
 
@@ -32,6 +33,7 @@ npm run start:payment:dev     # payment-service (RMQ)
 ```
 
 Tekshirish: `http://localhost:3000/api/v1/health` · Swagger: `http://localhost:3000/api/docs`
+Bog'liqliklar bilan birga: `http://localhost:3000/api/v1/health/readiness` (barcha servis + DB)
 
 ### Foydali buyruqlar
 
@@ -42,6 +44,12 @@ Tekshirish: `http://localhost:3000/api/v1/health` · Swagger: `http://localhost:
 | `npm run lint`       | ESLint tekshiruvi             |
 | `npm run format`     | Prettier bilan formatlash     |
 | `npm run infra:down` | Docker xizmatlarni to'xtatish |
+| `npm run contract:export` | Swagger'ni `docs/openapi.json` ga chiqarish |
+
+> `contract:export` dan oldin `npm run build:all` bajarilgan bo'lishi kerak.
+> Natijani frontend repo'siga ko'chiring — u shu faylga qarab kontrakt
+> mosligini tekshiradi:
+> `cp docs/openapi.json ../Marketplace-FrontEnd/contract/openapi.json`
 
 ## Monorepo tuzilishi
 
@@ -55,6 +63,19 @@ libs/
   common/           umumiy kod (BaseEntity, guards, filter, outbox, ...)
 docs/               PRD, API kontrakt, DB sxema, Trello
 ```
+
+## Xavfsizlik
+
+| Qatlam            | Nima qilingan                                                        |
+| ----------------- | -------------------------------------------------------------------- |
+| Rate limiting     | Umumiy `RATE_LIMIT_MAX`/daqiqa; login va parol tiklash 3–5 so'rov/daqiqa |
+| Sarlavhalar       | `helmet` (API) + Caddy'da HSTS, CSP, `X-Frame-Options`               |
+| CORS              | `CORS_ORIGINS` — productionda aniq domenlar, `credentials: true`     |
+| Kuzatuv           | Har so'rovga `X-Request-Id`; xato javobida ham qaytadi               |
+| Migratsiya        | `DB_AUTO_MIGRATE=false` bilan nazoratli rollout qilish mumkin        |
+
+Rate limiting `X-Forwarded-For` bo'yicha ishlaydi — `TRUST_PROXY_HOPS`
+reverse proxy qatlamlari soniga teng bo'lishi shart (Caddy = 1).
 
 ## Stack (rejalashtirilgan)
 

@@ -8,6 +8,7 @@ import {
   CommonAuthModule,
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   RmqClient,
   RmqQueue,
   ServiceHealthModule,
@@ -59,7 +60,7 @@ const entities = [User, AuthSession, ActivityLog];
             CreateActivityLog1722950000002,
             CreateRecoverySupport1723100000000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

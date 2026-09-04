@@ -12,8 +12,20 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
   CORS_ORIGINS: Joi.string().allow('').optional(),
+  // Reverse proxy (Caddy) qatlamlari soni — haqiqiy mijoz IP'sini aniqlash
+  // uchun. Bu bo'lmasa rate limit hamma foydalanuvchini bitta IP deb sanaydi.
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(1),
+
+  // Rate limiting — umumiy chegara. Auth kabi nozik endpointlarda controller
+  // darajasida @Throttle bilan qattiqroq limit qo'yiladi.
   RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(1000).default(60000),
-  RATE_LIMIT_MAX: Joi.number().integer().min(1).default(100),
+  RATE_LIMIT_MAX: Joi.number().integer().min(1).default(300),
+
+  // Migratsiya konteyner ko'tarilishida avtomat ishlasinmi. Productionda
+  // nazoratli rollout uchun `false` qilib, alohida qadamda ishga tushiriladi.
+  DB_AUTO_MIGRATE: Joi.boolean().default(true),
+
+  // Birinchi deploy uchun idempotent seed.
   SEED_ADMIN_PHONE: Joi.string()
     .pattern(/^\+998\d{9}$/)
     .optional(),

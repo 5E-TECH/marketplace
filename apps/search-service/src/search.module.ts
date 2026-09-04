@@ -5,6 +5,7 @@ import {
   CommonConfigModule,
   ensureSchema,
   ServiceHealthModule,
+  shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
 import { SearchDocument } from './entities/search-document.entity';
@@ -23,7 +24,7 @@ import { SearchIndexService } from './search-index.service';
         return {
           ...typeOrmOptions(config, 'search', [SearchDocument]),
           migrations: [CreateSearchIndex1722945600000],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

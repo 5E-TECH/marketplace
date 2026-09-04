@@ -6,6 +6,7 @@ import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   OutboxEvent,
   OutboxService,
   RmqClient,
@@ -68,7 +69,7 @@ const entities = [
             CreateInventoryOutbox1721822400002,
             AddInventoryBaseColumns1721822400003,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

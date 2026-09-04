@@ -5,6 +5,7 @@ import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonConfigModule,
   ensureSchema,
+  shouldRunMigrations,
   RmqClient,
   RmqQueue,
   ServiceHealthModule,
@@ -94,7 +95,7 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite, Review];
             CreateReviews1724846400000,
             AddProductModeration1725105600000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

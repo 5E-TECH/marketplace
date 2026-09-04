@@ -6,6 +6,7 @@ import {
   CommonConfigModule,
   ensureSchema,
   ServiceHealthModule,
+  shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
 import { EmailAdapter } from './adapters/email.adapter';
@@ -34,7 +35,7 @@ const entities = [Notification, NotificationDelivery];
         return {
           ...typeOrmOptions(config, 'notification', entities),
           migrations: [CreateNotificationTables1722686400000],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),
