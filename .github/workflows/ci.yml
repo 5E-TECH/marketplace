@@ -114,8 +114,11 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" <<'REMOTE'
+            "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_DOMAIN" <<'REMOTE'
           set -euo pipefail
+          deploy_domain=$1
+          export DOMAIN="$deploy_domain"
+          export TLS_EMAIL="admin@$deploy_domain"
           cd /srv/marketplace
           test -f .env.production
           sh scripts/validate-production-env.sh .env.production
