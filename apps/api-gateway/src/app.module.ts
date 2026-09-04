@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
@@ -41,6 +41,8 @@ import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { ReadinessService } from './readiness.service';
+import { RateLimitMiddleware } from './rate-limit.middleware';
 
 @Module({
   imports: [
@@ -111,6 +113,15 @@ import { AdminProductsController } from './admin/admin-products.controller';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.SEARCH),
       },
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
     ]),
   ],
   controllers: [
@@ -146,9 +157,15 @@ import { AdminProductsController } from './admin/admin-products.controller';
   ],
   providers: [
     AppService,
+    ReadinessService,
+    RateLimitMiddleware,
     // Global auth: avval JWT (401), keyin rol (403)
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RateLimitMiddleware).forRoutes('*');
+  }
+}

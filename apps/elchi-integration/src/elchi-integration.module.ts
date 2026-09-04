@@ -8,6 +8,7 @@ import {
   ensureSchema,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -23,6 +24,7 @@ const entities = [ElchiMarketProvision, GeoCache];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('elchi-integration'),
     ScheduleModule.forRoot(),
     ClientsModule.registerAsync([
       {

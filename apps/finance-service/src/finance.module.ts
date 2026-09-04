@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
+import {
+  CommonConfigModule,
+  ensureSchema,
+  ServiceHealthModule,
+  typeOrmOptions,
+} from '@app/common';
 import { Commission } from './entities/commission.entity';
 import { Payout } from './entities/payout.entity';
 import { SellerLedger } from './entities/seller-ledger.entity';
@@ -16,6 +21,7 @@ const entities = [SellerLedger, Payout, Commission, CodReconciliation];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('finance-service'),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {

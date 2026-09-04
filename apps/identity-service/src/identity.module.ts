@@ -10,6 +10,7 @@ import {
   ensureSchema,
   RmqClient,
   RmqQueue,
+  ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
@@ -31,6 +32,7 @@ const entities = [User, AuthSession, ActivityLog];
 @Module({
   imports: [
     CommonConfigModule, // .env + Joi
+    ServiceHealthModule.register('identity-service'),
     CommonAuthModule, // JwtService (JWT_SECRET)
     ClientsModule.registerAsync([
       {

@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommonConfigModule, ensureSchema, typeOrmOptions } from '@app/common';
+import {
+  CommonConfigModule,
+  ensureSchema,
+  ServiceHealthModule,
+  typeOrmOptions,
+} from '@app/common';
 import { EmailAdapter } from './adapters/email.adapter';
 import { NOTIFICATION_ADAPTERS } from './adapters/notification-adapter';
 import { SmsAdapter } from './adapters/sms.adapter';
@@ -20,6 +25,7 @@ const entities = [Notification, NotificationDelivery];
 @Module({
   imports: [
     CommonConfigModule,
+    ServiceHealthModule.register('notification-service'),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
