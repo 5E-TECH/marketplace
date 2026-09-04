@@ -12,6 +12,13 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
   CORS_ORIGINS: Joi.string().allow('').optional(),
+  RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(1000).default(60000),
+  RATE_LIMIT_MAX: Joi.number().integer().min(1).default(100),
+  SEED_ADMIN_PHONE: Joi.string()
+    .pattern(/^\+998\d{9}$/)
+    .optional(),
+  SEED_ADMIN_PASSWORD: Joi.string().min(4).optional(),
+  SEED_DEFAULT_CATEGORIES: Joi.boolean().default(false),
 
   // PostgreSQL
   DB_HOST: Joi.string().required(),

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { CommonConfigModule } from '@app/common';
+import { CommonConfigModule, ServiceHealthModule } from '@app/common';
 import { EchoController } from './echo.controller';
 
 @Module({
-  imports: [CommonConfigModule],
+  imports: [CommonConfigModule, ServiceHealthModule.register('echo-service')],
   controllers: [EchoController],
 })
 export class EchoModule {}

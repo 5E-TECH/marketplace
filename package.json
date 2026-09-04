@@ -38,6 +38,7 @@
     "ops:monitor": "node scripts/health-monitor.mjs",
     "ops:backup": "sh scripts/db-backup.sh",
     "ops:restore-test": "sh scripts/db-restore-test.sh",
+    "ops:env-audit": "sh scripts/validate-production-env.sh",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f"

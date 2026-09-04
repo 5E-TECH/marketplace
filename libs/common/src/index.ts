@@ -64,6 +64,7 @@ export * from './security/ssrf.util';
 export * from './messaging/execute-and-ack';
 export * from './messaging/rmq.util';
 export * from './messaging/rpc.util';
+export * from './health/service-health.module';
 
 // Idempotency / Outbox / Activity-log
 export * from './idempotency/idempotency-record.entity';
