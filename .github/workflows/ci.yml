@@ -131,11 +131,22 @@ jobs:
 
       - name: Docker stackni yangilash
         run: |
+          # ssh argumentlarni bitta satrga qo'shib yuboradi, shuning uchun
+          # `bash -s -- "$DEPLOY_DOMAIN"` da bo'sh qiymat butunlay yo'qoladi va
+          # masofadagi skript `set -u` ostida "$1: unbound variable" bilan
+          # yiqiladi. Qiymatni pozitsion argument o'rniga muhit o'zgaruvchisi
+          # sifatida uzatamiz va oldindan bo'sh emasligini tekshiramiz.
+          test -n "${DEPLOY_DOMAIN:-}" || {
+            echo "XATO: DEPLOY_DOMAIN secret bo'sh — GitHub production environment'da sozlang" >&2
+            exit 1
+          }
+
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_DOMAIN" <<'REMOTE'
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            env DEPLOY_DOMAIN="$DEPLOY_DOMAIN" bash -s <<'REMOTE'
           set -euo pipefail
-          deploy_domain=$1
+          deploy_domain="${DEPLOY_DOMAIN:?DEPLOY_DOMAIN serverga yetib kelmadi}"
           cd /srv/marketplace
           test -f .env.production
 
