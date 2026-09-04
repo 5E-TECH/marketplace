@@ -11,4 +11,6 @@ export interface ApiErrorResponse {
   message: string | string[];
   errorCode: string;
   details?: Array<{ field: string; error: string }>;
+  /** Kuzatuv identifikatori — log bilan solishtirish uchun (X-Request-Id). */
+  requestId?: string;
 }

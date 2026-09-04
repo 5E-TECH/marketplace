@@ -2,10 +2,12 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import {
   CommonAuthModule,
   CommonConfigModule,
   JwtAuthGuard,
+  RequestIdMiddleware,
   RmqClient,
   RmqQueue,
   RolesGuard,
@@ -42,12 +44,25 @@ import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { ReadinessService } from './readiness.service';
-import { RateLimitMiddleware } from './rate-limit.middleware';
 
 @Module({
   imports: [
     CommonConfigModule, // .env + Joi (global)
     CommonAuthModule, // JWT + guardlar (global)
+    // Rate limiting — umumiy chegara. Auth kabi nozik endpointlarda
+    // controller darajasida @Throttle bilan qattiqroq limit qo'yiladi.
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: config.get<number>('RATE_LIMIT_WINDOW_MS', 60_000),
+            limit: config.get<number>('RATE_LIMIT_MAX', 300),
+          },
+        ],
+      }),
+    }),
     // Servislarga RMQ client'lari (echo demo + identity; keyin catalog/...)
     ClientsModule.registerAsync([
       {
@@ -158,14 +173,15 @@ import { RateLimitMiddleware } from './rate-limit.middleware';
   providers: [
     AppService,
     ReadinessService,
-    RateLimitMiddleware,
-    // Global auth: avval JWT (401), keyin rol (403)
+    // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
+    // keyin JWT (401), keyin rol (403).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RateLimitMiddleware).forRoutes('*');
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
   }
 }

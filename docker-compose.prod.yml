@@ -166,8 +166,11 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN}
-      TLS_EMAIL: ${TLS_EMAIL}
+      DOMAIN: ${DOMAIN:?DOMAIN kerak — API domeni (.env.production)}
+      # Bo'sh qolsa Caddy konfiguratsiyasi umuman parse bo'lmaydi va TLS
+      # qatlami bilan birga API ham yiqiladi. Shuning uchun majburiy.
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN kerak — sotuvchi kabineti domeni (.env.production)}
+      TLS_EMAIL: ${TLS_EMAIL:?TLS_EMAIL kerak — Let's Encrypt uchun (.env.production)}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -184,5 +187,8 @@ volumes:
   caddy_config:
 
 networks:
+  # Aniq nom: frontend compose'i shu tarmoqqa `external` sifatida ulanadi
+  # (Marketplace-FrontEnd/docker-compose.prod.yml).
   frontend:
+    name: marketplace_edge
   backend:

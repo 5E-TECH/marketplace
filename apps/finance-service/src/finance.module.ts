@@ -5,6 +5,7 @@ import {
   CommonConfigModule,
   ensureSchema,
   ServiceHealthModule,
+  shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
 import { Commission } from './entities/commission.entity';
@@ -33,7 +34,7 @@ const entities = [SellerLedger, Payout, Commission, CodReconciliation];
             CreateFinanceTables1724673600000,
             CreateCodReconciliation1724932800000,
           ],
-          migrationsRun: true,
+          migrationsRun: shouldRunMigrations(config),
         };
       },
     }),

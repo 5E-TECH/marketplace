@@ -9,7 +9,10 @@ if grep -Eq '=(REPLACE_WITH|change-me|changeme|example\.com)' "$env_file"; then
   exit 1
 fi
 
-required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS'
+# APP_DOMAIN (sotuvchi kabineti domeni) faqat shu fayldan keladi — DOMAIN va
+# TLS_EMAIL deploy secret'idan beriladi. Bo'sh qolsa Caddyfile parse bo'lmaydi
+# va TLS qatlami bilan birga API ham yiqiladi.
+required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS APP_DOMAIN'
 for key in $required; do
   value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
   if [ -z "$value" ]; then
