@@ -223,8 +223,11 @@ jobs:
       # DEPLOY_DOMAIN secret'i ixtiyoriy: berilmasa domenni serverdagi
       # .env.production dan o'qiymiz, shunda deploy qo'shimcha sozlamasiz ham
       # to'liq tekshiriladi.
-      - name: Public domenni aniqlash
-        id: domain
+      # Tekshiruv manzili: domen bo'lsa https, HTTP rejimida esa server IP'si.
+      # DEPLOY_DOMAIN secret'i ixtiyoriy — bo'lmasa serverdagi .env.production
+      # dan o'qiladi.
+      - name: Public smoke manzilini aniqlash
+        id: smoke
         run: |
           domain="${DEPLOY_DOMAIN:-}"
           if [ -z "$domain" ]; then
@@ -232,11 +235,16 @@ jobs:
               "$DEPLOY_USER@$DEPLOY_HOST" \
               "sed -n 's/^DOMAIN=//p' /srv/marketplace/.env.production | tail -n 1")
           fi
-          if [ -z "$domain" ]; then
-            echo "XATO: domen topilmadi — DEPLOY_DOMAIN secret'ini qo'ying yoki .env.production da DOMAIN bo'lsin" >&2
-            exit 1
-          fi
-          echo "domain=$domain" >> "$GITHUB_OUTPUT"
 
-      - name: Public HTTPS smoke
-        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://${{ steps.domain.outputs.domain }}/api/v1/health/readiness"
+          if [ -z "$domain" ] || [ "${domain#:}" != "$domain" ]; then
+            echo "Domen yo'q — HTTP rejimi, IP orqali tekshiriladi."
+            url="http://$DEPLOY_HOST/api/v1/health/readiness"
+          else
+            url="https://$domain/api/v1/health/readiness"
+          fi
+
+          echo "Smoke: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Public smoke
+        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "${{ steps.smoke.outputs.url }}"
