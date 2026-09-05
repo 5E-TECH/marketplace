@@ -177,6 +177,18 @@ jobs:
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 
+          # Uzilib qolgan oldingi deploy `<hash>_marketplace-...` nomli yarim
+          # yaratilgan konteynerlarni qoldiradi. Ular turgan ekan, keyingi
+          # `compose up` "container name is already in use" bilan yiqiladi —
+          # ya'ni bitta uzilish keyingi barcha deploylarni bloklaydi.
+          stale=$(docker ps -a --format '{{.Names}}' \
+            | grep -E '^[0-9a-f]{12}_marketplace-' || true)
+          if [ -n "$stale" ]; then
+            echo "Oldingi uzilgan deploydan qolgan konteynerlar tozalanmoqda:"
+            echo "$stale"
+            echo "$stale" | xargs -r docker rm -f
+          fi
+
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
