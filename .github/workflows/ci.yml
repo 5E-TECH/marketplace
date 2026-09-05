@@ -133,18 +133,25 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<'REMOTE'
+            "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_DOMAIN" <<'REMOTE'
           set -euo pipefail
+          deploy_domain=${1:-}
           cd /srv/marketplace
           test -f .env.production
 
-          # Env auditi: placeholder qolmaganini va majburiy kalitlar borligini
-          # tekshiradi (DOMAIN va TLS_EMAIL ham shu ro'yxatda).
-          sh scripts/validate-production-env.sh .env.production
-
-          # Domenlar yagona manbadan — .env.production dan — keladi. Compose
-          # ham shu faylni o'qiydi, shuning uchun ular bir-biriga mos bo'ladi.
+          # Serverdagi qiymatlar ustuvor. Eski server env faylida DOMAIN hali
+          # bo'lmasa GitHub production environment'idagi secret ishlatiladi.
           set -a; . ./.env.production; set +a
+          export DOMAIN="${DOMAIN:-$deploy_domain}"
+          if [ -z "$DOMAIN" ]; then
+            echo "XATO: DOMAIN topilmadi — DEPLOY_DOMAIN secret'ini qo'ying yoki .env.production ga DOMAIN kiriting." >&2
+            exit 1
+          fi
+          export TLS_EMAIL="${TLS_EMAIL:-admin@$DOMAIN}"
+
+          # Validator fayldagi qiymatlar bilan birga yuqoridagi deploy
+          # override'larini ham tekshiradi.
+          sh scripts/validate-production-env.sh .env.production
 
           # Sotuvchi kabineti domeni berilmagan bo'lsa deploy to'xtamaydi,
           # lekin bu jimgina o'tib ketmasligi kerak.
