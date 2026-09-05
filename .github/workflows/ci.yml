@@ -126,13 +126,20 @@ jobs:
             --exclude 'dist/' \
             --exclude 'coverage/' \
             --exclude 'backups/' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+                 -o ServerAliveInterval=30 -o ServerAliveCountMax=20" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:/srv/marketplace/"
 
       - name: Docker stackni yangilash
         run: |
+          # Keepalive shart: `compose up --build` 12 servisni quradi va bu
+          # paytda ulanish uzoq vaqt jim turadi. Keepalivesiz oradagi NAT
+          # bo'sh TCP ulanishni uzadi, SSH o'ladi va compose konteynerlarni
+          # yarim qayta yaratgan holda qoladi — keyingi deploy nom
+          # to'qnashuvi bilan yiqiladi.
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_DOMAIN" <<'REMOTE'
           set -euo pipefail
           deploy_domain=${1:-}
@@ -189,10 +196,19 @@ jobs:
             echo "$stale" | xargs -r docker rm -f
           fi
 
+          # Build va qayta yaratish ataylab ajratilgan. Build — eng uzun
+          # bosqich (12 servis), lekin bu paytda ishlab turgan konteynerlarga
+          # umuman tegilmaydi: ulanish shu yerda uzilsa ham sayt ishlayveradi.
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
-            up -d --build --remove-orphans
+            build
+
+          # Qayta yaratish endi bir necha soniya — uzilish oynasi juda kichik.
+          docker compose \
+            --env-file .env.production \
+            -f docker-compose.prod.yml \
+            up -d --remove-orphans
 
           docker compose \
             --env-file .env.production \
@@ -244,6 +260,7 @@ jobs:
           domain="${DEPLOY_DOMAIN:-}"
           if [ -z "$domain" ]; then
             domain=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
               "$DEPLOY_USER@$DEPLOY_HOST" \
               "sed -n 's/^DOMAIN=//p' /srv/marketplace/.env.production | tail -n 1")
           fi
