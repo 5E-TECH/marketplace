@@ -13,7 +13,7 @@ fi
 # qiymatdan kelishi mumkin. Ikkalasi ham bo'sh qolsa Caddyfile parse bo'lmaydi.
 # APP_DOMAIN (sotuvchi kabineti) ixtiyoriy: berilmasa compose xavfsiz
 # `.localhost` zaxirasini qo'yadi va faqat ogohlantirish chiqadi.
-required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS DOMAIN TLS_EMAIL'
+required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS'
 for key in $required; do
   value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
   if [ -z "$value" ]; then
@@ -41,5 +41,11 @@ esac
   printf 'Rate-limit qiymatlari noto‘g‘ri\n' >&2
   exit 1
 }
+
+domain=$(sed -n 's/^DOMAIN=//p' "$env_file" | tail -n 1)
+if [ -z "${domain:-}" ] || [ "${domain#:}" != "$domain" ]; then
+  printf 'OGOHLANTIRISH: DOMAIN yo‘q yoki HTTP rejimi — API sertifikatsiz, IP orqali ochiladi.\n' >&2
+  printf '  Production uchun .env.production ga DOMAIN va TLS_EMAIL qo‘shing.\n' >&2
+fi
 
 printf 'Production env audit muvaffaqiyatli: %s\n' "$env_file"

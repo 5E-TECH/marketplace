@@ -142,12 +142,17 @@ jobs:
           # Serverdagi qiymatlar ustuvor. Eski server env faylida DOMAIN hali
           # bo'lmasa GitHub production environment'idagi secret ishlatiladi.
           set -a; . ./.env.production; set +a
-          export DOMAIN="${DOMAIN:-$deploy_domain}"
-          if [ -z "$DOMAIN" ]; then
-            echo "XATO: DOMAIN topilmadi — DEPLOY_DOMAIN secret'ini qo'ying yoki .env.production ga DOMAIN kiriting." >&2
-            exit 1
+          # Tartib: .env.production → DEPLOY_DOMAIN secret → HTTP zaxirasi.
+          # Domen umuman bo'lmasa deploy to'xtamaydi: Caddy `:80` da oddiy
+          # HTTP xizmat qiladi va API IP orqali ochiladi (sertifikatsiz).
+          export DOMAIN="${DOMAIN:-${deploy_domain:-:80}}"
+          if [ "${DOMAIN#:}" != "$DOMAIN" ]; then
+            echo "OGOHLANTIRISH: domen yo'q — API HTTP rejimida, IP orqali ochiladi." >&2
+            echo "  HTTPS uchun .env.production ga DOMAIN va TLS_EMAIL qo'shing." >&2
+            export TLS_EMAIL="${TLS_EMAIL:-admin@localhost}"
+          else
+            export TLS_EMAIL="${TLS_EMAIL:-admin@$DOMAIN}"
           fi
-          export TLS_EMAIL="${TLS_EMAIL:-admin@$DOMAIN}"
 
           # Validator fayldagi qiymatlar bilan birga yuqoridagi deploy
           # override'larini ham tekshiradi.

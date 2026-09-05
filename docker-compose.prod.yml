@@ -166,14 +166,17 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN:?DOMAIN kerak — API domeni (.env.production)}
-      # Bo'sh qolsa Caddy konfiguratsiyasi umuman parse bo'lmaydi va TLS
-      # qatlami bilan birga API ham yiqiladi. Sotuvchi kabineti hali
-      # chiqarilmagan bo'lsa `.localhost` zaxira qiymati ishlatiladi — Caddy
-      # unga ichki sertifikat beradi, public ACME'ga murojaat qilmaydi va
-      # API'ga umuman ta'sir qilmaydi.
+      # DOMAIN berilmasa Caddy `:80` da oddiy HTTP xizmat qiladi — domen hali
+      # yo'q bo'lsa API to'g'ridan-to'g'ri IP orqali ochiladi. Domen
+      # qo'shilishi bilan Caddy o'zi HTTPS'ga o'tadi va sertifikat oladi.
+      DOMAIN: ${DOMAIN:-:80}
+      # Sotuvchi kabineti hali chiqarilmagan bo'lsa `.localhost` zaxirasi —
+      # Caddy unga ichki sertifikat beradi, public ACME'ga murojaat qilmaydi
+      # va API'ga umuman ta'sir qilmaydi.
       APP_DOMAIN: ${APP_DOMAIN:-kabinet.localhost}
-      TLS_EMAIL: ${TLS_EMAIL:?TLS_EMAIL kerak — Let's Encrypt uchun (.env.production)}
+      # Faqat Let's Encrypt uchun. HTTP rejimida ishlatilmaydi, lekin
+      # Caddyfile parse bo'lishi uchun qiymat bo'lishi shart.
+      TLS_EMAIL: ${TLS_EMAIL:-admin@localhost}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
