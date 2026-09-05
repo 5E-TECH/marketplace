@@ -133,22 +133,29 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_DOMAIN" <<'REMOTE'
+            "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<'REMOTE'
           set -euo pipefail
-          deploy_domain=$1
           cd /srv/marketplace
           test -f .env.production
 
           # Env auditi: placeholder qolmaganini va majburiy kalitlar borligini
-          # tekshiradi.
+          # tekshiradi (DOMAIN va TLS_EMAIL ham shu ro'yxatda).
           sh scripts/validate-production-env.sh .env.production
 
-          # Tartib muhim: avval fayl o'qiladi (APP_DOMAIN faqat shu yerda),
-          # keyin DOMAIN/TLS_EMAIL deploy secret'idan qayta yoziladi —
-          # secret fayldagi qiymatdan ustun turadi.
+          # Domenlar yagona manbadan — .env.production dan — keladi. Compose
+          # ham shu faylni o'qiydi, shuning uchun ular bir-biriga mos bo'ladi.
           set -a; . ./.env.production; set +a
-          export DOMAIN="$deploy_domain"
-          export TLS_EMAIL="admin@$deploy_domain"
+
+          # Sotuvchi kabineti domeni berilmagan bo'lsa deploy to'xtamaydi,
+          # lekin bu jimgina o'tib ketmasligi kerak.
+          if [ -z "${APP_DOMAIN:-}" ]; then
+            echo "OGOHLANTIRISH: APP_DOMAIN yo'q — sotuvchi kabineti public domenda ochilmaydi." >&2
+            echo "  Kabinetni chiqarish uchun .env.production ga APP_DOMAIN va CORS_ORIGINS qo'shing." >&2
+          fi
+          # Compose'dagi zaxira qiymat bilan bir xil bo'lishi shart, aks holda
+          # quyidagi Caddy tekshiruvi haqiqatda ishlaydigan konfiguratsiyadan
+          # boshqasini tekshirgan bo'lardi.
+          export APP_DOMAIN="${APP_DOMAIN:-kabinet.localhost}"
 
           # Caddy ikkala domenning TLS'ini ushlab turadi. Konfiguratsiya xato
           # bo'lsa u ko'tarilmaydi va API ham birga yiqiladi — shuning uchun
@@ -201,5 +208,23 @@ jobs:
             ps
           REMOTE
 
+      # DEPLOY_DOMAIN secret'i ixtiyoriy: berilmasa domenni serverdagi
+      # .env.production dan o'qiymiz, shunda deploy qo'shimcha sozlamasiz ham
+      # to'liq tekshiriladi.
+      - name: Public domenni aniqlash
+        id: domain
+        run: |
+          domain="${DEPLOY_DOMAIN:-}"
+          if [ -z "$domain" ]; then
+            domain=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" \
+              "sed -n 's/^DOMAIN=//p' /srv/marketplace/.env.production | tail -n 1")
+          fi
+          if [ -z "$domain" ]; then
+            echo "XATO: domen topilmadi — DEPLOY_DOMAIN secret'ini qo'ying yoki .env.production da DOMAIN bo'lsin" >&2
+            exit 1
+          fi
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
+
       - name: Public HTTPS smoke
-        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://$DEPLOY_DOMAIN/api/v1/health/readiness"
+        run: curl --fail --show-error --silent --retry 12 --retry-delay 5 "https://${{ steps.domain.outputs.domain }}/api/v1/health/readiness"
