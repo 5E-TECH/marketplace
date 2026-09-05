@@ -188,7 +188,12 @@ export class AuthService {
     const page = Math.max(1, Number(query?.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query?.limit ?? 20)));
 
-    const qb = this.users.createQueryBuilder('u').where('u.is_deleted = FALSE');
+    const qb = this.users
+      .createQueryBuilder('u')
+      .where('u.is_deleted = FALSE')
+      // SUPERADMIN platformaning yashirin egasi: umumiy admin userlar
+      // ro'yxatida va qidiruv natijalarida ko'rsatilmaydi.
+      .andWhere('u.role != :hiddenRole', { hiddenRole: Role.SUPERADMIN });
     if (query?.role) {
       qb.andWhere('u.role = :role', { role: query.role });
     }

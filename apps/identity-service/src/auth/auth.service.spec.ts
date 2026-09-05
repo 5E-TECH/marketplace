@@ -513,11 +513,36 @@ describe('AuthService.adminListUsers (C1.29)', () => {
       limit: 20,
     });
 
+    expect(qb.andWhere).toHaveBeenCalledWith('u.role != :hiddenRole', {
+      hiddenRole: Role.SUPERADMIN,
+    });
     expect(qb.andWhere).toHaveBeenCalledWith('u.role = :role', {
       role: 'SELLER',
     });
     expect(res).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
     expect((res.items[0] as any).passwordHash).toBeUndefined();
+  });
+
+  it('SUPERADMIN umumiy ro‘yxatdan doim yashiriladi', async () => {
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn(() => Promise.resolve([[], 0])),
+    };
+    const svc: any = Object.create(AuthService.prototype);
+    svc.users = { createQueryBuilder: jest.fn(() => qb) };
+
+    await svc.adminListUsers({ role: Role.SUPERADMIN });
+
+    expect(qb.andWhere).toHaveBeenNthCalledWith(1, 'u.role != :hiddenRole', {
+      hiddenRole: Role.SUPERADMIN,
+    });
+    expect(qb.andWhere).toHaveBeenNthCalledWith(2, 'u.role = :role', {
+      role: Role.SUPERADMIN,
+    });
   });
 
   it('blocked filtri qo‘llaydi', async () => {
