@@ -9,13 +9,16 @@ if grep -Eq '=(REPLACE_WITH|change-me|changeme|example\.com)' "$env_file"; then
   exit 1
 fi
 
-# Domenlar yagona manbadan — shu fayldan — keladi. DOMAIN yoki TLS_EMAIL
-# bo'sh qolsa Caddyfile parse bo'lmaydi va TLS bilan birga API ham yiqiladi.
+# DOMAIN va TLS_EMAIL server faylidan yoki deploy jarayonida export qilingan
+# qiymatdan kelishi mumkin. Ikkalasi ham bo'sh qolsa Caddyfile parse bo'lmaydi.
 # APP_DOMAIN (sotuvchi kabineti) ixtiyoriy: berilmasa compose xavfsiz
 # `.localhost` zaxirasini qo'yadi va faqat ogohlantirish chiqadi.
 required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS DOMAIN TLS_EMAIL'
 for key in $required; do
   value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
+  if [ -z "$value" ]; then
+    eval "value=\${${key}:-}"
+  fi
   if [ -z "$value" ]; then
     printf 'Production env qiymati yo‘q: %s\n' "$key" >&2
     exit 1
