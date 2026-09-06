@@ -1,0 +1,65 @@
+List,Card Name,Description,Labels,Members,Due Date
+Backlog,C5.1 Domen olish va DNS sozlash,"**Maqsad:** Marketplace uchun domen olib, kabinet va API subdomenlarini serverga yo'naltirish.
+
+Hozir hammasi IP orqali va HTTPS'siz ishlayapti — bu faqat sinov uchun yaraydi. Domen olinmaguncha sertifikat olish ham, Telegram'da havola ko'rinishi ham mumkin emas.
+
+- domen tanlash va ro'yxatdan o'tkazish
+- Cloudflare DNS'ga qo'shish
+- `admin.` (kabinet) va `api.` (backend) yozuvlari
+
+|| TEST: TC1 dig admin.<domen> server IP ni qaytaradi; TC2 dig api.<domen> server IP ni qaytaradi; TC3 domen Cloudflare panelida faol ko'rinadi.",Phase 4;DevOps;Blocker;S,Lead,2026-09-08
+Backlog,C5.2 Cloudflare Tunnel — kabinet va API ni HTTPS'ga chiqarish,"**Maqsad:** Kabinet va API ni server portlarini ochmasdan HTTPS orqali chiqarish.
+
+Tunnel serverdan Cloudflare tomon ulanadi, ya'ni 80/443 ni tashqariga ochish shart emas. cloudflared konteyneri `marketplace_edge` tarmog'ida turadi va `frontend:8080` hamda `caddy:80` ga ulanadi.
+
+- cloudflared konteyneri (token Cloudflare panelidan)
+- public hostname: kabinet -> frontend:8080, API -> caddy:80
+- ishga tushgach 8080 portini yopish
+
+|| TEST: TC1 https://api.<domen>/api/v1/health 200 qaytaradi; TC2 https://admin.<domen> kabinetni ochadi; TC3 sertifikat yaroqli (brauzer ogohlantirmaydi); TC4 8080 porti tashqaridan yopiq.",Phase 4;DevOps;Blocker;M,Lead,2026-09-09
+Backlog,C5.3 HTTPS'ga o'tgach vaqtinchalik yon yechimlarni olib tashlash,"**Maqsad:** IP+HTTP bilan sinash uchun qo'yilgan chetlashuvlarni tozalash.
+
+Sinov uchun ataylab qo'yilgan yon yechimlar bor. Domen ishlagach ularning hammasi olib tashlanishi shart, aks holda production HTTPS'siz qolib ketadi.
+
+- frontend `.env.production` dan `VITE_ALLOW_INSECURE_API` olib tashlanadi
+- `VITE_API_URL` https manzilga o'tadi
+- backend `CORS_ORIGINS` dan IP va localhost originlari olib tashlanadi
+- `MINIO_PUBLIC_URL` https ga o'tadi
+- `DOMAIN=:80` o'rniga haqiqiy domen, `TLS_EMAIL` haqiqiy pochta
+
+|| TEST: TC1 frontend build bayroqsiz o'tadi; TC2 CORS javobida faqat https origin ruxsat etiladi; TC3 mahsulot rasmi https orqali ochiladi; TC4 http manzil https ga yo'naltiriladi.",Phase 4;DevOps;High;S,Lead,2026-09-10
+Backlog,C5.4 Kabinetdan xaridor qismini chiqarish,"**Maqsad:** Kabinet faqat sotuvchi, operator va admin uchun qolsin.
+
+Hozir `/checkout` kabinet ichida `BUYER_ONLY` roli bilan turibdi — bu rejadan chetga chiqish. Xaridor kabinetga umuman kirmasligi kerak, uning joyi storefront'da.
+
+- `/checkout` marshruti kabinetdan olib tashlanadi
+- `BUYER` roli kabinet ruxsatidan chiqariladi
+- CheckoutPage mantiqi storefront'ga ko'chiriladi (C2.17 bilan bog'liq)
+
+|| TEST: TC1 BUYER roli bilan login qilinganda kabinetga kirish taqiqlanadi; TC2 marshrut konfiguratsiyasida BUYER_ONLY qolmagan; TC3 e2e testlar yashil; TC4 sotuvchi va admin oqimlari buzilmagan.",Phase 4;Frontend;High;S,Bahodir,2026-09-11
+Backlog,C5.5 Frontend CI avtomatik deploy,"**Maqsad:** Kabinet ham backend kabi `main`ga push bo'lganda o'zi chiqsin.
+
+Birinchi deploy qo'lda qilindi. Frontend repo'sida deploy secretlari yo'q, shuning uchun CI dagi deploy job ishlamaydi.
+
+- frontend repo'ga `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` secretlari
+- deploy job bir marta sinab ko'riladi
+
+|| TEST: TC1 main'ga push deploy job'ni ishga tushiradi; TC2 healthcheck deploy'ni tasdiqlaydi; TC3 ataylab buzilgan build'da job qizil bo'ladi.",Phase 4;DevOps;High;S,Lead,2026-09-09
+Backlog,C5.6 OpenAPI'dan tip generatsiyasi,"**Maqsad:** Kontrakt kabinet va storefront'da bir manbadan kelsin.
+
+Hozir kontrakt mosligini `contract:check` tekshiradi — u endpoint bor-yo'qligini biladi, lekin maydon nomi o'zgarsa sezmaydi. Ikkinchi frontend ilova qo'shilganda bu xavf ikki barobar ortadi.
+
+- `contract/openapi.json` dan TypeScript tiplari generatsiyasi
+- CI'da drift tekshiruvi
+- kabinet va storefront bir xil tiplarni ishlatadi
+
+|| TEST: TC1 generatsiya skripti xatosiz ishlaydi; TC2 backend DTO maydoni o'zgarsa CI qizil bo'ladi; TC3 ikkala ilova bir xil tip manbasini ishlatadi.",Phase 4;DevOps;Normal;M,Lead,2026-09-15
+Backlog,C5.7 Storefront va kabinetni domen bo'yicha ajratish,"**Maqsad:** `<domen>` xaridor do'koni, `admin.<domen>` esa kabinet bo'lsin.
+
+Hozir kabinet `noindex` bilan yopilgan — bu kabinet uchun to'g'ri, do'kon uchun esa aynan teskarisi kerak. Do'kon SSR bo'lishi shart: Telegram va Yandex JavaScript ishlatmaydi, ya'ni SPA'da ulashilgan mahsulot havolasi bo'sh ko'rinish beradi.
+
+- kabinet `admin.` subdomenida
+- storefront ildiz domenda (C2.12 bilan bog'liq)
+- kabinet robots noindex, storefront indekslanadigan
+
+|| TEST: TC1 admin.<domen> login sahifasini beradi; TC2 <domen> katalogni beradi; TC3 kabinet robots noindex, storefront index; TC4 Telegram'ga mahsulot havolasi tashlanganda nom, narx va rasm ko'rinadi.",Phase 4;Frontend;High;M,Bahodir,2026-09-22
