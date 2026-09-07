@@ -184,18 +184,6 @@ jobs:
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 
-          # Uzilib qolgan oldingi deploy `<hash>_marketplace-...` nomli yarim
-          # yaratilgan konteynerlarni qoldiradi. Ular turgan ekan, keyingi
-          # `compose up` "container name is already in use" bilan yiqiladi —
-          # ya'ni bitta uzilish keyingi barcha deploylarni bloklaydi.
-          stale=$(docker ps -a --format '{{.Names}}' \
-            | grep -E '^[0-9a-f]{12}_marketplace-' || true)
-          if [ -n "$stale" ]; then
-            echo "Oldingi uzilgan deploydan qolgan konteynerlar tozalanmoqda:"
-            echo "$stale"
-            echo "$stale" | xargs -r docker rm -f
-          fi
-
           # Build va qayta yaratish ataylab ajratilgan. Build — eng uzun
           # bosqich (12 servis), lekin bu paytda ishlab turgan konteynerlarga
           # umuman tegilmaydi: ulanish shu yerda uzilsa ham sayt ishlayveradi.
@@ -204,16 +192,40 @@ jobs:
             -f docker-compose.prod.yml \
             build
 
+          # Uzilib qolgan oldingi deploy `<hash>_marketplace-...` nomli yarim
+          # yaratilgan konteynerlarni qoldiradi. Build tugagandan keyingina
+          # tozalaymiz: uzun build davomida ishlab turgan API o'chib qolmaydi.
+          stale=$(docker ps -a --format '{{.Names}}' \
+            | grep -E '^[0-9a-f]{12}_marketplace-' || true)
+          if [ -n "$stale" ]; then
+            echo "Oldingi uzilgan deploydan qolgan konteynerlar tozalanmoqda:"
+            echo "$stale"
+            echo "$stale" | xargs -r docker rm -f
+          fi
+
+          # Frontend network nomi eski deploylarda `marketplace_frontend`,
+          # hozir esa `marketplace_edge`. Docker ba'zan eski caddy/gateway
+          # konteynerining network metadata'sini uzolmay, "not connected to
+          # the network" bilan compose'ni yiqitadi. Faqat edge'ga ulangan
+          # stateless konteynerlarni label orqali olib tashlash bu migratsiyani
+          # idempotent qiladi; DB, queue, MinIO va volumelarga tegilmaydi.
+          for service in api-gateway caddy; do
+            ids=$(docker ps -aq \
+              --filter label=com.docker.compose.project=marketplace \
+              --filter label=com.docker.compose.service="$service")
+            if [ -n "$ids" ]; then
+              docker rm -f $ids
+            fi
+          done
+          # Faqat boshqa konteyner ulanmagan bo'lsa o'chadi. Ulangan bo'lsa
+          # xatoni e'tiborsiz qoldiramiz — yangi stack baribir edge'ni ishlatadi.
+          docker network rm marketplace_frontend 2>/dev/null || true
+
           # Qayta yaratish endi bir necha soniya — uzilish oynasi juda kichik.
           docker compose \
             --env-file .env.production \
             -f docker-compose.prod.yml \
             up -d --remove-orphans
-
-          docker compose \
-            --env-file .env.production \
-            -f docker-compose.prod.yml \
-            up -d --force-recreate --no-deps caddy
 
           # Deploy muvaffaqiyatli deyilishidan oldin public API Nginx orqali
           # javob berayotganini tekshiramiz.
