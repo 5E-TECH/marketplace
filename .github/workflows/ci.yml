@@ -67,6 +67,9 @@ jobs:
           sh -n scripts/db-backup.sh
           sh -n scripts/db-restore-test.sh
 
+      - name: Ops regression testlar
+        run: npm run test:ops
+
       - name: Build (barcha app)
         run: npm run build:all
 
