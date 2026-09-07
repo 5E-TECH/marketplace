@@ -72,7 +72,9 @@ describe('CheckoutService (C2.9)', () => {
       ),
     };
     const integration = {
-      send: jest.fn(() => of({ amount: 20 })),
+      send: jest.fn((_pattern?: unknown, _request?: unknown) =>
+        of({ amount: 20 }),
+      ),
     };
     return {
       service: new CheckoutService(
@@ -158,6 +160,30 @@ describe('CheckoutService (C2.9)', () => {
     expect(cart.status).toBe('converted');
   });
 
+  it('C2.20 TC1: checkout har posilka uchun alohida dostavka narxini saqlaydi', async () => {
+    const { service, integration } = setup();
+
+    const result = await service.create('5', dto());
+
+    expect(integration.send).toHaveBeenCalledTimes(2);
+    expect(result.sellerOrders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ shopId: '7', deliveryFee: 20 }),
+        expect.objectContaining({ shopId: '8', deliveryFee: 20 }),
+      ]),
+    );
+  });
+
+  it('C2.20 TC2: jami subtotal va barcha posilkalar dostavkasiga teng', async () => {
+    const { service } = setup();
+
+    await expect(service.create('5', dto())).resolves.toMatchObject({
+      subtotal: 500,
+      deliveryFee: 40,
+      totalAmount: 540,
+    });
+  });
+
   it('C2.20 TC3: storefront preview har shop uchun alohida posilka qaytaradi', async () => {
     const { service, integration } = setup();
 
@@ -173,5 +199,24 @@ describe('CheckoutService (C2.9)', () => {
       ],
     });
     expect(integration.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('C2.20: manzil o‘zgarganda Elchi tarifini qayta hisoblaydi', async () => {
+    const { service, integration } = setup();
+    integration.send.mockImplementation(
+      (_pattern: unknown, request: { districtId: string }) =>
+        of({ amount: request.districtId === '3' ? 35 : 20 }),
+    );
+
+    const first = await service.preview('5', undefined, dto().address);
+    const changedAddress = { ...dto().address, districtId: '3' };
+    const second = await service.preview('5', undefined, changedAddress);
+
+    expect(first).toMatchObject({ deliveryFee: 40, totalAmount: 540 });
+    expect(second).toMatchObject({ deliveryFee: 70, totalAmount: 570 });
+    expect(integration.send).toHaveBeenCalledWith(
+      { cmd: 'integration.tariff.get' },
+      expect.objectContaining({ districtId: '3' }),
+    );
   });
 });

@@ -12,6 +12,9 @@ async function bootstrap() {
     rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
   );
   await app.startAllMicroservices();
+  // CategorySeeder.onApplicationBootstrap() ishlashi uchun HTTP app contextini
+  // ham init qilish kerak. Aks holda RMQ ko‘tariladi, lekin seed hook chaqirilmaydi.
+  await app.init();
 
   Logger.log(
     `📦 catalog-service RMQ tinglayapti (${RmqQueue.CATALOG})`,
