@@ -43,6 +43,7 @@ import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { AdminAuditController } from './admin/admin-audit.controller';
 import { ReadinessService } from './readiness.service';
 
 @Module({
@@ -169,6 +170,7 @@ import { ReadinessService } from './readiness.service';
     AdminFinanceController,
     ReviewsController,
     AdminProductsController,
+    AdminAuditController,
   ],
   providers: [
     AppService,
