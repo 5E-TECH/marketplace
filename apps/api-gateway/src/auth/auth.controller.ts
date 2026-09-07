@@ -58,28 +58,47 @@ export class AuthController {
     private readonly jwt: JwtService,
   ) {}
 
-  private setRefreshCookie(response: Response, refreshToken: string): void {
+  /**
+   * Cookie bayroqlari NODE_ENV emas, so'rovning haqiqiy protokoli bo'yicha
+   * tanlanadi. Sababi: `Secure` cookie'ni brauzer HTTP orqali umuman
+   * saqlamaydi, `SameSite=None` esa `Secure`siz rad etiladi. Domen hali
+   * olinmagan va API HTTP orqali ishlayotgan bo'lsa, qat'iy qiymatlar
+   * refresh oqimini butunlay ishlamas holga keltirardi.
+   *
+   * HTTPS'da: `Secure` + `SameSite=None` — boshqa domendagi kabinet ham
+   * cookie'ni yubora oladi. HTTP'da: `SameSite=Lax` — port farq qilsa ham
+   * brauzer buni bir xil sayt deb hisoblaydi, shuning uchun ishlaydi.
+   */
+  private static isHttps(request: Request): boolean {
+    return request.secure || request.headers['x-forwarded-proto'] === 'https';
+  }
+
+  private setRefreshCookie(
+    request: Request,
+    response: Response,
+    refreshToken: string,
+  ): void {
     const decoded = this.jwt.decode(refreshToken) as { exp?: number } | null;
     const expiresAt = decoded?.exp
       ? decoded.exp * 1000
       : Date.now() + AuthController.FALLBACK_REFRESH_TTL_MS;
-    const isProduction = process.env.NODE_ENV === 'production';
+    const https = AuthController.isHttps(request);
 
     response.cookie(AuthController.REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
+      secure: https,
+      sameSite: https ? 'none' : 'lax',
       path: AuthController.REFRESH_COOKIE_PATH,
       maxAge: Math.max(1, expiresAt - Date.now()),
     });
   }
 
-  private clearRefreshCookie(response: Response): void {
-    const isProduction = process.env.NODE_ENV === 'production';
+  private clearRefreshCookie(request: Request, response: Response): void {
+    const https = AuthController.isHttps(request);
     response.clearCookie(AuthController.REFRESH_COOKIE_NAME, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
+      secure: https,
+      sameSite: https ? 'none' : 'lax',
       path: AuthController.REFRESH_COOKIE_PATH,
     });
   }
@@ -129,6 +148,7 @@ export class AuthController {
   })
   async login(
     @Body() dto: LoginDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await sendRpc<{
@@ -137,7 +157,7 @@ export class AuthController {
       refreshToken: string;
     }>(this.identity, { cmd: 'auth.login' }, dto);
 
-    this.setRefreshCookie(response, result.refreshToken);
+    this.setRefreshCookie(request, response, result.refreshToken);
     return rawResponse({
       accessToken: result.accessToken,
     });
@@ -165,7 +185,7 @@ export class AuthController {
           dto.refreshToken ?? (cookie ? decodeURIComponent(cookie) : ''),
       },
     );
-    this.setRefreshCookie(res, result.refreshToken);
+    this.setRefreshCookie(req, res, result.refreshToken);
     return rawResponse({ accessToken: result.accessToken });
   }
   @Public()
@@ -250,6 +270,7 @@ export class AuthController {
   })
   async logout(
     @CurrentUser() user: JwtUser,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await sendRpc(
@@ -259,7 +280,7 @@ export class AuthController {
         userId: user.sub,
       },
     );
-    this.clearRefreshCookie(response);
+    this.clearRefreshCookie(request, response);
     return result;
   }
 }
