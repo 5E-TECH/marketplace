@@ -46,4 +46,14 @@ describe('AuditController (C1.31)', () => {
     expect((ctrl as unknown as Record<string, unknown>).update).toBeUndefined();
     expect((ctrl as unknown as Record<string, unknown>).delete).toBeUndefined();
   });
+
+  it('C6.3: list queryni activity log servicega uzatadi', async () => {
+    const list = jest.fn().mockResolvedValue({ items: [], total: 0 });
+    const ctrl = new AuditController({ list } as never);
+    const query = { actorId: '7', action: 'shop.suspend', page: 1, limit: 20 };
+
+    await ctrl.list({ query });
+
+    expect(list).toHaveBeenCalledWith(query);
+  });
 });

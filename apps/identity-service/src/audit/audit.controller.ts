@@ -1,6 +1,10 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { ActivityLogService, RpcHttpExceptionFilter } from '@app/common';
+import {
+  ActivityLogQuery,
+  ActivityLogService,
+  RpcHttpExceptionFilter,
+} from '@app/common';
 
 /**
  * C1.31 — Admin audit sink. Gateway har admin write amalidan so'ng shu yerga
@@ -30,5 +34,10 @@ export class AuditController {
       entityId: data?.entityId ?? null,
       meta: data?.meta ?? null,
     });
+  }
+
+  @MessagePattern({ cmd: 'identity.audit.list' })
+  list(@Payload() data: { query?: ActivityLogQuery }) {
+    return this.activityLog.list(data?.query ?? {});
   }
 }
