@@ -211,7 +211,7 @@ export class ProductService {
       });
     }
     const [items, total] = await qb
-      .orderBy('product.created_at', 'DESC')
+      .orderBy('product.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();

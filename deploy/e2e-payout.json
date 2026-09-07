@@ -1,0 +1,204 @@
+{
+  "requiredEnv": [
+    "E2E_BASE_URL",
+    "E2E_ADMIN_PHONE",
+    "E2E_ADMIN_PASSWORD",
+    "E2E_NEW_BUYER_PHONE",
+    "E2E_NEW_BUYER_PASSWORD",
+    "E2E_PRODUCT_ID",
+    "E2E_VARIANT_ID",
+    "E2E_ADDRESS",
+    "E2E_REGION_ID",
+    "E2E_DISTRICT_ID",
+    "E2E_PAYMENT_PROVIDER"
+  ],
+  "evidenceIds": [
+    "BUYER_ID",
+    "ORDER_ID",
+    "SELLER_ORDER_ID",
+    "PAYMENT_ID",
+    "SHIPMENT_ID",
+    "PAYOUT_ID"
+  ],
+  "steps": [
+    {
+      "name": "Readiness",
+      "path": "/health/readiness",
+      "expectStatus": 200
+    },
+    {
+      "name": "Admin login",
+      "method": "POST",
+      "path": "/auth/login",
+      "body": {
+        "phone": "${E2E_ADMIN_PHONE}",
+        "password": "${E2E_ADMIN_PASSWORD}"
+      },
+      "capture": {
+        "ADMIN_TOKEN": "accessToken"
+      }
+    },
+    {
+      "name": "Register new test buyer",
+      "method": "POST",
+      "path": "/auth/register",
+      "body": {
+        "name": "C4.6 ${RUN_ID}",
+        "phone": "${E2E_NEW_BUYER_PHONE}",
+        "password": "${E2E_NEW_BUYER_PASSWORD}"
+      },
+      "capture": {
+        "BUYER_TOKEN": "data.accessToken",
+        "BUYER_ID": "data.user.id"
+      }
+    },
+    {
+      "name": "Add test product to cart",
+      "method": "POST",
+      "path": "/cart/items",
+      "bearer": "${BUYER_TOKEN}",
+      "body": {
+        "productId": "${E2E_PRODUCT_ID}",
+        "variantId": "${E2E_VARIANT_ID}",
+        "quantity": 1
+      },
+      "assert": [
+        {
+          "path": "data.totalQuantity",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "name": "Create online order",
+      "method": "POST",
+      "path": "/checkout",
+      "bearer": "${BUYER_TOKEN}",
+      "headers": {
+        "idempotency-key": "c46-${RUN_ID}"
+      },
+      "body": {
+        "paymentMethod": "online",
+        "address": {
+          "recipientName": "C4.6 test",
+          "phone": "${E2E_NEW_BUYER_PHONE}",
+          "address": "${E2E_ADDRESS}",
+          "regionId": "${E2E_REGION_ID}",
+          "districtId": "${E2E_DISTRICT_ID}"
+        }
+      },
+      "capture": {
+        "ORDER_ID": "data.id",
+        "SELLER_ORDER_ID": "data.sellerOrders.0.id",
+        "SHOP_ID": "data.sellerOrders.0.shopId",
+        "ORDER_AMOUNT": "data.totalAmount"
+      },
+      "assert": [
+        {
+          "path": "data.status",
+          "equals": "PENDING_PAYMENT"
+        }
+      ]
+    },
+    {
+      "name": "Create payment",
+      "method": "POST",
+      "path": "/payments",
+      "bearer": "${BUYER_TOKEN}",
+      "body": {
+        "salesOrderId": "${ORDER_ID}",
+        "provider": "${E2E_PAYMENT_PROVIDER}",
+        "amount": "${ORDER_AMOUNT}"
+      },
+      "capture": {
+        "PAYMENT_ID": "data.id"
+      },
+      "assert": [
+        {
+          "path": "data.salesOrderId",
+          "equals": "${ORDER_ID}"
+        }
+      ],
+      "message": "Order ${ORDER_ID}, payment ${PAYMENT_ID}: shu buyurtma uchun provayder orqali to‘lovni bajaring. Keyin Elchi orqali test yetkazilishini yakunlang."
+    },
+    {
+      "name": "Payment confirms order and creates shipment",
+      "path": "/admin/orders/${ORDER_ID}",
+      "bearer": "${ADMIN_TOKEN}",
+      "wait": {
+        "attempts": 120,
+        "intervalMs": 15000
+      },
+      "assert": [
+        {
+          "path": "data.status",
+          "equals": "CONFIRMED"
+        },
+        {
+          "path": "data.sellerOrders.0.elchiShipmentId",
+          "nonEmpty": true
+        }
+      ],
+      "capture": {
+        "SHIPMENT_ID": "data.sellerOrders.0.elchiShipmentId"
+      }
+    },
+    {
+      "name": "Delivery creates payout for this seller order",
+      "path": "/admin/finance/payouts?shopId=${SHOP_ID}&limit=100",
+      "bearer": "${ADMIN_TOKEN}",
+      "wait": {
+        "attempts": 240,
+        "intervalMs": 15000
+      },
+      "select": {
+        "path": "data.items",
+        "match": {
+          "referenceId": "${SELLER_ORDER_ID}"
+        }
+      },
+      "capture": {
+        "PAYOUT_ID": "id"
+      },
+      "assert": [
+        {
+          "path": "status",
+          "equals": "PENDING"
+        }
+      ],
+      "message": "Payout ${PAYOUT_ID}: SUPERADMIN orqali approve va release qiling; skript PAID holatini kutadi."
+    },
+    {
+      "name": "Verify released payout",
+      "path": "/admin/finance/payouts?shopId=${SHOP_ID}&limit=100",
+      "bearer": "${ADMIN_TOKEN}",
+      "wait": {
+        "attempts": 120,
+        "intervalMs": 15000
+      },
+      "select": {
+        "path": "data.items",
+        "match": {
+          "id": "${PAYOUT_ID}",
+          "referenceId": "${SELLER_ORDER_ID}"
+        }
+      },
+      "assert": [
+        {
+          "path": "status",
+          "equals": "PAID"
+        },
+        {
+          "path": "paidAt",
+          "nonEmpty": true
+        }
+      ]
+    }
+  ],
+  "reauthenticate": {
+    "ADMIN_TOKEN": {
+      "phone": "${E2E_ADMIN_PHONE}",
+      "password": "${E2E_ADMIN_PASSWORD}"
+    }
+  }
+}

@@ -42,7 +42,10 @@
     "ops:env-audit": "sh scripts/validate-production-env.sh",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f"
+    "infra:logs": "docker compose logs -f",
+    "test:ops": "node --test scripts/tests/*.test.mjs",
+    "test:e2e:payout": "E2E_SCENARIO_FILE=deploy/e2e-payout.json node scripts/e2e-smoke.mjs",
+    "ops:c46-preflight": "node --env-file=.env.production scripts/c46-preflight.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
