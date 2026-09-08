@@ -4578,6 +4578,33 @@
         "tags": [
           "payments"
         ]
+      },
+      "get": {
+        "operationId": "PaymentsController_providerStatus",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Provayder sozlanganligini tekshirish (maxfiy kalitsiz)",
+        "tags": [
+          "payments"
+        ]
       }
     },
     "/api/v1/support/tickets": {
@@ -5659,6 +5686,9 @@
         "responses": {
           "200": {
             "description": "{ items, total, page, limit, totalPages }"
+          },
+          "400": {
+            "description": "Filtr yoki sahifalash qiymati noto‘g‘ri"
           },
           "401": {
             "description": "",
@@ -8341,6 +8371,11 @@
       "UpsertProviderConfigDto": {
         "type": "object",
         "properties": {
+          "serviceId": {
+            "type": "string",
+            "example": "12345",
+            "description": "Click service_id (merchant_id dan alohida)"
+          },
           "merchantId": {
             "type": "string",
             "example": "merchant-123"

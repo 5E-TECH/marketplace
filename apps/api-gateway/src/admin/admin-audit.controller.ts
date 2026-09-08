@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
@@ -32,6 +33,9 @@ export class AdminAuditController {
     summary: 'Audit jurnali (actor/action/sana filtr + sahifalash)',
   })
   @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
+  @ApiBadRequestResponse({
+    description: 'Filtr yoki sahifalash qiymati noto‘g‘ri',
+  })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminAuditQueryDto) {

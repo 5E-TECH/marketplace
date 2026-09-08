@@ -1,3 +1,4 @@
+import { Payment } from './entities/payment.entity';
 import { BadRequestException } from '@nestjs/common';
 import { PaymentProvider, PaymentStatus } from '@app/common';
 import { PaymentService } from './payment.service';
@@ -42,6 +43,13 @@ describe('PaymentService (C3.1)', () => {
     const config = {
       getOrThrow: jest.fn(() => encryptionKey),
     };
+    const manager = {
+      query: jest.fn(),
+      getRepository: (entity: unknown) =>
+        entity === Payment ? payments : providerConfigs,
+      transaction: async (work: (m: unknown) => unknown) => work(manager),
+    };
+    Object.assign(payments, { manager });
     return {
       service: new PaymentService(
         payments as never,

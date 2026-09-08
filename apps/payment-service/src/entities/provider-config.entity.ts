@@ -18,6 +18,9 @@ export class ProviderConfig {
   @Column({ name: 'merchant_id', type: 'varchar', length: 255, nullable: true })
   merchantId: string | null;
 
+  @Column({ name: 'service_id', type: 'varchar', length: 255, nullable: true })
+  serviceId: string | null;
+
   @Column({
     name: 'secret_encrypted',
     type: 'text',

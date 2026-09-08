@@ -1,5 +1,7 @@
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { Role, ROLES_KEY, RolesGuard } from '@app/common';
 import { AdminAuditController } from './admin-audit.controller';
 
 describe('AdminAuditController (C6.3)', () => {
@@ -27,4 +29,21 @@ describe('AdminAuditController (C6.3)', () => {
       Reflect.getMetadata(ROLES_KEY, AdminAuditController.prototype.list),
     ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
   });
+
+  it.each(Object.values(Role))(
+    'TC4: %s roli haqiqiy guard orqali tekshiriladi',
+    (role) => {
+      const context = {
+        getHandler: () => AdminAuditController.prototype.list,
+        getClass: () => AdminAuditController,
+        switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
+      } as unknown as ExecutionContext;
+      const guard = new RolesGuard(new Reflector());
+      if (role === Role.ADMIN || role === Role.SUPERADMIN) {
+        expect(guard.canActivate(context)).toBe(true);
+      } else {
+        expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+      }
+    },
+  );
 });

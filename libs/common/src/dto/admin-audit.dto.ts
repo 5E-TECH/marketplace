@@ -7,6 +7,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
 } from 'class-validator';
 
@@ -18,6 +19,8 @@ export class AdminAuditQueryDto {
   })
   @IsOptional()
   @IsString()
+  @Matches(/^[1-9]\d*$/)
+  @MaxLength(19)
   actorId?: string;
 
   @ApiPropertyOptional({ example: 'shop.suspend' })
@@ -28,12 +31,12 @@ export class AdminAuditQueryDto {
 
   @ApiPropertyOptional({ example: '2026-09-01' })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
   dateFrom?: string;
 
   @ApiPropertyOptional({ example: '2026-09-30' })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
   dateTo?: string;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })

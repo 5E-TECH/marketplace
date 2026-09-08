@@ -1,3 +1,4 @@
+import { Payment } from './entities/payment.entity';
 import { createHash } from 'crypto';
 import { PaymentProvider, PaymentStatus } from '@app/common';
 import { ClickService } from './click.service';
@@ -33,8 +34,8 @@ describe('ClickService (C3.3)', () => {
     };
     const transactions = {
       findOne: jest.fn(async ({ where }) =>
-        transactionRows.find(
-          (row) => row.providerTxnId === where.providerTxnId,
+        transactionRows.find((row) =>
+          Object.entries(where).every(([key, value]) => row[key] === value),
         ),
       ),
       create: jest.fn((value) => ({ id: '77', ...value })),
@@ -45,11 +46,19 @@ describe('ClickService (C3.3)', () => {
     };
     const paymentService = {
       getProviderCredentials: jest.fn().mockResolvedValue({
-        merchantId: serviceId,
+        merchantId: 'merchant-5',
+        serviceId,
         secret,
       }),
     };
-    const events = { paid: jest.fn().mockResolvedValue(undefined) };
+    const events = { recordPaid: jest.fn().mockResolvedValue(undefined) };
+    const manager = {
+      query: jest.fn(),
+      getRepository: (entity: unknown) =>
+        entity === Payment ? payments : transactions,
+      transaction: async (work: (m: unknown) => unknown) => work(manager),
+    };
+    Object.assign(payments, { manager });
     return {
       service: new ClickService(
         payments as never,
@@ -108,7 +117,7 @@ describe('ClickService (C3.3)', () => {
     });
     expect(payment.status).toBe(PaymentStatus.PAID);
     expect(payment.paidAt).toBeInstanceOf(Date);
-    expect(events.paid).toHaveBeenCalledWith(payment);
+    expect(events.recordPaid).toHaveBeenCalledWith(payment, expect.anything());
   });
 
   it('TC2: noto‘g‘ri sign_string -1 bilan rad etiladi', async () => {
@@ -117,7 +126,7 @@ describe('ClickService (C3.3)', () => {
     await expect(
       service.prepare({ ...signed(0), sign_string: 'invalid' }),
     ).resolves.toMatchObject({ error: -1, error_note: 'SIGN CHECK FAILED!' });
-    expect(events.paid).not.toHaveBeenCalled();
+    expect(events.recordPaid).not.toHaveBeenCalled();
   });
 
   it('TC3: Complete summasi mos kelmasa -2 bilan rad etiladi', async () => {
@@ -144,7 +153,7 @@ describe('ClickService (C3.3)', () => {
       error: 0,
     });
     expect(payments.save).toHaveBeenCalledTimes(savesAfterComplete);
-    expect(events.paid).toHaveBeenCalledTimes(2);
+    expect(events.recordPaid).toHaveBeenCalledTimes(1);
   });
 
   it('Click yuborgan xato Complete transactionni bekor qiladi', async () => {
@@ -156,6 +165,6 @@ describe('ClickService (C3.3)', () => {
     ).resolves.toMatchObject({ error: -9 });
     expect(payment.status).toBe(PaymentStatus.CANCELLED);
     expect(transactionRows[0].state).toBe(-1);
-    expect(events.paid).not.toHaveBeenCalled();
+    expect(events.recordPaid).not.toHaveBeenCalled();
   });
 });

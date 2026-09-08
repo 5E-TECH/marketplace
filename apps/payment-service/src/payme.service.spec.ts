@@ -1,3 +1,4 @@
+import { Payment } from './entities/payment.entity';
 import { PaymentProvider, PaymentStatus } from '@app/common';
 import { PaymeService } from './payme.service';
 
@@ -48,7 +49,14 @@ describe('PaymeService (C3.2)', () => {
     const paymentService = {
       getProviderSecret: jest.fn().mockResolvedValue('sandbox-key'),
     };
-    const events = { paid: jest.fn().mockResolvedValue(undefined) };
+    const events = { recordPaid: jest.fn().mockResolvedValue(undefined) };
+    const manager = {
+      query: jest.fn(),
+      getRepository: (entity: unknown) =>
+        entity === Payment ? payments : transactions,
+      transaction: async (work: (m: unknown) => unknown) => work(manager),
+    };
+    Object.assign(payments, { manager });
     return {
       service: new PaymeService(
         payments as never,
@@ -69,7 +77,18 @@ describe('PaymeService (C3.2)', () => {
     method: string,
     params: Record<string, unknown>,
     authorization = auth,
-  ) => service.callback({ authorization, body: { id: 1, method, params } });
+  ) =>
+    service.callback({
+      authorization,
+      body: {
+        id: 1,
+        method,
+        params: {
+          ...(method === 'CreateTransaction' ? { time: Date.now() } : {}),
+          ...params,
+        },
+      },
+    });
 
   it('TC1: CheckPerform → Create → Perform paymentni PAID qiladi', async () => {
     const { service, payment, events } = setup();
@@ -91,7 +110,7 @@ describe('PaymeService (C3.2)', () => {
     ).resolves.toMatchObject({ result: { state: 2 } });
     expect(payment.status).toBe(PaymentStatus.PAID);
     expect(payment.paidAt).toBeInstanceOf(Date);
-    expect(events.paid).toHaveBeenCalledWith(payment);
+    expect(events.recordPaid).toHaveBeenCalledWith(payment, expect.anything());
   });
 
   it('TC2: noto‘g‘ri summa -31001 qaytaradi', async () => {
@@ -102,7 +121,7 @@ describe('PaymeService (C3.2)', () => {
         account: { order_id: '10' },
       }),
     ).resolves.toMatchObject({ error: { code: -31001, data: 'amount' } });
-    expect(events.paid).not.toHaveBeenCalled();
+    expect(events.recordPaid).not.toHaveBeenCalled();
   });
 
   it('TC3: noto‘g‘ri Basic authni rad etadi', async () => {
@@ -121,7 +140,7 @@ describe('PaymeService (C3.2)', () => {
       call(service, 'CancelTransaction', { id: 'payme-1', reason: 5 }),
     ).resolves.toMatchObject({ result: { state: -2, reason: 5 } });
     expect(payment.status).toBe(PaymentStatus.CANCELLED);
-    expect(events.paid).toHaveBeenCalledTimes(1);
+    expect(events.recordPaid).toHaveBeenCalledTimes(1);
   });
 
   it('TC5: Perform ikki marta chaqirilsa idempotent', async () => {
@@ -134,7 +153,7 @@ describe('PaymeService (C3.2)', () => {
       call(service, 'PerformTransaction', { id: 'payme-1' }),
     ).resolves.toMatchObject({ result: { state: 2 } });
     expect(payments.save).toHaveBeenCalledTimes(savesAfterFirstPerform);
-    expect(events.paid).toHaveBeenCalledTimes(2);
+    expect(events.recordPaid).toHaveBeenCalledTimes(1);
   });
 
   it('CheckTransaction mavjud transaction holatini qaytaradi', async () => {

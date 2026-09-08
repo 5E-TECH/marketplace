@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonConfigModule,
+  OutboxEvent,
   ensureSchema,
   shouldRunMigrations,
   RmqClient,
@@ -23,12 +25,15 @@ import { PaymeService } from './payme.service';
 import { ClickService } from './click.service';
 import { PaymentEventsService } from './payment-events.service';
 import { PaymentRefundService } from './payment-refund.service';
+import { PaymentOutboxRelayService } from './payment-outbox-relay.service';
+import { HardenPaymentCallbacks1724414400000 } from './migrations/1724414400000-harden-payment-callbacks';
 
-const entities = [Payment, PaymentTransaction, ProviderConfig];
+const entities = [Payment, PaymentTransaction, ProviderConfig, OutboxEvent];
 
 @Module({
   imports: [
     CommonConfigModule,
+    ScheduleModule.forRoot(),
     ServiceHealthModule.register('payment-service'),
     ClientsModule.registerAsync([
       {
@@ -48,6 +53,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
           migrations: [
             CreatePaymentTables1724241600000,
             AddPaymeTransactionState1724328000000,
+            HardenPaymentCallbacks1724414400000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -61,6 +67,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig];
     PaymeService,
     ClickService,
     PaymentEventsService,
+    PaymentOutboxRelayService,
     PaymentRefundService,
   ],
 })
