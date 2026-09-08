@@ -9,6 +9,7 @@ import {
   IsUrl,
   MaxLength,
   Min,
+  Matches,
 } from 'class-validator';
 import { PaymentProvider, PaymentStatus } from '../enums';
 
@@ -16,6 +17,7 @@ export class CreatePaymentDto {
   @ApiProperty({ example: '42' })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[1-9]\d{0,18}$/)
   salesOrderId: string;
 
   @ApiProperty({ enum: PaymentProvider })
@@ -29,9 +31,20 @@ export class CreatePaymentDto {
 }
 
 export class UpsertProviderConfigDto {
+  @ApiPropertyOptional({
+    example: '12345',
+    description: 'Click service_id (merchant_id dan alohida)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[1-9]\d*$/)
+  @MaxLength(255)
+  serviceId?: string;
+
   @ApiPropertyOptional({ example: 'merchant-123' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(255)
   merchantId?: string;
 

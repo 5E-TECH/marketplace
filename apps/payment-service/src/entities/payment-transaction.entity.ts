@@ -31,6 +31,12 @@ export class PaymentTransaction {
   })
   providerTxnId: string | null;
 
+  @Column({ type: 'varchar', length: 10 })
+  provider: string;
+
+  @Column({ name: 'provider_time', type: 'bigint' })
+  providerTime: string;
+
   @Column({ type: 'integer', nullable: true })
   state: number | null;
 

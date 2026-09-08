@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ActivityLog } from './activity-log.entity';
@@ -35,6 +35,35 @@ export class ActivityLogService {
   async list(query: ActivityLogQuery) {
     const page = Math.max(1, Number(query?.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query?.limit ?? 20)));
+    if (
+      !Number.isSafeInteger(page) ||
+      !Number.isInteger(limit) ||
+      !Number.isSafeInteger((page - 1) * limit)
+    ) {
+      throw new BadRequestException('Sahifalash qiymatlari noto‘g‘ri');
+    }
+    if (
+      query?.actorId !== undefined &&
+      (!/^[1-9]\d{0,18}$/.test(query.actorId) ||
+        BigInt(query.actorId) > BigInt('9223372036854775807'))
+    ) {
+      throw new BadRequestException('actorId musbat bigint bo‘lishi kerak');
+    }
+    const dateFrom = query?.dateFrom ? new Date(query.dateFrom) : undefined;
+    const dateTo = query?.dateTo ? new Date(query.dateTo) : undefined;
+    // PostgreSQL mikrosekundlarni saqlaydi: butun kun uchun keyingi kun
+    // boshlanishidan kichik qiymatlarni olamiz, oxirgi millisekund bilan cheklamaymiz.
+    const dateToIsDay = query?.dateTo?.length === 10;
+    if (dateTo && dateToIsDay) dateTo.setUTCDate(dateTo.getUTCDate() + 1);
+    if (
+      (dateFrom && !Number.isFinite(dateFrom.getTime())) ||
+      (dateTo && !Number.isFinite(dateTo.getTime())) ||
+      (dateFrom &&
+        dateTo &&
+        (dateToIsDay ? dateFrom >= dateTo : dateFrom > dateTo))
+    ) {
+      throw new BadRequestException('Sana oralig‘i noto‘g‘ri');
+    }
     const qb = this.repo
       .createQueryBuilder('log')
       .where('log.is_deleted = FALSE');
@@ -45,21 +74,19 @@ export class ActivityLogService {
     if (query?.action?.trim()) {
       qb.andWhere('log.action = :action', { action: query.action.trim() });
     }
-    if (query?.dateFrom) {
+    if (dateFrom) {
       qb.andWhere('log.created_at >= :dateFrom', {
-        dateFrom: new Date(query.dateFrom),
+        dateFrom,
       });
     }
-    if (query?.dateTo) {
-      const dateTo = new Date(
-        query.dateTo.length === 10
-          ? `${query.dateTo}T23:59:59.999Z`
-          : query.dateTo,
-      );
-      qb.andWhere('log.created_at <= :dateTo', { dateTo });
+    if (dateTo) {
+      qb.andWhere(`log.created_at ${dateToIsDay ? '<' : '<='} :dateTo`, {
+        dateTo,
+      });
     }
 
     qb.orderBy('log.created_at', 'DESC')
+      .addOrderBy('log.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
     const [items, total] = await qb.getManyAndCount();

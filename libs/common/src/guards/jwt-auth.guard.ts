@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import {
+  IS_PUBLIC_KEY,
+  PROVIDER_CALLBACK_KEY,
+} from '../decorators/public.decorator';
 
 /**
  * Authorization: Bearer <jwt> ni tekshiradi.
@@ -27,6 +30,14 @@ export class JwtAuthGuard implements CanActivate {
       context.getClass(),
     ]);
     const req = context.switchToHttp().getRequest();
+    if (
+      isPublic &&
+      this.reflector.getAllAndOverride<boolean>(PROVIDER_CALLBACK_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    )
+      return true;
     const header: string | undefined = req.headers?.authorization;
     if (isPublic && !header) return true;
     if (!header || !header.startsWith('Bearer ')) {

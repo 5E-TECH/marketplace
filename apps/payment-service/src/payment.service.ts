@@ -14,6 +14,7 @@ import {
 } from '@app/common';
 import { Payment } from './entities/payment.entity';
 import { ProviderConfig } from './entities/provider-config.entity';
+import { paymentAtomic, validReference } from './payment-atomic';
 
 @Injectable()
 export class PaymentService {
@@ -26,6 +27,25 @@ export class PaymentService {
   ) {}
 
   async create(dto: CreatePaymentDto): Promise<PaymentResultDto> {
+    if (
+      !validReference(dto.salesOrderId) ||
+      !Number.isFinite(dto.amount) ||
+      dto.amount <= 0 ||
+      dto.amount >= 1e12
+    )
+      throw new BadRequestException(
+        'To‘lov summasi yoki buyurtma ID noto‘g‘ri',
+      );
+    return paymentAtomic(this.payments, (manager) =>
+      new PaymentService(
+        manager.getRepository(Payment),
+        manager.getRepository(ProviderConfig),
+        this.config,
+      ).createLocked(dto),
+    );
+  }
+
+  private async createLocked(dto: CreatePaymentDto): Promise<PaymentResultDto> {
     const existing = await this.payments.findOne({
       where: {
         salesOrderId: dto.salesOrderId,
@@ -70,6 +90,7 @@ export class PaymentService {
         id: true,
         provider: true,
         merchantId: true,
+        serviceId: true,
         secretEncrypted: true,
         baseUrl: true,
         isActive: true,
@@ -79,6 +100,7 @@ export class PaymentService {
     });
     const entity = current ?? this.providerConfigs.create({ provider });
     if (dto.merchantId !== undefined) entity.merchantId = dto.merchantId;
+    if (dto.serviceId !== undefined) entity.serviceId = dto.serviceId;
     if (dto.baseUrl !== undefined) entity.baseUrl = dto.baseUrl;
     if (dto.isActive !== undefined) entity.isActive = dto.isActive;
     if (dto.secret !== undefined) {
@@ -88,20 +110,57 @@ export class PaymentService {
     return this.withoutSecret(saved);
   }
 
+  async providerStatus(provider: PaymentProvider) {
+    const entity = await this.providerConfigs.findOne({
+      where: { provider },
+      select: {
+        id: true,
+        provider: true,
+        merchantId: true,
+        serviceId: true,
+        isActive: true,
+        baseUrl: true,
+        secretEncrypted: true,
+      },
+    });
+    return {
+      provider,
+      merchantId: entity?.merchantId ?? null,
+      serviceId: entity?.serviceId ?? null,
+      baseUrl: entity?.baseUrl ?? null,
+      isActive: entity?.isActive ?? false,
+      hasSecret: Boolean(entity?.secretEncrypted),
+      configured: Boolean(
+        entity?.isActive &&
+        entity.secretEncrypted &&
+        entity.merchantId &&
+        (provider !== PaymentProvider.CLICK || entity.serviceId),
+      ),
+    };
+  }
+
   async getProviderSecret(provider: PaymentProvider): Promise<string | null> {
     return (await this.getProviderCredentials(provider))?.secret ?? null;
   }
 
-  async getProviderCredentials(
-    provider: PaymentProvider,
-  ): Promise<{ merchantId: string | null; secret: string } | null> {
+  async getProviderCredentials(provider: PaymentProvider): Promise<{
+    merchantId: string | null;
+    serviceId: string | null;
+    secret: string;
+  } | null> {
     const entity = await this.providerConfigs.findOne({
       where: { provider, isActive: true },
-      select: { id: true, merchantId: true, secretEncrypted: true },
+      select: {
+        id: true,
+        merchantId: true,
+        serviceId: true,
+        secretEncrypted: true,
+      },
     });
     if (!entity?.secretEncrypted) return null;
     return {
       merchantId: entity.merchantId,
+      serviceId: entity.serviceId,
       secret: decryptSecret(entity.secretEncrypted, this.encryptionKey()),
     };
   }

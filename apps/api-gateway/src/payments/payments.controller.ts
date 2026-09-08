@@ -1,13 +1,16 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Headers,
+  Get,
   Inject,
   Param,
   ParseEnumPipe,
   Post,
   Put,
   Res,
+  Req,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -20,14 +23,14 @@ import {
   CreatePaymentDto,
   PaymentProvider,
   PaymentResultDto,
-  Public,
+  ProviderCallback,
   Role,
   Roles,
   RmqClient,
   sendRpc,
   UpsertProviderConfigDto,
 } from '@app/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 @ApiTags('payments')
 @ApiBearerAuth()
@@ -35,16 +38,34 @@ import { Response } from 'express';
 export class PaymentsController {
   constructor(
     @Inject(RmqClient.PAYMENT) private readonly payment: ClientProxy,
+    @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
   ) {}
 
   @Post('payments')
   @ApiOperation({ summary: 'Online to‘lov yozuvini yaratish' })
   @ApiCreatedResponse({ type: PaymentResultDto })
-  create(@Body() dto: CreatePaymentDto) {
-    return sendRpc(this.payment, { cmd: 'payment.create' }, dto);
+  async create(
+    @Body() dto: CreatePaymentDto,
+    @Req() request: Request & { user: { sub: string } },
+  ) {
+    const context = await sendRpc<{ amount: number }>(
+      this.checkout,
+      { cmd: 'checkout.payment-context' },
+      {
+        orderId: dto.salesOrderId,
+        customerId: request.user.sub,
+      },
+    );
+    if (dto.amount !== context.amount)
+      throw new BadRequestException('To‘lov summasi buyurtmaga mos emas');
+    return sendRpc(
+      this.payment,
+      { cmd: 'payment.create' },
+      { ...dto, amount: context.amount },
+    );
   }
 
-  @Public()
+  @ProviderCallback()
   @Post('payments/payme/callback')
   @ApiOperation({ summary: 'Payme Merchant API JSON-RPC callback' })
   async paymeCallback(
@@ -60,7 +81,7 @@ export class PaymentsController {
     return response.status(200).json(result);
   }
 
-  @Public()
+  @ProviderCallback()
   @Post('payments/click/prepare')
   @ApiOperation({ summary: 'Click Merchant API Prepare callback' })
   async clickPrepare(
@@ -75,7 +96,7 @@ export class PaymentsController {
     return response.status(200).json(result);
   }
 
-  @Public()
+  @ProviderCallback()
   @Post('payments/click/complete')
   @ApiOperation({ summary: 'Click Merchant API Complete callback' })
   async clickComplete(
@@ -102,6 +123,22 @@ export class PaymentsController {
       this.payment,
       { cmd: 'payment.provider-config.upsert' },
       { provider, dto },
+    );
+  }
+
+  @Get('admin/payments/providers/:provider')
+  @Roles(Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Provayder sozlanganligini tekshirish (maxfiy kalitsiz)',
+  })
+  providerStatus(
+    @Param('provider', new ParseEnumPipe(PaymentProvider))
+    provider: PaymentProvider,
+  ) {
+    return sendRpc(
+      this.payment,
+      { cmd: 'payment.provider-config.status' },
+      { provider },
     );
   }
 }

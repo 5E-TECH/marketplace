@@ -22,6 +22,11 @@ export class CheckoutController {
     private readonly reviewEligibility: ReviewEligibilityService,
   ) {}
 
+  @MessagePattern({ cmd: 'checkout.payment-context' })
+  paymentContext(@Payload() data: { orderId: string; customerId: string }) {
+    return this.service.paymentContext(data.orderId, data.customerId);
+  }
+
   @MessagePattern({ cmd: 'checkout.review.verify' })
   verifyReview(
     @Payload()
@@ -80,6 +85,11 @@ export class CheckoutController {
       event.paymentId,
       event.amount,
     );
+  }
+
+  @MessagePattern({ cmd: 'checkout.payment-paid' })
+  paymentPaidRpc(@Payload() event: PaymentPaidEvent) {
+    return this.paymentPaid(event);
   }
 
   @MessagePattern({ cmd: 'checkout.elchi-webhook.process' })

@@ -45,6 +45,11 @@ export class PaymentController {
     return this.service.upsertProviderConfig(data.provider, data.dto);
   }
 
+  @MessagePattern({ cmd: 'payment.provider-config.status' })
+  providerStatus(@Payload() data: { provider: PaymentProvider }) {
+    return this.service.providerStatus(data.provider);
+  }
+
   @MessagePattern({ cmd: 'payment.payme.callback' })
   paymeCallback(@Payload() payload: PaymeRpcPayload) {
     return this.payme.callback(payload);

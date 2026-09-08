@@ -371,7 +371,7 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
 ### 8.8 To'lovlar ◻︎
 **`GET /admin/payments` · ADMIN** — hamma tranzaksiya (query: `provider?, status?, orderId?, dateFrom/To?`).
-**`GET /admin/payments/providers` · SUPERADMIN** · **`PUT /admin/payments/providers/:provider` · SUPERADMIN** — `merchantId`, `secret` (AES; javobda **maskalanadi**), `isActive`.
+**`GET /admin/payments/providers/:provider` · SUPERADMIN** — maxfiy kalitsiz sozlanish holati (`configured`, `hasSecret`). **`PUT /admin/payments/providers/:provider` · SUPERADMIN** — `merchantId`, Click uchun alohida `serviceId`, `secret` (AES; javobga kiritilmaydi), `baseUrl`, `isActive`.
 
 ### 8.9 Moliya: payout + komissiya ◻︎
 **`GET /admin/finance/ledger` · ADMIN** — seller ledger (query: `shopId?`).
@@ -400,7 +400,12 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
 ### 8.15 Audit log
 - ⭐ **Yozish:** har xavfli admin amali `activity-log` (libs/common) ga yoziladi (kim, nima, resurs, eski→yangi, IP, vaqt).
-- ◻︎ **`GET /admin/audit` · ADMIN** — filtr/qidiruv/eksport. Yozuvlar **immutable** (tahrir/o'chirish yo'q).
+- ✅ **`GET /admin/audit` · ADMIN, SUPERADMIN (C6.3)** — audit jurnali, filtr va sahifalash. Yozuvlar **immutable** (tahrir/o'chirish yo'q).
+  - Query: `actorId` (musbat bigint, string), `action` (aniq moslik), `dateFrom`, `dateTo` (ISO sana/vaqt), `page` (default 1), `limit` (default 20, maksimum 100).
+  - Sana vaqt ko'rsatilmasdan berilsa UTC hisoblanadi; `dateTo=2026-09-07` shu kunning barcha yozuvlarini qamrab oladi. Teskari sana oralig'i va noto'g'ri filtrlar → `400`.
+  - Javobning `data` qismi: `{ items, total, page, limit, totalPages }`. Bo'sh ro'yxatda `totalPages: 1`. Tartib: `createdAt DESC, id DESC`.
+  - Har yozuv: `id`, `actorId` (tizim amali uchun `null`), `createdAt`, `action`, `entityType`, `entityId`, `meta`, `updatedAt`, `isDeleted`.
+  - Tokensiz → `401`; qolgan rollar → `403`. Qidiruv/eksport C6.3 doirasiga kirmaydi.
 
 ---
 
@@ -444,12 +449,16 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
 **`POST /payments/payme/callback` · public (Basic auth bilan himoyalangan)**
 - Header: `Authorization: Basic base64(Paycom:<provider-secret>)`.
+- `account.order_id` — marketplace `payment.id` (salesOrderId emas).
 - JSON-RPC 2.0 metodlari: `CheckPerformTransaction`, `CreateTransaction`,
   `PerformTransaction`, `CancelTransaction`, `CheckTransaction`, `GetStatement`.
 - Summa Payme talabi bo‘yicha tiyinlarda yuboriladi; marketplace payment summasi
   bilan mos kelmasa `-31001` qaytariladi.
 - `CreateTransaction`, `PerformTransaction` va `CancelTransaction` takroriy
-  chaqirilganda mavjud holat qaytariladi (idempotent).
+  chaqirilganda ikki marta hisoblanmaydi. Create takrorida account/summa tekshiriladi;
+  faqat pending tranzaksiyaga Create qayta muvaffaqiyatli javob beradi.
+- Pending tranzaksiya Payme yuborgan `time` dan 12 soat o'tganda `state=-1, reason=4`;
+  GetStatement ham shu provider vaqti bo'yicha filtrlanadi.
 - Javob oddiy JSON-RPC formatida va har doim HTTP `200`; standart marketplace
   response envelope qo‘shilmaydi.
 
@@ -460,10 +469,16 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 - Click callback maydonlari `application/x-www-form-urlencoded` yoki JSON body orqali
   qabul qilinadi.
 - `sign_string` Click protokoli bo‘yicha MD5 bilan tekshiriladi; `service_id`
-  provider konfiguratsiyasidagi `merchantId`ga teng bo‘lishi kerak.
-- `merchant_trans_id` sifatida marketplace `payment.id` (yoki `salesOrderId`)
+  provider konfiguratsiyasidagi `serviceId`ga teng bo‘lishi kerak.
+- `merchant_trans_id` sifatida marketplace `payment.id`
   yuboriladi. Click summasi so‘mda va marketplace payment summasiga aynan teng
   bo‘lishi kerak.
 - Prepare muvaffaqiyatli bo‘lsa `merchant_prepare_id`, Complete muvaffaqiyatli
   bo‘lsa `merchant_confirm_id` qaytariladi va payment `PAID` holatiga o‘tadi.
 - Prepare va Complete takroriy chaqiriqlari idempotent; javob har doim HTTP `200`.
+
+Callback biznes javoblari HTTP 200; transport/infratuzilma xatolari 5xx bo'lishi mumkin.
+Payment + tranzaksiya + paid outbox yozuvi bitta DB tranzaksiyasida saqlanadi.
+Checkout RPC muvaffaqiyatli javob bergach outbox processed bo'ladi; xatoda qayta yuboriladi.
+`POST /payments` buyurtma egasi, online/pending holati va summasini checkout orqali tekshiradi.
+Sozlash, sandbox va Done checklisti: [PAYMENT_INTEGRATION.md](PAYMENT_INTEGRATION.md).
