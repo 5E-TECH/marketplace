@@ -394,9 +394,10 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 ### 8.13 Platforma sozlamalari ◻︎
 **`GET /admin/settings` · ADMIN** · **`PUT /admin/settings` · SUPERADMIN** — komissiya default, rate-limit, feature flag, dostavka narx siyosati.
 
-### 8.14 Admin jamoa ◻︎
-**`GET /admin/team` · SUPERADMIN** · **`POST /admin/team` · SUPERADMIN** — `{ name, phone, role }`.
+### 8.14 Admin jamoa ✅ C6.1
+**`GET /admin/team` · SUPERADMIN** · **`POST /admin/team` · SUPERADMIN** — `{ name, phone, role, password? }`. Parol berilmasa bir martalik `temporaryPassword` yaratiladi.
 **`PATCH /admin/team/:id/role` · SUPERADMIN** · **`DELETE /admin/team/:id` · SUPERADMIN** — oxirgi SUPERADMIN himoyalangan.
+Rol o'zgartirish va o'chirish faol refresh sessiyalarni bekor qiladi. Har o'zgarish oldingi/yangi qiymat va IP bilan auditga shu DB tranzaksiyasida yoziladi.
 
 ### 8.15 Audit log
 - ⭐ **Yozish:** har xavfli admin amali `activity-log` (libs/common) ga yoziladi (kim, nima, resurs, eski→yangi, IP, vaqt).

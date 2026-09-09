@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { of } from 'rxjs';
@@ -134,7 +134,7 @@ describe('AuthService (C0.4)', () => {
       name: 'Admin',
       phone: '+998901112233',
       password: 'OldSecret123',
-      role: Role.ADMIN,
+      role: Role.BUYER,
     });
     expect(sessionStore[0].revokedAt).toBeNull();
 
@@ -174,6 +174,18 @@ describe('AuthService (C0.4)', () => {
     } catch (e: any) {
       expect(e.getStatus()).toBe(409);
     }
+  });
+
+  it('C6.1: public register orqali ADMIN/SUPERADMIN yaratishni rad etadi', async () => {
+    await expect(
+      service.register({
+        name: 'Soxta admin',
+        phone: '+998901119999',
+        password: 'Secret123',
+        role: Role.SUPERADMIN,
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it('TC2: login JWT beradi (sub, role)', async () => {
@@ -222,7 +234,7 @@ describe('AuthService (C0.4)', () => {
       name: 'Admin',
       phone: '+998901110001',
       password: 'Secret123',
-      role: Role.ADMIN,
+      role: Role.BUYER,
     });
     const adminId = reg.user.id;
     try {

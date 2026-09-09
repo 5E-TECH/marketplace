@@ -55,6 +55,11 @@ export class AuthService {
       );
     }
     const role = dto.role ?? Role.BUYER;
+    if (![Role.BUYER, Role.SELLER].includes(role)) {
+      throw new BadRequestException(
+        'Public ro‘yxatdan o‘tishda faqat BUYER yoki SELLER roli mumkin',
+      );
+    }
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const user = await this.users.save(
       this.users.create({
@@ -115,7 +120,9 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.users.findOne({ where: { phone: dto.phone } });
+    const user = await this.users.findOne({
+      where: { phone: dto.phone, isDeleted: false },
+    });
     // Bir xil xabar — foydalanuvchi mavjudligini oshkor qilmaslik uchun
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Telefon yoki parol xato');
