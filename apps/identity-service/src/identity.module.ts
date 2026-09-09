@@ -27,6 +27,8 @@ import { AddUserShopOperator1722950000000 } from './migrations/1722950000000-add
 import { AddUserIsBlocked1722950000001 } from './migrations/1722950000001-add-user-is-blocked';
 import { CreateActivityLog1722950000002 } from './migrations/1722950000002-create-activity-log';
 import { CreateRecoverySupport1723100000000 } from './migrations/1723100000000-create-recovery-support';
+import { AdminTeamController } from './team/admin-team.controller';
+import { AdminTeamService } from './team/admin-team.service';
 
 const entities = [User, AuthSession, ActivityLog];
 
@@ -66,7 +68,7 @@ const entities = [User, AuthSession, ActivityLog];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [AuthController, AuditController],
-  providers: [AuthService, AdminSeeder, ActivityLogService],
+  controllers: [AuthController, AuditController, AdminTeamController],
+  providers: [AuthService, AdminSeeder, ActivityLogService, AdminTeamService],
 })
 export class IdentityModule {}

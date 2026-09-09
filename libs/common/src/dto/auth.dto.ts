@@ -1,6 +1,6 @@
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -36,10 +36,10 @@ export class RegisterDto {
   email?: string;
 
   // register orqali faqat SELLER/BUYER; ADMIN'lar seed/boshqa admin tomonidan
-  @ApiPropertyOptional({ enum: Role, default: Role.BUYER })
+  @ApiPropertyOptional({ enum: [Role.BUYER, Role.SELLER], default: Role.BUYER })
   @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
+  @IsIn([Role.BUYER, Role.SELLER])
+  role?: Role.BUYER | Role.SELLER;
 }
 
 export class LoginDto {
