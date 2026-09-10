@@ -79,6 +79,8 @@ jobs:
           node --check scripts/export-openapi.mjs
           sh -n scripts/db-backup.sh
           sh -n scripts/db-restore-test.sh
+          sh -n scripts/setup-elchi-integration.sh
+          sh -n scripts/verify-elchi-integration.sh
 
       - name: Ops regression testlar
         run: npm run test:ops

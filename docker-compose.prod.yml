@@ -212,7 +212,13 @@ services:
     profiles:
       - tunnel
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN kerak — Cloudflare Zero Trust > Networks > Tunnels}
+      # DIQQAT: bu yerda `${TUNNEL_TOKEN:?...}` ISHLATMANG. Compose butun
+      # faylni `profiles` filtridan OLDIN interpolatsiya qiladi, ya'ni `:?`
+      # token yo'q paytda `docker compose ps`, `exec`, `logs` — hammasini
+      # yiqitadi va kunlik backup skriptini ham to'xtatib qo'yadi.
+      # Token yo'qligi cloudflared ishga tushganda o'zi bilinadi, u esa
+      # faqat `tunnel` profili yoqilganda ko'tariladi.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
       - caddy
     networks:
