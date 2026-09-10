@@ -29,8 +29,12 @@ import { CreateActivityLog1722950000002 } from './migrations/1722950000002-creat
 import { CreateRecoverySupport1723100000000 } from './migrations/1723100000000-create-recovery-support';
 import { AdminTeamController } from './team/admin-team.controller';
 import { AdminTeamService } from './team/admin-team.service';
+import { PlatformSettings } from './entities/platform-settings.entity';
+import { CreatePlatformSettings1725897600000 } from './migrations/1725897600000-create-platform-settings';
+import { PlatformSettingsController } from './settings/platform-settings.controller';
+import { PlatformSettingsService } from './settings/platform-settings.service';
 
-const entities = [User, AuthSession, ActivityLog];
+const entities = [User, AuthSession, ActivityLog, PlatformSettings];
 
 @Module({
   imports: [
@@ -61,6 +65,7 @@ const entities = [User, AuthSession, ActivityLog];
             AddUserIsBlocked1722950000001,
             CreateActivityLog1722950000002,
             CreateRecoverySupport1723100000000,
+            CreatePlatformSettings1725897600000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -68,7 +73,18 @@ const entities = [User, AuthSession, ActivityLog];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [AuthController, AuditController, AdminTeamController],
-  providers: [AuthService, AdminSeeder, ActivityLogService, AdminTeamService],
+  controllers: [
+    AuthController,
+    AuditController,
+    AdminTeamController,
+    PlatformSettingsController,
+  ],
+  providers: [
+    AuthService,
+    AdminSeeder,
+    ActivityLogService,
+    AdminTeamService,
+    PlatformSettingsService,
+  ],
 })
 export class IdentityModule {}

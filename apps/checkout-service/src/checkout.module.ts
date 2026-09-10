@@ -41,6 +41,12 @@ import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-deli
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
       },
       {
+        name: RmqClient.IDENTITY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
+      },
+      {
         name: RmqClient.INVENTORY,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>

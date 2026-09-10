@@ -391,8 +391,10 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 ### 8.12 Kontent / bannerlar ◻︎
 **`GET/POST/PATCH/DELETE /admin/content/banners` · ADMIN** — storefront bosh sahifa bloklari.
 
-### 8.13 Platforma sozlamalari ◻︎
-**`GET /admin/settings` · ADMIN** · **`PUT /admin/settings` · SUPERADMIN** — komissiya default, rate-limit, feature flag, dostavka narx siyosati.
+### 8.13 Platforma sozlamalari ✅ C6.2
+**`GET /admin/settings` · ADMIN, SUPERADMIN** — joriy `{ commissionPercent, minimumOrderAmount, supportPhone, updatedBy, updatedAt }`.
+**`PUT /admin/settings` · SUPERADMIN** — to'liq `{ commissionPercent, minimumOrderAmount, supportPhone }`; komissiya `0..100`, summa manfiy emas, telefon bo'sh yoki `+998XXXXXXXXX`. O'zgarish eski/yangi qiymatlar va IP bilan auditga atomar yoziladi. Oddiy ADMIN uchun `403`.
+Checkout minimal summani va admin dashboard daromad hisobidagi komissiyani har so'rovda shu sozlamalardan oladi; servis restart talab qilinmaydi.
 
 ### 8.14 Admin jamoa ✅ C6.1
 **`GET /admin/team` · SUPERADMIN** · **`POST /admin/team` · SUPERADMIN** — `{ name, phone, role, password? }`. Parol berilmasa bir martalik `temporaryPassword` yaratiladi.

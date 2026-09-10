@@ -1,4 +1,5 @@
 import { SalesOrderSellerStatus } from '@app/common';
+import { of } from 'rxjs';
 import { SellerOrdersService } from './seller-orders.service';
 
 describe('SellerOrdersService', () => {
@@ -199,6 +200,34 @@ describe('SellerOrdersService.adminStats (C1.28)', () => {
       gmv: 1000000,
       revenue: 50000,
     });
+  });
+
+  it('C6.2: daromadni joriy platforma komissiyasi bilan hisoblaydi', async () => {
+    process.env.PLATFORM_COMMISSION_RATE = '0.99';
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { ordersTotal: '1', ordersToday: '0', gmv: '1000000' },
+        ]),
+    };
+    const identity = {
+      send: jest.fn(() => of({ commissionPercent: 7.5 })),
+    };
+    const service = new SellerOrdersService(
+      dataSource as never,
+      undefined,
+      identity as never,
+    );
+
+    await expect(service.adminStats()).resolves.toMatchObject({
+      gmv: 1000000,
+      revenue: 75000,
+    });
+    expect(identity.send).toHaveBeenCalledWith(
+      { cmd: 'identity.settings.get' },
+      {},
+    );
   });
 
   it('TC3: yangi platforma -> adminStats hammasi 0', async () => {

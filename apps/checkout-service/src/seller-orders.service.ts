@@ -25,6 +25,9 @@ export class SellerOrdersService {
     @Optional()
     @Inject(RmqClient.INTEGRATION)
     private readonly integration?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.IDENTITY)
+    private readonly identity?: ClientProxy,
   ) {}
 
   async findAll(
@@ -170,8 +173,8 @@ export class SellerOrdersService {
    * `sales_order` (do'kon bo'yicha emas, butun platforma). GMV = tasdiqlangan
    * buyurtmalar (`CONFIRMED`+) `total_amount` yig'indisi. "Bugun" — Asia/Tashkent
    * kuni bo'yicha (bitta AT TIME ZONE konversiyasi). Yangi platformada hamma 0.
-   * Daromad = GMV × PLATFORM_COMMISSION_RATE (default 0 — bazada komissiya manbai
-   * yo'q, config bilan beriladi).
+   * Daromad C6.2 platforma sozlamasidagi komissiya foizi bilan hisoblanadi.
+   * Identity client berilmagan unit-testlarda eski env fallback saqlanadi.
    */
   async adminStats(): Promise<{
     ordersTotal: number;
@@ -179,8 +182,9 @@ export class SellerOrdersService {
     gmv: number;
     revenue: number;
   }> {
-    const rows = await this.dataSource.query(
-      `SELECT COUNT(*)::int AS "ordersTotal",
+    const [rows, settings] = await Promise.all([
+      this.dataSource.query(
+        `SELECT COUNT(*)::int AS "ordersTotal",
               COUNT(*) FILTER (
                 WHERE (created_at AT TIME ZONE 'Asia/Tashkent')::date
                       = (now() AT TIME ZONE 'Asia/Tashkent')::date
@@ -191,10 +195,20 @@ export class SellerOrdersService {
                 ), 0
               ) AS gmv
          FROM checkout.sales_order`,
-    );
+      ),
+      this.identity
+        ? sendRpc<{ commissionPercent: number }>(
+            this.identity,
+            { cmd: 'identity.settings.get' },
+            {},
+          )
+        : Promise.resolve(null),
+    ]);
     const row = rows[0] ?? {};
     const gmv = Number(row.gmv ?? 0);
-    const rate = Number(process.env.PLATFORM_COMMISSION_RATE ?? 0);
+    const rate = settings
+      ? Number(settings.commissionPercent) / 100
+      : Number(process.env.PLATFORM_COMMISSION_RATE ?? 0);
     const revenue = Math.round(gmv * (Number.isFinite(rate) ? rate : 0));
     return {
       ordersTotal: Number(row.ordersTotal ?? 0),

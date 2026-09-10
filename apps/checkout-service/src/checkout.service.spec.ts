@@ -16,7 +16,7 @@ describe('CheckoutService (C2.9)', () => {
     },
   });
 
-  function setup(reserveFails = false) {
+  function setup(reserveFails = false, minimumOrderAmount = 0) {
     const cart = {
       id: '9',
       customerId: '5',
@@ -76,16 +76,21 @@ describe('CheckoutService (C2.9)', () => {
         of({ amount: 20 }),
       ),
     };
+    const identity = {
+      send: jest.fn(() => of({ minimumOrderAmount })),
+    };
     return {
       service: new CheckoutService(
         dataSource as never,
         inventory as never,
         integration as never,
+        identity as never,
       ),
       queries,
       inventory,
       cart,
       integration,
+      identity,
     };
   }
 
@@ -182,6 +187,19 @@ describe('CheckoutService (C2.9)', () => {
       deliveryFee: 40,
       totalAmount: 540,
     });
+  });
+
+  it('C6.2: yangi minimal buyurtma summasini darhol qo‘llaydi', async () => {
+    const { service, inventory, identity } = setup(false, 501);
+
+    await expect(service.create('5', dto())).rejects.toThrow(
+      'Minimal buyurtma summasi 501',
+    );
+    expect(identity.send).toHaveBeenCalledWith(
+      { cmd: 'identity.settings.get' },
+      {},
+    );
+    expect(inventory.send).not.toHaveBeenCalled();
   });
 
   it('C2.20 TC3: storefront preview har shop uchun alohida posilka qaytaradi', async () => {
