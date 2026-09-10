@@ -5721,6 +5721,175 @@
           "admin-audit"
         ]
       }
+    },
+    "/api/v1/admin/team": {
+      "get": {
+        "operationId": "AdminTeamController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminTeamMemberDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Admin jamoasi ro‘yxati",
+        "tags": [
+          "admin-team"
+        ]
+      },
+      "post": {
+        "operationId": "AdminTeamController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminTeamMemberDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAdminTeamMemberResultDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Telefon allaqachon band"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Admin jamoasiga a’zo qo‘shish",
+        "tags": [
+          "admin-team"
+        ]
+      }
+    },
+    "/api/v1/admin/team/{id}/role": {
+      "patch": {
+        "operationId": "AdminTeamController_updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdminTeamRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTeamMemberDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Oxirgi SUPERADMIN himoyalangan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Jamoa a’zosi rolini o‘zgartirish",
+        "tags": [
+          "admin-team"
+        ]
+      }
+    },
+    "/api/v1/admin/team/{id}": {
+      "delete": {
+        "operationId": "AdminTeamController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ id, removed: true }"
+          },
+          "409": {
+            "description": "Oxirgi SUPERADMIN himoyalangan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Jamoa a’zosini o‘chirish",
+        "tags": [
+          "admin-team"
+        ]
+      }
     }
   },
   "info": {
@@ -5763,11 +5932,8 @@
           "role": {
             "type": "string",
             "enum": [
-              "SELLER",
-              "OPERATOR",
               "BUYER",
-              "ADMIN",
-              "SUPERADMIN"
+              "SELLER"
             ],
             "default": "BUYER"
           }
@@ -8621,6 +8787,147 @@
         "required": [
           "orderItemId",
           "rating"
+        ]
+      },
+      "AdminTeamMemberDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "7"
+          },
+          "name": {
+            "type": "string",
+            "example": "Admin Operator"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901112233"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERADMIN"
+            ]
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "role",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateAdminTeamMemberDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Admin Operator"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901112233"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "ADMIN"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Berilmasa bir martalik vaqtinchalik parol yaratiladi"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "role"
+        ]
+      },
+      "CreateAdminTeamMemberResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "7"
+          },
+          "name": {
+            "type": "string",
+            "example": "Admin Operator"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901112233"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERADMIN"
+            ]
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "temporaryPassword": {
+            "type": "string",
+            "description": "Parol bodyda berilmagan bo‘lsa faqat shu javobda qaytadi"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "role",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAdminTeamRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "ADMIN"
+          }
+        },
+        "required": [
+          "role"
         ]
       }
     }
