@@ -34,6 +34,7 @@ export * from './dto/admin-user.dto';
 export * from './dto/admin-order.dto';
 export * from './dto/admin-audit.dto';
 export * from './dto/admin-team.dto';
+export * from './dto/admin-settings.dto';
 export * from './dto/operator.dto';
 export * from './dto/payment.dto';
 export * from './dto/finance.dto';

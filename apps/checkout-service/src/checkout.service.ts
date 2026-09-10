@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -26,6 +27,9 @@ export class CheckoutService {
     private readonly inventory: ClientProxy,
     @Inject(RmqClient.INTEGRATION)
     private readonly integration: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.IDENTITY)
+    private readonly identity?: ClientProxy,
   ) {}
 
   async paymentContext(
@@ -57,6 +61,13 @@ export class CheckoutService {
     sessionId?: string,
   ): Promise<CheckoutResultDto> {
     if (!customerId) throw new BadRequestException('Login talab qilinadi');
+    const settings = this.identity
+      ? await sendRpc<{ minimumOrderAmount: number }>(
+          this.identity,
+          { cmd: 'identity.settings.get' },
+          {},
+        )
+      : { minimumOrderAmount: 0 };
     return this.dataSource.transaction(async (manager) => {
       const cart = await manager.getRepository(Cart).findOne({
         where: sessionId
@@ -69,6 +80,11 @@ export class CheckoutService {
       if (!cart.items.length) throw new BadRequestException('Savat bo‘sh');
 
       const quote = await this.quote(cart.items, dto.address);
+      if (quote.subtotal < Number(settings.minimumOrderAmount)) {
+        throw new BadRequestException(
+          `Minimal buyurtma summasi ${settings.minimumOrderAmount}`,
+        );
+      }
 
       const status =
         dto.paymentMethod === CheckoutPaymentMethod.ONLINE

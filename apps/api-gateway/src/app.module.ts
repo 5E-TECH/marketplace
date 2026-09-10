@@ -45,6 +45,7 @@ import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
 import { AdminTeamController } from './admin/admin-team.controller';
+import { AdminSettingsController } from './admin/admin-settings.controller';
 import { ReadinessService } from './readiness.service';
 
 @Module({
@@ -173,6 +174,7 @@ import { ReadinessService } from './readiness.service';
     AdminProductsController,
     AdminAuditController,
     AdminTeamController,
+    AdminSettingsController,
   ],
   providers: [
     AppService,
