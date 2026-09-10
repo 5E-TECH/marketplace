@@ -177,6 +177,11 @@ services:
       # Faqat Let's Encrypt uchun. HTTP rejimida ishlatilmaydi, lekin
       # Caddyfile parse bo'lishi uchun qiymat bo'lishi shart.
       TLS_EMAIL: ${TLS_EMAIL:-admin@localhost}
+      # Kabinet CSP'si uchun brauzer ko'radigan API manzili, sxemasi bilan.
+      # DOMAIN'dan alohida: tunnel rejimida DOMAIN `http://...` bo'ladi,
+      # brauzer esa baribir `https://...` ga murojaat qiladi. Bo'sh qolsa CSP
+      # faqat `'self'` bilan cheklanadi — domen yo'q paytdagi holat.
+      API_ORIGIN: ${API_ORIGIN:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -184,6 +189,34 @@ services:
     networks:
       - frontend
       - backend
+
+  # ── Cloudflare Tunnel (C5.2) ───────────────────────────────────────────────
+  # Kabinet va API'ni server portlarini ochmasdan HTTPS'ga chiqaradi: tunnel
+  # serverdan Cloudflare tomon ULANADI, ya'ni 80/443 ni tashqariga ochish
+  # shart emas.
+  #
+  # `profiles` ostida — token yo'q paytda ataylab ko'tarilmaydi va hozirgi IP
+  # orqali ishlash buzilmaydi. Yoqish: `.env.production` ga
+  # `COMPOSE_PROFILES=tunnel` qo'shiladi yoki `docker compose --profile tunnel`.
+  #
+  # Public Hostname sozlamalari Cloudflare Zero Trust panelida belgilanadi
+  # (token bilan boshqariladigan tunnelda ular kodda emas, panelda turadi):
+  #   api.<domen>   -> http://caddy:80      — Caddy /media, xavfsizlik
+  #                                           sarlavhalari va health-check'ni
+  #                                           saqlab qoladi
+  #   admin.<domen> -> http://frontend:8080 — sotuvchi kabineti SPA
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    profiles:
+      - tunnel
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN kerak — Cloudflare Zero Trust > Networks > Tunnels}
+    depends_on:
+      - caddy
+    networks:
+      - frontend
 
 volumes:
   postgres_data:
