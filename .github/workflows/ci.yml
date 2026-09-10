@@ -51,11 +51,24 @@ jobs:
       - name: Format tekshiruvi (Prettier)
         run: npm run format:check
 
-      - name: Caddy konfiguratsiyasini tekshirish
+      - name: Caddy konfiguratsiyasini tekshirish (to'g'ridan-to'g'ri HTTPS)
         run: >-
           docker run --rm
           -e DOMAIN=api.example.com -e APP_DOMAIN=app.example.com
           -e TLS_EMAIL=ops@example.com
+          -e API_ORIGIN=https://api.example.com
+          -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      # Tunnel rejimi: DOMAIN sxema bilan keladi va TLS Cloudflare chekkasida
+      # tugaydi. API_ORIGIN esa baribir https — CSP brauzer ko'radigan manzilga
+      # qarab yoziladi. Ikkala rejim ham parse bo'lishi kerak.
+      - name: Caddy konfiguratsiyasini tekshirish (Cloudflare Tunnel)
+        run: >-
+          docker run --rm
+          -e DOMAIN=http://api.example.com -e APP_DOMAIN=http://app.example.com
+          -e TLS_EMAIL=ops@example.com
+          -e API_ORIGIN=https://api.example.com
           -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
           caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 

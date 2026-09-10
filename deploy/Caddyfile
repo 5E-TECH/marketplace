@@ -51,7 +51,14 @@
 	header {
 		# SPA: skriptlar faqat o'z domenidan; antd inline uslub yozadi;
 		# API chaqiruvlari va rasm faqat API domeniga ruxsat etilgan.
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$DOMAIN}; font-src 'self' data:; connect-src 'self' https://{$DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		#
+		# API_ORIGIN — brauzer ko'radigan to'liq API manzili, sxemasi bilan
+		# (masalan `https://api.example.com`). DOMAIN'dan alohida, chunki
+		# Cloudflare Tunnel rejimida DOMAIN `http://api.example.com` bo'ladi
+		# (TLS Cloudflare chekkasida tugaydi, Caddy tunnel ortida oddiy HTTP
+		# beradi) — o'shanda `https://{$DOMAIN}` yozuvi `https://http://...`
+		# ga aylanib CSP'ni buzardi.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$API_ORIGIN}; font-src 'self' data:; connect-src 'self' {$API_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 	}
 
 	reverse_proxy frontend:8080
