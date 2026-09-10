@@ -5890,6 +5890,111 @@
           "admin-team"
         ]
       }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "operationId": "AdminSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettingsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Joriy platforma sozlamalari",
+        "tags": [
+          "admin-settings"
+        ]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdminSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sozlama qiymati noto‘g‘ri"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Platforma sozlamalarini yangilash",
+        "tags": [
+          "admin-settings"
+        ]
+      }
     }
   },
   "info": {
@@ -8928,6 +9033,69 @@
         },
         "required": [
           "role"
+        ]
+      },
+      "AdminSettingsDto": {
+        "type": "object",
+        "properties": {
+          "commissionPercent": {
+            "type": "number",
+            "example": 5,
+            "minimum": 0,
+            "maximum": 100
+          },
+          "minimumOrderAmount": {
+            "type": "number",
+            "example": 50000,
+            "minimum": 0
+          },
+          "supportPhone": {
+            "type": "string",
+            "example": "+998712000000",
+            "description": "Bo'sh yoki +998XXXXXXXXX"
+          },
+          "updatedBy": {
+            "type": "object",
+            "example": "17"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-08T12:00:00.000Z"
+          }
+        },
+        "required": [
+          "commissionPercent",
+          "minimumOrderAmount",
+          "supportPhone",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "UpdateAdminSettingsDto": {
+        "type": "object",
+        "properties": {
+          "commissionPercent": {
+            "type": "number",
+            "example": 5,
+            "minimum": 0,
+            "maximum": 100
+          },
+          "minimumOrderAmount": {
+            "type": "number",
+            "example": 50000,
+            "minimum": 0
+          },
+          "supportPhone": {
+            "type": "string",
+            "example": "+998712000000",
+            "description": "Bo'sh yoki +998XXXXXXXXX"
+          }
+        },
+        "required": [
+          "commissionPercent",
+          "minimumOrderAmount",
+          "supportPhone"
         ]
       }
     }
