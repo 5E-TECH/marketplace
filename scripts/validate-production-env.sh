@@ -13,7 +13,7 @@ fi
 # qiymatdan kelishi mumkin. Ikkalasi ham bo'sh qolsa Caddyfile parse bo'lmaydi.
 # APP_DOMAIN (sotuvchi kabineti) ixtiyoriy: berilmasa compose xavfsiz
 # `.localhost` zaxirasini qo'yadi va faqat ogohlantirish chiqadi.
-required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS'
+required='DB_PASSWORD RABBITMQ_PASSWORD JWT_SECRET JWT_REFRESH_SECRET INTEGRATION_CREDENTIAL_SECRET MINIO_SECRET_KEY CORS_ORIGINS ELCHI_PARTNER_API_URL ELCHI_PARTNER_API_KEY'
 for key in $required; do
   value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
   if [ -z "$value" ]; then

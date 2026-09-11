@@ -24,9 +24,8 @@ export interface CreateElchiShipmentInput {
 }
 
 export interface ElchiTariffInput {
-  region_id?: string | null;
-  district_id?: string | null;
-  packages?: number;
+  elchi_market_id: string;
+  where_deliver?: 'center' | 'address';
 }
 
 /**
@@ -38,17 +37,28 @@ export interface ElchiTariffInput {
 @Injectable()
 export class ElchiApiClient {
   private readonly logger = new Logger(ElchiApiClient.name);
+  private readonly partnerApiUrl: string;
+  private readonly partnerApiKey: string;
 
-  constructor(private readonly config: ConfigService) {}
-
-  private baseUrl(): string {
-    return this.config
+  constructor(private readonly config: ConfigService) {
+    // Bu qiymatlarni birinchi so'rov kelguncha kutib tekshirish xavfli: servis
+    // readiness'da "ok" ko'rinib, checkout paytida 500 qaytarib qoladi. Client
+    // Nest bootstrapida yaratiladi, demak noto'g'ri production config servisni
+    // darhol yiqitadi va gateway readiness elchi-integration'ni `down` qiladi.
+    this.partnerApiUrl = this.config
       .getOrThrow<string>('ELCHI_PARTNER_API_URL')
       .replace(/\/+$/, '');
+    this.partnerApiKey = this.config.getOrThrow<string>(
+      'ELCHI_PARTNER_API_KEY',
+    );
+  }
+
+  private baseUrl(): string {
+    return this.partnerApiUrl;
   }
 
   private apiKey(): string {
-    return this.config.getOrThrow<string>('ELCHI_PARTNER_API_KEY');
+    return this.partnerApiKey;
   }
 
   /** POST /partner/markets — sotuvchi uchun market provisioning (idempotent). */
@@ -106,12 +116,12 @@ export class ElchiApiClient {
   /** GET /partner/tariff — bitta yoki bir nechta posilka yetkazish narxi. */
   async getTariff(input: ElchiTariffInput): Promise<{ amount: number }> {
     const query = new URLSearchParams();
-    if (input.region_id) query.set('region_id', input.region_id);
-    if (input.district_id) query.set('district_id', input.district_id);
-    query.set('packages', String(input.packages ?? 1));
+    query.set('elchi_market_id', input.elchi_market_id);
+    query.set('where_deliver', input.where_deliver ?? 'address');
     const res = await this.request('GET', `/partner/tariff?${query}`);
     const raw =
       this.pluck(res, 'amount') ??
+      this.pluck(res, 'market_tariff') ??
       this.pluck(res, 'price') ??
       this.pluck(res, 'tariff') ??
       this.pluck(res, 'delivery_price');
