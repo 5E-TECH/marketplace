@@ -20,6 +20,8 @@ function makeService(
   };
   const geoRepo: AnyMock = {
     findOne: jest.fn(() => Promise.resolve(null)),
+    find: jest.fn(() => Promise.resolve([])),
+    count: jest.fn(() => Promise.resolve(0)),
     create: jest.fn((x: unknown) => x),
     save: jest.fn((x: unknown) => Promise.resolve(x)),
     ...(overrides.geoRepo ?? {}),
@@ -221,5 +223,58 @@ describe('ElchiIntegrationService (C1.6)', () => {
       name: 'Chilonzor',
       elchiRegionId: '1',
     });
+  });
+
+  it('getRegions keshdan viloyatlar ro‘yxatini oladi', async () => {
+    const { service, geoRepo } = makeService({
+      geoRepo: {
+        find: jest.fn(() =>
+          Promise.resolve([
+            { id: '1', elchiId: '1', name: 'Toshkent shahri' },
+            { id: '2', elchiId: '2', name: 'Samarqand viloyati' },
+          ]),
+        ),
+      },
+    });
+
+    const res = await service.getRegions();
+    expect(res).toEqual([
+      { id: '1', name: 'Toshkent shahri' },
+      { id: '2', name: 'Samarqand viloyati' },
+    ]);
+    expect(geoRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { kind: 'region', isDeleted: false } }),
+    );
+  });
+
+  it('getDistricts keshdan tumanlar ro‘yxatini oladi', async () => {
+    const { service, geoRepo } = makeService({
+      geoRepo: {
+        find: jest.fn(() =>
+          Promise.resolve([
+            {
+              id: '10',
+              elchiId: '10',
+              elchiRegionId: '1',
+              name: 'Yunusobod tumani',
+            },
+          ]),
+        ),
+      },
+    });
+
+    const res = await service.getDistricts('1');
+    expect(res).toEqual([
+      { id: '10', regionId: '1', name: 'Yunusobod tumani' },
+    ]);
+    expect(geoRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          kind: 'district',
+          elchiRegionId: '1',
+          isDeleted: false,
+        },
+      }),
+    );
   });
 });

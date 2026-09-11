@@ -5995,6 +5995,65 @@
           "admin-settings"
         ]
       }
+    },
+    "/api/v1/regions": {
+      "get": {
+        "operationId": "RegionsController_getRegions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegionDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Viloyatlar ro‘yxati (checkout va do‘kon manzili uchun)",
+        "tags": [
+          "regions"
+        ]
+      }
+    },
+    "/api/v1/regions/{regionId}/districts": {
+      "get": {
+        "operationId": "RegionsController_getDistricts",
+        "parameters": [
+          {
+            "name": "regionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistrictDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Tanlangan viloyat tumanlari ro‘yxati",
+        "tags": [
+          "regions"
+        ]
+      }
     }
   },
   "info": {
@@ -9096,6 +9155,50 @@
           "commissionPercent",
           "minimumOrderAmount",
           "supportPhone"
+        ]
+      },
+      "RegionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Viloyat IDsi (Elchi)",
+            "example": "1"
+          },
+          "name": {
+            "type": "string",
+            "description": "Viloyat nomi",
+            "example": "Toshkent shahri"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "DistrictDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Tuman IDsi (Elchi)",
+            "example": "10"
+          },
+          "regionId": {
+            "type": "string",
+            "description": "Viloyat IDsi (Elchi)",
+            "example": "1"
+          },
+          "name": {
+            "type": "string",
+            "description": "Tuman nomi",
+            "example": "Yunusobod tumani"
+          }
+        },
+        "required": [
+          "id",
+          "regionId",
+          "name"
         ]
       }
     }

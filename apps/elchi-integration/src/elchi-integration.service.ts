@@ -146,6 +146,58 @@ export class ElchiIntegrationService {
     return { regions: regions.length, districts: districts.length };
   }
 
+  async getRegions(): Promise<Array<{ id: string; name: string }>> {
+    let regions = await this.geoRepo.find({
+      where: { kind: 'region', isDeleted: false },
+      order: { elchiId: 'ASC' },
+    });
+    if (regions.length === 0) {
+      await this.syncGeoCache();
+      regions = await this.geoRepo.find({
+        where: { kind: 'region', isDeleted: false },
+        order: { elchiId: 'ASC' },
+      });
+    }
+    return regions.map((r) => ({
+      id: String(r.elchiId),
+      name: r.name,
+    }));
+  }
+
+  async getDistricts(
+    regionId: string,
+  ): Promise<Array<{ id: string; regionId: string; name: string }>> {
+    let districts = await this.geoRepo.find({
+      where: {
+        kind: 'district',
+        elchiRegionId: String(regionId),
+        isDeleted: false,
+      },
+      order: { elchiId: 'ASC' },
+    });
+    if (districts.length === 0) {
+      const totalDistricts = await this.geoRepo.count({
+        where: { kind: 'district', isDeleted: false },
+      });
+      if (totalDistricts === 0) {
+        await this.syncGeoCache();
+        districts = await this.geoRepo.find({
+          where: {
+            kind: 'district',
+            elchiRegionId: String(regionId),
+            isDeleted: false,
+          },
+          order: { elchiId: 'ASC' },
+        });
+      }
+    }
+    return districts.map((d) => ({
+      id: String(d.elchiId),
+      regionId: String(d.elchiRegionId ?? regionId),
+      name: d.name,
+    }));
+  }
+
   createShipment(input: CreateElchiShipmentInput) {
     return this.elchi.createShipment(input);
   }
