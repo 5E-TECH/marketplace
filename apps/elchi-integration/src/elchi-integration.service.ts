@@ -20,6 +20,15 @@ export interface ShopApprovedEvent {
   district_id?: string | null;
 }
 
+interface CatalogShop {
+  id: string;
+  name: string;
+  phone: string | null;
+  regionId: string | null;
+  districtId: string | null;
+  elchiMarketId: string | null;
+}
+
 const STATUS = { PENDING: 'pending', DONE: 'done', FAILED: 'failed' } as const;
 
 @Injectable()
@@ -141,12 +150,41 @@ export class ElchiIntegrationService {
     return this.elchi.createShipment(input);
   }
 
-  getTariff(input: { regionId?: string | null; districtId?: string | null }) {
+  async getTariff(input: {
+    shopId: string;
+    regionId?: string | null;
+    districtId?: string | null;
+  }) {
+    let shop = await this.getCatalogShop(input.shopId);
+    if (!shop.elchiMarketId) {
+      // Integratsiyadan oldin approve qilingan production do'konlarini birinchi
+      // previewdayoq idempotent tarzda Elchi'ga ulaymiz. Keyingi so'rovlarda
+      // catalogdagi saqlangan ID to'g'ridan-to'g'ri ishlatiladi.
+      await this.onShopApproved({
+        shopId: shop.id,
+        shopName: shop.name,
+        phone: shop.phone,
+        region_id: shop.regionId,
+        district_id: shop.districtId,
+      });
+      shop = await this.getCatalogShop(input.shopId);
+    }
+    if (!shop.elchiMarketId) {
+      throw new Error(`Do‘kon ${input.shopId} Elchi bilan bog‘lanmadi`);
+    }
     return this.elchi.getTariff({
-      region_id: input.regionId,
-      district_id: input.districtId,
-      packages: 1,
+      elchi_market_id: shop.elchiMarketId,
+      where_deliver: 'address',
     });
+  }
+
+  private getCatalogShop(shopId: string): Promise<CatalogShop> {
+    return firstValueFrom(
+      this.catalogClient.send<CatalogShop>(
+        { cmd: 'catalog.shop.get-by-id' },
+        { shopId },
+      ),
+    );
   }
 
   private async upsertGeo(

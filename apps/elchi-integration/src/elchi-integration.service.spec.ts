@@ -25,7 +25,21 @@ function makeService(
     ...(overrides.geoRepo ?? {}),
   };
   const catalogSend =
-    overrides.catalogSend ?? jest.fn(() => of({ statusCode: 200 }));
+    overrides.catalogSend ??
+    jest.fn((pattern: { cmd: string }) =>
+      of(
+        pattern.cmd === 'catalog.shop.get-by-id'
+          ? {
+              id: '9',
+              name: 'Zamon Store',
+              phone: '+998901234567',
+              regionId: '1',
+              districtId: '10',
+              elchiMarketId: '500',
+            }
+          : { statusCode: 200 },
+      ),
+    );
   const elchi: AnyMock = {
     provisionMarket: jest.fn(() => Promise.resolve({ elchi_market_id: '500' })),
     getRegions: jest.fn(() => Promise.resolve([])),
@@ -46,12 +60,41 @@ describe('ElchiIntegrationService (C1.6)', () => {
   it('C2.20: delivery tarifini Elchi clientdan oladi', async () => {
     const { service, elchi } = makeService();
     await expect(
-      service.getTariff({ regionId: '1', districtId: '10' }),
+      service.getTariff({ shopId: '9', regionId: '1', districtId: '10' }),
     ).resolves.toEqual({ amount: 15000 });
     expect(elchi.getTariff).toHaveBeenCalledWith({
-      region_id: '1',
-      district_id: '10',
-      packages: 1,
+      elchi_market_id: '500',
+      where_deliver: 'address',
+    });
+  });
+
+  it('C2.20: eski do‘konda market ID bo‘lmasa preview uni provision qiladi', async () => {
+    let marketId: string | null = null;
+    const catalogSend = jest.fn((pattern: { cmd: string }, data: any) => {
+      if (pattern.cmd === 'catalog.shop.set-elchi-market-id') {
+        marketId = data.elchiMarketId;
+        return of({ statusCode: 200 });
+      }
+      return of({
+        id: '9',
+        name: 'Zamon Store',
+        phone: '+998901234567',
+        regionId: '1',
+        districtId: '10',
+        elchiMarketId: marketId,
+      });
+    });
+    const { service, elchi } = makeService({ catalogSend });
+
+    await expect(service.getTariff({ shopId: '9' })).resolves.toEqual({
+      amount: 15000,
+    });
+    expect(elchi.provisionMarket).toHaveBeenCalledWith(
+      expect.objectContaining({ external_seller_id: '9' }),
+    );
+    expect(elchi.getTariff).toHaveBeenCalledWith({
+      elchi_market_id: '500',
+      where_deliver: 'address',
     });
   });
   it('TC1: shop.approved -> Elchi market ochiladi va shop.elchi_market_id yoziladi', async () => {
