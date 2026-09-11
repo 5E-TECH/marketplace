@@ -39,7 +39,7 @@ export class AdminShopController {
   }
 
   @MessagePattern({ cmd: 'catalog.shop.publish-approved' })
-  publishApproved(
+  async publishApproved(
     @Payload()
     data: {
       sellerUserId: string;
@@ -48,7 +48,10 @@ export class AdminShopController {
       phone?: string | null;
     },
   ) {
-    return this.adminShops.publishShopApproved(data);
+    await this.adminShops.publishShopApproved(data);
+    // RMQ request/reply handler `undefined` qaytarsa javob freymi chiqmaydi va
+    // gateway'dagi firstValueFrom "no elements in sequence" bilan 500 beradi.
+    return { published: true };
   }
 
   @MessagePattern({ cmd: 'catalog.shop.reject' })
