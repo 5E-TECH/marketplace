@@ -34,4 +34,14 @@ export class ElchiIntegrationController {
   ) {
     return this.service.getTariff(input);
   }
+
+  @MessagePattern({ cmd: 'integration.regions.list' })
+  getRegions() {
+    return this.service.getRegions();
+  }
+
+  @MessagePattern({ cmd: 'integration.districts.list' })
+  getDistricts(@Payload() input: { regionId: string }) {
+    return this.service.getDistricts(input.regionId);
+  }
 }

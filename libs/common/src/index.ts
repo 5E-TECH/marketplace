@@ -42,6 +42,7 @@ export * from './dto/review.dto';
 export * from './dto/support.dto';
 export * from './dto/favorite.dto';
 export * from './dto/elchi-webhook.dto';
+export * from './dto/geo.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
