@@ -8487,7 +8487,10 @@
             "type": "string",
             "example": "Mahsulot mavjud emas"
           }
-        }
+        },
+        "required": [
+          "reason"
+        ]
       },
       "AdminOrderRefundDto": {
         "type": "object",
@@ -8501,7 +8504,10 @@
             "example": 125000,
             "description": "Hozir faqat to‘liq refund: summa order totaliga teng bo‘lishi kerak"
           }
-        }
+        },
+        "required": [
+          "reason"
+        ]
       },
       "CreateOperatorDto": {
         "type": "object",
