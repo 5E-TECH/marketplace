@@ -43,3 +43,9 @@ export interface OrderCreatedEvent {
   recipients: NotificationRecipient[];
   totalAmount?: number;
 }
+
+export interface OrderAdminActionEvent {
+  orderId: string;
+  reason: string;
+  recipients: NotificationRecipient[];
+}

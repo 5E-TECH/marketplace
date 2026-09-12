@@ -29,6 +29,19 @@ export class InventoryOperationsController {
     return this.inventory.commit(input);
   }
 
+  @MessagePattern({ cmd: 'inventory.release' })
+  release(
+    @Payload()
+    input: {
+      orderRef: string;
+      idempotencyKey: string;
+      reason?: string;
+      actorId?: string;
+    },
+  ) {
+    return this.inventory.release(input);
+  }
+
   @MessagePattern({ cmd: 'inventory.return-order-items' })
   returnOrderItems(@Payload() input: ReturnOrderItemsDto) {
     return this.inventory.returnOrderItems(input);

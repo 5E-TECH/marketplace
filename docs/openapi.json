@@ -4078,6 +4078,82 @@
         ]
       }
     },
+    "/api/v1/admin/orders/{id}/cancel": {
+      "post": {
+        "operationId": "AdminOrdersController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminOrderActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "admin-orders"
+        ]
+      }
+    },
+    "/api/v1/admin/orders/{id}/refund": {
+      "post": {
+        "operationId": "AdminOrdersController_refund",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminOrderRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "admin-orders"
+        ]
+      }
+    },
     "/api/v1/sellers/operators": {
       "post": {
         "operationId": "SellerOperatorsController_create",
@@ -8403,6 +8479,29 @@
           "gmv",
           "revenue"
         ]
+      },
+      "AdminOrderActionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Mahsulot mavjud emas"
+          }
+        }
+      },
+      "AdminOrderRefundDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Mahsulot mavjud emas"
+          },
+          "amount": {
+            "type": "number",
+            "example": 125000,
+            "description": "Hozir faqat to‘liq refund: summa order totaliga teng bo‘lishi kerak"
+          }
+        }
       },
       "CreateOperatorDto": {
         "type": "object",

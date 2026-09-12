@@ -44,4 +44,19 @@ describe('NotificationEventsController', () => {
     });
     expect(create).toHaveBeenCalledTimes(2);
   });
+
+  it('C6.4 refund buyer va sellerga notification yaratadi', async () => {
+    await controller.orderRefunded({
+      orderId: '50',
+      reason: 'Tovar mavjud emas',
+      recipients: [{ userId: '10' }, { userId: '11' }],
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'order_refunded',
+        data: { orderId: '50', reason: 'Tovar mavjud emas' },
+      }),
+    );
+  });
 });

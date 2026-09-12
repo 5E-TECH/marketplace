@@ -3,6 +3,7 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import { NotificationService } from './notification.service';
 import {
   OrderCreatedEvent,
+  OrderAdminActionEvent,
   SellerRegistrationCreatedEvent,
   ShopApprovedEvent,
   ShopRejectedEvent,
@@ -73,6 +74,38 @@ export class NotificationEventsController {
           title: 'Yangi buyurtma',
           body: `${orderLabel} raqamli buyurtma yaratildi.`,
           data: { orderId: event.orderId, totalAmount: event.totalAmount },
+        }),
+      ),
+    );
+  }
+
+  @EventPattern('order.cancelled')
+  orderCancelled(@Payload() event: OrderAdminActionEvent) {
+    return this.orderAction(event, 'order_cancelled', 'Buyurtma bekor qilindi');
+  }
+
+  @EventPattern('order.refunded')
+  orderRefunded(@Payload() event: OrderAdminActionEvent) {
+    return this.orderAction(
+      event,
+      'order_refunded',
+      'Buyurtma puli qaytarildi',
+    );
+  }
+
+  private async orderAction(
+    event: OrderAdminActionEvent,
+    type: string,
+    title: string,
+  ) {
+    await Promise.all(
+      event.recipients.map((recipient) =>
+        this.notifications.create({
+          recipient,
+          type,
+          title,
+          body: `#${event.orderId} buyurtma. Sabab: ${event.reason}`,
+          data: { orderId: event.orderId, reason: event.reason },
         }),
       ),
     );
