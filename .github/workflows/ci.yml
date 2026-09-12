@@ -305,9 +305,13 @@ jobs:
               "sed -n 's/^DOMAIN=//p' /srv/marketplace/.env.production | tail -n 1")
           fi
 
+          domain="${domain%/}"
+
           if [ -z "$domain" ] || [ "${domain#:}" != "$domain" ]; then
             echo "Domen yo'q — HTTP rejimi, IP orqali tekshiriladi."
             url="http://$DEPLOY_HOST/api/v1/health/readiness"
+          elif [ "${domain#http://}" != "$domain" ] || [ "${domain#https://}" != "$domain" ]; then
+            url="$domain/api/v1/health/readiness"
           else
             url="https://$domain/api/v1/health/readiness"
           fi
