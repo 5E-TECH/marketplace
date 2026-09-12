@@ -6,6 +6,10 @@ import {
   Optional,
 } from '@nestjs/common';
 import {
+  CheckoutPaymentMethod,
+  FinanceRefundRequestedEvent,
+  RefundPaymentDto,
+  ReturnOrderItemsDto,
   SellerDashboardDto,
   SellerOrdersPageDto,
   SellerOrdersQueryDto,
@@ -13,6 +17,7 @@ import {
 import { DataSource } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { RmqClient, sendRpc } from '@app/common';
+import { firstValueFrom } from 'rxjs';
 
 interface CountRow {
   total: string | number;
@@ -28,6 +33,21 @@ export class SellerOrdersService {
     @Optional()
     @Inject(RmqClient.IDENTITY)
     private readonly identity?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.INVENTORY)
+    private readonly inventory?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.PAYMENT)
+    private readonly payment?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.FINANCE)
+    private readonly finance?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notifications?: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
   ) {}
 
   async findAll(
@@ -398,6 +418,226 @@ export class SellerOrdersService {
         items: itemsBySeller.get(String(s.id)) ?? [],
       })),
     };
+  }
+
+  async adminCancelOrder(input: {
+    orderId: string;
+    reason: string;
+    actorId: string;
+  }) {
+    if (!this.inventory)
+      throw new BadRequestException('Inventory servisi ulanmagan');
+    const result = await this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `admin-cancel:${input.orderId}`,
+      ]);
+      const [order] = await manager.query(
+        `SELECT id::text,status,payment_method,customer_id::text FROM checkout.sales_order WHERE id=$1 FOR UPDATE`,
+        [input.orderId],
+      );
+      if (!order)
+        throw new NotFoundException(`Buyurtma #${input.orderId} topilmadi`);
+      if (order.status === 'CANCELLED')
+        return {
+          id: input.orderId,
+          status: 'CANCELLED',
+          idempotent: true,
+          customerId: order.customer_id,
+          shopIds: [] as string[],
+        };
+      if (!['DRAFT', 'PENDING_PAYMENT'].includes(order.status)) {
+        throw new BadRequestException(
+          'Bu buyurtmani cancel qilish mumkin emas; to‘langan order uchun refund ishlating',
+        );
+      }
+      await sendRpc(
+        this.inventory!,
+        { cmd: 'inventory.release' },
+        {
+          orderRef: input.orderId,
+          idempotencyKey: `admin-cancel:${input.orderId}`,
+          reason: input.reason,
+          actorId: input.actorId,
+        },
+      );
+      const sellers = (await manager.query(
+        `SELECT shop_id::text FROM checkout.sales_order_seller WHERE sales_order_id=$1`,
+        [input.orderId],
+      )) as Array<{ shop_id: string }>;
+      await manager.query(
+        `UPDATE checkout.sales_order SET status='CANCELLED',updated_at=now() WHERE id=$1`,
+        [input.orderId],
+      );
+      await manager.query(
+        `UPDATE checkout.sales_order_seller SET status='CANCELLED',updated_at=now() WHERE sales_order_id=$1`,
+        [input.orderId],
+      );
+      await manager.query(
+        `INSERT INTO checkout.sales_order_seller_history (sales_order_seller_id,status,comment)
+         SELECT id,'CANCELLED',$2 FROM checkout.sales_order_seller WHERE sales_order_id=$1`,
+        [input.orderId, `Admin: ${input.reason}`],
+      );
+      return {
+        id: input.orderId,
+        status: 'CANCELLED',
+        idempotent: false,
+        customerId: order.customer_id,
+        shopIds: sellers.map((seller) => seller.shop_id),
+      };
+    });
+    if (result.shopIds.length > 0) {
+      await this.notify(
+        'order.cancelled',
+        result.customerId,
+        result.shopIds,
+        input.orderId,
+        input.reason,
+      );
+    }
+    const { customerId: _customerId, shopIds: _shopIds, ...response } = result;
+    return response;
+  }
+
+  async adminRefundOrder(input: {
+    orderId: string;
+    reason: string;
+    amount?: number;
+    actorId: string;
+  }) {
+    if (!this.inventory || !this.payment || !this.finance) {
+      throw new BadRequestException('Refund servislaridan biri ulanmagan');
+    }
+    const result = await this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `admin-refund:${input.orderId}`,
+      ]);
+      const [order] = await manager.query(
+        `SELECT id::text,status,payment_method,payment_id::text,total_amount::float8,customer_id::text FROM checkout.sales_order WHERE id=$1 FOR UPDATE`,
+        [input.orderId],
+      );
+      if (!order)
+        throw new NotFoundException(`Buyurtma #${input.orderId} topilmadi`);
+      if (order.status === 'REFUNDED')
+        return {
+          id: input.orderId,
+          status: 'REFUNDED',
+          idempotent: true,
+          customerId: order.customer_id,
+          shopIds: [] as string[],
+        };
+      if (order.payment_method === CheckoutPaymentMethod.COD) {
+        throw new BadRequestException(
+          'To‘lanmagan COD buyurtmani refund qilib bo‘lmaydi',
+        );
+      }
+      if (
+        input.amount !== undefined &&
+        Number(input.amount) !== Number(order.total_amount)
+      ) {
+        throw new BadRequestException(
+          'Hozir faqat to‘liq refund qo‘llab-quvvatlanadi',
+        );
+      }
+      const sellers = await manager.query(
+        `SELECT id::text,shop_id::text FROM checkout.sales_order_seller WHERE sales_order_id=$1 ORDER BY id`,
+        [input.orderId],
+      );
+      if (!sellers.length)
+        throw new BadRequestException('Sub-buyurtmalar topilmadi');
+      const items = (await manager.query(
+        `SELECT i.variant_id::text AS "variantId",SUM(i.quantity)::int AS quantity
+           FROM checkout.sales_order_item i JOIN checkout.sales_order_seller s ON s.id=i.sales_order_seller_id
+          WHERE s.sales_order_id=$1 GROUP BY i.variant_id`,
+        [input.orderId],
+      )) as ReturnOrderItemsDto['items'];
+      await sendRpc(this.payment!, { cmd: 'payment.refund' }, {
+        paymentId: order.payment_id,
+        salesOrderId: input.orderId,
+        sellerOrderId: sellers[0].id,
+        reason: input.reason,
+        idempotencyKey: `admin-refund:${input.orderId}`,
+      } satisfies RefundPaymentDto);
+      await sendRpc(this.inventory!, { cmd: 'inventory.return-order-items' }, {
+        orderRef: input.orderId,
+        items,
+        reason: input.reason,
+        idempotencyKey: `admin-refund:${input.orderId}`,
+      } satisfies ReturnOrderItemsDto);
+      for (const seller of sellers) {
+        await sendRpc(this.finance!, { cmd: 'finance.refund' }, {
+          eventId: `admin-refund:${input.orderId}:${seller.id}`,
+          sellerOrderId: seller.id,
+          shopId: seller.shop_id,
+          occurredAt: new Date().toISOString(),
+        } satisfies FinanceRefundRequestedEvent);
+      }
+      await manager.query(
+        `UPDATE checkout.sales_order SET status='REFUNDED',updated_at=now() WHERE id=$1`,
+        [input.orderId],
+      );
+      await manager.query(
+        `UPDATE checkout.sales_order_seller SET status='RETURNED',updated_at=now() WHERE sales_order_id=$1`,
+        [input.orderId],
+      );
+      await manager.query(
+        `INSERT INTO checkout.sales_order_seller_history (sales_order_seller_id,status,comment)
+         SELECT id,'RETURNED',$2 FROM checkout.sales_order_seller WHERE sales_order_id=$1`,
+        [input.orderId, `Admin refund: ${input.reason}`],
+      );
+      return {
+        id: input.orderId,
+        status: 'REFUNDED',
+        idempotent: false,
+        customerId: order.customer_id,
+        shopIds: sellers.map((seller: { shop_id: string }) => seller.shop_id),
+      };
+    });
+    if (result.shopIds.length > 0) {
+      await this.notify(
+        'order.refunded',
+        result.customerId,
+        result.shopIds,
+        input.orderId,
+        input.reason,
+      );
+    }
+    const { customerId: _customerId, shopIds: _shopIds, ...response } = result;
+    return response;
+  }
+
+  private async notify(
+    type: string,
+    customerId: string,
+    shopIds: string[],
+    orderId: string,
+    reason: string,
+  ) {
+    if (!this.notifications) return;
+    const sellerUserIds = this.catalog
+      ? await Promise.all(
+          shopIds.map(async (shopId) => {
+            const shop = await sendRpc<{ ownerUserId: string }>(
+              this.catalog!,
+              { cmd: 'catalog.shop.get-by-id' },
+              { shopId },
+            );
+            return String(shop.ownerUserId);
+          }),
+        )
+      : [];
+    const recipients = [customerId, ...sellerUserIds]
+      .filter(Boolean)
+      .filter((id, index, all) => all.indexOf(id) === index)
+      .map((userId) => ({ userId }));
+    if (!recipients.length) return;
+    await firstValueFrom(
+      this.notifications.emit(type, {
+        orderId,
+        reason,
+        recipients,
+      }),
+      { defaultValue: undefined },
+    );
   }
 
   /**

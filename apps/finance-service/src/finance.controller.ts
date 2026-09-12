@@ -28,6 +28,11 @@ export class FinanceController {
     return this.finance.refund(event);
   }
 
+  @MessagePattern({ cmd: 'finance.refund' })
+  refund(@Payload() event: FinanceRefundRequestedEvent) {
+    return this.finance.refund(event);
+  }
+
   @EventPattern('finance.cod.settled')
   codSettled(@Payload() event: FinanceCodSettledEvent) {
     return this.finance.processCodSettled(event);

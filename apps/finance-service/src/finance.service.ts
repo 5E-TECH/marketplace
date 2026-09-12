@@ -239,9 +239,12 @@ export class FinanceService {
     return summary;
   }
 
-  refund(
-    event: FinanceRefundRequestedEvent,
-  ): Promise<{ entry: LedgerRow; balance: number; idempotent: boolean }> {
+  refund(event: FinanceRefundRequestedEvent): Promise<{
+    entry: LedgerRow | null;
+    balance: number;
+    idempotent: boolean;
+    skipped?: boolean;
+  }> {
     if (!event?.sellerOrderId || !event?.shopId) {
       throw new BadRequestException('Refund eventi noto‘g‘ri');
     }
@@ -272,7 +275,17 @@ export class FinanceService {
             AND entry_type IN ('SALE','COMMISSION')`,
         [event.shopId, event.sellerOrderId],
       )) as Array<{ entryType: FinanceLedgerEntryType; amount: number }>;
-      if (!source.length) throw new NotFoundException('Asl savdo topilmadi');
+      // Pul seller ledgeriga hali o'tmagan bo'lsa (masalan shipment yetkazilishidan
+      // oldingi admin refund), yechiladigan mablag' yo'q. Refund oqimini shu yerda
+      // to'xtatish providerda pul qaytib bo'lgan orderni yarim holatda qoldiradi.
+      if (!source.length) {
+        return {
+          entry: null,
+          balance: await this.balance(manager, event.shopId),
+          idempotent: true,
+          skipped: true,
+        };
+      }
       const net = this.money(
         source.reduce((total, row) => total + Number(row.amount), 0),
       );

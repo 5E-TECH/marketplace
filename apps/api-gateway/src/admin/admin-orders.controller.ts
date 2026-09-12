@@ -1,4 +1,13 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Ip,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
@@ -10,6 +19,10 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminOrdersQueryDto,
+  AdminOrderActionDto,
+  AdminOrderRefundDto,
+  CurrentUser,
+  JwtUser,
   AuthErrorResponseDto,
   Role,
   Roles,
@@ -27,6 +40,7 @@ import {
 export class AdminOrdersController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
+    @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
   ) {}
 
   @Get('admin/orders')
@@ -60,5 +74,70 @@ export class AdminOrdersController {
       { cmd: 'checkout.admin.order-get' },
       { orderId: id },
     );
+  }
+
+  @Post('admin/orders/:id/cancel')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  async cancel(
+    @Param('id') id: string,
+    @Body() dto: AdminOrderActionDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const result = await sendRpc(
+      this.checkout,
+      { cmd: 'checkout.admin.order-cancel' },
+      {
+        orderId: id,
+        reason: dto.reason,
+        actorId: admin.sub,
+      },
+    );
+    this.audit(admin.sub, 'order.cancel', id, ip, dto);
+    return result;
+  }
+
+  @Post('admin/orders/:id/refund')
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  async refund(
+    @Param('id') id: string,
+    @Body() dto: AdminOrderRefundDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const result = await sendRpc(
+      this.checkout,
+      { cmd: 'checkout.admin.order-refund' },
+      {
+        orderId: id,
+        reason: dto.reason,
+        amount: dto.amount,
+        actorId: admin.sub,
+      },
+    );
+    this.audit(admin.sub, 'order.refund', id, ip, dto);
+    return result;
+  }
+
+  private audit(
+    actorId: string,
+    action: string,
+    entityId: string,
+    ip: string,
+    meta: object,
+  ) {
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId,
+        action,
+        entityType: 'SalesOrder',
+        entityId,
+        meta: { ...meta, ip: ip || null },
+      },
+    ).catch(() => undefined);
   }
 }

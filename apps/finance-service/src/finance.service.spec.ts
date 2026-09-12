@@ -280,6 +280,19 @@ describe('FinanceService (C3.5)', () => {
     expect(payouts[0].status).toBe(FinancePayoutStatus.HELD);
   });
 
+  it('C6.4: sellerga hali tushum yozilmagan bo‘lsa refund ledger no-op bo‘ladi', async () => {
+    const { service, ledgers } = setup();
+    await expect(
+      service.refund({
+        eventId: 'admin-refund-early',
+        sellerOrderId: '55',
+        shopId: '7',
+        occurredAt: new Date().toISOString(),
+      }),
+    ).resolves.toMatchObject({ entry: null, skipped: true, idempotent: true });
+    expect(ledgers).toHaveLength(0);
+  });
+
   it('C4.3 TC1: COD settled sale, settlement va commission ledger yozadi', async () => {
     const { service, ledgers } = setup();
     await expect(

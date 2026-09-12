@@ -146,6 +146,26 @@ export class SellerOrdersController {
     return this.orders.adminGetOrder(String(data.orderId));
   }
 
+  @MessagePattern({ cmd: 'checkout.admin.order-cancel' })
+  adminCancelOrder(
+    @Payload() data: { orderId: string; reason: string; actorId: string },
+  ) {
+    return this.orders.adminCancelOrder(data);
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.order-refund' })
+  adminRefundOrder(
+    @Payload()
+    data: {
+      orderId: string;
+      reason: string;
+      amount?: number;
+      actorId: string;
+    },
+  ) {
+    return this.orders.adminRefundOrder(data);
+  }
+
   @MessagePattern({ cmd: 'seller.dashboard.get' })
   async dashboard(@Payload() data: { ownerUserId: string }) {
     const shop = await this.shop(data.ownerUserId);
