@@ -161,10 +161,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # Trafik Cloudflare Tunnel orqali `caddy:80` ga ichki tarmoqdan keladi,
+    # shuning uchun portlar tashqariga ochilmaydi — faqat loopback (C5.2 TC4).
+    # Tunnelsiz, IP orqali ishlash kerak bo'lsa `127.0.0.1:` prefikslarini
+    # olib tashlang.
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:443:443/udp"
     environment:
       # DOMAIN berilmasa Caddy `:80` da oddiy HTTP xizmat qiladi — domen hali
       # yo'q bo'lsa API to'g'ridan-to'g'ri IP orqali ochiladi. Domen
@@ -201,10 +205,13 @@ services:
   #
   # Public Hostname sozlamalari Cloudflare Zero Trust panelida belgilanadi
   # (token bilan boshqariladigan tunnelda ular kodda emas, panelda turadi):
-  #   api.<domen>   -> http://caddy:80      — Caddy /media, xavfsizlik
-  #                                           sarlavhalari va health-check'ni
-  #                                           saqlab qoladi
-  #   admin.<domen> -> http://frontend:8080 — sotuvchi kabineti SPA
+  #   <domen>       -> http://storefront:3001 — xaridor sayti (Next.js SSR).
+  #                       Ataylab Caddy'siz: Next o'z sarlavhalarini qo'yadi
+  #                       va SSR'da Host/protokolga tayanadi.
+  #   admin.<domen> -> http://caddy:80        — kabinet. Caddy {$APP_DOMAIN}
+  #                       bloki CSP qo'yib frontend:8080 ga proxy qiladi.
+  #   api.<domen>   -> http://caddy:80        — API. Caddy {$DOMAIN} bloki
+  #                       /media proxy va xavfsizlik sarlavhalarini beradi.
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped

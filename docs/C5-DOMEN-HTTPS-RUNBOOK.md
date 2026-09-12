@@ -102,16 +102,26 @@ Loglarda `Registered tunnel connection` (odatda 4 ta) ko'rinishi kerak.
 
 ### 2.4 Portlarni yopish
 
-Tunnel ishlagach tashqi portlar kerak emas:
+**Bajarildi 2026-09-12.** Portlar butunlay olib tashlanmadi — `127.0.0.1` ga
+bog'landi. Shunda tashqaridan yopiq, lekin serverning o'zidan (va SSH tunnel
+orqali nosozlik qidirishda) ochiq qoladi.
 
-- `/home/deploy/marketplace-frontend/docker-compose.prod.yml` → `ports` bo'limini
-  olib tashlash (yoki `127.0.0.1:8080:8080` qilish)
-- `/home/deploy/marketplace-storefront/docker-compose.prod.yml` → xuddi shunday
-  (`8081`)
-- `/srv/marketplace/docker-compose.prod.yml` → `caddy` servisidagi `80`, `443`
-  publish'larini olib tashlash
+Frontendlarda port env o'zgaruvchisidan keladi, shuning uchun fayl tahrir
+qilinmadi — faqat `.env.production` ga qo'shildi:
 
-Har birida o'zgarishdan keyin `docker compose up -d`.
+```sh
+# /home/deploy/marketplace-frontend/.env.production
+FRONTEND_HTTP_PORT=127.0.0.1:8080
+# /home/deploy/marketplace-storefront/.env.production
+STOREFRONT_PORT=127.0.0.1:8081
+```
+
+Caddy'da portlar qattiq yozilgan edi, shuning uchun `docker-compose.prod.yml`
+da `127.0.0.1:` prefikslari qo'yildi (repo'da ham, aks holda keyingi deploy
+qaytarib ochardi).
+
+Natija tekshirildi: `169.58.98.223` ning 80, 443, 8080, 8081 portlari
+tashqaridan javob bermaydi; uchala sayt esa tunnel orqali 200 qaytaradi.
 
 ### 2.5 Cloudflare panelida ikkita sozlama
 
