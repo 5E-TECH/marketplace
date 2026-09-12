@@ -81,6 +81,7 @@ jobs:
           sh -n scripts/db-restore-test.sh
           sh -n scripts/setup-elchi-integration.sh
           sh -n scripts/verify-elchi-integration.sh
+          sh -n scripts/apply-domain.sh
 
       - name: Ops regression testlar
         run: npm run test:ops
@@ -202,8 +203,12 @@ jobs:
           # Caddy ikkala domenning TLS'ini ushlab turadi. Konfiguratsiya xato
           # bo'lsa u ko'tarilmaydi va API ham birga yiqiladi — shuning uchun
           # hech narsaga tegmasdan oldin bir martalik konteynerda tekshiramiz.
+          # API_ORIGIN ham uzatiladi: u kabinet CSP'siga yoziladi va agar
+          # bu yerda berilmasa, tekshiruv haqiqatda ishlaydigan
+          # konfiguratsiyadan boshqasini tekshirgan bo'lardi.
+          export API_ORIGIN="${API_ORIGIN:-}"
           docker run --rm \
-            -e DOMAIN -e APP_DOMAIN -e TLS_EMAIL \
+            -e DOMAIN -e APP_DOMAIN -e TLS_EMAIL -e API_ORIGIN \
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 

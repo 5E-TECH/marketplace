@@ -1,100 +1,85 @@
-# C5.1 → C5.2 → C5.3: domen, Cloudflare Tunnel va HTTPS'ga o'tish
+# C5.1 → C5.2 → C5.3: elchimarket.uz, Cloudflare Tunnel va HTTPS
 
-Bu hujjat domen olingandan keyin bajariladigan **mexanik** tartib. Maqsad —
-domen va tunnel tokeni kelgan zahoti ish 30 daqiqaga qolishi, qidiruv bilan
-vaqt ketmasligi.
+Domen olindi: **`elchimarket.uz`** (Eskiz'dan, 2026-09-12). Bu hujjat qolgan
+ishni bosqichma-bosqich, aniq qiymatlar bilan bajarish uchun.
 
-Holat 2026-09-10: kod tomoni tayyor (`cloudflared` servisi `docker-compose.prod.yml`
-da `tunnel` profili ostida turibdi, Caddyfile ikkala rejimda ham tekshirilgan).
-Kutilayotgani — **domen** (C5.1) va **tunnel tokeni** (C5.2). Ikkalasini ham
-foydalanuvchi beradi.
-
----
-
-## Hozirgi holat (nimadan boshlaymiz)
-
-| Nima | Hozir | Bo'lishi kerak |
-|---|---|---|
-| API | `http://169.58.98.223` (IP, HTTPS yo'q) | `https://api.<domen>` |
-| Kabinet | `http://169.58.98.223:8080` | `https://admin.<domen>` |
-| `DOMAIN` | `:80` | `http://api.<domen>` (tunnel rejimi) |
-| `APP_DOMAIN` | `kabinet.localhost` | `http://admin.<domen>` |
-| `TLS_EMAIL` | `admin@localhost` | haqiqiy pochta |
-| `API_ORIGIN` | (bo'sh) | `https://api.<domen>` |
-| `MINIO_PUBLIC_URL` | `http://169.58.98.223/media` | `https://api.<domen>/media` |
-| `CORS_ORIGINS` | IP + localhost portlari | faqat `https://` originlar |
-| 8080 porti | `0.0.0.0:8080` — ochiq | yopiq (faqat tunnel orqali) |
-
-Serverlar va kataloglar:
-
-- Backend: `ssh marketplace` → `/srv/marketplace`
-- Kabinet (frontend): `ssh marketplace` → `/home/deploy/marketplace-frontend`
-
----
-
-## Nega Tunnel, nega to'g'ridan-to'g'ri Caddy emas
-
-Ikkala yo'l ham ishlaydi:
-
-1. **To'g'ridan-to'g'ri:** DNS A-yozuvi → server IP, 80/443 tashqariga ochiq,
-   Caddy Let's Encrypt sertifikatini o'zi oladi.
-2. **Cloudflare Tunnel (C5.2 tanlagan yo'l):** `cloudflared` serverdan
-   Cloudflare tomon **chiquvchi** ulanish quradi. 80/443 ni tashqariga ochish
-   shart emas, server IP'si yashirin qoladi, DDoS himoyasi Cloudflare tomonida.
-
-Tunnel rejimida TLS **Cloudflare chekkasida** tugaydi, Caddy tunnel ortida
-oddiy HTTP beradi. Shuning uchun `DOMAIN` ga `http://` prefiksi qo'yiladi —
-bu Caddy'ga "bu sayt uchun avtomatik HTTPS qilma" deydi. Tekshirilgan:
+## Yakuniy tuzilish
 
 ```
-DOMAIN=api.example.com        → "enabling automatic HTTP->HTTPS redirects"  (ACME yo'li)
-DOMAIN=http://api.example.com → redirect yo'q                               (tunnel yo'li)
+elchimarket.uz         → storefront:3001   (xaridor sayti, Next.js SSR)
+admin.elchimarket.uz   → caddy:80          (sotuvchi kabineti + admin panel)
+api.elchimarket.uz     → caddy:80          (API)
+www.elchimarket.uz     → elchimarket.uz    (redirect)
 ```
 
-`API_ORIGIN` aynan shuning uchun `DOMAIN`dan **alohida** o'zgaruvchi: kabinet
-CSP'siga brauzer ko'radigan manzil (`https://...`) kerak, `DOMAIN` esa tunnel
-rejimida `http://...` bo'ladi. Ilgari Caddyfile'da `https://{$DOMAIN}` yozilgan
-edi — tunnelga o'tganda u `https://http://api...` ga aylanib CSP'ni buzardi.
+Uchala manzil ham **Cloudflare Tunnel** orqali chiqadi: server portlari
+tashqariga ochilmaydi, TLS Cloudflare chekkasida tugaydi.
+
+### Nega ikkitasi Caddy orqali, storefront esa to'g'ridan-to'g'ri
+
+`deploy/Caddyfile` da allaqachon ikkita sayt bloki bor va ular kerakli ishni
+qiladi — qayta yozish shart emas:
+
+- `{$DOMAIN}` bloki — API: `/media/*` ni MinIO'ga proxy qiladi, xavfsizlik
+  sarlavhalarini qo'yadi, api-gateway'ga health-check bilan boradi.
+- `{$APP_DOMAIN}` bloki — kabinet: CSP qo'yadi va `frontend:8080` ga proxy qiladi.
+
+Storefront esa Next.js serveri: o'z sarlavhalarini o'zi qo'yadi va SSR
+paytida Host/protokolga tayanadi. Uning oldiga yana bir proxy qo'yish
+foyda bermaydi, aksincha kanonik havola va `og:url` ni buzishi mumkin.
+Shuning uchun tunnel unga to'g'ridan-to'g'ri boradi.
+
+**Natija: Caddyfile'ga tegilmaydi.** Faqat muhit o'zgaruvchilari o'zgaradi.
 
 ---
 
-## 1-qadam — C5.1: domen va DNS
+## 1-bosqich — C5.1: domen va DNS
 
-1. Domenni ro'yxatdan o'tkazish (foydalanuvchi bajaradi).
-2. Cloudflare'ga zona sifatida qo'shish, registrarda nameserverlarni
-   Cloudflare'nikiga almashtirish. Zona `Active` bo'lguncha kutiladi.
-3. DNS yozuvlari **qo'lda qo'shilmaydi** — 2-qadamda tunnel ularni
-   (`CNAME ... .cfargotunnel.com`, proxied) o'zi yaratadi.
+**Bajarildi:** domen Cloudflare'ga qo'shilgan (Free tarif), NS Eskiz panelida
+`anita.ns.cloudflare.com` va `nero.ns.cloudflare.com` ga o'zgartirilgan.
 
-**C5.1 checklisti:**
+**Kutilmoqda:** `.uz` registry delegatsiyani yangilashi. Tekshirish:
 
-- TC1 `dig admin.<domen>` javob beradi → 2-qadamdan keyin tekshiriladi
-- TC2 `dig api.<domen>` javob beradi → 2-qadamdan keyin
-- TC3 domen Cloudflare panelida `Active`
+```bash
+dig NS elchimarket.uz @ns1.uz +short     # cloudflare.com chiqishi kerak
+dig SOA elchimarket.uz +short @1.1.1.1   # NOERROR bo'lishi kerak
+```
+
+> Oraliq holatda `SERVFAIL` normal: registry hali Eskiz'ni ko'rsatadi, Eskiz
+> esa zonani endi xizmat qilmaydi (`REFUSED`). Registry yozuvining TTL'i
+> 14400s (4 soat). 4–6 soatdan keyin ham o'zgarmasa — Eskiz qo'llab-quvvatlash
+> xizmatiga yozish kerak, delegatsiya cctld.uz ga yuborilmagan bo'ladi.
+
+DNS yozuvlarini **qo'lda qo'shmang** — tunnel ularni o'zi yaratadi.
 
 ---
 
-## 2-qadam — C5.2: Cloudflare Tunnel
+## 2-bosqich — C5.2: Cloudflare Tunnel
 
-### 2.1 Tunnel yaratish (Cloudflare paneli)
+### 2.1 Tunnel yaratish
 
-Zero Trust → Networks → Tunnels → **Create a tunnel** → Cloudflared →
-nom: `marketplace`. Chiqqan **tokenni** nusxalash (`eyJ...` bilan boshlanadi).
+Cloudflare → **Zero Trust** → **Networks** → **Tunnels** → **Create a tunnel**
+→ **Cloudflared** → nom: `marketplace` → **Save**.
 
-> Token — sir. Uni Trello'ga, commit'ga yoki chatga yozmaslik kerak.
+Chiqqan **tokenni** nusxalang (`eyJ...` bilan boshlanadi).
 
-### 2.2 Public hostname'lar (o'sha panelda)
+> Token — sir. Trello'ga, commit'ga yoki chatga yozilmaydi. To'g'ridan-to'g'ri
+> serverdagi `.env.production` ga qo'yiladi.
 
-| Subdomain | Domain | Type | URL |
-|---|---|---|---|
-| `api` | `<domen>` | HTTP | `caddy:80` |
-| `admin` | `<domen>` | HTTP | `frontend:8080` |
+### 2.2 Public hostname'lar
 
-`api` Caddy orqali o'tadi — `/media` proxy'si, xavfsizlik sarlavhalari va
-health-check shu yerda. `admin` to'g'ridan-to'g'ri SPA konteyneriga boradi.
+O'sha tunnel ichida **Public Hostname** bo'limiga uchta yozuv qo'shiladi:
 
-Ikkala nom ham `marketplace_edge` docker tarmog'idagi konteyner nomlari;
-`cloudflared` shu tarmoqda turgani uchun ularni ko'ra oladi.
+| # | Subdomain | Domain | Type | URL |
+|---|---|---|---|---|
+| 1 | *(bo'sh)* | `elchimarket.uz` | HTTP | `storefront:3001` |
+| 2 | `admin` | `elchimarket.uz` | HTTP | `caddy:80` |
+| 3 | `api` | `elchimarket.uz` | HTTP | `caddy:80` |
+
+Har biri saqlanganda Cloudflare DNS'ga mos `CNAME` (proxied) yozuvini
+avtomatik qo'shadi.
+
+`www` uchun alohida hostname shart emas — uni 2.5 da redirect bilan hal qilamiz.
 
 ### 2.3 Serverda yoqish
 
@@ -103,113 +88,161 @@ Ikkala nom ham `marketplace_edge` docker tarmog'idagi konteyner nomlari;
 ```sh
 TUNNEL_TOKEN=<panel bergan token>
 COMPOSE_PROFILES=tunnel
-
-DOMAIN=http://api.<domen>
-APP_DOMAIN=http://admin.<domen>
-API_ORIGIN=https://api.<domen>
-TLS_EMAIL=<haqiqiy pochta>
 ```
 
-Keyin:
+So'ng:
 
-```sh
+```bash
 cd /srv/marketplace
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d cloudflared caddy
-docker compose -f docker-compose.prod.yml logs cloudflared --tail 30
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d cloudflared
+docker compose --env-file .env.production -f docker-compose.prod.yml logs cloudflared --tail 30
 ```
 
 Loglarda `Registered tunnel connection` (odatda 4 ta) ko'rinishi kerak.
 
-### 2.4 8080 portini yopish
+### 2.4 Portlarni yopish
 
-Tunnel ishlagach kabinet `0.0.0.0:8080` orqali ochiq turishi shart emas.
-`/home/deploy/marketplace-frontend/docker-compose.prod.yml` da port
-publish'ini olib tashlash (yoki `127.0.0.1:8080:8080` ga o'zgartirish), so'ng
-`docker compose up -d`.
+Tunnel ishlagach tashqi portlar kerak emas:
+
+- `/home/deploy/marketplace-frontend/docker-compose.prod.yml` → `ports` bo'limini
+  olib tashlash (yoki `127.0.0.1:8080:8080` qilish)
+- `/home/deploy/marketplace-storefront/docker-compose.prod.yml` → xuddi shunday
+  (`8081`)
+- `/srv/marketplace/docker-compose.prod.yml` → `caddy` servisidagi `80`, `443`
+  publish'larini olib tashlash
+
+Har birida o'zgarishdan keyin `docker compose up -d`.
+
+### 2.5 Cloudflare panelida ikkita sozlama
+
+- **SSL/TLS → Overview** → rejim **Full** (Flexible EMAS).
+- **SSL/TLS → Edge Certificates** → **Always Use HTTPS** yoqiladi.
+- **Rules → Redirect Rules** → `www.elchimarket.uz/*` → `https://elchimarket.uz/$1`
+  (301).
 
 **C5.2 checklisti:**
 
-- TC1 `https://api.<domen>/api/v1/health` → 200
-- TC2 `https://admin.<domen>` kabinetni ochadi
+- TC1 `https://api.elchimarket.uz/api/v1/health` → 200
+- TC2 `https://admin.elchimarket.uz` kabinetni ochadi
 - TC3 sertifikat yaroqli (brauzer ogohlantirmaydi)
 - TC4 `curl http://169.58.98.223:8080` tashqaridan javob bermaydi
 
 ---
 
-## 3-qadam — C5.3: vaqtinchalik yon yechimlarni olib tashlash
+## 3-bosqich — C5.3: vaqtinchalik yon yechimlarni olib tashlash
 
-Bular sinov uchun **ataylab** qo'yilgan edi. Domen ishlagach hammasi
-olib tashlanmasa, production HTTPS'siz qolib ketadi.
+Bular IP+HTTP bilan sinash uchun **ataylab** qo'yilgan edi. Domen ishlagach
+hammasi olib tashlanmasa, production HTTPS'siz qolib ketadi.
 
-### 3.1 Kabinet (`/home/deploy/marketplace-frontend/.env.production`)
+### 3.1 Backend — `/srv/marketplace/.env.production`
+
+```diff
+-DOMAIN=:80
++DOMAIN=http://api.elchimarket.uz
+-APP_DOMAIN=kabinet.localhost
++APP_DOMAIN=http://admin.elchimarket.uz
++API_ORIGIN=https://api.elchimarket.uz
+-TLS_EMAIL=admin@localhost
++TLS_EMAIL=<haqiqiy pochta>
+-CORS_ORIGINS=http://5.189.141.169:3004,http://localhost:5173,http://localhost:5174,http://169.58.98.223:8080
++CORS_ORIGINS=https://admin.elchimarket.uz,https://elchimarket.uz
+-MINIO_PUBLIC_URL=http://169.58.98.223/media
++MINIO_PUBLIC_URL=https://api.elchimarket.uz/media
+```
+
+**`DOMAIN` va `APP_DOMAIN` da `http://` prefiksi ATAYLAB.** Tunnel rejimida
+TLS Cloudflare chekkasida tugaydi va Caddy tunnel ortida oddiy HTTP beradi;
+bu prefiks Caddy'ning avtomatik HTTPS'ini (ACME) o'chiradi. `API_ORIGIN` esa
+brauzer ko'radigan manzil, shuning uchun `https://` — u kabinet CSP'siga
+yoziladi.
+
+> `http://5.189.141.169:3004` — Elchi backendining origini. Elchi marketplace
+> API'siga brauzerdan emas, server-server murojaat qiladi, ya'ni unga CORS
+> kerak emas.
+
+### 3.2 Kabinet — `/home/deploy/marketplace-frontend/.env.production`
 
 ```diff
 -VITE_ALLOW_INSECURE_API=true
 -VITE_API_URL=http://169.58.98.223/api/v1
-+VITE_API_URL=https://api.<domen>/api/v1
++VITE_API_URL=https://api.elchimarket.uz/api/v1
 ```
 
-`VITE_API_URL` **build vaqtida** bundle ichiga yoziladi — o'zgartirilgach
-qayta build shart (`docker compose build --no-cache frontend && up -d`).
+`VITE_API_URL` **build vaqtida** bundle ichiga yoziladi — qayta build shart:
 
-`VITE_ALLOW_INSECURE_API` bayrog'i `src/shared/api/httpClient.ts` dagi
-`resolveApiUrl()` da tekshiriladi. Aniqlik uchun: u **build'ni emas, ilovaning
-ishga tushishini** to'xtatadi — `axios.create()` modul yuklanayotganda
-chaqiriladi, ya'ni bayroqsiz va `http://` manzil bilan build muvaffaqiyatli
-o'tadi, lekin kabinet brauzerda ochilmay xato beradi. Shuning uchun 3.1 dagi
-ikki qatorni **birga** o'zgartirish kerak: bayroqni olib tashlab, manzilni
-`https://` ga o'tkazmaslik — kabinetni ishdan chiqaradi.
+```bash
+cd /home/deploy/marketplace-frontend
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
 
-### 3.2 Backend (`/srv/marketplace/.env.production`)
+⚠️ Ikki qatorni **birga** o'zgartiring. `VITE_ALLOW_INSECURE_API` ni olib
+tashlab, manzilni `https://` ga o'tkazmasangiz — build yashil bo'ladi, lekin
+kabinet brauzerda umuman ochilmaydi (`resolveApiUrl` modul yuklanayotganda
+xato tashlaydi).
+
+### 3.3 Storefront — `/home/deploy/marketplace-storefront/.env.production`
 
 ```diff
--CORS_ORIGINS=http://5.189.141.169:3004,http://localhost:5173,http://localhost:5174,http://169.58.98.223:8080
-+CORS_ORIGINS=https://admin.<domen>,https://<storefront-domeni>
--MINIO_PUBLIC_URL=http://169.58.98.223/media
-+MINIO_PUBLIC_URL=https://api.<domen>/media
+-NEXT_PUBLIC_SITE_URL=http://169.58.98.223:8081
++NEXT_PUBLIC_SITE_URL=https://elchimarket.uz
 ```
 
-> `http://5.189.141.169:3004` — Elchi backendining origini. Elchi
-> marketplace API'siga brauzerdan emas, server-server murojaat qiladi, ya'ni
-> unga CORS kerak emas. Olib tashlashdan oldin Elchi tomonidagi
-> `MARKETPLACE_WEBHOOK_URL` ni ham `https://api.<domen>` ga o'tkazish kerak
-> ([[C1.40]] webhook zanjiri shu manzilga uradi).
+`API_BASE_URL` o'zgarmaydi — u ichki `http://api-gateway:3000/api/v1` bo'lib
+qoladi va tashqi tarmoqqa umuman chiqmaydi.
 
-> `localhost:5173/5174` — dasturchilarning lokal Vite portlari. Ular
-> production `.env` da turishi kerak emas; kerak bo'lsa alohida dev muhitida.
+`NEXT_PUBLIC_SITE_URL` kanonik havola va `og:url` uchun ishlatiladi, shuning
+uchun qayta build kerak.
 
-### 3.3 MinIO'dagi eski havolalar
+### 3.4 Elchi tomoni
+
+Elchi'dagi marketplace hamkorining `webhook_url` i hozir IP'ga ishora qiladi.
+Uni yangilash kerak:
+
+```
+http://169.58.98.223/api/v1/webhooks/elchi
+  → https://api.elchimarket.uz/api/v1/webhooks/elchi
+```
+
+### 3.5 Bazadagi eski rasm havolalari
 
 `MINIO_PUBLIC_URL` o'zgargach **yangi** yuklangan rasmlar https havola oladi.
 Bazada saqlangan eski `http://169.58.98.223/media/...` havolalari o'z-o'zidan
-o'zgarmaydi — mahsulot rasmlari mixed-content bo'lib ko'rinmay qolishi mumkin.
-Tekshirish va kerak bo'lsa bir martalik `UPDATE` bilan almashtirish.
+o'zgarmaydi va sahifada mixed-content bo'lib ko'rinmay qolishi mumkin.
+
+Tekshirish va bir martalik almashtirish:
+
+```sql
+select count(*) from catalog.product where image_url like 'http://169.58.98.223%';
+update catalog.product
+   set image_url = replace(image_url, 'http://169.58.98.223/media', 'https://api.elchimarket.uz/media')
+ where image_url like 'http://169.58.98.223%';
+```
+
+`catalog.product_image` (yoki `images` jsonb) uchun ham xuddi shunday.
 
 **C5.3 checklisti:**
 
 - TC1 frontend build `VITE_ALLOW_INSECURE_API` bayrog'isiz o'tadi
 - TC2 CORS javobida faqat https origin ruxsat etiladi
-- TC3 mahsulot rasmi https orqali ochiladi (3.3 dagi eski havolalarni unutmaslik)
-- TC4 http manzil https ga yo'naltiriladi (Cloudflare'da SSL/TLS → Edge
-  Certificates → **Always Use HTTPS** yoqiladi)
+- TC3 mahsulot rasmi https orqali ochiladi (3.5 ni unutmaslik)
+- TC4 http manzil https ga yo'naltiriladi (2.5 dagi *Always Use HTTPS*)
 
 ---
 
-## 4-qadam — zanjirning qolgan qismini ochish
+## 4-bosqich — zanjirning qolgani ochiladi
 
 Domen ishlagach quyidagilar to'siqdan chiqadi:
 
-- **C3.3 / C7.1 (Click, Payme sandbox):** provayderga beriladigan callback
-  manzillari paydo bo'ladi:
-  - `https://api.<domen>/api/v1/payments/click/prepare`
-  - `https://api.<domen>/api/v1/payments/click/complete`
-  - `https://api.<domen>/api/v1/payments/payme/callback`
-  Batafsil: `docs/PAYMENT_INTEGRATION.md`.
-- **C4.6 (E2E smoke + monitoring):** `npm run ops:c46-preflight` aynan
-  `DOMAIN` ni talab qiladi va hozir shuning uchun yiqiladi. U yana
-  `ALERT_WEBHOOK_URL` (https) va `ELCHI_WEBHOOK_SECRET` ni ham tekshiradi.
-- **C2.28 (storefront deploy):** storefront ham shu tunnelga uchinchi public
-  hostname sifatida qo'shiladi.
+- **C3.3 / C7.1 (Click, Payme sandbox):** provayderga beriladigan HTTPS
+  callback manzillari paydo bo'ladi:
+  - `https://api.elchimarket.uz/api/v1/payments/click/prepare`
+  - `https://api.elchimarket.uz/api/v1/payments/click/complete`
+  - `https://api.elchimarket.uz/api/v1/payments/payme/callback`
+- **C4.6:** `npm run ops:c46-preflight` aynan `DOMAIN` ni talab qiladi va
+  hozir shuning uchun yiqiladi.
+- **C8.1 (MVP qo'lda testi):** TC1 "sayt HTTPS bilan ochiladi" yopiladi.
+  (Qolgan TC'lari C2.17 checkout'ga bog'liq.)
+- **C2.28 TC1/TC4** yopiladi.
 
 ---
 
@@ -217,15 +250,14 @@ Domen ishlagach quyidagilar to'siqdan chiqadi:
 
 Tunnel bilan muammo chiqsa, IP orqali ishlashga qaytish:
 
-```sh
-# .env.production da:
-#   COMPOSE_PROFILES qatorini olib tashlash
-#   DOMAIN=:80  APP_DOMAIN=kabinet.localhost  API_ORIGIN=
+```bash
 cd /srv/marketplace
-docker compose -f docker-compose.prod.yml --env-file .env.production stop cloudflared
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d caddy
+# .env.production da: COMPOSE_PROFILES qatorini olib tashlash,
+#   DOMAIN=:80  APP_DOMAIN=kabinet.localhost  API_ORIGIN=
+docker compose --env-file .env.production -f docker-compose.prod.yml stop cloudflared
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d caddy
 ```
 
+Portlarni qaytadan ochish kerak bo'lsa, 2.4 dagi o'zgarishlarni teskari qiling.
 `cloudflared` `profiles: [tunnel]` ostida turgani uchun `COMPOSE_PROFILES`
-qo'yilmasa umuman ko'tarilmaydi — ya'ni bu o'zgarish hozirgi IP orqali
-ishlashni buzmaydi.
+qo'yilmasa umuman ko'tarilmaydi.
