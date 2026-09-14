@@ -74,7 +74,14 @@ export class CheckoutService {
           ? { sessionId, status: 'active' }
           : { customerId, status: 'active' },
         relations: { items: true },
-        lock: { mode: 'pessimistic_write' },
+        // `tables: ['cart']` ATAYLAB. `relations` LEFT JOIN hosil qiladi,
+        // qulfsiz `pessimistic_write` esa unga `FOR UPDATE` qo'shadi — Postgres
+        // buni rad etadi: "FOR UPDATE cannot be applied to the nullable side of
+        // an outer join". Natijada HAR QANDAY buyurtma yaratish 500 bilan
+        // yiqilardi. Bizga faqat savat qatorini ketma-ketlashtirish kerak,
+        // shuning uchun `FOR UPDATE OF cart` — elchi-webhook.service.ts dagi
+        // `FOR UPDATE OF s` bilan bir xil yondashuv.
+        lock: { mode: 'pessimistic_write', tables: ['cart'] },
       });
       if (!cart) throw new NotFoundException('Faol savat topilmadi');
       if (!cart.items.length) throw new BadRequestException('Savat bo‘sh');
