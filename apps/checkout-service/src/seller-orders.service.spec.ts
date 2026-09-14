@@ -365,6 +365,8 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       query: jest.fn().mockResolvedValue([
         {
           orderId: '42',
+          customerId: '9',
+          sessionId: 'guest-session',
           orderStatus: 'CONFIRMED',
           orderUpdatedAt: '2026-09-14T10:00:00.000Z',
           sellerOrderId: '11',
@@ -377,6 +379,8 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
         },
         {
           orderId: '42',
+          customerId: '9',
+          sessionId: 'guest-session',
           orderStatus: 'CONFIRMED',
           orderUpdatedAt: '2026-09-14T10:00:00.000Z',
           sellerOrderId: '12',
@@ -416,16 +420,65 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       ],
     });
     expect(dataSource.query).toHaveBeenCalledWith(
-      expect.stringContaining('o.customer_id=$2'),
-      ['42', '9'],
+      expect.stringContaining('WHERE o.id=$1'),
+      ['42'],
     );
   });
 
-  it('buyer tracking boshqa xaridor orderini 404 qiladi', async () => {
-    const dataSource = { query: jest.fn().mockResolvedValue([]) };
+  it('buyer tracking to‘g‘ri guest session bilan ishlaydi', async () => {
+    const dataSource = {
+      query: jest.fn().mockResolvedValue([
+        {
+          orderId: '42',
+          customerId: '9',
+          sessionId: 'guest-session',
+          orderStatus: 'DRAFT',
+          orderUpdatedAt: '2026-09-14T10:00:00.000Z',
+          sellerOrderId: '11',
+          shopId: '3',
+          shopName: 'Elchi do‘koni',
+          shipmentId: null,
+          shipmentStatus: 'PENDING',
+          trackingUrl: null,
+          updatedAt: '2026-09-14T10:00:00.000Z',
+        },
+      ]),
+    };
     const service = new SellerOrdersService(dataSource as never);
 
-    await expect(service.buyerTracking('42', '10')).rejects.toThrow(
+    await expect(
+      service.buyerTracking('42', undefined, 'guest-session'),
+    ).resolves.toMatchObject({ orderId: '42' });
+  });
+
+  it.each([
+    ['begona buyer', '10', undefined],
+    ['begona guest', undefined, 'other-session'],
+  ])('buyer tracking %s uchun 403 qiladi', async (_name, buyer, session) => {
+    const dataSource = {
+      query: jest.fn().mockResolvedValue([
+        {
+          orderId: '42',
+          customerId: '9',
+          sessionId: 'guest-session',
+          orderStatus: 'DRAFT',
+          orderUpdatedAt: '2026-09-14T10:00:00.000Z',
+        },
+      ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.buyerTracking('42', buyer, session)).rejects.toThrow(
+      'ruxsat yo‘q',
+    );
+  });
+
+  it('buyer tracking mavjud bo‘lmagan orderni 404 qiladi', async () => {
+    const service = new SellerOrdersService({
+      query: jest.fn().mockResolvedValue([]),
+    } as never);
+
+    await expect(service.buyerTracking('999', '9')).rejects.toThrow(
       'Buyurtma topilmadi',
     );
   });

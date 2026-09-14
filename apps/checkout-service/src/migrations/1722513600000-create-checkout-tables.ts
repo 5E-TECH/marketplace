@@ -8,6 +8,7 @@ export class CreateCheckoutTables1722513600000 implements MigrationInterface {
       CREATE TABLE IF NOT EXISTS "checkout"."sales_order" (
         "id" BIGSERIAL PRIMARY KEY,
         "customer_id" BIGINT NOT NULL,
+        "session_id" VARCHAR(255),
         "buyer_name" VARCHAR(255),
         "status" VARCHAR(25) NOT NULL DEFAULT 'DRAFT',
         "payment_method" VARCHAR(10) NOT NULL,

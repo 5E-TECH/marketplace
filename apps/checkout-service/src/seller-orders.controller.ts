@@ -119,8 +119,19 @@ export class SellerOrdersController {
   }
 
   @MessagePattern({ cmd: 'checkout.order.tracking' })
-  buyerTracking(@Payload() data: { orderId: string; customerId: string }) {
-    return this.orders.buyerTracking(data.orderId, data.customerId);
+  buyerTracking(
+    @Payload()
+    data: {
+      orderId: string;
+      customerId?: string;
+      sessionId?: string;
+    },
+  ) {
+    return this.orders.buyerTracking(
+      data.orderId,
+      data.customerId,
+      data.sessionId,
+    );
   }
 
   @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
