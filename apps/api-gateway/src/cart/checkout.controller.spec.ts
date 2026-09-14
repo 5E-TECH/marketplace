@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { of } from 'rxjs';
 import { CheckoutPaymentMethod, IS_PUBLIC_KEY, Role } from '@app/common';
 import { CheckoutController } from './checkout.controller';
@@ -86,5 +86,47 @@ describe('CheckoutController (C2.19)', () => {
         address: dto.address,
       },
     );
+  });
+
+  it('guest COD confirm session bilan checkout servisiga uzatiladi', async () => {
+    const { controller, checkout } = setup();
+
+    await controller.confirm(
+      { headers: { 'x-session-id': ' guest-session ' } } as never,
+      '42',
+    );
+
+    expect(checkout).toHaveBeenCalledWith(
+      { cmd: 'checkout.confirm-cod' },
+      { orderId: '42', customerId: undefined, sessionId: 'guest-session' },
+    );
+  });
+
+  it('buyer COD confirm token egasi bilan checkout servisiga uzatiladi', async () => {
+    const { controller, checkout } = setup();
+
+    await controller.confirm(
+      { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+      '42',
+    );
+
+    expect(checkout).toHaveBeenCalledWith(
+      { cmd: 'checkout.confirm-cod' },
+      { orderId: '42', customerId: '9', sessionId: undefined },
+    );
+  });
+
+  it('confirm token va sessionsiz 401 qaytaradi', () => {
+    const { controller } = setup();
+
+    expect(() => controller.confirm({ headers: {} } as never, '42')).toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('confirm optional auth uchun public belgilanadi', () => {
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, CheckoutController.prototype.confirm),
+    ).toBe(true);
   });
 });

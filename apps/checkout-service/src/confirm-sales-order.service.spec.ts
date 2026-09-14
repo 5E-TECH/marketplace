@@ -2,7 +2,13 @@ import { of, throwError } from 'rxjs';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 
 describe('ConfirmSalesOrderService (C2.10)', () => {
-  function setup(failingShipment = false) {
+  function setup(
+    options: {
+      failingShipment?: boolean;
+      orderMissing?: boolean;
+      order?: Record<string, unknown>;
+    } = {},
+  ) {
     const sellers = [
       { id: '11', shop_id: '101', subtotal: '200', elchi_shipment_id: null },
       { id: '12', shop_id: '102', subtotal: '300', elchi_shipment_id: null },
@@ -12,10 +18,12 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       query: jest.fn(async (sql: string, params: unknown[]) => {
         queries.push({ sql, params });
         if (sql.includes('FROM checkout.sales_order WHERE')) {
+          if (options.orderMissing) return [];
           return [
             {
               id: '1',
               customer_id: '5',
+              session_id: 'guest-session',
               buyer_name: 'Ali',
               status: 'DRAFT',
               payment_method: 'cod',
@@ -24,6 +32,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
               region_id: '1',
               district_id: '2',
               where_deliver: 'ADDRESS',
+              ...options.order,
             },
           ];
         }
@@ -50,7 +59,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
     const integration = {
       send: jest.fn(() => {
         shipmentCall++;
-        if (failingShipment && shipmentCall === 2) {
+        if (options.failingShipment && shipmentCall === 2) {
           return throwError(() => new Error('Elchi unavailable'));
         }
         return of({
@@ -138,8 +147,9 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
   });
 
   it('TC4: shipment xatosida inventory commit va order confirm bo‘lmaydi', async () => {
-    const { service, inventory, notifications, queries, dataSource } =
-      setup(true);
+    const { service, inventory, notifications, queries, dataSource } = setup({
+      failingShipment: true,
+    });
     await expect(service.confirm('1', '5')).rejects.toThrow(
       'Elchi unavailable',
     );
@@ -153,5 +163,33 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
           entry.sql.includes("status='CONFIRMED'"),
       ),
     ).toBe(false);
+  });
+
+  it('guest o‘z sessioni bilan COD orderni confirm qiladi', async () => {
+    const { service } = setup();
+
+    await expect(
+      service.confirm('1', undefined, 'guest-session'),
+    ).resolves.toMatchObject({ id: '1', status: 'CONFIRMED' });
+  });
+
+  it.each([
+    ['begona buyer', '99', undefined],
+    ['begona guest session', undefined, 'other-session'],
+  ])('%s confirm qilsa 403 qaytaradi', async (_name, buyerId, sessionId) => {
+    const { service, integration } = setup();
+
+    await expect(service.confirm('1', buyerId, sessionId)).rejects.toThrow(
+      'ruxsat yo‘q',
+    );
+    expect(integration.send).not.toHaveBeenCalled();
+  });
+
+  it('mavjud bo‘lmagan order uchun 404 qaytaradi', async () => {
+    const { service } = setup({ orderMissing: true });
+
+    await expect(service.confirm('999', '5')).rejects.toThrow(
+      'Buyurtma topilmadi',
+    );
   });
 });

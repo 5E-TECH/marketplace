@@ -4507,6 +4507,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Session-Id",
+            "in": "header",
+            "description": "Guest checkoutda ishlatilgan session identifikatori",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4514,7 +4523,13 @@
             "description": ""
           }
         },
-        "summary": "COD buyurtmani tasdiqlash",
+        "security": [
+          {
+            "bearer": []
+          },
+          {}
+        ],
+        "summary": "Buyer yoki guest uchun COD buyurtmani tasdiqlash",
         "tags": [
           "checkout"
         ]
