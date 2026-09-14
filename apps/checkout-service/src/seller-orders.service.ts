@@ -136,6 +136,72 @@ export class SellerOrdersService {
     return Number((rows[0] as CountRow | undefined)?.total ?? 0);
   }
 
+  async buyerTracking(orderId: string, customerId: string) {
+    if (
+      !customerId ||
+      !/^[1-9]\d{0,18}$/.test(orderId) ||
+      BigInt(orderId) > BigInt('9223372036854775807')
+    ) {
+      throw new NotFoundException('Buyurtma topilmadi');
+    }
+
+    const rows = (await this.dataSource.query(
+      `SELECT o.id::text AS "orderId",o.status AS "orderStatus",
+              o.updated_at AS "orderUpdatedAt",s.id::text AS "sellerOrderId",
+              s.shop_id::text AS "shopId",sh.name AS "shopName",
+              s.elchi_shipment_id::text AS "shipmentId",
+              s.status AS "shipmentStatus",s.tracking_url AS "trackingUrl",
+              s.updated_at AS "updatedAt"
+         FROM checkout.sales_order o
+         LEFT JOIN checkout.sales_order_seller s ON s.sales_order_id=o.id
+         LEFT JOIN catalog.shop sh ON sh.id=s.shop_id
+        WHERE o.id=$1 AND o.customer_id=$2
+        ORDER BY s.id`,
+      [orderId, customerId],
+    )) as Array<Record<string, unknown>>;
+
+    if (!rows.length) throw new NotFoundException('Buyurtma topilmadi');
+    const shipmentStatus = (status: unknown) =>
+      status === 'ON_THE_ROAD' ? 'OUT_FOR_DELIVERY' : String(status);
+    const statuses = rows
+      .map((row) => String(row.shipmentStatus ?? ''))
+      .filter(Boolean);
+    const orderStatus = statuses.some((status) => status === 'ON_THE_ROAD')
+      ? 'IN_TRANSIT'
+      : statuses.length > 0 &&
+          statuses.every((status) => status === 'DELIVERED')
+        ? 'DELIVERED'
+        : String(rows[0].orderStatus);
+    const updatedAt = rows.reduce<Date | string>(
+      (latest, row) => {
+        const candidate = row.updatedAt as Date | string | undefined;
+        return candidate && new Date(candidate) > new Date(latest)
+          ? candidate
+          : latest;
+      },
+      rows[0].orderUpdatedAt as Date | string,
+    );
+
+    return {
+      orderId: String(rows[0].orderId),
+      orderStatus,
+      estimatedDeliveryAt: null,
+      updatedAt,
+      shipments: rows
+        .filter((row) => row.sellerOrderId)
+        .map((row) => ({
+          shipmentId: row.shipmentId
+            ? String(row.shipmentId)
+            : String(row.sellerOrderId),
+          shopId: String(row.shopId),
+          shopName: String(row.shopName ?? ''),
+          shipmentStatus: shipmentStatus(row.shipmentStatus),
+          trackingUrl: row.trackingUrl ? String(row.trackingUrl) : null,
+          updatedAt: row.updatedAt as Date | string,
+        })),
+    };
+  }
+
   async dashboard(
     shopId: string,
     lowStockCount: number,

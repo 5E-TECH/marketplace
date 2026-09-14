@@ -118,6 +118,11 @@ export class SellerOrdersController {
     return this.orders.adminStats();
   }
 
+  @MessagePattern({ cmd: 'checkout.order.tracking' })
+  buyerTracking(@Payload() data: { orderId: string; customerId: string }) {
+    return this.orders.buyerTracking(data.orderId, data.customerId);
+  }
+
   @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
   countByShop(@Payload() data: { shopId: string }) {
     return this.orders.countByShop(String(data.shopId));

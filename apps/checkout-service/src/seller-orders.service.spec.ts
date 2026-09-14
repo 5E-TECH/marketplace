@@ -359,4 +359,74 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
     const service = new SellerOrdersService(dataSource as never);
     await expect(service.adminGetOrder('999')).rejects.toThrow();
   });
+
+  it('buyer tracking order va barcha shop posilkalarini qaytaradi', async () => {
+    const dataSource = {
+      query: jest.fn().mockResolvedValue([
+        {
+          orderId: '42',
+          orderStatus: 'CONFIRMED',
+          orderUpdatedAt: '2026-09-14T10:00:00.000Z',
+          sellerOrderId: '11',
+          shopId: '3',
+          shopName: 'Elchi do‘koni',
+          shipmentId: '7',
+          shipmentStatus: 'ON_THE_ROAD',
+          trackingUrl: 'https://elchi.uz/track/7',
+          updatedAt: '2026-09-14T10:30:00.000Z',
+        },
+        {
+          orderId: '42',
+          orderStatus: 'CONFIRMED',
+          orderUpdatedAt: '2026-09-14T10:00:00.000Z',
+          sellerOrderId: '12',
+          shopId: '4',
+          shopName: 'Ikkinchi do‘kon',
+          shipmentId: '8',
+          shipmentStatus: 'SHIPMENT_CREATED',
+          trackingUrl: null,
+          updatedAt: '2026-09-14T10:20:00.000Z',
+        },
+      ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.buyerTracking('42', '9')).resolves.toEqual({
+      orderId: '42',
+      orderStatus: 'IN_TRANSIT',
+      estimatedDeliveryAt: null,
+      updatedAt: '2026-09-14T10:30:00.000Z',
+      shipments: [
+        {
+          shipmentId: '7',
+          shopId: '3',
+          shopName: 'Elchi do‘koni',
+          shipmentStatus: 'OUT_FOR_DELIVERY',
+          trackingUrl: 'https://elchi.uz/track/7',
+          updatedAt: '2026-09-14T10:30:00.000Z',
+        },
+        {
+          shipmentId: '8',
+          shopId: '4',
+          shopName: 'Ikkinchi do‘kon',
+          shipmentStatus: 'SHIPMENT_CREATED',
+          trackingUrl: null,
+          updatedAt: '2026-09-14T10:20:00.000Z',
+        },
+      ],
+    });
+    expect(dataSource.query).toHaveBeenCalledWith(
+      expect.stringContaining('o.customer_id=$2'),
+      ['42', '9'],
+    );
+  });
+
+  it('buyer tracking boshqa xaridor orderini 404 qiladi', async () => {
+    const dataSource = { query: jest.fn().mockResolvedValue([]) };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.buyerTracking('42', '10')).rejects.toThrow(
+      'Buyurtma topilmadi',
+    );
+  });
 });

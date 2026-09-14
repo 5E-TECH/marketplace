@@ -48,6 +48,7 @@ import { AdminTeamController } from './admin/admin-team.controller';
 import { AdminSettingsController } from './admin/admin-settings.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
+import { BuyerOrdersController } from './orders/buyer-orders.controller';
 
 @Module({
   imports: [
@@ -177,6 +178,7 @@ import { ReadinessService } from './readiness.service';
     AdminTeamController,
     AdminSettingsController,
     RegionsController,
+    BuyerOrdersController,
   ],
   providers: [
     AppService,

@@ -6130,6 +6130,42 @@
           "regions"
         ]
       }
+    },
+    "/api/v1/orders/{orderId}/tracking": {
+      "get": {
+        "operationId": "BuyerOrdersController_tracking",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerOrderTrackingDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xaridor buyurtmasi va posilkalarini kuzatish",
+        "tags": [
+          "orders"
+        ]
+      }
     }
   },
   "info": {
@@ -9304,6 +9340,78 @@
           "id",
           "regionId",
           "name"
+        ]
+      },
+      "BuyerShipmentTrackingDto": {
+        "type": "object",
+        "properties": {
+          "shipmentId": {
+            "type": "string",
+            "example": "7"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "3"
+          },
+          "shopName": {
+            "type": "string",
+            "example": "Elchi do‘koni"
+          },
+          "shipmentStatus": {
+            "type": "string",
+            "example": "OUT_FOR_DELIVERY"
+          },
+          "trackingUrl": {
+            "type": "object",
+            "example": "https://elchi.uz/track/7",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "object",
+            "example": "2026-09-14T10:30:00.000Z"
+          }
+        },
+        "required": [
+          "shipmentId",
+          "shopId",
+          "shopName",
+          "shipmentStatus",
+          "updatedAt"
+        ]
+      },
+      "BuyerOrderTrackingDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "example": "42"
+          },
+          "orderStatus": {
+            "type": "string",
+            "example": "IN_TRANSIT"
+          },
+          "estimatedDeliveryAt": {
+            "type": "object",
+            "example": "2026-09-16T12:00:00.000Z",
+            "nullable": true,
+            "description": "Yetkazish provayderi bergan taxminiy vaqt; mavjud bo‘lmasa null"
+          },
+          "updatedAt": {
+            "type": "object",
+            "example": "2026-09-14T10:30:00.000Z"
+          },
+          "shipments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyerShipmentTrackingDto"
+            }
+          }
+        },
+        "required": [
+          "orderId",
+          "orderStatus",
+          "updatedAt",
+          "shipments"
         ]
       }
     }
