@@ -98,6 +98,7 @@ export class CheckoutService {
         status,
         total,
         quote.deliveryFee,
+        sessionId,
       );
       const sellerOrders = [] as CheckoutResultDto['sellerOrders'];
       const groups = new Map<string, typeof cart.items>();
@@ -255,11 +256,12 @@ export class CheckoutService {
     status: string,
     total: number,
     deliveryFee: number,
+    sessionId?: string,
   ) {
     const [order] = await manager.query(
       `INSERT INTO checkout.sales_order
-       (customer_id,buyer_name,status,payment_method,total_amount,delivery_fee,delivery_address,region_id,district_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id::text`,
+       (customer_id,buyer_name,status,payment_method,total_amount,delivery_fee,delivery_address,region_id,district_id,session_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id::text`,
       [
         customerId,
         dto.address.recipientName,
@@ -270,6 +272,7 @@ export class CheckoutService {
         `${dto.address.address}\n${dto.address.phone}`,
         dto.address.regionId || null,
         dto.address.districtId || null,
+        sessionId?.trim() || null,
       ],
     );
     return order as { id: string };

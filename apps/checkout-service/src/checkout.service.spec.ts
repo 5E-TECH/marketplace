@@ -162,6 +162,7 @@ describe('CheckoutService (C2.9)', () => {
       entry.sql.includes('INSERT INTO checkout.sales_order\n'),
     );
     expect(insert?.params[0]).toBe('77');
+    expect(insert?.params[9]).toBe('guest-session');
     expect(cart.status).toBe('converted');
   });
 

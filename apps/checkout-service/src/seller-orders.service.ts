@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -136,9 +137,12 @@ export class SellerOrdersService {
     return Number((rows[0] as CountRow | undefined)?.total ?? 0);
   }
 
-  async buyerTracking(orderId: string, customerId: string) {
+  async buyerTracking(
+    orderId: string,
+    customerId?: string,
+    sessionId?: string,
+  ) {
     if (
-      !customerId ||
       !/^[1-9]\d{0,18}$/.test(orderId) ||
       BigInt(orderId) > BigInt('9223372036854775807')
     ) {
@@ -146,7 +150,8 @@ export class SellerOrdersService {
     }
 
     const rows = (await this.dataSource.query(
-      `SELECT o.id::text AS "orderId",o.status AS "orderStatus",
+      `SELECT o.id::text AS "orderId",o.customer_id::text AS "customerId",
+              o.session_id AS "sessionId",o.status AS "orderStatus",
               o.updated_at AS "orderUpdatedAt",s.id::text AS "sellerOrderId",
               s.shop_id::text AS "shopId",sh.name AS "shopName",
               s.elchi_shipment_id::text AS "shipmentId",
@@ -155,12 +160,19 @@ export class SellerOrdersService {
          FROM checkout.sales_order o
          LEFT JOIN checkout.sales_order_seller s ON s.sales_order_id=o.id
          LEFT JOIN catalog.shop sh ON sh.id=s.shop_id
-        WHERE o.id=$1 AND o.customer_id=$2
+        WHERE o.id=$1
         ORDER BY s.id`,
-      [orderId, customerId],
+      [orderId],
     )) as Array<Record<string, unknown>>;
 
     if (!rows.length) throw new NotFoundException('Buyurtma topilmadi');
+    const belongsToBuyer =
+      customerId && String(rows[0].customerId) === String(customerId);
+    const belongsToGuest =
+      sessionId && String(rows[0].sessionId ?? '') === String(sessionId);
+    if (!belongsToBuyer && !belongsToGuest) {
+      throw new ForbiddenException('Bu buyurtmani ko‘rishga ruxsat yo‘q');
+    }
     const shipmentStatus = (status: unknown) =>
       status === 'ON_THE_ROAD' ? 'OUT_FOR_DELIVERY' : String(status);
     const statuses = rows
