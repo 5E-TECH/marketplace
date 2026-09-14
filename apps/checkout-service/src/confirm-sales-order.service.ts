@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -12,6 +13,7 @@ import { DataSource } from 'typeorm';
 interface OrderRow {
   id: string;
   customer_id: string;
+  session_id: string | null;
   buyer_name: string | null;
   status: string;
   payment_method: string;
@@ -36,6 +38,7 @@ interface ShopDetails {
 
 interface ConfirmOptions {
   customerId?: string;
+  sessionId?: string;
   prepaid: boolean;
   paymentId?: string;
   paidAmount?: number;
@@ -65,8 +68,13 @@ export class ConfirmSalesOrderService {
   async confirm(
     orderId: string,
     customerId?: string,
+    sessionId?: string,
   ): Promise<ConfirmSalesOrderResult> {
-    return this.confirmOrder(orderId, { customerId, prepaid: false });
+    return this.confirmOrder(orderId, {
+      customerId,
+      sessionId,
+      prepaid: false,
+    });
   }
 
   async confirmPaid(
@@ -91,11 +99,18 @@ export class ConfirmSalesOrderService {
         [orderId],
       )) as OrderRow[];
       if (!order) throw new NotFoundException('Buyurtma topilmadi');
-      if (
-        options.customerId &&
-        String(order.customer_id) !== String(options.customerId)
-      ) {
-        throw new NotFoundException('Buyurtma topilmadi');
+      if (!options.prepaid) {
+        const belongsToBuyer =
+          options.customerId &&
+          String(order.customer_id) === String(options.customerId);
+        const belongsToGuest =
+          options.sessionId &&
+          String(order.session_id ?? '') === String(options.sessionId);
+        if (!belongsToBuyer && !belongsToGuest) {
+          throw new ForbiddenException(
+            'Bu buyurtmani tasdiqlashga ruxsat yo‘q',
+          );
+        }
       }
       const expectedMethod = options.prepaid ? 'online' : 'cod';
       if (order.payment_method !== expectedMethod) {

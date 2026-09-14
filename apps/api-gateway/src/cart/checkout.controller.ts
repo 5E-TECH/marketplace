@@ -6,9 +6,17 @@ import {
   Inject,
   Param,
   Post,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Request } from 'express';
 import {
   CreateCheckoutDto,
   CurrentUser,
@@ -96,12 +104,38 @@ export class CheckoutController {
   }
 
   @Post(':orderId/confirm')
-  @ApiOperation({ summary: 'COD buyurtmani tasdiqlash' })
-  confirm(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
+  @Public()
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Session-Id',
+    required: false,
+    description: 'Guest checkoutda ishlatilgan session identifikatori',
+  })
+  @ApiOperation({
+    summary: 'Buyer yoki guest uchun COD buyurtmani tasdiqlash',
+    security: [{ bearer: [] }, {}],
+  })
+  confirm(
+    @Req() request: Request & { user?: JwtUser },
+    @Param('orderId') orderId: string,
+  ) {
+    const sessionHeader = request.headers['x-session-id'];
+    const sessionId = Array.isArray(sessionHeader)
+      ? sessionHeader[0]
+      : sessionHeader;
+    if (!request.user?.sub && !sessionId?.trim()) {
+      throw new UnauthorizedException(
+        'Token yoki X-Session-Id berilishi kerak',
+      );
+    }
     return sendRpc(
       this.checkout,
       { cmd: 'checkout.confirm-cod' },
-      { orderId, customerId: user.sub },
+      {
+        orderId,
+        customerId: request.user?.sub,
+        sessionId: sessionId?.trim(),
+      },
     );
   }
 }

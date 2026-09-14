@@ -74,8 +74,19 @@ export class CheckoutController {
   }
 
   @MessagePattern({ cmd: 'checkout.confirm-cod' })
-  confirmCod(@Payload() data: { orderId: string; customerId?: string }) {
-    return this.confirmer.confirm(data.orderId, data.customerId);
+  confirmCod(
+    @Payload()
+    data: {
+      orderId: string;
+      customerId?: string;
+      sessionId?: string;
+    },
+  ) {
+    return this.confirmer.confirm(
+      data.orderId,
+      data.customerId,
+      data.sessionId,
+    );
   }
 
   @EventPattern('payment.paid')
