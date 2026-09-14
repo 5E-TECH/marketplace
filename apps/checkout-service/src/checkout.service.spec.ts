@@ -54,7 +54,18 @@ describe('CheckoutService (C2.9)', () => {
         if (sql.includes('INSERT INTO checkout.sales_order\n'))
           return [{ id: String(++orderId) }];
         if (sql.includes('INSERT INTO checkout.sales_order_seller'))
-          return [{ id: String(++sellerId), deliveryFee: Number(params[3]) }];
+          // `.toFixed(2)` ATAYLAB — SATR qaytaramiz. node-postgres `numeric`
+          // ustunini aniqlikni yo'qotmaslik uchun aynan shunday beradi. Avval
+          // bu mock `Number()` qaytarardi va shu sabab jonli tizimdagi satr
+          // birikmasi nuqsonini (10000 + "0.00" = "100000.00") butun to'plam
+          // yashil turib o'tkazib yuborgandi. Mock haqiqatdan soddaroq bo'lsa,
+          // testlar kodni emas, mockni tekshiradi.
+          return [
+            {
+              id: String(++sellerId),
+              deliveryFee: Number(params[3]).toFixed(2),
+            },
+          ];
         return [];
       }),
     };

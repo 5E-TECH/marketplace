@@ -290,7 +290,7 @@ export class CheckoutService {
     paymentMethod: CheckoutPaymentMethod,
     deliveryFee: number,
   ) {
-    const [seller] = await manager.query(
+    const [seller] = (await manager.query(
       `INSERT INTO checkout.sales_order_seller
        (sales_order_id,shop_id,subtotal,delivery_fee,cod_amount,status)
        VALUES ($1,$2,$3,$4,$5,'PENDING') RETURNING id::text,"delivery_fee" AS "deliveryFee"`,
@@ -303,7 +303,16 @@ export class CheckoutService {
           ? subtotal + deliveryFee
           : 0,
       ],
-    );
-    return seller as { id: string; deliveryFee: number };
+    )) as [{ id: string; deliveryFee: string }];
+
+    // `deliveryFee: string` ATAYLAB: Postgres `numeric` ustunini node-postgres
+    // aniqlikni yo'qotmaslik uchun SATR qilib qaytaradi ("0.00"). Avval bu yer
+    // `number` deb e'lon qilingandi, `manager.query()` esa `any` bergani uchun
+    // TypeScript yolg'onni ushlamasdi. Natijada chaqiruvchidagi
+    // `subtotal + seller.deliveryFee` qo'shish emas, SATR BIRIKMASI bo'lardi:
+    // 10000 + "0.00" = "100000.00" — mijozga 10 barobar katta summa.
+    // Jonli tizimdagi 1-buyurtma aynan shu qiymat bilan yaratilgan.
+    // Qo'shni `seller-orders.service.ts` ham xuddi shunday `Number()` qiladi.
+    return { id: seller.id, deliveryFee: Number(seller.deliveryFee) };
   }
 }
