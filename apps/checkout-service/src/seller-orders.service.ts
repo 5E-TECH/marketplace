@@ -830,13 +830,22 @@ export class SellerOrdersService {
     if (!ALLOWED.includes(status)) {
       throw new BadRequestException('status noto‘g‘ri');
     }
-    const rows = await this.dataSource.query(
+    // Postgres drayveri `UPDATE ... RETURNING` uchun `[qatorlar, soni]`
+    // qaytaradi, `SELECT` uchun esa oddiy massiv. Avval natija to'g'ridan-to'g'ri
+    // qatorlar deb o'qilardi va javobda `{"id":"undefined","status":"undefined"}`
+    // chiqardi (holat bazada TO'G'RI yangilanardi — faqat javob buzuq edi).
+    // Ikkala shaklni ham qabul qilamiz: drayver xatti-harakati versiyaga bog'liq.
+    const result = (await this.dataSource.query(
       `UPDATE checkout.sales_order_seller
          SET status = $1, updated_at = now()
        WHERE id = $2 AND shop_id = $3
        RETURNING id, status`,
       [status, String(orderId), String(shopId)],
-    );
+    )) as unknown[];
+    const rows = (Array.isArray(result[0]) ? result[0] : result) as Array<{
+      id: string;
+      status: string;
+    }>;
     if (!rows.length) {
       throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
     }

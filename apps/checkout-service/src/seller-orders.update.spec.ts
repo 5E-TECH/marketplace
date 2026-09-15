@@ -3,8 +3,12 @@ import { SellerOrdersService } from './seller-orders.service';
 
 describe('SellerOrdersService.updateStatus (C1.38 — operator scope)', () => {
   it('TC3: o‘z do‘koni buyurtmasi -> status yangilanadi (shop_id scope)', async () => {
+    // `[[qator], soni]` ATAYLAB — Postgres drayveri `UPDATE ... RETURNING`
+    // uchun aynan shunday qaytaradi. Avval bu mock oddiy massiv qaytarardi,
+    // ya'ni haqiqatdan soddaroq edi, va shu sabab jonli javobdagi
+    // `{"id":"undefined"}` nuqsonini o'tkazib yuborgandi.
     const query = jest.fn((_sql: string, _params: unknown[]) =>
-      Promise.resolve([{ id: '7', status: 'SHIPMENT_CREATED' }]),
+      Promise.resolve([[{ id: '7', status: 'SHIPMENT_CREATED' }], 1]),
     );
     const svc = new SellerOrdersService({ query } as never);
 
