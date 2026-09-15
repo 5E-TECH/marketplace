@@ -29,6 +29,20 @@ export interface ElchiTariffInput {
 }
 
 /**
+ * Elchi `where_deliver` uchun faqat 'center' va 'address' ni biladi. Bizda bu
+ * qiymat bazadan katta harfda ('ADDRESS') keladi, tashqi manbalardan esa
+ * umuman kelmasligi mumkin — shuning uchun kichik harfga keltirib, notanish
+ * qiymatda xavfsiz `'address'` ga qaytamiz.
+ */
+function normalizeWhereDeliver(value?: string | null): 'center' | 'address' {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase() === 'center'
+    ? 'center'
+    : 'address';
+}
+
+/**
  * Elchi Partner API HTTP klienti (marketplace tomoni). Native `fetch`, autentifikatsiya
  * `X-Api-Key` header bilan (Elchi PartnerApiKeyGuard shu header'ni kutadi — C1.2).
  * Kalit env'dan (`ELCHI_PARTNER_API_KEY`) — server sekret sifatida. Kontrakt:
@@ -81,7 +95,21 @@ export class ElchiApiClient {
   async createShipment(
     body: CreateElchiShipmentInput,
   ): Promise<{ shipment_id: string; tracking_url?: string }> {
-    const res = await this.request('POST', '/partner/shipments', body);
+    // `where_deliver` ni Elchi faqat KICHIK harfda qabul qiladi
+    // ('center' yoki 'address'), aks holda butun so'rovni 400 bilan rad etadi.
+    // Bizning `checkout.sales_order.where_deliver` ustuni esa 'ADDRESS' saqlaydi
+    // (migratsiyadagi DEFAULT katta harfda). Ikkala chaqiruvchi ham qiymatni
+    // bazadan o'zgartirmasdan uzatgani uchun productionda HAR QANDAY posilka
+    // yaratish yiqilardi:
+    //   POST /partner/shipments → 400 "where_deliver must be one of the
+    //   following values: center, address"
+    // Normalizatsiya ataylab shu yerda — Elchi'ga chiqadigan yagona nuqta,
+    // demak kelajakdagi chaqiruvchilar ham avtomatik himoyalanadi.
+    // `getTariff` allaqachon shu qoidaga amal qiladi.
+    const res = await this.request('POST', '/partner/shipments', {
+      ...body,
+      where_deliver: normalizeWhereDeliver(body.where_deliver),
+    });
     const id = this.pluck(res, 'shipment_id');
     if (!id) throw new Error('Elchi javobida shipment_id yo‘q');
     const trackingUrl = this.pluck(res, 'tracking_url');

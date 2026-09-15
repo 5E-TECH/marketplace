@@ -70,4 +70,63 @@ describe('ElchiApiClient config (C2.20)', () => {
     );
     fetchMock.mockRestore();
   });
+
+  // Regressiya: productionda HAR QANDAY posilka yaratish 400 bilan yiqilardi —
+  // baza `where_deliver` ni 'ADDRESS' (katta harf) saqlaydi, Elchi esa faqat
+  // kichik harfni qabul qiladi. Bu testlar aynan shu holatni qoplaydi.
+  const shipmentBody = (whereDeliver?: string) => ({
+    external_order_id: 'seller-order-1',
+    elchi_market_id: '77',
+    customer: { name: 'Mijoz', phone: '+998901234567' },
+    address: 'Toshkent sh.',
+    region_id: '1',
+    district_id: '1',
+    ...(whereDeliver === undefined ? {} : { where_deliver: whereDeliver }),
+    items: [{ name: 'Mahsulot', quantity: 1 }],
+    cod_amount: 10000,
+  });
+
+  const sentBody = (fetchMock: jest.SpyInstance) =>
+    JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)) as {
+      where_deliver: string;
+    };
+
+  const shipmentClient = () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ data: { shipment_id: '55' } }),
+    } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz/',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+    return { fetchMock, client };
+  };
+
+  it.each([
+    ['ADDRESS', 'address'],
+    ['address', 'address'],
+    ['CENTER', 'center'],
+    ['center', 'center'],
+    [' Address ', 'address'],
+  ])(
+    'where_deliver "%s" Elchi kutgan "%s" ga keltiriladi',
+    async (input, expected) => {
+      const { fetchMock, client } = shipmentClient();
+      await client.createShipment(shipmentBody(input) as never);
+      expect(sentBody(fetchMock).where_deliver).toBe(expected);
+      fetchMock.mockRestore();
+    },
+  );
+
+  it('notanish yoki bo‘sh qiymatda xavfsiz "address" yuboriladi', async () => {
+    for (const input of [undefined, '', 'uyga']) {
+      const { fetchMock, client } = shipmentClient();
+      await client.createShipment(shipmentBody(input) as never);
+      expect(sentBody(fetchMock).where_deliver).toBe('address');
+      fetchMock.mockRestore();
+    }
+  });
 });
