@@ -130,10 +130,16 @@ export class CheckoutService {
           await manager.query(
             `INSERT INTO checkout.sales_order_item
              (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price, line_total)
-             VALUES ($1,$2,'',$3,$4,$5,$6)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
             [
               seller.id,
               item.productId,
+              // Avval bu yerga qattiq `''` yozilardi. Natijada HAR BIR buyurtma
+              // bandining nomi bo'sh bo'lib qolardi va Elchi posilka yaratishni
+              // rad etardi: "items.0.name should not be empty" — ya'ni sotuvchi
+              // buyurtmani umuman jo'nata olmasdi. Zaxira qiymat ataylab: eski
+              // savat qatorlarida surat yo'q, lekin Elchi'ga BO'SH nom ketmasin.
+              item.productNameSnapshot?.trim() || `Mahsulot #${item.productId}`,
               item.variantId,
               item.quantity,
               Number(item.unitPriceSnapshot),

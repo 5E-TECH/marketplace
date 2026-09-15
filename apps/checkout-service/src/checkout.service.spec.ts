@@ -28,6 +28,7 @@ describe('CheckoutService (C2.9)', () => {
           shopId: '7',
           quantity: 2,
           unitPriceSnapshot: 100,
+          productNameSnapshot: 'Smartfon X',
         },
         {
           productId: '20',
@@ -248,5 +249,26 @@ describe('CheckoutService (C2.9)', () => {
       { cmd: 'integration.tariff.get' },
       expect.objectContaining({ districtId: '3' }),
     );
+  });
+
+  it('mahsulot nomi buyurtma bandiga o‘tadi, surat yo‘q bo‘lsa zaxira nom yoziladi', async () => {
+    /**
+     * Regressiya: avval `product_name` INSERT'ga qattiq `''` qilib yozilardi.
+     * Natijada productiondagi HAR BIR buyurtma bandining nomi bo'sh bo'lib
+     * qolgan va Elchi posilka yaratishni rad etgan:
+     *   POST /partner/shipments → 400 "items.0.name should not be empty"
+     * ya'ni sotuvchi buyurtmani umuman jo'nata olmasdi.
+     *
+     * Ikkinchi band ATAYLAB suratsiz — ustun qo'shilishidan oldin savatga
+     * tushgan qatorlar shunday bo'ladi. Ular uchun ham Elchi'ga bo'sh nom
+     * ketmasligi kerak.
+     */
+    const { service, queries } = setup();
+    await service.create('5', dto());
+    const names = queries
+      .filter((q) => q.sql.includes('INSERT INTO checkout.sales_order_item'))
+      .map((q) => q.params[2]);
+    expect(names).toEqual(['Smartfon X', 'Mahsulot #20']);
+    expect(names.every((n) => String(n).trim().length > 0)).toBe(true);
   });
 });

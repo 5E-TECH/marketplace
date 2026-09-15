@@ -29,6 +29,7 @@ import { ElchiWebhookService } from './elchi-webhook.service';
 import { ReviewEligibilityService } from './review-eligibility.service';
 import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-delivery-fee';
 import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-add-sales-order-session-id';
+import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-add-cart-item-product-name';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-
             CreateElchiWebhookEvent1724587200000,
             AddDeliveryFee1725192000000,
             AddSalesOrderSessionId1726329600000,
+            AddCartItemProductName1726416000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

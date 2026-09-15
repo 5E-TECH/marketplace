@@ -21,4 +21,14 @@ export class CartItem extends BaseEntity {
     transformer: numericTransformer,
   })
   unitPriceSnapshot: number;
+  // Narx kabi suratga olinadi: sotuvchi keyin mahsulot nomini o'zgartirsa ham
+  // buyurtmada xaridor sotib olgan paytdagi nom qoladi. `null` bo'lishi mumkin —
+  // ustun qo'shilishidan oldin savatga tushgan qatorlar uchun.
+  @Column({
+    name: 'product_name_snapshot',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  productNameSnapshot: string | null;
 }

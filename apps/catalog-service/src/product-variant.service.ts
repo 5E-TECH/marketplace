@@ -254,6 +254,9 @@ export class ProductVariantService {
       variantId: variant.id,
       shopId: variant.product.shopId,
       unitPrice: variant.price ?? variant.product.price,
+      // Mahsulot allaqachon JOIN qilingan — nom qo'shimcha so'rovsiz keladi.
+      // U savatga suratga olinadi va buyurtma orqali Elchi'ga boradi.
+      productName: variant.product.name,
     };
   }
 

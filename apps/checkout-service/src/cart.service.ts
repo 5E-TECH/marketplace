@@ -44,6 +44,7 @@ export class CartService {
       if (existing) {
         existing.quantity += dto.quantity;
         existing.unitPriceSnapshot = variant.unitPrice;
+        existing.productNameSnapshot = variant.productName;
         existing.productId = variant.productId;
         existing.shopId = variant.shopId;
         await repository.save(existing);
@@ -56,6 +57,7 @@ export class CartService {
             shopId: variant.shopId,
             quantity: dto.quantity,
             unitPriceSnapshot: variant.unitPrice,
+            productNameSnapshot: variant.productName,
           }),
         );
       }

@@ -62,6 +62,12 @@ export interface CartCatalogVariantDto {
   variantId: string;
   shopId: string;
   unitPrice: number;
+  /**
+   * Katalogdagi mahsulot nomi. Savatga qo'shilganda suratga olinadi va
+   * buyurtmaga o'tadi — Elchi posilka yaratishda BO'SH nomni rad etadi
+   * ("items.0.name should not be empty").
+   */
+  productName: string;
 }
 
 export enum CheckoutPaymentMethod {

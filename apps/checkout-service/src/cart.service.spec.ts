@@ -62,7 +62,13 @@ describe('CartService', () => {
     const result = await service.add(
       { sessionId: 'anon-1' },
       { productId: '10', variantId: '11', quantity: 2 },
-      { productId: '10', variantId: '11', shopId: '7', unitPrice: 125000 },
+      {
+        productId: '10',
+        variantId: '11',
+        shopId: '7',
+        unitPrice: 125000,
+        productName: 'Smartfon X',
+      },
     );
 
     expect(result.items[0]).toEqual(
@@ -73,13 +79,22 @@ describe('CartService', () => {
       }),
     );
     expect(result.totalAmount).toBe(250000);
+    // Nom ham narx kabi suratga olinishi SHART: u buyurtmaga, undan esa
+    // Elchi posilkasiga boradi. Elchi bo'sh nomni rad etadi.
+    expect(items[0].productNameSnapshot).toBe('Smartfon X');
   });
 
   it('TC2: quantityni yangilaydi va itemni o‘chiradi', async () => {
     const added = await service.add(
       { sessionId: 'anon-2' },
       { productId: '10', variantId: '11', quantity: 1 },
-      { productId: '10', variantId: '11', shopId: '7', unitPrice: 100 },
+      {
+        productId: '10',
+        variantId: '11',
+        shopId: '7',
+        unitPrice: 100,
+        productName: 'Smartfon X',
+      },
     );
     const updated = await service.update(
       { sessionId: 'anon-2' },
@@ -99,12 +114,24 @@ describe('CartService', () => {
     await service.add(
       { customerId: '99' },
       { productId: '10', variantId: '11', quantity: 2 },
-      { productId: '10', variantId: '11', shopId: '7', unitPrice: 90 },
+      {
+        productId: '10',
+        variantId: '11',
+        shopId: '7',
+        unitPrice: 90,
+        productName: 'Smartfon X',
+      },
     );
     await service.add(
       { sessionId: 'anon-3' },
       { productId: '10', variantId: '11', quantity: 3 },
-      { productId: '10', variantId: '11', shopId: '7', unitPrice: 100 },
+      {
+        productId: '10',
+        variantId: '11',
+        shopId: '7',
+        unitPrice: 100,
+        productName: 'Smartfon X',
+      },
     );
 
     const merged = await service.merge('99', 'anon-3');
