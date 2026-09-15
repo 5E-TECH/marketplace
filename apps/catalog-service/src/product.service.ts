@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -46,6 +47,21 @@ export class ProductService {
     const shop = await this.getShop(ownerUserId);
     await this.ensureCategoryExists(dto.categoryId);
     const slug = await this.uniqueSlug(shop.id, dto.name);
+    // Validate that at least one image (imageUrl or images) is provided
+    const hasPrimary = !!dto.imageUrl?.trim();
+    const hasGallery =
+      Array.isArray(dto.images) && dto.images.some((i) => i?.trim());
+    if (!hasPrimary && !hasGallery) {
+      throw new BadRequestException(
+        'Mahsulot yaratish uchun kamida bitta rasm majburiy',
+      );
+    }
+    // Ensure both fields are populated for consistency
+    if (hasPrimary && !hasGallery) {
+      dto.images = [dto.imageUrl!];
+    } else if (!hasPrimary && hasGallery) {
+      dto.imageUrl = dto.images[0];
+    }
 
     const product = this.products.create({
       shopId: shop.id,

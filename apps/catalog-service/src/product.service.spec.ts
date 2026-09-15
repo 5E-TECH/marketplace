@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ProductStatus, ShopStatus } from '@app/common';
 import { of } from 'rxjs';
