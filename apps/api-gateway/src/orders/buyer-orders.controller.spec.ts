@@ -35,6 +35,37 @@ describe('BuyerOrdersController', () => {
     );
   });
 
+  it('buyer order tafsilotlarini ownership bilan so‘raydi', async () => {
+    const send = jest.fn(() => of({ id: '42', sellerOrders: [] }));
+    const controller = new BuyerOrdersController({ send } as never);
+
+    await expect(
+      controller.details(
+        { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+        '42',
+      ),
+    ).resolves.toMatchObject({ id: '42' });
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'checkout.order.details' },
+      { orderId: '42', customerId: '9', sessionId: undefined },
+    );
+  });
+
+  it('guest order tafsilotlarini session bilan so‘raydi', async () => {
+    const send = jest.fn(() => of({ id: '42', sellerOrders: [] }));
+    const controller = new BuyerOrdersController({ send } as never);
+
+    await controller.details(
+      { headers: { 'x-session-id': 'guest-session' } } as never,
+      '42',
+    );
+
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'checkout.order.details' },
+      { orderId: '42', customerId: undefined, sessionId: 'guest-session' },
+    );
+  });
+
   it('token ham session ham bo‘lmasa 401', () => {
     const controller = new BuyerOrdersController({} as never);
     expect(() => controller.tracking({ headers: {} } as never, '42')).toThrow(

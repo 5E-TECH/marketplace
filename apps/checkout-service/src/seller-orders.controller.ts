@@ -134,6 +134,22 @@ export class SellerOrdersController {
     );
   }
 
+  @MessagePattern({ cmd: 'checkout.order.details' })
+  buyerOrderDetails(
+    @Payload()
+    data: {
+      orderId: string;
+      customerId?: string;
+      sessionId?: string;
+    },
+  ) {
+    return this.orders.buyerOrderDetails(
+      data.orderId,
+      data.customerId,
+      data.sessionId,
+    );
+  }
+
   @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
   countByShop(@Payload() data: { shopId: string }) {
     return this.orders.countByShop(String(data.shopId));

@@ -6146,6 +6146,52 @@
         ]
       }
     },
+    "/api/v1/orders/{orderId}": {
+      "get": {
+        "operationId": "BuyerOrdersController_details",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Session-Id",
+            "in": "header",
+            "description": "Guest checkoutda ishlatilgan session identifikatori",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerOrderDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {}
+        ],
+        "summary": "Xaridor yoki guest buyurtmasining tafsilotlari",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/api/v1/orders/{orderId}/tracking": {
       "get": {
         "operationId": "BuyerOrdersController_tracking",
@@ -9365,6 +9411,151 @@
           "id",
           "regionId",
           "name"
+        ]
+      },
+      "BuyerOrderItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "88"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Telefon"
+          },
+          "variantId": {
+            "type": "string",
+            "example": "5"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 225000
+          },
+          "lineTotal": {
+            "type": "number",
+            "example": 450000
+          }
+        },
+        "required": [
+          "productId",
+          "productName",
+          "variantId",
+          "quantity",
+          "unitPrice",
+          "lineTotal"
+        ]
+      },
+      "BuyerOrderShopDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "15"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 450000
+          },
+          "deliveryFee": {
+            "type": "number",
+            "example": 25000
+          },
+          "status": {
+            "type": "string",
+            "example": "ON_THE_ROAD"
+          },
+          "elchiShipmentId": {
+            "type": "object",
+            "example": "987",
+            "nullable": true
+          },
+          "trackingUrl": {
+            "type": "object",
+            "example": "https://elchi.uz/track/987",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyerOrderItemDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "subtotal",
+          "deliveryFee",
+          "status",
+          "items"
+        ]
+      },
+      "BuyerOrderDetailsDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "42"
+          },
+          "buyerName": {
+            "type": "object",
+            "example": "Ali",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "example": "CONFIRMED"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "example": "cod"
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 475000
+          },
+          "deliveryFee": {
+            "type": "number",
+            "example": 25000
+          },
+          "deliveryAddress": {
+            "type": "object",
+            "example": "Toshkent, Amir Temur 1",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "object",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "object",
+            "example": "2026-09-14T10:30:00.000Z"
+          },
+          "sellerOrders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyerOrderShopDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "paymentMethod",
+          "totalAmount",
+          "deliveryFee",
+          "createdAt",
+          "updatedAt",
+          "sellerOrders"
         ]
       },
       "BuyerShipmentTrackingDto": {

@@ -142,12 +142,7 @@ export class SellerOrdersService {
     customerId?: string,
     sessionId?: string,
   ) {
-    if (
-      !/^[1-9]\d{0,18}$/.test(orderId) ||
-      BigInt(orderId) > BigInt('9223372036854775807')
-    ) {
-      throw new NotFoundException('Buyurtma topilmadi');
-    }
+    await this.assertBuyerOwnership(orderId, customerId, sessionId);
 
     const rows = (await this.dataSource.query(
       `SELECT o.id::text AS "orderId",o.customer_id::text AS "customerId",
@@ -166,13 +161,6 @@ export class SellerOrdersService {
     )) as Array<Record<string, unknown>>;
 
     if (!rows.length) throw new NotFoundException('Buyurtma topilmadi');
-    const belongsToBuyer =
-      customerId && String(rows[0].customerId) === String(customerId);
-    const belongsToGuest =
-      sessionId && String(rows[0].sessionId ?? '') === String(sessionId);
-    if (!belongsToBuyer && !belongsToGuest) {
-      throw new ForbiddenException('Bu buyurtmani ko‘rishga ruxsat yo‘q');
-    }
     const shipmentStatus = (status: unknown) =>
       status === 'ON_THE_ROAD' ? 'OUT_FOR_DELIVERY' : String(status);
     const statuses = rows
@@ -212,6 +200,43 @@ export class SellerOrdersService {
           updatedAt: row.updatedAt as Date | string,
         })),
     };
+  }
+
+  async buyerOrderDetails(
+    orderId: string,
+    customerId?: string,
+    sessionId?: string,
+  ) {
+    await this.assertBuyerOwnership(orderId, customerId, sessionId);
+    const { customerId: _customerId, ...details } =
+      await this.adminGetOrder(orderId);
+    return details;
+  }
+
+  private async assertBuyerOwnership(
+    orderId: string,
+    customerId?: string,
+    sessionId?: string,
+  ): Promise<void> {
+    if (
+      !/^[1-9]\d{0,18}$/.test(orderId) ||
+      BigInt(orderId) > BigInt('9223372036854775807')
+    ) {
+      throw new NotFoundException('Buyurtma topilmadi');
+    }
+    const [order] = (await this.dataSource.query(
+      `SELECT customer_id::text AS "customerId",session_id AS "sessionId"
+         FROM checkout.sales_order WHERE id=$1`,
+      [orderId],
+    )) as Array<{ customerId: string; sessionId: string | null }>;
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const belongsToBuyer =
+      customerId && String(order.customerId) === String(customerId);
+    const belongsToGuest =
+      sessionId && String(order.sessionId ?? '') === String(sessionId);
+    if (!belongsToBuyer && !belongsToGuest) {
+      throw new ForbiddenException('Bu buyurtmani ko‘rishga ruxsat yo‘q');
+    }
   }
 
   async dashboard(

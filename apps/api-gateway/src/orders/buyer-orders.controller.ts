@@ -16,6 +16,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  BuyerOrderDetailsDto,
   BuyerOrderTrackingDto,
   JwtUser,
   RmqClient,
@@ -29,6 +30,31 @@ export class BuyerOrdersController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
   ) {}
+
+  @Get(':orderId')
+  @Public()
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Session-Id',
+    required: false,
+    description: 'Guest checkoutda ishlatilgan session identifikatori',
+  })
+  @ApiOperation({
+    summary: 'Xaridor yoki guest buyurtmasining tafsilotlari',
+    security: [{ bearer: [] }, {}],
+  })
+  @ApiOkResponse({ type: BuyerOrderDetailsDto })
+  details(
+    @Req() request: Request & { user?: JwtUser },
+    @Param('orderId') orderId: string,
+  ) {
+    const owner = this.owner(request);
+    return sendRpc(
+      this.checkout,
+      { cmd: 'checkout.order.details' },
+      { orderId, ...owner },
+    );
+  }
 
   @Get(':orderId/tracking')
   @Public()
@@ -47,18 +73,25 @@ export class BuyerOrdersController {
     @Req() request: Request & { user?: JwtUser },
     @Param('orderId') orderId: string,
   ) {
-    const user = request.user;
+    const owner = this.owner(request);
+    return sendRpc(
+      this.checkout,
+      { cmd: 'checkout.order.tracking' },
+      { orderId, ...owner },
+    );
+  }
+
+  private owner(request: Request & { user?: JwtUser }) {
     const sessionHeader = request.headers['x-session-id'];
     const sessionId = Array.isArray(sessionHeader)
       ? sessionHeader[0]
       : sessionHeader;
-    if (!user?.sub && !sessionId?.trim()) {
+    if (!request.user?.sub && !sessionId?.trim()) {
       throw new UnauthorizedException('Token yoki X-Session-Id talab qilinadi');
     }
-    return sendRpc(
-      this.checkout,
-      { cmd: 'checkout.order.tracking' },
-      { orderId, customerId: user?.sub, sessionId: sessionId?.trim() },
-    );
+    return {
+      customerId: request.user?.sub,
+      sessionId: sessionId?.trim(),
+    };
   }
 }
