@@ -3,6 +3,7 @@ import {
   Get,
   Inject,
   Param,
+  Query,
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -18,9 +19,13 @@ import {
 import {
   BuyerOrderDetailsDto,
   BuyerOrderTrackingDto,
+  BuyerOrdersPageDto,
+  BuyerOrdersQueryDto,
   JwtUser,
   RmqClient,
   Public,
+  Role,
+  Roles,
   sendRpc,
 } from '@app/common';
 
@@ -30,6 +35,22 @@ export class BuyerOrdersController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
   ) {}
+
+  @Get()
+  @Roles(Role.BUYER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Xaridorning buyurtmalari' })
+  @ApiOkResponse({ type: BuyerOrdersPageDto })
+  list(
+    @Req() request: Request & { user: JwtUser },
+    @Query() query: BuyerOrdersQueryDto,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'checkout.orders.list-by-buyer' },
+      { customerId: request.user.sub, query },
+    );
+  }
 
   @Get(':orderId')
   @Public()

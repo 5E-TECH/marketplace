@@ -6146,6 +6146,54 @@
         ]
       }
     },
+    "/api/v1/orders": {
+      "get": {
+        "operationId": "BuyerOrdersController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuyerOrdersPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xaridorning buyurtmalari",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/api/v1/orders/{orderId}": {
       "get": {
         "operationId": "BuyerOrdersController_details",
@@ -9411,6 +9459,116 @@
           "id",
           "regionId",
           "name"
+        ]
+      },
+      "BuyerOrderListItemProductDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "7"
+          },
+          "name": {
+            "type": "string",
+            "example": "Mahsulot"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 100000
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "quantity",
+          "unitPrice"
+        ]
+      },
+      "BuyerOrderListItemDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "example": "42"
+          },
+          "createdAt": {
+            "type": "object",
+            "example": "2026-09-15T10:00:00.000Z"
+          },
+          "orderStatus": {
+            "type": "string",
+            "example": "CONFIRMED"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 100000
+          },
+          "deliveryFee": {
+            "type": "number",
+            "example": 15000
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 115000
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyerOrderListItemProductDto"
+            }
+          }
+        },
+        "required": [
+          "orderId",
+          "createdAt",
+          "orderStatus",
+          "subtotal",
+          "deliveryFee",
+          "totalAmount",
+          "items"
+        ]
+      },
+      "BuyerOrdersPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyerOrderListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
         ]
       },
       "BuyerOrderItemDto": {

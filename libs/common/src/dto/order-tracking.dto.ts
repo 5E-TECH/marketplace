@@ -1,4 +1,53 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
+
+export class BuyerOrdersQueryDto {
+  @ApiPropertyOptional({ type: Number, example: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ type: Number, example: 20, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
+}
+
+export class BuyerOrderListItemProductDto {
+  @ApiProperty({ example: '7' }) productId: string;
+  @ApiProperty({ example: 'Mahsulot' }) name: string;
+  @ApiProperty({ example: 1 }) quantity: number;
+  @ApiProperty({ example: 100000 }) unitPrice: number;
+  @ApiPropertyOptional({ example: null, nullable: true }) imageUrl:
+    string | null;
+}
+
+export class BuyerOrderListItemDto {
+  @ApiProperty({ example: '42' }) orderId: string;
+  @ApiProperty({ example: '2026-09-15T10:00:00.000Z' })
+  createdAt: Date | string;
+  @ApiProperty({ example: 'CONFIRMED' }) orderStatus: string;
+  @ApiProperty({ example: 100000 }) subtotal: number;
+  @ApiProperty({ example: 15000 }) deliveryFee: number;
+  @ApiProperty({ example: 115000 }) totalAmount: number;
+  @ApiProperty({ type: [BuyerOrderListItemProductDto] })
+  items: BuyerOrderListItemProductDto[];
+}
+
+export class BuyerOrdersPageDto {
+  @ApiProperty({ type: [BuyerOrderListItemDto] })
+  items: BuyerOrderListItemDto[];
+  @ApiProperty({ example: 1 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 1 }) totalPages: number;
+}
 
 export class BuyerShipmentTrackingDto {
   @ApiProperty({ example: '7' })

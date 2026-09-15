@@ -213,6 +213,72 @@ export class SellerOrdersService {
     return details;
   }
 
+  async buyerOrders(
+    customerId: string,
+    query: { page?: number; limit?: number } = {},
+  ) {
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
+    const [countRow] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total
+         FROM checkout.sales_order WHERE customer_id=$1`,
+      [customerId],
+    );
+    const total = Number(countRow?.total ?? 0);
+    const orders = (await this.dataSource.query(
+      `SELECT id::text AS "orderId",created_at AS "createdAt",
+              status AS "orderStatus",total_amount::float8 AS "totalAmount",
+              delivery_fee::float8 AS "deliveryFee"
+         FROM checkout.sales_order
+        WHERE customer_id=$1
+        ORDER BY created_at DESC,id DESC
+        LIMIT $2 OFFSET $3`,
+      [customerId, limit, (page - 1) * limit],
+    )) as Array<Record<string, unknown>>;
+    const orderIds = orders.map((order) => String(order.orderId));
+    const itemRows = orderIds.length
+      ? ((await this.dataSource.query(
+          `SELECT s.sales_order_id::text AS "orderId",i.product_id::text AS "productId",
+                  i.product_name AS name,i.quantity,i.unit_price::float8 AS "unitPrice",
+                  p.image_url AS "imageUrl"
+             FROM checkout.sales_order_item i
+             JOIN checkout.sales_order_seller s ON s.id=i.sales_order_seller_id
+             LEFT JOIN catalog.product p ON p.id=i.product_id
+            WHERE s.sales_order_id=ANY($1::bigint[])
+            ORDER BY i.id`,
+          [orderIds],
+        )) as Array<Record<string, unknown>>)
+      : [];
+    const itemsByOrder = new Map<string, Array<Record<string, unknown>>>();
+    for (const item of itemRows) {
+      const key = String(item.orderId);
+      const items = itemsByOrder.get(key) ?? [];
+      items.push({
+        productId: String(item.productId),
+        name: String(item.name),
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        imageUrl: item.imageUrl ? String(item.imageUrl) : null,
+      });
+      itemsByOrder.set(key, items);
+    }
+    return {
+      items: orders.map((order) => ({
+        orderId: String(order.orderId),
+        createdAt: order.createdAt,
+        orderStatus: order.orderStatus,
+        subtotal: Number(order.totalAmount) - Number(order.deliveryFee),
+        deliveryFee: Number(order.deliveryFee),
+        totalAmount: Number(order.totalAmount),
+        items: itemsByOrder.get(String(order.orderId)) ?? [],
+      })),
+      total,
+      page,
+      limit,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
+  }
+
   private async assertBuyerOwnership(
     orderId: string,
     customerId?: string,

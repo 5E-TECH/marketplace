@@ -150,6 +150,17 @@ export class SellerOrdersController {
     );
   }
 
+  @MessagePattern({ cmd: 'checkout.orders.list-by-buyer' })
+  buyerOrders(
+    @Payload()
+    data: {
+      customerId: string;
+      query?: { page?: number; limit?: number };
+    },
+  ) {
+    return this.orders.buyerOrders(data.customerId, data.query);
+  }
+
   @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
   countByShop(@Payload() data: { shopId: string }) {
     return this.orders.countByShop(String(data.shopId));

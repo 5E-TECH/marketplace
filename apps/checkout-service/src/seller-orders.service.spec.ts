@@ -576,4 +576,82 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       service.buyerOrderDetails('42', undefined, 'guest-session'),
     ).resolves.toMatchObject({ id: '42' });
   });
+
+  it('buyer buyurtmalarini mahsulotlari bilan sahifalab qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            createdAt: '2026-09-15T10:00:00.000Z',
+            orderStatus: 'CONFIRMED',
+            totalAmount: 115000,
+            deliveryFee: 15000,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            productId: '7',
+            name: 'Mahsulot',
+            quantity: 1,
+            unitPrice: 100000,
+            imageUrl: null,
+          },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(
+      service.buyerOrders('9', { page: 1, limit: 20 }),
+    ).resolves.toEqual({
+      items: [
+        {
+          orderId: '42',
+          createdAt: '2026-09-15T10:00:00.000Z',
+          orderStatus: 'CONFIRMED',
+          subtotal: 100000,
+          deliveryFee: 15000,
+          totalAmount: 115000,
+          items: [
+            {
+              productId: '7',
+              name: 'Mahsulot',
+              quantity: 1,
+              unitPrice: 100000,
+              imageUrl: null,
+            },
+          ],
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+      totalPages: 1,
+    });
+    expect(dataSource.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('WHERE customer_id=$1'),
+      ['9', 20, 0],
+    );
+  });
+
+  it('buyer orderlari bo‘lmasa bo‘sh sahifa qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.buyerOrders('9')).resolves.toMatchObject({
+      items: [],
+      total: 0,
+      totalPages: 0,
+    });
+    expect(dataSource.query).toHaveBeenCalledTimes(2);
+  });
 });

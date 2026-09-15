@@ -4,6 +4,21 @@ import { IS_PUBLIC_KEY, Role } from '@app/common';
 import { BuyerOrdersController } from './buyer-orders.controller';
 
 describe('BuyerOrdersController', () => {
+  it('buyer buyurtmalar ro‘yxatini sahifalash bilan so‘raydi', async () => {
+    const send = jest.fn(() => of({ items: [], total: 0 }));
+    const controller = new BuyerOrdersController({ send } as never);
+
+    await controller.list({ user: { sub: '9', role: Role.BUYER } } as never, {
+      page: 2,
+      limit: 10,
+    });
+
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'checkout.orders.list-by-buyer' },
+      { customerId: '9', query: { page: 2, limit: 10 } },
+    );
+  });
+
   it('buyer id va order idni checkout tracking RPCga uzatadi', async () => {
     const send = jest.fn(() => of({ orderId: '42', shipments: [] }));
     const controller = new BuyerOrdersController({ send } as never);
