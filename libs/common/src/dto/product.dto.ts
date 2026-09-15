@@ -44,7 +44,11 @@ export class CreateProductDto {
   @Min(0)
   oldPrice?: number | null;
 
-  @ApiPropertyOptional({ example: 'https://cdn.example.com/iphone.jpg' })
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/iphone.jpg',
+    description:
+      'Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -53,6 +57,8 @@ export class CreateProductDto {
   @ApiPropertyOptional({
     type: [String],
     example: ['https://cdn.example.com/iphone-1.jpg'],
+    description:
+      'Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)',
   })
   @IsOptional()
   @IsArray()
@@ -74,6 +80,15 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+}
+
+export class AdminCreateProductDto extends CreateProductDto {
+  @ApiProperty({
+    example: '15',
+    description: 'Mahsulot biriktiriladigan do‘kon IDsi',
+  })
+  @Matches(/^\d+$/, { message: "shopId musbat son bo'lishi kerak" })
+  shopId: string;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

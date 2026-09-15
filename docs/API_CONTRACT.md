@@ -220,6 +220,24 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 - Validatsiya: `name` 1..255, `price` > 0, `status ∈ ProductStatus`, `categoryId` mavjud bo'lsin.
 - `shopId`/`ownerUserId` — **body'dan olinmaydi**, token'dan (`shopId`). Yuborilsa e'tiborsiz.
 - Dublikat slug (shop ichida) → `409`.
+- `imageUrl` yoki `images[]` ichida kamida bitta rasm bo‘lishi shart; aks holda `400`.
+
+**`POST /admin/products` · ADMIN / SUPERADMIN** — admin tanlangan do‘kon
+uchun mahsulot yaratadi. Seller yaratish body’siga qo‘shimcha ravishda `shopId`
+majburiy:
+```jsonc
+{
+  "shopId":"15",
+  "name":"Adidas krossovka",
+  "categoryId":"7",
+  "price":499000,
+  "images":["https://.../1.jpg","https://.../2.jpg"],
+  "status":"ACTIVE"
+}
+```
+- Mahsulot `shopId` dagi do‘kon va uning egasiga biriktiriladi.
+- Amalni bajargan admin `product.create` audit yozuvida saqlanadi.
+- Seller endpointidagi rasm talabi va qolgan validatsiyalar bunda ham amal qiladi.
 
 **`PATCH /products/:id` · SELLER** — yuqoridagi maydonlar (barchasi ixtiyoriy). O'zganiki → `403`.
 **`DELETE /products/:id` · SELLER** — soft-delete (`isDeleted=true`). → `204`-ma'noli.
@@ -350,6 +368,7 @@ filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
 ### 8.4 Katalog / mahsulot moderatsiya
 **`GET /admin/products` · ADMIN ⭐** — hamma mahsulot, pagination. Query: `shopId?, categoryId?, status?, search?`.
+**`POST /admin/products` · ADMIN ⭐** — tanlangan `shopId` uchun mahsulot yaratadi; admin harakati audit qilinadi.
 **`POST /admin/products/:id/hide` · ADMIN ◻︎** — storefront'da yashiradi. **`.../flag` ◻︎** — belgilaydi.
 
 ### 8.5 Kategoriyalar ⭐

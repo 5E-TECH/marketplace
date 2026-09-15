@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ProductStatus, ShopStatus } from '@app/common';
 import { of } from 'rxjs';
@@ -56,6 +57,7 @@ describe('ProductService', () => {
     await service.create('42', {
       name: 'Telefon',
       price: 1200000,
+      imageUrl: 'http://minio/telefon.jpg',
       status: ProductStatus.ACTIVE,
     });
 
@@ -79,6 +81,7 @@ describe('ProductService', () => {
       name: 'O‘yin telefoni',
       categoryId: '3',
       price: 1200000,
+      imageUrl: 'http://minio/oyin-telefoni.jpg',
     });
 
     expect(productRepo.create).toHaveBeenCalledWith(
@@ -108,7 +111,11 @@ describe('ProductService', () => {
       .mockResolvedValueOnce({ id: '1', shopId: '5', slug: 'iphone' })
       .mockResolvedValueOnce(null);
 
-    await service.create('42', { name: 'iPhone', price: 100 });
+    await service.create('42', {
+      name: 'iPhone',
+      price: 100,
+      imageUrl: 'http://minio/iphone.jpg',
+    });
 
     expect(productRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({ slug: 'iphone-2' }),
@@ -124,9 +131,65 @@ describe('ProductService', () => {
         name: 'Telefon',
         categoryId: '404',
         price: 100,
+        imageUrl: 'http://minio/telefon.jpg',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(productRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rasmsiz mahsulot yaratishni 400 bilan bloklaydi', async () => {
+    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+    productRepo.findOne.mockResolvedValue(null);
+
+    await expect(
+      service.create('42', { name: 'Telefon', price: 100 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(productRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('gallerydagi birinchi yaroqli rasmni asosiy rasm qiladi', async () => {
+    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+    productRepo.findOne.mockResolvedValue(null);
+
+    await service.create('42', {
+      name: 'Telefon',
+      price: 100,
+      images: ['  ', ' http://minio/telefon.jpg '],
+    });
+
+    expect(productRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageUrl: 'http://minio/telefon.jpg',
+        images: ['http://minio/telefon.jpg'],
+      }),
+    );
+  });
+
+  it('admin tanlagan shop egasi nomidan mahsulot yaratadi', async () => {
+    shopRepo.findOne.mockResolvedValue({
+      id: '9',
+      ownerUserId: '42',
+      name: 'Ali Market',
+      isDeleted: false,
+    });
+    productRepo.findOne.mockResolvedValue(null);
+
+    await service.adminCreate('9', {
+      name: 'Telefon',
+      price: 1200000,
+      imageUrl: 'https://cdn.example.com/telefon.jpg',
+    });
+
+    expect(shopRepo.findOne).toHaveBeenCalledWith({
+      where: { id: '9', isDeleted: false },
+    });
+    expect(productRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shopId: '9',
+        ownerUserId: '42',
+        name: 'Telefon',
+      }),
+    );
   });
 
   it('boshqa seller mahsulotini tahrirlashni 403 bilan bloklaydi', async () => {

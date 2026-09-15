@@ -5523,6 +5523,41 @@
       }
     },
     "/api/v1/admin/products": {
+      "post": {
+        "operationId": "AdminProductsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCreateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Admin tanlangan do‘kon uchun yangi mahsulot yaratadi",
+        "tags": [
+          "admin-products"
+        ]
+      },
       "get": {
         "operationId": "AdminProductsController_list",
         "parameters": [
@@ -7058,12 +7093,14 @@
           },
           "imageUrl": {
             "type": "object",
-            "example": "https://cdn.example.com/iphone.jpg"
+            "example": "https://cdn.example.com/iphone.jpg",
+            "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
           "images": {
             "example": [
               "https://cdn.example.com/iphone-1.jpg"
             ],
+            "description": "Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)",
             "type": "array",
             "items": {
               "type": "string"
@@ -7271,12 +7308,14 @@
           },
           "imageUrl": {
             "type": "object",
-            "example": "https://cdn.example.com/iphone.jpg"
+            "example": "https://cdn.example.com/iphone.jpg",
+            "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
           "images": {
             "example": [
               "https://cdn.example.com/iphone-1.jpg"
             ],
+            "description": "Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)",
             "type": "array",
             "items": {
               "type": "string"
@@ -9211,6 +9250,77 @@
         "required": [
           "orderItemId",
           "rating"
+        ]
+      },
+      "AdminCreateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "iPhone 16 Pro"
+          },
+          "categoryId": {
+            "type": "object",
+            "example": "1",
+            "nullable": true
+          },
+          "description": {
+            "type": "object",
+            "example": "Titanium, 256 GB"
+          },
+          "price": {
+            "type": "number",
+            "example": 14999000,
+            "minimum": 0
+          },
+          "oldPrice": {
+            "type": "object",
+            "example": 15999000,
+            "minimum": 0,
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": "https://cdn.example.com/iphone.jpg",
+            "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
+          },
+          "images": {
+            "example": [
+              "https://cdn.example.com/iphone-1.jpg"
+            ],
+            "description": "Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "example": {
+              "brand": "Apple",
+              "storage": "256 GB"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "ARCHIVED",
+              "OUT_OF_STOCK"
+            ],
+            "default": "ACTIVE"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "15",
+            "description": "Mahsulot biriktiriladigan do‘kon IDsi"
+          }
+        },
+        "required": [
+          "name",
+          "price",
+          "shopId"
         ]
       },
       "AdminTeamMemberDto": {

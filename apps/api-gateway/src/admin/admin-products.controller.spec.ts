@@ -33,6 +33,41 @@ describe('AdminProductsController (C4.5)', () => {
     );
   });
 
+  it('tanlangan shop uchun mahsulot yaratadi va admin harakatini audit qiladi', async () => {
+    const { controller, catalog, identity } = setup();
+    const admin = { sub: '7', role: Role.ADMIN } as never;
+    const body = {
+      shopId: '9',
+      name: 'Telefon',
+      price: 1200000,
+      imageUrl: 'https://cdn.example.com/telefon.jpg',
+    };
+
+    await controller.create(body, admin, '1.2.3.4');
+
+    expect(catalog).toHaveBeenCalledWith(
+      { cmd: 'catalog.product.admin-create' },
+      {
+        shopId: '9',
+        dto: {
+          name: 'Telefon',
+          price: 1200000,
+          imageUrl: 'https://cdn.example.com/telefon.jpg',
+        },
+      },
+    );
+    expect(identity).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        actorId: '7',
+        action: 'product.create',
+        entityType: 'Product',
+        entityId: '10',
+        meta: { shopId: '9', ip: '1.2.3.4' },
+      }),
+    );
+  });
+
   it('suspend va reactivate amallarini audit qiladi', async () => {
     const { controller, catalog, identity } = setup();
     const admin = { sub: '7', role: Role.ADMIN } as never;

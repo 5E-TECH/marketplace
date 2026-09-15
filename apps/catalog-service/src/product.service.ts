@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -44,23 +45,48 @@ export class ProductService {
 
   async create(ownerUserId: string, dto: CreateProductDto): Promise<Product> {
     const shop = await this.getShop(ownerUserId);
+    return this.createForShop(shop, dto);
+  }
+
+  async adminCreate(shopId: string, dto: CreateProductDto): Promise<Product> {
+    const shop = await this.getShopById(shopId);
+    return this.createForShop(shop, dto);
+  }
+
+  private async createForShop(
+    shop: Shop,
+    dto: CreateProductDto,
+  ): Promise<Product> {
     await this.ensureCategoryExists(dto.categoryId);
     const slug = await this.uniqueSlug(shop.id, dto.name);
+    // Validate that at least one image (imageUrl or images) is provided
+    const primaryImage = dto.imageUrl?.trim();
+    const galleryImages = (dto.images ?? [])
+      .map((image) => image.trim())
+      .filter(Boolean);
+    if (!primaryImage && galleryImages.length === 0) {
+      throw new BadRequestException(
+        'Mahsulot yaratish uchun kamida bitta rasm majburiy',
+      );
+    }
+    // Ensure both fields are populated for consistency
+    const imageUrl = primaryImage ?? galleryImages[0];
+    const images = galleryImages.length > 0 ? galleryImages : [imageUrl];
 
     const product = this.products.create({
       shopId: shop.id,
-      ownerUserId,
+      ownerUserId: shop.ownerUserId,
       categoryId: dto.categoryId ?? null,
       name: dto.name.trim(),
       slug,
       description: dto.description ?? null,
       price: dto.price,
       oldPrice: dto.oldPrice ?? null,
-      imageUrl: dto.imageUrl ?? null,
-      images: dto.images ?? [],
+      imageUrl,
+      images,
       attributes: dto.attributes ?? {},
       hasVariants: false,
-      // Seller yaratgan mahsulot faol marketda public katalogga darhol chiqadi.
+      // Yangi mahsulot faol marketda public katalogga darhol chiqadi.
       status: dto.status ?? ProductStatus.ACTIVE,
     });
     const createdProduct = await this.save(product);
@@ -258,6 +284,14 @@ export class ProductService {
       where: { ownerUserId, isDeleted: false },
     });
     if (!shop) throw new NotFoundException('Sotuvchining do‘koni topilmadi');
+    return shop;
+  }
+
+  private async getShopById(shopId: string): Promise<Shop> {
+    const shop = await this.shops.findOne({
+      where: { id: shopId, isDeleted: false },
+    });
+    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
     return shop;
   }
 
