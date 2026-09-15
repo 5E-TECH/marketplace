@@ -142,12 +142,7 @@ export class SellerOrdersService {
     customerId?: string,
     sessionId?: string,
   ) {
-    if (
-      !/^[1-9]\d{0,18}$/.test(orderId) ||
-      BigInt(orderId) > BigInt('9223372036854775807')
-    ) {
-      throw new NotFoundException('Buyurtma topilmadi');
-    }
+    await this.assertBuyerOwnership(orderId, customerId, sessionId);
 
     const rows = (await this.dataSource.query(
       `SELECT o.id::text AS "orderId",o.customer_id::text AS "customerId",
@@ -166,13 +161,6 @@ export class SellerOrdersService {
     )) as Array<Record<string, unknown>>;
 
     if (!rows.length) throw new NotFoundException('Buyurtma topilmadi');
-    const belongsToBuyer =
-      customerId && String(rows[0].customerId) === String(customerId);
-    const belongsToGuest =
-      sessionId && String(rows[0].sessionId ?? '') === String(sessionId);
-    if (!belongsToBuyer && !belongsToGuest) {
-      throw new ForbiddenException('Bu buyurtmani ko‘rishga ruxsat yo‘q');
-    }
     const shipmentStatus = (status: unknown) =>
       status === 'ON_THE_ROAD' ? 'OUT_FOR_DELIVERY' : String(status);
     const statuses = rows
@@ -212,6 +200,109 @@ export class SellerOrdersService {
           updatedAt: row.updatedAt as Date | string,
         })),
     };
+  }
+
+  async buyerOrderDetails(
+    orderId: string,
+    customerId?: string,
+    sessionId?: string,
+  ) {
+    await this.assertBuyerOwnership(orderId, customerId, sessionId);
+    const { customerId: _customerId, ...details } =
+      await this.adminGetOrder(orderId);
+    return details;
+  }
+
+  async buyerOrders(
+    customerId: string,
+    query: { page?: number; limit?: number } = {},
+  ) {
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
+    const [countRow] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total
+         FROM checkout.sales_order WHERE customer_id=$1`,
+      [customerId],
+    );
+    const total = Number(countRow?.total ?? 0);
+    const orders = (await this.dataSource.query(
+      `SELECT id::text AS "orderId",created_at AS "createdAt",
+              status AS "orderStatus",total_amount::float8 AS "totalAmount",
+              delivery_fee::float8 AS "deliveryFee"
+         FROM checkout.sales_order
+        WHERE customer_id=$1
+        ORDER BY created_at DESC,id DESC
+        LIMIT $2 OFFSET $3`,
+      [customerId, limit, (page - 1) * limit],
+    )) as Array<Record<string, unknown>>;
+    const orderIds = orders.map((order) => String(order.orderId));
+    const itemRows = orderIds.length
+      ? ((await this.dataSource.query(
+          `SELECT s.sales_order_id::text AS "orderId",i.product_id::text AS "productId",
+                  i.product_name AS name,i.quantity,i.unit_price::float8 AS "unitPrice",
+                  p.image_url AS "imageUrl"
+             FROM checkout.sales_order_item i
+             JOIN checkout.sales_order_seller s ON s.id=i.sales_order_seller_id
+             LEFT JOIN catalog.product p ON p.id=i.product_id
+            WHERE s.sales_order_id=ANY($1::bigint[])
+            ORDER BY i.id`,
+          [orderIds],
+        )) as Array<Record<string, unknown>>)
+      : [];
+    const itemsByOrder = new Map<string, Array<Record<string, unknown>>>();
+    for (const item of itemRows) {
+      const key = String(item.orderId);
+      const items = itemsByOrder.get(key) ?? [];
+      items.push({
+        productId: String(item.productId),
+        name: String(item.name),
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        imageUrl: item.imageUrl ? String(item.imageUrl) : null,
+      });
+      itemsByOrder.set(key, items);
+    }
+    return {
+      items: orders.map((order) => ({
+        orderId: String(order.orderId),
+        createdAt: order.createdAt,
+        orderStatus: order.orderStatus,
+        subtotal: Number(order.totalAmount) - Number(order.deliveryFee),
+        deliveryFee: Number(order.deliveryFee),
+        totalAmount: Number(order.totalAmount),
+        items: itemsByOrder.get(String(order.orderId)) ?? [],
+      })),
+      total,
+      page,
+      limit,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
+  }
+
+  private async assertBuyerOwnership(
+    orderId: string,
+    customerId?: string,
+    sessionId?: string,
+  ): Promise<void> {
+    if (
+      !/^[1-9]\d{0,18}$/.test(orderId) ||
+      BigInt(orderId) > BigInt('9223372036854775807')
+    ) {
+      throw new NotFoundException('Buyurtma topilmadi');
+    }
+    const [order] = (await this.dataSource.query(
+      `SELECT customer_id::text AS "customerId",session_id AS "sessionId"
+         FROM checkout.sales_order WHERE id=$1`,
+      [orderId],
+    )) as Array<{ customerId: string; sessionId: string | null }>;
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const belongsToBuyer =
+      customerId && String(order.customerId) === String(customerId);
+    const belongsToGuest =
+      sessionId && String(order.sessionId ?? '') === String(sessionId);
+    if (!belongsToBuyer && !belongsToGuest) {
+      throw new ForbiddenException('Bu buyurtmani ko‘rishga ruxsat yo‘q');
+    }
   }
 
   async dashboard(

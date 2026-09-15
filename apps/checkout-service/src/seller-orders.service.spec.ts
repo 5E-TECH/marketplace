@@ -482,4 +482,176 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       'Buyurtma topilmadi',
     );
   });
+
+  it('buyer order tafsilotlari mahsulot, summa, manzil va to‘lov turini qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { customerId: '9', sessionId: 'guest-session' },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '42',
+            buyerName: 'Ali',
+            customerId: '9',
+            status: 'CONFIRMED',
+            paymentMethod: 'cod',
+            totalAmount: '475000',
+            deliveryFee: '25000',
+            deliveryAddress: 'Toshkent',
+            createdAt: '2026-09-14T10:00:00.000Z',
+            updatedAt: '2026-09-14T10:30:00.000Z',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '31',
+            shopId: '15',
+            subtotal: '450000',
+            deliveryFee: '25000',
+            codAmount: '475000',
+            status: 'ON_THE_ROAD',
+            elchiShipmentId: '987',
+            trackingUrl: 'https://elchi.uz/track/987',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            sellerOrderId: '31',
+            productId: '88',
+            productName: 'Telefon',
+            variantId: '5',
+            quantity: '2',
+            unitPrice: '225000',
+            lineTotal: '450000',
+          },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    const result = await service.buyerOrderDetails('42', '9');
+
+    expect(result).toMatchObject({
+      id: '42',
+      status: 'CONFIRMED',
+      paymentMethod: 'cod',
+      totalAmount: 475000,
+      deliveryFee: 25000,
+      deliveryAddress: 'Toshkent',
+    });
+    expect(result).not.toHaveProperty('customerId');
+    expect(result.sellerOrders[0].items[0]).toMatchObject({
+      productName: 'Telefon',
+      quantity: 2,
+      lineTotal: 450000,
+    });
+  });
+
+  it('guest order tafsilotlarini to‘g‘ri session bilan qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { customerId: '9', sessionId: 'guest-session' },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '42',
+            customerId: '9',
+            status: 'DRAFT',
+            paymentMethod: 'cod',
+            totalAmount: '100',
+            deliveryFee: '10',
+            createdAt: 'd1',
+            updatedAt: 'd2',
+          },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(
+      service.buyerOrderDetails('42', undefined, 'guest-session'),
+    ).resolves.toMatchObject({ id: '42' });
+  });
+
+  it('buyer buyurtmalarini mahsulotlari bilan sahifalab qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            createdAt: '2026-09-15T10:00:00.000Z',
+            orderStatus: 'CONFIRMED',
+            totalAmount: 115000,
+            deliveryFee: 15000,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            productId: '7',
+            name: 'Mahsulot',
+            quantity: 1,
+            unitPrice: 100000,
+            imageUrl: null,
+          },
+        ]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(
+      service.buyerOrders('9', { page: 1, limit: 20 }),
+    ).resolves.toEqual({
+      items: [
+        {
+          orderId: '42',
+          createdAt: '2026-09-15T10:00:00.000Z',
+          orderStatus: 'CONFIRMED',
+          subtotal: 100000,
+          deliveryFee: 15000,
+          totalAmount: 115000,
+          items: [
+            {
+              productId: '7',
+              name: 'Mahsulot',
+              quantity: 1,
+              unitPrice: 100000,
+              imageUrl: null,
+            },
+          ],
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+      totalPages: 1,
+    });
+    expect(dataSource.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('WHERE customer_id=$1'),
+      ['9', 20, 0],
+    );
+  });
+
+  it('buyer orderlari bo‘lmasa bo‘sh sahifa qaytaradi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    await expect(service.buyerOrders('9')).resolves.toMatchObject({
+      items: [],
+      total: 0,
+      totalPages: 0,
+    });
+    expect(dataSource.query).toHaveBeenCalledTimes(2);
+  });
 });
