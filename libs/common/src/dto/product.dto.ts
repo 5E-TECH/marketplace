@@ -82,6 +82,15 @@ export class CreateProductDto {
   status?: ProductStatus;
 }
 
+export class AdminCreateProductDto extends CreateProductDto {
+  @ApiProperty({
+    example: '15',
+    description: 'Mahsulot biriktiriladigan do‘kon IDsi',
+  })
+  @Matches(/^\d+$/, { message: "shopId musbat son bo'lishi kerak" })
+  shopId: string;
+}
+
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
 export class MyProductsQueryDto {

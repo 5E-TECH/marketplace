@@ -19,6 +19,11 @@ export class ProductController {
     return this.products.create(data.ownerUserId, data.dto);
   }
 
+  @MessagePattern({ cmd: 'catalog.product.admin-create' })
+  adminCreate(@Payload() data: { shopId: string; dto: CreateProductDto }) {
+    return this.products.adminCreate(data.shopId, data.dto);
+  }
+
   @MessagePattern({ cmd: 'product.get-mine' })
   getMine(@Payload() data: { ownerUserId: string; query: MyProductsQueryDto }) {
     return this.products.getMine(data.ownerUserId, data.query);

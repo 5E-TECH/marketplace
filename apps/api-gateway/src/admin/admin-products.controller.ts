@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
@@ -10,11 +11,13 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  AdminCreateProductDto,
   AdminProductsQueryDto,
   CurrentUser,
   JwtUser,
@@ -34,6 +37,26 @@ export class AdminProductsController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
   ) {}
+
+  @Post()
+  @ApiOperation({
+    summary: 'Admin tanlangan do‘kon uchun yangi mahsulot yaratadi',
+  })
+  @ApiCreatedResponse({ type: ProductDto })
+  async create(
+    @Body() body: AdminCreateProductDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const { shopId, ...dto } = body;
+    const product = await sendRpc<ProductDto>(
+      this.catalog,
+      { cmd: 'catalog.product.admin-create' },
+      { shopId, dto },
+    );
+    this.audit(admin.sub, 'product.create', product.id, ip, { shopId });
+    return product;
+  }
 
   @Get()
   @ApiOperation({
@@ -92,6 +115,7 @@ export class AdminProductsController {
     action: string,
     entityId: string,
     ip?: string,
+    meta: Record<string, unknown> = {},
   ): void {
     void sendRpc(
       this.identity,
@@ -101,7 +125,7 @@ export class AdminProductsController {
         action,
         entityType: 'Product',
         entityId,
-        meta: { ip: ip ?? null },
+        meta: { ...meta, ip: ip ?? null },
       },
     ).catch(() => undefined);
   }
