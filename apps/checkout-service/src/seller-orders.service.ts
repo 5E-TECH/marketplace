@@ -858,7 +858,7 @@ export class SellerOrdersService {
 
   async getSellerOrder(shopId: string, id: string) {
     const rows = await this.dataSource.query(
-      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.delivery_fee AS "deliveryFee",s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
+      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.delivery_fee AS "deliveryFee",s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.qr_code_token AS "qrCodeToken",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
       [id, shopId],
     );
     if (!rows[0])
@@ -869,6 +869,10 @@ export class SellerOrdersService {
       id: String(r.id),
       salesOrderId: String(r.salesOrderId),
       subtotal: Number(r.subtotal),
+      // `deliveryFee` ATAYLAB qo'shildi: u ham `numeric` ustun, ya'ni
+      // node-postgres uni SATR qilib qaytaradi ("0.00") va javobga shundayligicha
+      // chiqib ketardi — qolgan summalar son bo'lgani holda.
+      deliveryFee: Number(r.deliveryFee),
       codAmount: Number(r.codAmount),
     };
   }
@@ -921,6 +925,7 @@ export class SellerOrdersService {
     const result = await sendRpc<{
       shipment_id: string;
       tracking_url?: string;
+      qr_code_token?: string;
     }>(
       this.integration,
       { cmd: 'integration.shipment.create' },
@@ -947,8 +952,16 @@ export class SellerOrdersService {
       },
     );
     await this.dataSource.query(
-      `UPDATE checkout.sales_order_seller SET elchi_shipment_id=$1,tracking_url=$2,status='SHIPMENT_CREATED',updated_at=now() WHERE id=$3 AND shop_id=$4`,
-      [result.shipment_id, result.tracking_url ?? null, id, shopId],
+      `UPDATE checkout.sales_order_seller SET elchi_shipment_id=$1,tracking_url=$2,qr_code_token=$3,status='SHIPMENT_CREATED',updated_at=now() WHERE id=$4 AND shop_id=$5`,
+      [
+        result.shipment_id,
+        result.tracking_url ?? null,
+        // Pochta posilkani shu token bo'yicha skanerlab qabul qiladi va
+        // yorliqdagi QR ichiga ham shu yoziladi (C1.45).
+        result.qr_code_token ?? null,
+        id,
+        shopId,
+      ],
     );
     await this.dataSource.query(
       `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status,comment) VALUES($1,'SHIPMENT_CREATED','Yetkazib berish yaratildi')`,

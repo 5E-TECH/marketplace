@@ -30,6 +30,7 @@ import { ReviewEligibilityService } from './review-eligibility.service';
 import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-delivery-fee';
 import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-add-sales-order-session-id';
 import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-add-cart-item-product-name';
+import { AddSellerOrderQrToken1726502400000 } from './migrations/1726502400000-add-seller-order-qr-token';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-
             AddDeliveryFee1725192000000,
             AddSalesOrderSessionId1726329600000,
             AddCartItemProductName1726416000000,
+            AddSellerOrderQrToken1726502400000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

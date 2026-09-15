@@ -92,9 +92,11 @@ export class ElchiApiClient {
   }
 
   /** POST /partner/shipments — external_order_id Elchi tomonida idempotency kaliti. */
-  async createShipment(
-    body: CreateElchiShipmentInput,
-  ): Promise<{ shipment_id: string; tracking_url?: string }> {
+  async createShipment(body: CreateElchiShipmentInput): Promise<{
+    shipment_id: string;
+    tracking_url?: string;
+    qr_code_token?: string;
+  }> {
     // `where_deliver` ni Elchi faqat KICHIK harfda qabul qiladi
     // ('center' yoki 'address'), aks holda butun so'rovni 400 bilan rad etadi.
     // Bizning `checkout.sales_order.where_deliver` ustuni esa 'ADDRESS' saqlaydi
@@ -113,9 +115,14 @@ export class ElchiApiClient {
     const id = this.pluck(res, 'shipment_id');
     if (!id) throw new Error('Elchi javobida shipment_id yo‘q');
     const trackingUrl = this.pluck(res, 'tracking_url');
+    // `qr_code_token` — pochta posilkani skanerlab qabul qiladigan kalit.
+    // Elchi uni javobda qaytaradi (PARTNER_API.md §3.3), lekin avval biz uni
+    // tashlab yuborardik. Yorliqdagi QR ichiga aynan shu yoziladi — C1.45.
+    const qrToken = this.pluck(res, 'qr_code_token');
     return {
       shipment_id: String(id),
       ...(trackingUrl ? { tracking_url: String(trackingUrl) } : {}),
+      ...(qrToken ? { qr_code_token: String(qrToken) } : {}),
     };
   }
 
