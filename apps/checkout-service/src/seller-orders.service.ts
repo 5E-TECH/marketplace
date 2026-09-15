@@ -926,7 +926,11 @@ export class SellerOrdersService {
       { cmd: 'integration.shipment.create' },
       {
         external_order_id: `seller-order-${id}`,
-        elchi_market_id: String(order.shopId),
+        // `shopId` ATAYLAB: bu marketplace'ning ICHKI do'kon id'si, Elchi
+        // market id'si emas. O'girish elchi-integration servisida bo'ladi —
+        // mapping o'sha yerda saqlanadi. Avval bu qiymat to'g'ridan-to'g'ri
+        // `elchi_market_id` sifatida ketardi va Elchi 403 bilan rad etardi.
+        shopId: String(order.shopId),
         customer: {
           name: order.buyerName ?? 'Mijoz',
           phone: customerPhone ?? '',

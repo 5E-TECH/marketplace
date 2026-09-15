@@ -278,3 +278,64 @@ describe('ElchiIntegrationService (C1.6)', () => {
     );
   });
 });
+
+describe('ElchiIntegrationService.createShipment (shopId → elchi_market_id)', () => {
+  /**
+   * Regressiya: `seller-orders.service.ts` marketplace'ning ICHKI do'kon
+   * id'sini (4) to'g'ridan-to'g'ri `elchi_market_id` maydoniga solib yuborardi,
+   * holbuki Elchi'dagi market id boshqa raqam (142). Natijada Elchi rad etardi:
+   *   403 "elchi_market_id shu hamkorga tegishli emas"
+   * ya'ni sotuvchi kabinetidan posilka yaratish umuman ishlamasdi.
+   */
+  const body = {
+    external_order_id: 'seller-order-9',
+    customer: { name: 'Nodira', phone: '+998901234567' },
+    address: 'Toshkent',
+    items: [{ name: 'Mahsulot', quantity: 1 }],
+    cod_amount: 45000,
+  };
+
+  const svc = (elchiMarketId: string | null) => {
+    const createShipment = jest.fn().mockResolvedValue({ shipment_id: '900' });
+    const service = Object.create(
+      ElchiIntegrationService.prototype,
+    ) as ElchiIntegrationService;
+    Object.assign(service, {
+      elchi: { createShipment },
+      getCatalogShop: jest.fn().mockResolvedValue({
+        id: '4',
+        name: 'Do‘kon',
+        phone: '+998900000000',
+        regionId: null,
+        districtId: null,
+        elchiMarketId,
+      }),
+      onShopApproved: jest.fn(),
+    });
+    return { service, createShipment };
+  };
+
+  it('shopId berilsa Elchi market id ga o‘giriladi', async () => {
+    const { service, createShipment } = svc('142');
+    await service.createShipment({ ...body, shopId: '4' } as never);
+    const sent = createShipment.mock.calls[0][0] as {
+      elchi_market_id: string;
+      shopId?: string;
+    };
+    expect(sent.elchi_market_id).toBe('142');
+    // `shopId` Elchi'ga uzatilmaydi — u faqat ichki moslashtirish uchun.
+    expect(sent.shopId).toBeUndefined();
+  });
+
+  it('elchi_market_id to‘g‘ridan-to‘g‘ri berilsa tegilmaydi', async () => {
+    const { service, createShipment } = svc(null);
+    await service.createShipment({
+      ...body,
+      elchi_market_id: '137',
+    } as never);
+    expect(
+      (createShipment.mock.calls[0][0] as { elchi_market_id: string })
+        .elchi_market_id,
+    ).toBe('137');
+  });
+});

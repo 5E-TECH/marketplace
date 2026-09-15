@@ -198,8 +198,28 @@ export class ElchiIntegrationService {
     }));
   }
 
-  createShipment(input: CreateElchiShipmentInput) {
-    return this.elchi.createShipment(input);
+  /**
+   * `shopId` berilsa u Elchi market id'siga o'giriladi.
+   *
+   * NEGA SHU YERDA: marketplace'ning ICHKI do'kon id'si (masalan 4) va Elchi
+   * market id'si (masalan 142) — boshqa-boshqa raqamlar. Moslashtirish shu
+   * servisning zimmasida. `seller-orders.service.ts` da catalog klienti yo'q,
+   * shuning uchun u faqat `shopId` ni bila oladi va avval uni `elchi_market_id`
+   * maydoniga solib yuborardi. Natijada Elchi 403 qaytarardi:
+   *   "elchi_market_id shu hamkorga tegishli emas"
+   * ya'ni sotuvchi kabinetidan posilka yaratish umuman ishlamasdi.
+   *
+   * `elchi_market_id` to'g'ridan-to'g'ri berilgan chaqiruvchilar
+   * (`confirm-sales-order.service.ts`) o'zgarishsiz ishlayveradi.
+   */
+  async createShipment(
+    input: CreateElchiShipmentInput & { shopId?: string },
+  ): Promise<{ shipment_id: string; tracking_url?: string }> {
+    const { shopId, ...body } = input;
+    if (shopId) {
+      body.elchi_market_id = await this.resolveElchiMarketId(shopId);
+    }
+    return this.elchi.createShipment(body);
   }
 
   async getTariff(input: {
@@ -207,10 +227,18 @@ export class ElchiIntegrationService {
     regionId?: string | null;
     districtId?: string | null;
   }) {
-    let shop = await this.getCatalogShop(input.shopId);
+    return this.elchi.getTariff({
+      elchi_market_id: await this.resolveElchiMarketId(input.shopId),
+      where_deliver: 'address',
+    });
+  }
+
+  /** Marketplace do'kon id'si → Elchi market id'si. Bog'lanmagan bo'lsa ulaydi. */
+  private async resolveElchiMarketId(shopId: string): Promise<string> {
+    let shop = await this.getCatalogShop(shopId);
     if (!shop.elchiMarketId) {
       // Integratsiyadan oldin approve qilingan production do'konlarini birinchi
-      // previewdayoq idempotent tarzda Elchi'ga ulaymiz. Keyingi so'rovlarda
+      // murojaatdayoq idempotent tarzda Elchi'ga ulaymiz. Keyingi so'rovlarda
       // catalogdagi saqlangan ID to'g'ridan-to'g'ri ishlatiladi.
       await this.onShopApproved({
         shopId: shop.id,
@@ -219,15 +247,12 @@ export class ElchiIntegrationService {
         region_id: shop.regionId,
         district_id: shop.districtId,
       });
-      shop = await this.getCatalogShop(input.shopId);
+      shop = await this.getCatalogShop(shopId);
     }
     if (!shop.elchiMarketId) {
-      throw new Error(`Do‘kon ${input.shopId} Elchi bilan bog‘lanmadi`);
+      throw new Error(`Do‘kon ${shopId} Elchi bilan bog‘lanmadi`);
     }
-    return this.elchi.getTariff({
-      elchi_market_id: shop.elchiMarketId,
-      where_deliver: 'address',
-    });
+    return shop.elchiMarketId;
   }
 
   private getCatalogShop(shopId: string): Promise<CatalogShop> {
