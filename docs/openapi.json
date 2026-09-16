@@ -3844,6 +3844,101 @@
         ]
       }
     },
+    "/api/v1/admin/users/{id}/role": {
+      "patch": {
+        "operationId": "AdminUsersController_updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Yangilangan foydalanuvchi"
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Foydalanuvchi rolini o‘zgartirish",
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}/impersonate": {
+      "post": {
+        "operationId": "AdminUsersController_impersonate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpersonationResultDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Foydalanuvchi nomidan 15 daqiqalik vaqtinchalik kirish",
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
     "/api/v1/admin/users/{id}/block": {
       "post": {
         "operationId": "AdminUsersController_block",
@@ -8672,6 +8767,85 @@
           "orders",
           "gmv",
           "revenue"
+        ]
+      },
+      "UpdateUserRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "BUYER",
+              "SELLER",
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "SELLER"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "ImpersonatedUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "42"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ali Valiyev"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SELLER",
+              "OPERATOR",
+              "BUYER",
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "SELLER"
+          },
+          "shopId": {
+            "type": "object",
+            "example": "15",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "shopId"
+        ]
+      },
+      "ImpersonationResultDto": {
+        "type": "object",
+        "properties": {
+          "impersonationToken": {
+            "type": "string",
+            "description": "15 daqiqalik, refresh qilib bo‘lmaydigan token"
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ImpersonatedUserDto"
+          }
+        },
+        "required": [
+          "impersonationToken",
+          "expiresIn",
+          "expiresAt",
+          "user"
         ]
       },
       "AdminOrderActionDto": {

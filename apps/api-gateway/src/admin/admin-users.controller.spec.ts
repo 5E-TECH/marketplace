@@ -15,6 +15,39 @@ describe('AdminUsersController (C1.29)', () => {
     }
   });
 
+  it('C6.5: role va impersonate faqat SUPERADMIN uchun', () => {
+    for (const method of ['updateRole', 'impersonate'] as const) {
+      expect(
+        Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype[method]),
+      ).toEqual([Role.SUPERADMIN]);
+    }
+  });
+
+  it('C6.5: role update va impersonate identity servisiga uzatiladi', async () => {
+    const send = jest.fn(() => of({ id: '9' }));
+    const ctrl = makeController(send);
+    const actor = { sub: '1', role: Role.SUPERADMIN } as never;
+
+    await ctrl.updateRole(actor, '9', { role: Role.SELLER }, '1.2.3.4');
+    await ctrl.impersonate(actor, '9', '1.2.3.4');
+
+    expect(send).toHaveBeenNthCalledWith(
+      1,
+      { cmd: 'identity.user.role.update' },
+      {
+        actorId: '1',
+        userId: '9',
+        dto: { role: Role.SELLER },
+        ip: '1.2.3.4',
+      },
+    );
+    expect(send).toHaveBeenNthCalledWith(
+      2,
+      { cmd: 'identity.user.impersonate' },
+      { actorId: '1', userId: '9', ip: '1.2.3.4' },
+    );
+  });
+
   it('TC1: list -> identity.user.admin-list ga query uzatiladi', async () => {
     const send = jest.fn(() => of({ items: [], total: 0 }));
     const ctrl = makeController(send);

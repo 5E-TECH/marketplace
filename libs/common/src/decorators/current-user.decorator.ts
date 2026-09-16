@@ -6,6 +6,9 @@ export interface JwtUser {
   sub: string; // user id
   role: Role;
   shopId?: string; // SELLER (owner) yoki OPERATOR do'kon scope'i
+  impersonatedBy?: string; // C6.5: foydalanuvchi nomidan kirgan SUPERADMIN id'si
+  tokenType?: 'access' | 'impersonation';
+  authVersion?: number; // C6.5: eski access tokenni darhol bekor qilish versiyasi
   iat?: number;
   exp?: number;
 }

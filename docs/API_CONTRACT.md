@@ -346,8 +346,8 @@ majburiy:
 **`POST /admin/users/:id/block` · ADMIN** — `{ "reason":"..." }` → `isActive=false` (kira olmaydi). O'zini bloklab bo'lmaydi → `409`.
 **`POST /admin/users/:id/unblock` · ADMIN** → `isActive=true`.
 **`POST /admin/users/:id/reset-password` · ADMIN ◻︎** → vaqtinchalik parol / reset havola.
-**`PATCH /admin/users/:id/role` · SUPERADMIN ◻︎** — `{ "role":"ADMIN" }`. Oxirgi SUPERADMIN pasaymaydi → `409`.
-**`POST /admin/users/:id/impersonate` · SUPERADMIN ◻︎** → `{ impersonationToken }` (cheklangan muddat, audit).
+**`PATCH /admin/users/:id/role` · SUPERADMIN ✅ C6.5** — `{ "role":"ADMIN" }`. `authVersion` oshiriladi, eski access tokenlar va faol refresh sessiyalar darhol bekor qilinadi; oxirgi SUPERADMIN pasaymaydi → `409`; audit atomar yoziladi.
+**`POST /admin/users/:id/impersonate` · SUPERADMIN ✅ C6.5** → `{ impersonationToken, expiresIn:900, expiresAt, user }`. Token refreshsiz, 15 daqiqalik va `impersonatedBy` claimiga ega; audit majburiy.
 
 ### 8.3 Do'konlar (shops) ⭐
 **`GET /admin/shops` · ADMIN** — pagination. Query: `status(ShopStatus)?, search?`.
