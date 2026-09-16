@@ -258,6 +258,7 @@ export class AuthService {
 
     if (dto.password) {
       user.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+      user.authVersion = (user.authVersion ?? 1) + 1;
     }
     const saved = await this.users.save(user);
 
@@ -286,6 +287,7 @@ export class AuthService {
     if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
 
     user.isBlocked = blocked;
+    user.authVersion = (user.authVersion ?? 1) + 1;
     const saved = await this.users.save(user);
     // Audit: kim kimni qachon (structured log).
     this.logger.log(
@@ -375,6 +377,7 @@ export class AuthService {
     if (dto.name !== undefined) operator.name = dto.name.trim();
     if (dto.password !== undefined) {
       operator.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+      operator.authVersion = (operator.authVersion ?? 1) + 1;
       await this.sessions.update(
         { userId: operator.id, revokedAt: IsNull() },
         { revokedAt: new Date() },
@@ -488,6 +491,7 @@ export class AuthService {
         'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
       );
     user.passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+    user.authVersion = (user.authVersion ?? 1) + 1;
     await this.users.save(user);
     await this.logout(user.id);
     return { reset: true };
@@ -677,6 +681,7 @@ export class AuthService {
       sub: user.id,
       role: user.role,
       shopId: user.shopId ?? undefined,
+      authVersion: user.authVersion ?? 1,
     };
     const accessToken = this.jwt.sign(payload, {
       expiresIn: this.config.get<string>('JWT_EXPIRES_IN', '1h') as any,

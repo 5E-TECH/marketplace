@@ -49,6 +49,7 @@ import { AdminSettingsController } from './admin/admin-settings.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
 import { BuyerOrdersController } from './orders/buyer-orders.controller';
+import { CurrentRoleGuard } from './auth/current-role.guard';
 
 @Module({
   imports: [
@@ -187,6 +188,7 @@ import { BuyerOrdersController } from './orders/buyer-orders.controller';
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: CurrentRoleGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })

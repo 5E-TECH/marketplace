@@ -33,6 +33,9 @@ import { PlatformSettings } from './entities/platform-settings.entity';
 import { CreatePlatformSettings1725897600000 } from './migrations/1725897600000-create-platform-settings';
 import { PlatformSettingsController } from './settings/platform-settings.controller';
 import { PlatformSettingsService } from './settings/platform-settings.service';
+import { AdminUserAccessController } from './admin-user-access/admin-user-access.controller';
+import { AdminUserAccessService } from './admin-user-access/admin-user-access.service';
+import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
 
 const entities = [User, AuthSession, ActivityLog, PlatformSettings];
 
@@ -66,6 +69,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
             CreateActivityLog1722950000002,
             CreateRecoverySupport1723100000000,
             CreatePlatformSettings1725897600000,
+            AddUserAuthVersion1725984000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -78,6 +82,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
     AuditController,
     AdminTeamController,
     PlatformSettingsController,
+    AdminUserAccessController,
   ],
   providers: [
     AuthService,
@@ -85,6 +90,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
     ActivityLogService,
     AdminTeamService,
     PlatformSettingsService,
+    AdminUserAccessService,
   ],
 })
 export class IdentityModule {}

@@ -92,6 +92,7 @@ export class AdminTeamService {
 
       const before = this.view(member);
       member.role = dto.role;
+      member.authVersion = (member.authVersion ?? 1) + 1;
       const saved = await users.save(member);
       await this.revokeSessions(manager, member.id);
       await this.audit(manager, actorId, 'admin.team.role.update', member.id, {
@@ -117,6 +118,7 @@ export class AdminTeamService {
       member.isDeleted = true;
       member.isActive = false;
       member.isBlocked = true;
+      member.authVersion = (member.authVersion ?? 1) + 1;
       await users.save(member);
       await this.revokeSessions(manager, member.id);
       await this.audit(manager, actorId, 'admin.team.delete', member.id, {

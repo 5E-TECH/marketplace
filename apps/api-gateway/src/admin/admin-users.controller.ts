@@ -1,9 +1,13 @@
 import {
   Controller,
+  Body,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Ip,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -20,11 +24,13 @@ import {
   AdminUsersQueryDto,
   AuthErrorResponseDto,
   CurrentUser,
+  ImpersonationResultDto,
   JwtUser,
   Role,
   Roles,
   RmqClient,
   sendRpc,
+  UpdateUserRoleDto,
 } from '@app/common';
 
 /**
@@ -64,6 +70,46 @@ export class AdminUsersController {
       this.identity,
       { cmd: 'identity.user.admin-get' },
       { userId: id },
+    );
+  }
+
+  @Patch('admin/users/:id/role')
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Foydalanuvchi rolini o‘zgartirish' })
+  @ApiOkResponse({ description: 'Yangilangan foydalanuvchi' })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  updateRole(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserRoleDto,
+    @Ip() ip: string,
+  ) {
+    return sendRpc(
+      this.identity,
+      { cmd: 'identity.user.role.update' },
+      { actorId: admin.sub, userId: id, dto, ip },
+    );
+  }
+
+  @Post('admin/users/:id/impersonate')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Foydalanuvchi nomidan 15 daqiqalik vaqtinchalik kirish',
+  })
+  @ApiOkResponse({ type: ImpersonationResultDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  impersonate(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Ip() ip: string,
+  ) {
+    return sendRpc(
+      this.identity,
+      { cmd: 'identity.user.impersonate' },
+      { actorId: admin.sub, userId: id, ip },
     );
   }
 

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -248,6 +249,11 @@ export class AuthController {
   })
   @ApiOkResponse({ description: 'Yangilangan profil (passwordHash qaytmaydi)' })
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
+    if (user.impersonatedBy && dto.password !== undefined) {
+      throw new ForbiddenException(
+        'Impersonation rejimida parolni o‘zgartirish taqiqlangan',
+      );
+    }
     return sendRpc(
       this.identity,
       { cmd: 'auth.profile.update' },

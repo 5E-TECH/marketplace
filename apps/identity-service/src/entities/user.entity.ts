@@ -36,6 +36,10 @@ export class User extends BaseEntity {
   @Column({ name: 'is_blocked', type: 'boolean', default: false })
   isBlocked: boolean;
 
+  /** Rol/parol/blok holati o‘zgarganda eski access tokenlarni bekor qiladi. */
+  @Column({ name: 'auth_version', type: 'integer', default: 1 })
+  authVersion: number;
+
   /** OPERATOR uchun — qaysi do'konga (catalog.shop.id) biriktirilgan. Boshqa rollar: null. */
   @Column({ name: 'shop_id', type: 'bigint', nullable: true })
   shopId: string | null;
