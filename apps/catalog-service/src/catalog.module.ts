@@ -38,6 +38,8 @@ import { AddGuestFavorites1724500800000 } from './migrations/1724500800000-add-g
 import { Review } from './entities/review.entity';
 import { CreateReviews1724846400000 } from './migrations/1724846400000-create-reviews';
 import { AddProductModeration1725105600000 } from './migrations/1725105600000-add-product-moderation';
+import { AddShopFeatured1725192000000 } from './migrations/1725192000000-add-shop-featured';
+import { AddShopTariffs1725372000000 } from './migrations/1725372000000-add-shop-tariffs';
 import { ReviewController } from './review.controller';
 import { ReviewService } from './review.service';
 import { CategorySeeder } from './seed/category.seeder';
@@ -94,6 +96,8 @@ const entities = [Shop, Category, Product, ProductVariant, Favorite, Review];
             AddGuestFavorites1724500800000,
             CreateReviews1724846400000,
             AddProductModeration1725105600000,
+            AddShopFeatured1725192000000,
+            AddShopTariffs1725372000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

@@ -46,6 +46,7 @@ import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
 import { AdminTeamController } from './admin/admin-team.controller';
 import { AdminSettingsController } from './admin/admin-settings.controller';
+import { AdminIntegrationController } from './admin/admin-integration.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
 import { BuyerOrdersController } from './orders/buyer-orders.controller';
@@ -178,6 +179,7 @@ import { CurrentRoleGuard } from './auth/current-role.guard';
     AdminAuditController,
     AdminTeamController,
     AdminSettingsController,
+    AdminIntegrationController,
     RegionsController,
     BuyerOrdersController,
   ],

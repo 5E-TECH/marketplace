@@ -20,6 +20,7 @@ import {
   AdminCreateProductDto,
   AdminProductsQueryDto,
   CurrentUser,
+  HideProductDto,
   JwtUser,
   ProductDto,
   Role,
@@ -92,6 +93,25 @@ export class AdminProductsController {
       { productId: id },
     );
     this.audit(admin.sub, 'product.suspend', id, ip);
+    return product;
+  }
+
+  @Post(':id/hide')
+  @ApiOperation({
+    summary: 'Mahsulotni sabab bilan storefront va searchdan yashirish',
+  })
+  async hide(
+    @Param('id') id: string,
+    @Body() dto: HideProductDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc(
+      this.catalog,
+      { cmd: 'catalog.product.admin-hide' },
+      { productId: id, reason: dto.reason },
+    );
+    this.audit(admin.sub, 'product.hide', id, ip, { reason: dto.reason });
     return product;
   }
 

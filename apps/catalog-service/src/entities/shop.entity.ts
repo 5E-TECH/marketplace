@@ -36,6 +36,26 @@ export class Shop extends BaseEntity {
   @Column({ name: 'district_id', type: 'bigint', nullable: true })
   districtId: string | null;
 
+  @Column({
+    name: 'tariff_home',
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    default: 25000,
+    transformer: numericTransformer,
+  })
+  tariffHome: number;
+
+  @Column({
+    name: 'tariff_center',
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    default: 15000,
+    transformer: numericTransformer,
+  })
+  tariffCenter: number;
+
   @Column({ type: 'text', nullable: true })
   address: string | null;
 
@@ -50,6 +70,9 @@ export class Shop extends BaseEntity {
 
   @Column({ name: 'orders_count', type: 'integer', default: 0 })
   ordersCount: number;
+
+  @Column({ name: 'is_featured', type: 'boolean', default: false })
+  isFeatured: boolean;
 
   @Column({ name: 'elchi_market_id', type: 'bigint', nullable: true })
   elchiMarketId: string | null;

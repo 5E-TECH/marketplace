@@ -3,6 +3,7 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import { NotificationService } from './notification.service';
 import {
   OrderCreatedEvent,
+  ProductHiddenEvent,
   OrderAdminActionEvent,
   SellerRegistrationCreatedEvent,
   ShopApprovedEvent,
@@ -60,6 +61,21 @@ export class NotificationEventsController {
         event.reason ? ` Sabab: ${event.reason}` : ''
       }`,
       data: { shopId: event.shopId },
+    });
+  }
+
+  @EventPattern('product.hidden')
+  productHidden(@Payload() event: ProductHiddenEvent) {
+    return this.notifications.create({
+      recipient: { userId: event.sellerUserId },
+      type: 'product_hidden',
+      title: 'Mahsulot yashirildi',
+      body: `${event.productName} mahsulotingiz ko‘rinishdan olib tashlandi. Sabab: ${event.reason}`,
+      data: {
+        productId: event.productId,
+        shopId: event.shopId,
+        reason: event.reason,
+      },
     });
   }
 

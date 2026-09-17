@@ -8,6 +8,7 @@ import {
   StockPageDto,
 } from '@app/common';
 import { SellerOrdersService } from './seller-orders.service';
+import { ShippingLabelService } from './shipping-label.service';
 
 interface SellerShop {
   id: string;
@@ -20,6 +21,7 @@ export class SellerOrdersController {
     private readonly orders: SellerOrdersService,
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    private readonly labels: ShippingLabelService,
   ) {}
 
   @MessagePattern({ cmd: 'seller.orders.list' })
@@ -101,6 +103,51 @@ export class SellerOrdersController {
       String(d.orderId),
       d.customerPhone,
     );
+  }
+
+  @MessagePattern({ cmd: 'seller.orders.label' }) async label(
+    @Payload() d: any,
+  ) {
+    const data = await this.orders.getShippingLabelData(
+      await this.resolveShopId(d),
+      String(d.orderId),
+    );
+    return this.labels.generate(data);
+  }
+
+  @MessagePattern({ cmd: 'seller.orders.labels' })
+  async labelsBatch(
+    @Payload()
+    data: {
+      ownerUserId?: string;
+      shopId?: string;
+      orderIds: string[];
+    },
+  ) {
+    const shopId = await this.resolveShopId(data);
+    const labels = await Promise.all(
+      data.orderIds.map((id) =>
+        this.orders.getShippingLabelData(shopId, String(id)),
+      ),
+    );
+    return this.labels.generateBatch(labels);
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.order-label' })
+  async adminLabel(@Payload() data: { orderId: string }) {
+    return this.labels.generate(
+      await this.orders.getShippingLabelDataForAdmin(String(data.orderId)),
+    );
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.order-labels' })
+  async adminLabelsBatch(@Payload() data: { orderIds: string[] }) {
+    const labels = await Promise.all(
+      data.orderIds.map((id) =>
+        this.orders.getShippingLabelDataForAdmin(String(id)),
+      ),
+    );
+    return this.labels.generateBatch(labels);
   }
 
   /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */

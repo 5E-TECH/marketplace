@@ -37,6 +37,27 @@ describe('NotificationEventsController', () => {
     );
   });
 
+  it('C6.6 TC4: yashirilgan mahsulot sababini sellerga yuboradi', async () => {
+    await controller.productHidden({
+      sellerUserId: '10',
+      productId: '30',
+      productName: 'Telefon',
+      shopId: '20',
+      reason: 'Rasm qoidalarga zid',
+    });
+    expect(create).toHaveBeenCalledWith({
+      recipient: { userId: '10' },
+      type: 'product_hidden',
+      title: 'Mahsulot yashirildi',
+      body: expect.stringContaining('Rasm qoidalarga zid'),
+      data: {
+        productId: '30',
+        shopId: '20',
+        reason: 'Rasm qoidalarga zid',
+      },
+    });
+  });
+
   it('order eventidagi har recipient uchun notification yaratadi', async () => {
     await controller.orderCreated({
       orderId: '50',

@@ -21,6 +21,11 @@ export class StorefrontController {
     return this.storefront.getProduct(data.id);
   }
 
+  @MessagePattern({ cmd: 'storefront.shops.featured' })
+  featuredShops() {
+    return this.storefront.getFeaturedShops();
+  }
+
   @MessagePattern({ cmd: 'storefront.shops.get' })
   getShop(
     @Payload()

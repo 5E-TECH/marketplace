@@ -204,6 +204,23 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 mahsulotlari. `page, limit, search, categoryId, minPrice, maxPrice, sort`
 filtrlari qo'llanadi. Do'kon topilmasa yoki faol bo'lmasa → `404`.
 
+**`GET /storefront/shops/featured` · PUBLIC ✅ C6.6** — bosh sahifa uchun
+`isFeatured=true` bo‘lgan faol do‘konlar (`rating DESC`, ko‘pi bilan 20 ta).
+
+### 5.1.1 Hududlar ✅ C1.44
+
+**`GET /regions` · PUBLIC** — Elchi bilan sinxronlangan faol viloyatlar:
+`[{ id, name, satoCode }]`.
+
+**`GET /regions/:regionId/districts` · PUBLIC** — tanlangan viloyatning faol
+tumanlari: `[{ id, regionId, name, satoCode }]`.
+
+**`POST /admin/integration/geo/sync` · ADMIN / SUPERADMIN** — Elchi region va
+tumanlarini darhol sinxronlaydi. Javob:
+`{ regions, districts, added, updated, deleted }`. Sinxronlash har kuni soat
+02:00 (`Asia/Tashkent`) da avtomatik ham bajariladi; Elchi ro‘yxatidan yo‘qolgan
+hududlar soft-delete qilinadi.
+
 ### 5.2 Yaratish / tahrir
 **`POST /products` · SELLER**
 ```jsonc
@@ -305,6 +322,15 @@ majburiy:
 ## 7. Seller orders & dashboard
 
 **`GET /seller/orders` · SELLER** — o'z sub-buyurtmalari (`sales_order_seller` + Elchi status), pagination.
+**`GET /seller/orders/:id/label` · SELLER / OPERATOR ✅ C1.45** — o‘z
+do‘konidagi shipment uchun 100x150 mm `application/pdf` yorliq. QR ichida
+Elchi `qr_code_token`; yorliqda qabul qiluvchi, telefon, manzil, mahsulotlar va
+COD summa mavjud. Shipment/token yo‘q → `409`, begona do‘kon buyurtmasi → `404`.
+**`POST /seller/orders/labels` · SELLER / OPERATOR ✅ C1.45** —
+`{ "orderIds":["101","102"] }`; 1–100 ta yorliqni bitta ko‘p sahifali PDF qiladi.
+**`GET /admin/orders/:id/label` · ADMIN / SUPERADMIN ✅ C1.45** — istalgan
+seller-order yorlig‘i. **`POST /admin/orders/labels`** — admin batch PDF.
+Elchi `received` webhook statusi seller-order holatini `RECEIVED` ga o‘tkazadi.
 - Query: `status(SalesOrderSellerStatus)?, dateFrom?, dateTo?, search?`.
 - `items[]`: `{ id, salesOrderId, buyerName, subtotal, codAmount, status, elchiShipmentId, trackingUrl, itemsCount, createdAt }`.
 - Buyurtmasiz → bo'sh `items`, `total:0` (xato **emas**).
@@ -361,15 +387,28 @@ majburiy:
 - `PENDING` emas shopni approve → `409 INVALID_STATE`.
 - Elchi provision xato → tranzaksiya rollback, `shop` `PENDING` qoladi, `502`-ma'noli xato (`errorCode: BUSINESS_RULE_VIOLATION`, message = sabab).
 
+**`PATCH /admin/shops/:id/tariffs` · ADMIN / SUPERADMIN ✅ C1.46** —
+`{ "tariffHome":25000, "tariffCenter":15000 }`; qiymatlar `0` dan katta.
+Tariflar do‘konda saqlanadi va approve paytidagi Elchi `POST /partner/markets`
+so‘roviga `tariff_home`/`tariff_center` sifatida yuboriladi. Retry snapshot aynan
+shu qiymatlarni saqlaydi. Elchi market allaqachon yaratilgan bo‘lsa, idempotent
+provisioning shu marketning tariflarini yangilaydi.
+
 **`POST /admin/shops/:id/reject` · ADMIN** — `{ "reason":"..." }` (majburiy) → `shop.REJECTED` + notify.
 **`POST /admin/shops/:id/suspend` · ADMIN** — `active → suspended`, mahsulotlari storefront'da yashirinadi.
 **`POST /admin/shops/:id/activate` · ADMIN** — `suspended → active`.
-**`PATCH /admin/shops/:id` · ADMIN ◻︎** — profil tahrir. **`POST /admin/shops/:id/feature` · ADMIN ◻︎** — tavsiya (featured).
+**`PATCH /admin/shops/:id` · ADMIN ◻︎** — profil tahrir.
+**`POST /admin/shops/:id/feature` · ADMIN / SUPERADMIN ✅ C6.6** —
+`{ "featured": true|false }`; faqat faol do‘konni tavsiya etilganga qo‘shadi,
+olib tashlash idempotent; amal audit jurnaliga yoziladi.
 
 ### 8.4 Katalog / mahsulot moderatsiya
 **`GET /admin/products` · ADMIN ⭐** — hamma mahsulot, pagination. Query: `shopId?, categoryId?, status?, search?`.
 **`POST /admin/products` · ADMIN ⭐** — tanlangan `shopId` uchun mahsulot yaratadi; admin harakati audit qilinadi.
-**`POST /admin/products/:id/hide` · ADMIN ◻︎** — storefront'da yashiradi. **`.../flag` ◻︎** — belgilaydi.
+**`POST /admin/products/:id/hide` · ADMIN / SUPERADMIN ✅ C6.6** —
+`{ "reason":"..." }`; mahsulotni storefront va qidiruvdan yashiradi,
+sotuvchiga sabab bilan xabar beradi va amalni audit jurnaliga yozadi.
+**`.../flag` ◻︎** — belgilaydi.
 
 ### 8.5 Kategoriyalar ⭐
 **`GET /admin/categories` · ADMIN** — daraxt (yoki `?flat=true`).

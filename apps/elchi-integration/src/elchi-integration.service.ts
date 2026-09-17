@@ -7,8 +7,12 @@ import { Repository } from 'typeorm';
 import { RmqClient } from '@app/common';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
-import { ElchiApiClient } from './elchi-api.client';
-import { CreateElchiShipmentInput } from './elchi-api.client';
+import {
+  CreateElchiShipmentInput,
+  ElchiApiClient,
+  ElchiDistrict,
+  ElchiRegion,
+} from './elchi-api.client';
 
 /** `shop.approved` event payloadi (loose contract — notification bilan bir xil shakl). */
 export interface ShopApprovedEvent {
@@ -18,6 +22,10 @@ export interface ShopApprovedEvent {
   phone?: string | null;
   region_id?: string | null;
   district_id?: string | null;
+  regionId?: string | null;
+  districtId?: string | null;
+  tariffHome?: number;
+  tariffCenter?: number;
 }
 
 interface CatalogShop {
@@ -26,7 +34,27 @@ interface CatalogShop {
   phone: string | null;
   regionId: string | null;
   districtId: string | null;
+  tariffHome: number;
+  tariffCenter: number;
   elchiMarketId: string | null;
+}
+
+export interface GeoSyncResult {
+  regions: number;
+  districts: number;
+  added: number;
+  updated: number;
+  deleted: number;
+}
+
+export interface UpdateMarketTariffsInput {
+  shopId: string;
+  shopName: string;
+  phone?: string | null;
+  regionId?: string | null;
+  districtId?: string | null;
+  tariffHome: number;
+  tariffCenter: number;
 }
 
 const STATUS = { PENDING: 'pending', DONE: 'done', FAILED: 'failed' } as const;
@@ -69,9 +97,27 @@ export class ElchiIntegrationService {
           status: STATUS.PENDING,
           shopName: event.shopName ?? null,
           phone: event.phone ?? null,
+          regionId: event.regionId ?? event.region_id ?? null,
+          districtId: event.districtId ?? event.district_id ?? null,
+          tariffHome: Number(event.tariffHome ?? 0),
+          tariffCenter: Number(event.tariffCenter ?? 0),
           retryCount: 0,
         }),
       );
+    } else {
+      // Qayta kelgan approve eventi retry snapshotini yangi ma'lumot bilan
+      // yangilaydi; DONE holati yuqorida allaqachon qaytarilgan.
+      record.shopName = event.shopName ?? record.shopName;
+      record.phone = event.phone ?? record.phone;
+      record.regionId =
+        event.regionId ?? event.region_id ?? record.regionId ?? null;
+      record.districtId =
+        event.districtId ?? event.district_id ?? record.districtId ?? null;
+      record.tariffHome = Number(event.tariffHome ?? record.tariffHome ?? 0);
+      record.tariffCenter = Number(
+        event.tariffCenter ?? record.tariffCenter ?? 0,
+      );
+      await this.provisionRepo.save(record);
     }
 
     await this.attemptProvision(record);
@@ -84,6 +130,10 @@ export class ElchiIntegrationService {
         external_seller_id: record.shopId,
         name: record.shopName ?? `shop-${record.shopId}`,
         phone: record.phone ?? '',
+        region_id: record.regionId,
+        district_id: record.districtId,
+        tariff_home: Number(record.tariffHome ?? 0),
+        tariff_center: Number(record.tariffCenter ?? 0),
       });
 
       record.elchiMarketId = elchi_market_id;
@@ -129,29 +179,129 @@ export class ElchiIntegrationService {
   }
 
   /**
+   * C1.46 — mavjud Elchi market uchun idempotent provisioning so‘rovini yangi
+   * tariflar bilan takrorlaydi. Elchi shu external_seller_id marketini yangilaydi;
+   * xatoda snapshot FAILED bo‘lib, odatiy cron orqali qayta urinadi.
+   */
+  async updateMarketTariffs(
+    input: UpdateMarketTariffsInput,
+  ): Promise<{ updated: boolean; status: string }> {
+    const shopId = String(input.shopId);
+    let record = await this.provisionRepo.findOne({
+      where: { shopId, isDeleted: false },
+    });
+    if (!record) {
+      record = this.provisionRepo.create({
+        shopId,
+        elchiMarketId: null,
+        retryCount: 0,
+        lastError: null,
+      });
+    }
+    record.shopName = input.shopName;
+    record.phone = input.phone ?? null;
+    record.regionId = input.regionId ?? null;
+    record.districtId = input.districtId ?? null;
+    record.tariffHome = Number(input.tariffHome);
+    record.tariffCenter = Number(input.tariffCenter);
+    record.status = STATUS.PENDING;
+    record = await this.provisionRepo.save(record);
+
+    await this.attemptProvision(record);
+    return { updated: record.status === STATUS.DONE, status: record.status };
+  }
+
+  /**
    * Elchi viloyat/tuman ma'lumotini geo_cache'ga sinxronlaydi (upsert).
    * Marketplace manzilini Elchi region/district'ga moslash uchun.
    */
-  async syncGeoCache(): Promise<{ regions: number; districts: number }> {
-    const regions = await this.elchi.getRegions();
-    for (const r of regions) {
-      await this.upsertGeo('region', r.id, r.name, null);
+  async syncGeoCache(): Promise<GeoSyncResult> {
+    // Ikkala tashqi so‘rov ham muvaffaqiyatli bo‘lmaguncha bazani o‘zgartirmaymiz.
+    const [regions, districts] = await Promise.all([
+      this.elchi.getRegions(),
+      this.elchi.getDistricts(),
+    ]);
+    if (regions.length === 0 || districts.length === 0) {
+      throw new Error(
+        'Elchi geo ro‘yxati bo‘sh qaytdi; mavjud cache o‘zgartirilmadi',
+      );
     }
 
-    const districts = await this.elchi.getDistricts();
-    for (const d of districts) {
-      await this.upsertGeo('district', d.id, d.name, d.region_id);
+    const existing = await this.geoRepo.find();
+    const byKey = new Map(
+      existing.map((row) => [`${row.kind}:${row.elchiId}`, row]),
+    );
+    const activeKeys = new Set<string>();
+    let added = 0;
+    let updated = 0;
+    let deleted = 0;
+
+    for (const region of regions) {
+      const counts = await this.reconcileGeoRow(
+        byKey,
+        activeKeys,
+        'region',
+        region,
+        null,
+      );
+      added += counts.added;
+      updated += counts.updated;
+    }
+    for (const district of districts) {
+      const counts = await this.reconcileGeoRow(
+        byKey,
+        activeKeys,
+        'district',
+        district,
+        district.region_id,
+      );
+      added += counts.added;
+      updated += counts.updated;
     }
 
-    return { regions: regions.length, districts: districts.length };
+    for (const row of existing) {
+      const key = `${row.kind}:${row.elchiId}`;
+      if (!activeKeys.has(key) && !row.isDeleted) {
+        row.isDeleted = true;
+        await this.geoRepo.save(row);
+        deleted++;
+      }
+    }
+
+    const result = {
+      regions: regions.length,
+      districts: districts.length,
+      added,
+      updated,
+      deleted,
+    };
+    this.logger.log(
+      `Geo sync yakunlandi: regions=${result.regions}, districts=${result.districts}, added=${added}, updated=${updated}, deleted=${deleted}`,
+    );
+    return result;
   }
 
-  async getRegions(): Promise<Array<{ id: string; name: string }>> {
+  /** C1.44 — Elchi geo keshini har kuni Toshkent vaqti bilan 02:00 da yangilaydi. */
+  @Cron('0 0 2 * * *', {
+    name: 'elchi-geo-cache-daily-sync',
+    timeZone: 'Asia/Tashkent',
+  })
+  async syncGeoCacheDaily(): Promise<void> {
+    try {
+      await this.syncGeoCache();
+    } catch (error) {
+      this.logger.error(`Kunlik geo sync xato: ${(error as Error).message}`);
+    }
+  }
+
+  async getRegions(): Promise<
+    Array<{ id: string; name: string; satoCode: string }>
+  > {
     let regions = await this.geoRepo.find({
       where: { kind: 'region', isDeleted: false },
       order: { elchiId: 'ASC' },
     });
-    if (regions.length === 0) {
+    if (regions.length === 0 || regions.some((row) => !row.satoCode)) {
       await this.syncGeoCache();
       regions = await this.geoRepo.find({
         where: { kind: 'region', isDeleted: false },
@@ -161,12 +311,15 @@ export class ElchiIntegrationService {
     return regions.map((r) => ({
       id: String(r.elchiId),
       name: r.name,
+      satoCode: String(r.satoCode),
     }));
   }
 
   async getDistricts(
     regionId: string,
-  ): Promise<Array<{ id: string; regionId: string; name: string }>> {
+  ): Promise<
+    Array<{ id: string; regionId: string; name: string; satoCode: string }>
+  > {
     let districts = await this.geoRepo.find({
       where: {
         kind: 'district',
@@ -175,7 +328,18 @@ export class ElchiIntegrationService {
       },
       order: { elchiId: 'ASC' },
     });
-    if (districts.length === 0) {
+    const needsSatoBackfill = districts.some((row) => !row.satoCode);
+    if (needsSatoBackfill) {
+      await this.syncGeoCache();
+      districts = await this.geoRepo.find({
+        where: {
+          kind: 'district',
+          elchiRegionId: String(regionId),
+          isDeleted: false,
+        },
+        order: { elchiId: 'ASC' },
+      });
+    } else if (districts.length === 0) {
       const totalDistricts = await this.geoRepo.count({
         where: { kind: 'district', isDeleted: false },
       });
@@ -195,6 +359,7 @@ export class ElchiIntegrationService {
       id: String(d.elchiId),
       regionId: String(d.elchiRegionId ?? regionId),
       name: d.name,
+      satoCode: String(d.satoCode),
     }));
   }
 
@@ -246,6 +411,8 @@ export class ElchiIntegrationService {
         phone: shop.phone,
         region_id: shop.regionId,
         district_id: shop.districtId,
+        tariffHome: Number(shop.tariffHome ?? 0),
+        tariffCenter: Number(shop.tariffCenter ?? 0),
       });
       shop = await this.getCatalogShop(shopId);
     }
@@ -264,21 +431,43 @@ export class ElchiIntegrationService {
     );
   }
 
-  private async upsertGeo(
+  private async reconcileGeoRow(
+    byKey: Map<string, GeoCache>,
+    activeKeys: Set<string>,
     kind: 'region' | 'district',
-    elchiId: string,
-    name: string,
+    source: ElchiRegion | ElchiDistrict,
     elchiRegionId: string | null,
-  ): Promise<void> {
-    const existing = await this.geoRepo.findOne({ where: { kind, elchiId } });
-    if (existing) {
-      existing.name = name;
-      existing.elchiRegionId = elchiRegionId;
-      await this.geoRepo.save(existing);
-    } else {
-      await this.geoRepo.save(
-        this.geoRepo.create({ kind, elchiId, name, elchiRegionId }),
-      );
+  ): Promise<{ added: number; updated: number }> {
+    const key = `${kind}:${source.id}`;
+    activeKeys.add(key);
+    const existing = byKey.get(key);
+    if (!existing) {
+      const created = this.geoRepo.create({
+        kind,
+        elchiId: source.id,
+        name: source.name,
+        satoCode: source.sato_code,
+        elchiRegionId,
+        isDeleted: false,
+      });
+      await this.geoRepo.save(created);
+      byKey.set(key, created);
+      return { added: 1, updated: 0 };
     }
+
+    const restored = existing.isDeleted;
+    const changed =
+      existing.name !== source.name ||
+      existing.satoCode !== source.sato_code ||
+      existing.elchiRegionId !== elchiRegionId ||
+      restored;
+    if (!changed) return { added: 0, updated: 0 };
+
+    existing.name = source.name;
+    existing.satoCode = source.sato_code;
+    existing.elchiRegionId = elchiRegionId;
+    existing.isDeleted = false;
+    await this.geoRepo.save(existing);
+    return { added: restored ? 1 : 0, updated: restored ? 0 : 1 };
   }
 }

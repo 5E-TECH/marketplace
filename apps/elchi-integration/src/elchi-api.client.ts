@@ -4,11 +4,13 @@ import { ConfigService } from '@nestjs/config';
 export interface ElchiRegion {
   id: string;
   name: string;
+  sato_code: string;
 }
 export interface ElchiDistrict {
   id: string;
   name: string;
   region_id: string;
+  sato_code: string;
 }
 
 export interface CreateElchiShipmentInput {
@@ -82,6 +84,8 @@ export class ElchiApiClient {
     phone: string;
     region_id?: string | null;
     district_id?: string | null;
+    tariff_home?: number;
+    tariff_center?: number;
   }): Promise<{ elchi_market_id: string }> {
     const res = await this.request('POST', '/partner/markets', body);
     const id = this.pluck(res, 'elchi_market_id');
@@ -126,25 +130,35 @@ export class ElchiApiClient {
     };
   }
 
-  /** GET /partner/regions → [{id, name}]. */
+  /** GET /partner/regions → [{id, name, sato_code}]. */
   async getRegions(): Promise<ElchiRegion[]> {
     const res = await this.request('GET', '/partner/regions');
     return this.list(res).map((r) => ({
-      id: String(r.id),
-      name: String(r.name),
+      id: this.requiredGeoValue(r, ['id'], 'region id'),
+      name: this.requiredGeoValue(r, ['name'], 'region name'),
+      sato_code: this.requiredGeoValue(
+        r,
+        ['sato_code', 'soato_code', 'soato', 'sato'],
+        'region sato_code',
+      ),
     }));
   }
 
-  /** GET /partner/districts?region_id= → [{id, name, region_id}]. */
+  /** GET /partner/districts?region_id= → [{id, name, region_id, sato_code}]. */
   async getDistricts(regionId?: string): Promise<ElchiDistrict[]> {
     const path = regionId
       ? `/partner/districts?region_id=${encodeURIComponent(regionId)}`
       : '/partner/districts';
     const res = await this.request('GET', path);
     return this.list(res).map((d) => ({
-      id: String(d.id),
-      name: String(d.name),
-      region_id: String(d.region_id),
+      id: this.requiredGeoValue(d, ['id'], 'district id'),
+      name: this.requiredGeoValue(d, ['name'], 'district name'),
+      region_id: this.requiredGeoValue(d, ['region_id'], 'district region_id'),
+      sato_code: this.requiredGeoValue(
+        d,
+        ['sato_code', 'soato_code', 'soato', 'sato'],
+        'district sato_code',
+      ),
     }));
   }
 
@@ -209,5 +223,19 @@ export class ElchiApiClient {
           ? r.data.data
           : [];
     return arr as Array<Record<string, any>>;
+  }
+
+  private requiredGeoValue(
+    row: Record<string, any>,
+    keys: string[],
+    label: string,
+  ): string {
+    for (const key of keys) {
+      const value = row[key];
+      if (value !== undefined && value !== null && String(value).trim()) {
+        return String(value).trim();
+      }
+    }
+    throw new Error(`Elchi geo javobida ${label} yo‘q`);
   }
 }

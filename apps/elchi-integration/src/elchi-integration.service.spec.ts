@@ -37,6 +37,8 @@ function makeService(
               phone: '+998901234567',
               regionId: '1',
               districtId: '10',
+              tariffHome: 15000,
+              tariffCenter: 10000,
               elchiMarketId: '500',
             }
           : { statusCode: 200 },
@@ -106,12 +108,20 @@ describe('ElchiIntegrationService (C1.6)', () => {
       shopId: '9',
       shopName: 'Zamon Store',
       phone: '+998901234567',
+      regionId: '1',
+      districtId: '10',
+      tariffHome: 15000,
+      tariffCenter: 10000,
     });
 
     expect(elchi.provisionMarket).toHaveBeenCalledWith({
       external_seller_id: '9',
       name: 'Zamon Store',
       phone: '+998901234567',
+      region_id: '1',
+      district_id: '10',
+      tariff_home: 15000,
+      tariff_center: 10000,
     });
     // shopga elchi_market_id yozildi (catalogga xabar)
     expect(catalogSend).toHaveBeenCalledWith(
@@ -191,38 +201,228 @@ describe('ElchiIntegrationService (C1.6)', () => {
     expect(provisionRepo.create).toHaveBeenCalledTimes(1);
   });
 
-  it('TC3: geo_cache Elchi region/district bilan mos (upsert)', async () => {
+  it('C1.46: retry approve paytidagi geo va tarif snapshotini saqlab yuboradi', async () => {
+    const record: any = {
+      shopId: '9',
+      status: 'failed',
+      shopName: 'Zamon',
+      phone: '+998901234567',
+      regionId: '1',
+      districtId: '10',
+      tariffHome: 15000,
+      tariffCenter: 10000,
+      retryCount: 1,
+      elchiMarketId: null,
+      lastError: 'Elchi down',
+    };
+    const provisionMarket = jest.fn().mockResolvedValue({
+      elchi_market_id: '500',
+    });
+    const { service } = makeService({
+      provisionRepo: {
+        find: jest.fn(() => Promise.resolve([record])),
+      },
+      elchi: { provisionMarket },
+    });
+
+    await expect(service.retryFailedProvisions()).resolves.toBe(1);
+    expect(provisionMarket).toHaveBeenCalledWith({
+      external_seller_id: '9',
+      name: 'Zamon',
+      phone: '+998901234567',
+      region_id: '1',
+      district_id: '10',
+      tariff_home: 15000,
+      tariff_center: 10000,
+    });
+  });
+
+  it('C1.46 TC3: mavjud market tariflarini idempotent provisioning bilan yangilaydi', async () => {
+    const record: any = {
+      shopId: '9',
+      status: 'done',
+      elchiMarketId: '500',
+      retryCount: 0,
+      lastError: null,
+    };
+    const provisionMarket = jest.fn().mockResolvedValue({
+      elchi_market_id: '500',
+    });
+    const { service } = makeService({
+      provisionRepo: {
+        findOne: jest.fn(() => Promise.resolve(record)),
+      },
+      elchi: { provisionMarket },
+    });
+
+    await expect(
+      service.updateMarketTariffs({
+        shopId: '9',
+        shopName: 'Zamon',
+        phone: '+998901234567',
+        regionId: '1',
+        districtId: '10',
+        tariffHome: 30000,
+        tariffCenter: 18000,
+      }),
+    ).resolves.toEqual({ updated: true, status: 'done' });
+    expect(provisionMarket).toHaveBeenCalledWith({
+      external_seller_id: '9',
+      name: 'Zamon',
+      phone: '+998901234567',
+      region_id: '1',
+      district_id: '10',
+      tariff_home: 30000,
+      tariff_center: 18000,
+    });
+  });
+
+  it('C1.44 TC1/TC2: 181 tuman sync bo‘ladi va har yozuv sato_code bilan saqlanadi', async () => {
+    const districts = Array.from({ length: 181 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Tuman ${index + 1}`,
+      region_id: '1',
+      sato_code: `1726${String(index + 1).padStart(3, '0')}`,
+    }));
     const { service, geoRepo, elchi } = makeService({
       elchi: {
         getRegions: jest.fn(() =>
           Promise.resolve([
-            { id: '1', name: 'Toshkent' },
-            { id: '2', name: 'Andijon' },
+            { id: '1', name: 'Toshkent', sato_code: '1726000' },
+            { id: '2', name: 'Andijon', sato_code: '1703000' },
           ]),
         ),
-        getDistricts: jest.fn(() =>
-          Promise.resolve([{ id: '10', name: 'Chilonzor', region_id: '1' }]),
-        ),
+        getDistricts: jest.fn(() => Promise.resolve(districts)),
       },
     });
 
     const res = await service.syncGeoCache();
 
-    expect(res).toEqual({ regions: 2, districts: 1 });
+    expect(res).toEqual({
+      regions: 2,
+      districts: 181,
+      added: 183,
+      updated: 0,
+      deleted: 0,
+    });
     expect(elchi.getRegions).toHaveBeenCalled();
     const saved = geoRepo.save.mock.calls.map((c) => c[0] as any);
-    expect(saved).toContainEqual({
-      kind: 'region',
-      elchiId: '1',
-      name: 'Toshkent',
-      elchiRegionId: null,
+    expect(saved).toContainEqual(
+      expect.objectContaining({
+        kind: 'region',
+        elchiId: '1',
+        satoCode: '1726000',
+      }),
+    );
+    expect(saved).toContainEqual(
+      expect.objectContaining({
+        kind: 'district',
+        elchiId: '1',
+        satoCode: '1726001',
+        elchiRegionId: '1',
+      }),
+    );
+    expect(saved.every((row) => Boolean(row.satoCode))).toBe(true);
+  });
+
+  it('C1.44 TC3: Elchida yo‘qolgan tuman is_deleted=true bo‘ladi', async () => {
+    const removed: any = {
+      kind: 'district',
+      elchiId: '99',
+      name: 'Eski tuman',
+      satoCode: '1799999',
+      elchiRegionId: '1',
+      isDeleted: false,
+    };
+    const { service, geoRepo } = makeService({
+      geoRepo: { find: jest.fn(() => Promise.resolve([removed])) },
+      elchi: {
+        getRegions: jest.fn(() =>
+          Promise.resolve([
+            { id: '1', name: 'Toshkent', sato_code: '1726000' },
+          ]),
+        ),
+        getDistricts: jest.fn(() =>
+          Promise.resolve([
+            {
+              id: '10',
+              name: 'Chilonzor',
+              region_id: '1',
+              sato_code: '1726266',
+            },
+          ]),
+        ),
+      },
     });
-    expect(saved).toContainEqual({
+
+    await expect(service.syncGeoCache()).resolves.toMatchObject({ deleted: 1 });
+    expect(removed.isDeleted).toBe(true);
+    expect(geoRepo.save).toHaveBeenCalledWith(removed);
+  });
+
+  it('C1.44 TC4: Elchidagi yangi tuman cachega qo‘shiladi', async () => {
+    const { service, geoRepo } = makeService({
+      elchi: {
+        getRegions: jest.fn(() =>
+          Promise.resolve([
+            { id: '1', name: 'Toshkent', sato_code: '1726000' },
+          ]),
+        ),
+        getDistricts: jest.fn(() =>
+          Promise.resolve([
+            {
+              id: '181',
+              name: 'Yangihayot',
+              region_id: '1',
+              sato_code: '1726290',
+            },
+          ]),
+        ),
+      },
+    });
+
+    await expect(service.syncGeoCache()).resolves.toMatchObject({ added: 2 });
+    expect(geoRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'district',
+        elchiId: '181',
+        name: 'Yangihayot',
+        satoCode: '1726290',
+        isDeleted: false,
+      }),
+    );
+  });
+
+  it('C1.44: Elchi bo‘sh javobida mavjud cache o‘chirilmaydi', async () => {
+    const existing = {
       kind: 'district',
       elchiId: '10',
-      name: 'Chilonzor',
-      elchiRegionId: '1',
+      isDeleted: false,
+    };
+    const { service, geoRepo } = makeService({
+      geoRepo: { find: jest.fn(() => Promise.resolve([existing])) },
     });
+
+    await expect(service.syncGeoCache()).rejects.toThrow(
+      'mavjud cache o‘zgartirilmadi',
+    );
+    expect(geoRepo.save).not.toHaveBeenCalled();
+    expect(existing.isDeleted).toBe(false);
+  });
+
+  it('C1.44: kunlik cron geo syncni ishga tushiradi', async () => {
+    const { service } = makeService();
+    const sync = jest.spyOn(service, 'syncGeoCache').mockResolvedValue({
+      regions: 14,
+      districts: 181,
+      added: 0,
+      updated: 0,
+      deleted: 0,
+    });
+
+    await service.syncGeoCacheDaily();
+
+    expect(sync).toHaveBeenCalledTimes(1);
   });
 
   it('getRegions keshdan viloyatlar ro‘yxatini oladi', async () => {
@@ -230,8 +430,18 @@ describe('ElchiIntegrationService (C1.6)', () => {
       geoRepo: {
         find: jest.fn(() =>
           Promise.resolve([
-            { id: '1', elchiId: '1', name: 'Toshkent shahri' },
-            { id: '2', elchiId: '2', name: 'Samarqand viloyati' },
+            {
+              id: '1',
+              elchiId: '1',
+              name: 'Toshkent shahri',
+              satoCode: '1726000',
+            },
+            {
+              id: '2',
+              elchiId: '2',
+              name: 'Samarqand viloyati',
+              satoCode: '1718000',
+            },
           ]),
         ),
       },
@@ -239,8 +449,8 @@ describe('ElchiIntegrationService (C1.6)', () => {
 
     const res = await service.getRegions();
     expect(res).toEqual([
-      { id: '1', name: 'Toshkent shahri' },
-      { id: '2', name: 'Samarqand viloyati' },
+      { id: '1', name: 'Toshkent shahri', satoCode: '1726000' },
+      { id: '2', name: 'Samarqand viloyati', satoCode: '1718000' },
     ]);
     expect(geoRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({ where: { kind: 'region', isDeleted: false } }),
@@ -257,6 +467,7 @@ describe('ElchiIntegrationService (C1.6)', () => {
               elchiId: '10',
               elchiRegionId: '1',
               name: 'Yunusobod tumani',
+              satoCode: '1726266',
             },
           ]),
         ),
@@ -265,7 +476,12 @@ describe('ElchiIntegrationService (C1.6)', () => {
 
     const res = await service.getDistricts('1');
     expect(res).toEqual([
-      { id: '10', regionId: '1', name: 'Yunusobod tumani' },
+      {
+        id: '10',
+        regionId: '1',
+        name: 'Yunusobod tumani',
+        satoCode: '1726266',
+      },
     ]);
     expect(geoRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({

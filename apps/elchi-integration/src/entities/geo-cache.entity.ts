@@ -19,6 +19,9 @@ export class GeoCache extends BaseEntity {
   @Column({ type: 'varchar' })
   name: string;
 
+  @Column({ name: 'sato_code', type: 'varchar', length: 20, nullable: true })
+  satoCode: string | null;
+
   @Column({ name: 'elchi_region_id', type: 'bigint', nullable: true })
   elchiRegionId: string | null;
 }

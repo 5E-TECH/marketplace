@@ -67,7 +67,9 @@
     "helmet": "^8.3.0",
     "joi": "^17.13.3",
     "minio": "^8.0.7",
+    "pdfkit": "^0.20.2",
     "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.20"
@@ -83,6 +85,8 @@
     "@types/jest": "^29.5.12",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.0",
+    "@types/pdfkit": "^0.17.6",
+    "@types/qrcode": "^1.5.6",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "globals": "^15.14.0",

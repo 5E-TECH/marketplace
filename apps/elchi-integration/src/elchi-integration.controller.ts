@@ -3,6 +3,7 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ElchiIntegrationService,
   ShopApprovedEvent,
+  UpdateMarketTariffsInput,
 } from './elchi-integration.service';
 
 @Controller()
@@ -33,6 +34,11 @@ export class ElchiIntegrationController {
     @Payload() input: Parameters<ElchiIntegrationService['getTariff']>[0],
   ) {
     return this.service.getTariff(input);
+  }
+
+  @MessagePattern({ cmd: 'integration.market.update-tariffs' })
+  updateMarketTariffs(@Payload() input: UpdateMarketTariffsInput) {
+    return this.service.updateMarketTariffs(input);
   }
 
   @MessagePattern({ cmd: 'integration.regions.list' })

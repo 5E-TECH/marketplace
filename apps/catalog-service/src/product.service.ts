@@ -41,6 +41,8 @@ export class ProductService {
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
     @Inject(RmqClient.SEARCH) private readonly search: ClientProxy,
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notifications: ClientProxy,
   ) {}
 
   async create(ownerUserId: string, dto: CreateProductDto): Promise<Product> {
@@ -265,6 +267,18 @@ export class ProductService {
     return saved;
   }
 
+  async adminHide(id: string, reason: string): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    if (product.isBlocked) {
+      throw new ConflictException('Mahsulot allaqachon yashirilgan');
+    }
+    product.isBlocked = true;
+    const saved = await this.products.save(product);
+    await this.publishRemoved(saved);
+    await this.emitProductHidden(saved, reason);
+    return saved;
+  }
+
   async adminReactivate(id: string): Promise<Product> {
     const product = await this.getAdminProduct(id);
     if (!product.isBlocked) {
@@ -417,6 +431,27 @@ export class ProductService {
     } catch (error) {
       this.logger.warn(
         `Mahsulot ${event.productId} search event yuborilmadi: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async emitProductHidden(
+    product: Product,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.notifications.emit('product.hidden', {
+          sellerUserId: product.ownerUserId,
+          productId: product.id,
+          productName: product.name,
+          shopId: product.shopId,
+          reason,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Mahsulot ${product.id} notification yuborilmadi: ${(error as Error).message}`,
       );
     }
   }

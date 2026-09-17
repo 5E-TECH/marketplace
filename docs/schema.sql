@@ -53,6 +53,8 @@ CREATE TABLE shop (
     phone           VARCHAR(20),
     region_id       BIGINT,                              -- Elchi region id (geo_cache)
     district_id     BIGINT,                              -- Elchi district id (geo_cache)
+    tariff_home     NUMERIC(14,2) NOT NULL DEFAULT 25000, -- uy manziliga yetkazish tarifi
+    tariff_center   NUMERIC(14,2) NOT NULL DEFAULT 15000, -- Elchi markaziga yetkazish tarifi
     address         TEXT,
     rating          NUMERIC(3,2) NOT NULL DEFAULT 0,
     orders_count    INTEGER      NOT NULL DEFAULT 0,
@@ -232,7 +234,7 @@ CREATE TABLE sales_order_seller (
     subtotal          NUMERIC(14,2) NOT NULL,
     cod_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,  -- 0 = prepaid (online), >0 = COD
     elchi_shipment_id BIGINT,                            -- elchi_shipment.id (cross-service, logical)
-    status            VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING|SHIPMENT_CREATED|ON_THE_ROAD|DELIVERED|CANCELLED|RETURNED
+    status            VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING|SHIPMENT_CREATED|RECEIVED|ON_THE_ROAD|DELIVERED|CANCELLED|RETURNED
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -340,12 +342,15 @@ CREATE TABLE elchi_shipment (
 -- Elchi region/district ↔ nom keshi (manzilni Elchi geo id'ga moslash)
 CREATE TABLE geo_cache (
     id              BIGSERIAL PRIMARY KEY,
-    type            VARCHAR(10)  NOT NULL,               -- region | district
+    kind            VARCHAR(10)  NOT NULL,               -- region | district
     elchi_id        BIGINT       NOT NULL,
     name            VARCHAR(255) NOT NULL,
-    parent_elchi_id BIGINT,                              -- district → region id
-    synced_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    UNIQUE (type, elchi_id)
+    sato_code       VARCHAR(20),                         -- SOATO/SATO kodi
+    elchi_region_id BIGINT,                              -- district → region id
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    is_deleted      BOOLEAN      NOT NULL DEFAULT false,
+    UNIQUE (kind, elchi_id)
 );
 
 

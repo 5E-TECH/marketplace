@@ -84,6 +84,11 @@ export class ProductController {
     return this.products.adminSuspend(String(data.productId));
   }
 
+  @MessagePattern({ cmd: 'catalog.product.admin-hide' })
+  adminHide(@Payload() data: { productId: string; reason: string }) {
+    return this.products.adminHide(String(data.productId), data.reason);
+  }
+
   @MessagePattern({ cmd: 'catalog.product.admin-reactivate' })
   adminReactivate(@Payload() data: { productId: string }) {
     return this.products.adminReactivate(String(data.productId));

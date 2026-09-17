@@ -1,4 +1,5 @@
 import { of, lastValueFrom } from 'rxjs';
+import { StreamableFile } from '@nestjs/common';
 import { TransformInterceptor } from './transform.interceptor';
 
 // TC1: javob {statusCode, message, data} qobig'iga o'raladi
@@ -33,5 +34,16 @@ describe('TransformInterceptor (TC1)', () => {
       message: 'Yaratildi',
       data: { id: '9' },
     });
+  });
+
+  it('C1.45: StreamableFile PDF javobini JSON qobig‘iga o‘ramaydi', async () => {
+    const file = new StreamableFile(Buffer.from('%PDF-test'), {
+      type: 'application/pdf',
+    });
+    const res = await lastValueFrom(
+      new TransformInterceptor().intercept(ctx(200), handler(file)),
+    );
+
+    expect(res).toBe(file);
   });
 });

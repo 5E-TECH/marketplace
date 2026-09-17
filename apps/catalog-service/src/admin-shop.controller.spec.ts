@@ -19,4 +19,19 @@ describe('AdminShopController', () => {
     });
     expect(publishShopApproved).toHaveBeenCalledWith(payload);
   });
+
+  it('C6.6 feature RMQ so‘rovini servicega uzatadi', async () => {
+    const adminFeature = jest.fn().mockResolvedValue({
+      id: '9',
+      isFeatured: true,
+    });
+    const controller = new AdminShopController({
+      adminFeature,
+    } as unknown as AdminShopService);
+
+    await expect(
+      controller.feature({ shopId: '9', featured: true }),
+    ).resolves.toMatchObject({ isFeatured: true });
+    expect(adminFeature).toHaveBeenCalledWith('9', true);
+  });
 });

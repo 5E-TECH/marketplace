@@ -38,6 +38,30 @@ export class AdminShopController {
     return this.adminShops.adminActivate(String(data.shopId));
   }
 
+  @MessagePattern({ cmd: 'catalog.shop.feature' })
+  feature(@Payload() data: { shopId: string; featured: boolean }) {
+    return this.adminShops.adminFeature(
+      String(data.shopId),
+      Boolean(data.featured),
+    );
+  }
+
+  @MessagePattern({ cmd: 'catalog.shop.update-tariffs' })
+  updateTariffs(
+    @Payload()
+    data: {
+      shopId: string;
+      tariffHome: number;
+      tariffCenter: number;
+    },
+  ) {
+    return this.adminShops.adminUpdateTariffs(
+      String(data.shopId),
+      Number(data.tariffHome),
+      Number(data.tariffCenter),
+    );
+  }
+
   @MessagePattern({ cmd: 'catalog.shop.publish-approved' })
   async publishApproved(
     @Payload()
@@ -46,6 +70,10 @@ export class AdminShopController {
       shopId: string;
       shopName?: string;
       phone?: string | null;
+      regionId?: string | null;
+      districtId?: string | null;
+      tariffHome?: number;
+      tariffCenter?: number;
     },
   ) {
     await this.adminShops.publishShopApproved(data);

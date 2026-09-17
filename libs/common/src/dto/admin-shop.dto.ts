@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsBoolean,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -51,6 +52,28 @@ export class RejectShopDto {
   reason?: string;
 }
 
+/** `POST /admin/shops/:id/feature` — bosh sahifada ko‘rsatish/yashirish. */
+export class FeatureShopDto {
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  featured: boolean;
+}
+
+/** `PATCH /admin/shops/:id/tariffs` — Elchi market tariflari. */
+export class UpdateShopTariffsDto {
+  @ApiProperty({ example: 25000, minimum: 1 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  tariffHome: number;
+
+  @ApiProperty({ example: 15000, minimum: 1 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  tariffCenter: number;
+}
+
 export class AdminShopDetailStatsDto {
   @ApiProperty({ example: 12 }) products: number;
   @ApiProperty({ example: 28 }) orders: number;
@@ -62,6 +85,8 @@ export class AdminShopDetailDto {
   @ApiProperty({ example: '42' }) ownerUserId: string;
   @ApiProperty({ example: 'Ali Market' }) name: string;
   @ApiProperty({ enum: ShopStatus }) status: ShopStatus;
+  @ApiProperty({ example: 25000 }) tariffHome: number;
+  @ApiProperty({ example: 15000 }) tariffCenter: number;
   @ApiProperty({ type: AdminShopDetailStatsDto })
   stats: AdminShopDetailStatsDto;
 }

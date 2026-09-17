@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -14,6 +15,7 @@ import {
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -28,6 +30,7 @@ import {
   Roles,
   RmqClient,
   sendRpc,
+  ShippingLabelsBatchDto,
 } from '@app/common';
 
 /**
@@ -74,6 +77,42 @@ export class AdminOrdersController {
       { cmd: 'checkout.admin.order-get' },
       { orderId: id },
     );
+  }
+
+  @Get('admin/orders/:id/label')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiProduces('application/pdf')
+  @ApiOperation({ summary: 'Seller-order Elchi QR yorlig‘ini PDF olish' })
+  async label(@Param('id') id: string): Promise<StreamableFile> {
+    const document = await sendRpc<{
+      fileName: string;
+      contentType: string;
+      base64: string;
+    }>(this.checkout, { cmd: 'checkout.admin.order-label' }, { orderId: id });
+    return this.pdf(document);
+  }
+
+  @Post('admin/orders/labels')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiProduces('application/pdf')
+  @ApiOperation({
+    summary: 'Bir nechta seller-order yorlig‘ini bitta PDF olish',
+  })
+  async labelsBatch(
+    @Body() dto: ShippingLabelsBatchDto,
+  ): Promise<StreamableFile> {
+    const document = await sendRpc<{
+      fileName: string;
+      contentType: string;
+      base64: string;
+    }>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-labels' },
+      { orderIds: dto.orderIds },
+    );
+    return this.pdf(document);
   }
 
   @Post('admin/orders/:id/cancel')
@@ -139,5 +178,17 @@ export class AdminOrdersController {
         meta: { ...meta, ip: ip || null },
       },
     ).catch(() => undefined);
+  }
+
+  private pdf(document: {
+    fileName: string;
+    contentType: string;
+    base64: string;
+  }): StreamableFile {
+    return new StreamableFile(Buffer.from(document.base64, 'base64'), {
+      type: document.contentType,
+      disposition: `attachment; filename="${document.fileName}"`,
+      length: Buffer.byteLength(document.base64, 'base64'),
+    });
   }
 }

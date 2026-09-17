@@ -1,5 +1,9 @@
 import { of } from 'rxjs';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { SellerOrdersService } from './seller-orders.service';
 
 describe('SellerOrdersService.updateStatus (C1.38 — operator scope)', () => {
@@ -89,5 +93,75 @@ describe('SellerOrdersService.createShipment (qr_code_token)', () => {
     expect(integration.send.mock.calls[0][1]).toEqual(
       expect.objectContaining({ shopId: '4' }),
     );
+  });
+});
+
+describe('SellerOrdersService.getShippingLabelData (C1.45)', () => {
+  it('shipment, QR, qabul qiluvchi, manzil, COD va itemlarni tayyorlaydi', async () => {
+    const service = new SellerOrdersService({ query: jest.fn() } as never);
+    jest.spyOn(service, 'getSellerOrder').mockResolvedValue({
+      id: '9',
+      salesOrderId: '5',
+      elchiShipmentId: '1251131',
+      qrCodeToken: '3e3a70f78d54064348bde43a',
+      buyerName: 'Nodira',
+      deliveryAddress: 'Toshkent, Chilonzor\n+998901234567',
+      codAmount: 45000,
+    } as never);
+    jest
+      .spyOn(service, 'getItems')
+      .mockResolvedValue([{ productName: 'Telefon', quantity: 2 }] as never);
+
+    await expect(service.getShippingLabelData('4', '9')).resolves.toEqual({
+      sellerOrderId: '9',
+      salesOrderId: '5',
+      shipmentId: '1251131',
+      qrCodeToken: '3e3a70f78d54064348bde43a',
+      buyerName: 'Nodira',
+      buyerPhone: '+998901234567',
+      deliveryAddress: 'Toshkent, Chilonzor',
+      codAmount: 45000,
+      items: [{ productName: 'Telefon', quantity: 2 }],
+    });
+    expect(service.getSellerOrder).toHaveBeenCalledWith('4', '9');
+    expect(service.getItems).toHaveBeenCalledWith('4', '9');
+  });
+
+  it('shipment yoki QR token bo‘lmasa yorliqni 409 bilan rad etadi', async () => {
+    const service = new SellerOrdersService({ query: jest.fn() } as never);
+    jest.spyOn(service, 'getSellerOrder').mockResolvedValue({
+      id: '9',
+      elchiShipmentId: null,
+      qrCodeToken: null,
+    } as never);
+
+    await expect(service.getShippingLabelData('4', '9')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it('begona do‘kon buyurtmasi uchun 404 qaytaradi', async () => {
+    const service = new SellerOrdersService({
+      query: jest.fn(() => Promise.resolve([])),
+    } as never);
+
+    await expect(
+      service.getShippingLabelData('99', '9'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('TC4: admin seller-order shopini topib yorliq ma’lumotini oladi', async () => {
+    const query = jest.fn(() => Promise.resolve([{ shopId: '4' }]));
+    const service = new SellerOrdersService({ query } as never);
+    jest.spyOn(service, 'getShippingLabelData').mockResolvedValue({
+      sellerOrderId: '9',
+    } as never);
+
+    await service.getShippingLabelDataForAdmin('9');
+
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('shop_id'), [
+      '9',
+    ]);
+    expect(service.getShippingLabelData).toHaveBeenCalledWith('4', '9');
   });
 });

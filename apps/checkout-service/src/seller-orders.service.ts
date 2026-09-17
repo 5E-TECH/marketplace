@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -19,6 +20,7 @@ import { DataSource } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { RmqClient, sendRpc } from '@app/common';
 import { firstValueFrom } from 'rxjs';
+import { ShippingLabelData } from './shipping-label.service';
 
 interface CountRow {
   total: string | number;
@@ -822,6 +824,7 @@ export class SellerOrdersService {
       'PENDING',
       'CONFIRMED',
       'SHIPMENT_CREATED',
+      'RECEIVED',
       'ON_THE_ROAD',
       'DELIVERED',
       'CANCELLED',
@@ -891,6 +894,49 @@ export class SellerOrdersService {
       unitPrice: Number(r.unitPrice),
       lineTotal: Number(r.lineTotal),
     }));
+  }
+
+  async getShippingLabelData(
+    shopId: string,
+    id: string,
+  ): Promise<ShippingLabelData> {
+    // getSellerOrder shop_id bilan scope qiladi: begona do‘kon uchun 404.
+    const order: any = await this.getSellerOrder(shopId, id);
+    if (!order.elchiShipmentId) {
+      throw new ConflictException(
+        'Yorliq uchun avval Elchi shipment yaratish kerak',
+      );
+    }
+    if (!order.qrCodeToken) {
+      throw new ConflictException('Elchi shipment QR tokeni mavjud emas');
+    }
+    const items = await this.getItems(shopId, id);
+    const delivery = this.parseDelivery(order.deliveryAddress);
+    return {
+      sellerOrderId: String(order.id),
+      salesOrderId: String(order.salesOrderId),
+      shipmentId: String(order.elchiShipmentId),
+      qrCodeToken: String(order.qrCodeToken),
+      buyerName: String(order.buyerName ?? 'Mijoz'),
+      buyerPhone: delivery.phone,
+      deliveryAddress: delivery.address,
+      codAmount: Number(order.codAmount),
+      items: items.map((item: any) => ({
+        productName: String(item.productName),
+        quantity: Number(item.quantity),
+      })),
+    };
+  }
+
+  async getShippingLabelDataForAdmin(id: string): Promise<ShippingLabelData> {
+    const rows = await this.dataSource.query(
+      `SELECT shop_id AS "shopId"
+         FROM checkout.sales_order_seller
+        WHERE id=$1`,
+      [String(id)],
+    );
+    if (!rows[0]) throw new NotFoundException('Buyurtma topilmadi');
+    return this.getShippingLabelData(String(rows[0].shopId), String(id));
   }
   async history(shopId: string, id: string) {
     const order = await this.getSellerOrder(shopId, id);
@@ -968,5 +1014,18 @@ export class SellerOrdersService {
       [id],
     );
     return this.getSellerOrder(shopId, id);
+  }
+
+  private parseDelivery(value?: string | null): {
+    address: string;
+    phone: string;
+  } {
+    const lines = String(value ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const phoneIndex = lines.findIndex((line) => /^\+998\d{9}$/.test(line));
+    const phone = phoneIndex >= 0 ? lines.splice(phoneIndex, 1)[0] : '';
+    return { address: lines.join(', '), phone };
   }
 }
