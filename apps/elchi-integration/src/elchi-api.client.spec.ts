@@ -40,6 +40,51 @@ describe('ElchiApiClient config (C2.20)', () => {
     ).toBeInstanceOf(ElchiApiClient);
   });
 
+  it('C1.44: region va district sato_code maydonlarini o‘qiydi', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: [{ id: 1, name: 'Toshkent', sato_code: 1726000 }],
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                id: 10,
+                name: 'Chilonzor',
+                region_id: 1,
+                soato_code: 1726266,
+              },
+            ],
+          }),
+      } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+
+    await expect(client.getRegions()).resolves.toEqual([
+      { id: '1', name: 'Toshkent', sato_code: '1726000' },
+    ]);
+    await expect(client.getDistricts()).resolves.toEqual([
+      {
+        id: '10',
+        name: 'Chilonzor',
+        region_id: '1',
+        sato_code: '1726266',
+      },
+    ]);
+    fetchMock.mockRestore();
+  });
+
   it('tarifni Elchi market ID bilan so‘raydi va market_tariffni o‘qiydi', async () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

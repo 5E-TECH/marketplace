@@ -20,6 +20,7 @@ describe('ProductService', () => {
   let variantRepo: { create: jest.Mock; save: jest.Mock };
   let service: ProductService;
   let searchClient: { emit: jest.Mock };
+  let notificationClient: { emit: jest.Mock };
 
   beforeEach(() => {
     productRepo = {
@@ -35,12 +36,14 @@ describe('ProductService', () => {
       save: jest.fn(async (value) => ({ id: '100', ...value })),
     };
     searchClient = { emit: jest.fn(() => of(undefined)) };
+    notificationClient = { emit: jest.fn(() => of(undefined)) };
     service = new ProductService(
       productRepo as any,
       shopRepo as any,
       categoryRepo as any,
       variantRepo as any,
       searchClient as any,
+      notificationClient as any,
     );
   });
 
@@ -241,6 +244,34 @@ describe('ProductService', () => {
       'catalog.product.changed',
       expect.objectContaining({ productId: '10', active: false }),
     );
+  });
+
+  it('C6.6 TC1/TC2/TC4: admin hide storefront/searchdan yashiradi va sellerga sabab yuboradi', async () => {
+    const product = {
+      id: '10',
+      shopId: '5',
+      ownerUserId: '42',
+      name: 'Telefon',
+      status: ProductStatus.ACTIVE,
+      isBlocked: false,
+      isDeleted: false,
+    };
+    productRepo.findOne.mockResolvedValue(product);
+
+    await expect(
+      service.adminHide('10', 'Rasm qoidalarga zid'),
+    ).resolves.toMatchObject({ isBlocked: true });
+    expect(searchClient.emit).toHaveBeenCalledWith(
+      'catalog.product.changed',
+      expect.objectContaining({ productId: '10', active: false }),
+    );
+    expect(notificationClient.emit).toHaveBeenCalledWith('product.hidden', {
+      sellerUserId: '42',
+      productId: '10',
+      productName: 'Telefon',
+      shopId: '5',
+      reason: 'Rasm qoidalarga zid',
+    });
   });
 
   it('C4.5: admin reactivate mahsulotni qayta indekslaydi', async () => {

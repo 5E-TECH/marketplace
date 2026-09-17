@@ -15,6 +15,7 @@ import {
 } from '@nestjs/swagger';
 import {
   AuthErrorResponseDto,
+  FeaturedShopDto,
   Public,
   RmqClient,
   sendRpc,
@@ -49,6 +50,13 @@ export class StorefrontController {
       { cmd: 'storefront.products.get' },
       { id: String(id) },
     );
+  }
+
+  @Get('shops/featured')
+  @ApiOperation({ summary: 'Bosh sahifa uchun tavsiya etilgan faol do‘konlar' })
+  @ApiOkResponse({ type: [FeaturedShopDto] })
+  featuredShops() {
+    return sendRpc(this.catalog, { cmd: 'storefront.shops.featured' }, {});
   }
 
   @Get('shops/:shopId/products')

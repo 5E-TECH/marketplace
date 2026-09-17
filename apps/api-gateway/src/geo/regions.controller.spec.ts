@@ -4,12 +4,14 @@ import { RegionsController } from './regions.controller';
 describe('RegionsController', () => {
   it('viloyatlar ro‘yxatini integration servisidan oladi', async () => {
     const integration = {
-      send: jest.fn(() => of([{ id: '1', name: 'Toshkent shahri' }])),
+      send: jest.fn(() =>
+        of([{ id: '1', name: 'Toshkent shahri', satoCode: '1726000' }]),
+      ),
     };
     const controller = new RegionsController(integration as never);
 
     await expect(controller.getRegions()).resolves.toEqual([
-      { id: '1', name: 'Toshkent shahri' },
+      { id: '1', name: 'Toshkent shahri', satoCode: '1726000' },
     ]);
     expect(integration.send).toHaveBeenCalledWith(
       { cmd: 'integration.regions.list' },
@@ -20,13 +22,25 @@ describe('RegionsController', () => {
   it('tanlangan viloyat tumanlarini integration servisidan oladi', async () => {
     const integration = {
       send: jest.fn(() =>
-        of([{ id: '10', regionId: '1', name: 'Yunusobod tumani' }]),
+        of([
+          {
+            id: '10',
+            regionId: '1',
+            name: 'Yunusobod tumani',
+            satoCode: '1726266',
+          },
+        ]),
       ),
     };
     const controller = new RegionsController(integration as never);
 
     await expect(controller.getDistricts('1')).resolves.toEqual([
-      { id: '10', regionId: '1', name: 'Yunusobod tumani' },
+      {
+        id: '10',
+        regionId: '1',
+        name: 'Yunusobod tumani',
+        satoCode: '1726266',
+      },
     ]);
     expect(integration.send).toHaveBeenCalledWith(
       { cmd: 'integration.districts.list' },

@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -168,6 +172,18 @@ export class SellerShopDto {
 
   @ApiProperty({ example: 0 })
   ordersCount: number;
+
+  @ApiProperty({ example: false })
+  isFeatured: boolean;
+
+  @ApiProperty({ example: 25000, description: 'Uy manziliga yetkazish tarifi' })
+  tariffHome: number;
+
+  @ApiProperty({
+    example: 15000,
+    description: 'Elchi markaziga yetkazish tarifi',
+  })
+  tariffCenter: number;
 }
 
 export class SellerShopResponseDto {
@@ -179,6 +195,22 @@ export class SellerShopResponseDto {
 
   @ApiProperty({ type: SellerShopDto })
   data: SellerShopDto;
+}
+
+export class ShippingLabelsBatchDto {
+  @ApiProperty({
+    type: [String],
+    example: ['101', '102'],
+    minItems: 1,
+    maxItems: 100,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Matches(/^[1-9]\d*$/, { each: true })
+  orderIds: string[];
 }
 
 export class SellerOrdersQueryDto {

@@ -10,7 +10,7 @@ describe('StorefrontService', () => {
   const query = (values: Partial<StorefrontProductsQueryDto> = {}) =>
     Object.assign(new StorefrontProductsQueryDto(), values);
   let productRepo: { createQueryBuilder: jest.Mock };
-  let shopRepo: { findOne: jest.Mock };
+  let shopRepo: { findOne: jest.Mock; find: jest.Mock };
   let service: StorefrontService;
   let qb: Record<string, jest.Mock>;
 
@@ -32,7 +32,7 @@ describe('StorefrontService', () => {
     qb.getManyAndCount = jest.fn().mockResolvedValue([[{ id: '1' }], 1]);
     qb.getOne = jest.fn();
     productRepo = { createQueryBuilder: jest.fn().mockReturnValue(qb) };
-    shopRepo = { findOne: jest.fn() };
+    shopRepo = { findOne: jest.fn(), find: jest.fn() };
     service = new StorefrontService(productRepo as any, shopRepo as any);
   });
 
@@ -49,6 +49,7 @@ describe('StorefrontService', () => {
       'product.status = :productStatus',
       { productStatus: ProductStatus.ACTIVE },
     );
+    expect(qb.andWhere).toHaveBeenCalledWith('product.is_blocked = FALSE');
     expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
       'product.category',
       'category',
@@ -58,6 +59,23 @@ describe('StorefrontService', () => {
       'variant',
       'variant.is_deleted = FALSE AND variant.is_active = TRUE',
     );
+  });
+
+  it('C6.6 TC3: faqat active va featured do‘konlarni bosh sahifaga qaytaradi', async () => {
+    shopRepo.find.mockResolvedValue([{ id: '9', isFeatured: true }]);
+
+    await expect(service.getFeaturedShops()).resolves.toEqual([
+      { id: '9', isFeatured: true },
+    ]);
+    expect(shopRepo.find).toHaveBeenCalledWith({
+      where: {
+        isFeatured: true,
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+      },
+      order: { rating: 'DESC', id: 'DESC' },
+      take: 20,
+    });
   });
 
   it('kategoriya, narx, qidiruv, sort va paginationni qo‘llaydi', async () => {

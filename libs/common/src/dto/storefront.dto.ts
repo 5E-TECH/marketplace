@@ -107,3 +107,7 @@ export class StorefrontShopPageDto {
   @ApiProperty({ type: StorefrontProductsPageDto })
   products: StorefrontProductsPageDto;
 }
+
+export class FeaturedShopDto extends SellerShopDto {
+  @ApiProperty({ example: true }) isFeatured: boolean;
+}

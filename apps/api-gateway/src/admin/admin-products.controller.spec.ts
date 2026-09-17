@@ -99,4 +99,29 @@ describe('AdminProductsController (C4.5)', () => {
       expect.objectContaining({ action: 'product.reactivate' }),
     );
   });
+
+  it('C6.6: hide sababni catalogga uzatadi va audit qiladi', async () => {
+    const { controller, catalog, identity } = setup();
+    const admin = { sub: '7', role: Role.SUPERADMIN } as never;
+
+    await controller.hide(
+      '10',
+      { reason: 'Noto‘g‘ri tavsif' },
+      admin,
+      '1.2.3.4',
+    );
+
+    expect(catalog).toHaveBeenCalledWith(
+      { cmd: 'catalog.product.admin-hide' },
+      { productId: '10', reason: 'Noto‘g‘ri tavsif' },
+    );
+    expect(identity).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        action: 'product.hide',
+        entityId: '10',
+        meta: { reason: 'Noto‘g‘ri tavsif', ip: '1.2.3.4' },
+      }),
+    );
+  });
 });

@@ -29,6 +29,18 @@ export class StorefrontService {
     return this.paginate(this.activeProductsQuery(), query);
   }
 
+  getFeaturedShops(): Promise<Shop[]> {
+    return this.shops.find({
+      where: {
+        isFeatured: true,
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+      },
+      order: { rating: 'DESC', id: 'DESC' },
+      take: 20,
+    });
+  }
+
   async getProduct(id: string): Promise<Product> {
     const product = await this.activeProductsQuery()
       .andWhere('product.id = :id', { id })

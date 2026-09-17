@@ -1,9 +1,10 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
   IsInt,
   IsNumber,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -89,6 +90,16 @@ export class AdminCreateProductDto extends CreateProductDto {
   })
   @Matches(/^\d+$/, { message: "shopId musbat son bo'lishi kerak" })
   shopId: string;
+}
+
+/** `POST /admin/products/:id/hide` — yashirish sababi sellerga yuboriladi. */
+export class HideProductDto {
+  @ApiProperty({ example: 'Mahsulot rasmi yoki tavsifi qoidalarga zid' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason: string;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

@@ -6,6 +6,7 @@ describe('ElchiWebhookService (C2.4)', () => {
   const event = (
     status:
       | 'on_the_road'
+      | 'received'
       | 'returned'
       | 'sold'
       | 'cancelled'
@@ -79,6 +80,15 @@ describe('ElchiWebhookService (C2.4)', () => {
       entry.sql.includes('UPDATE checkout.sales_order_seller'),
     );
     expect(update?.params).toEqual(['ON_THE_ROAD', '55']);
+  });
+
+  it('C1.45 TC6: skaner received eventi buyurtmani RECEIVED qiladi', async () => {
+    const { service, queries } = setup();
+    await service.process(event('received'));
+    const update = queries.find((entry) =>
+      entry.sql.includes('UPDATE checkout.sales_order_seller'),
+    );
+    expect(update?.params).toEqual(['RECEIVED', '55']);
   });
 
   it('TC3: returned event inventory inbound oqimini chaqiradi', async () => {

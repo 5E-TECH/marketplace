@@ -32,6 +32,7 @@ describe('ProductService admin list SQL', () => {
       source.getRepository(Category),
       source.getRepository(ProductVariant),
       { emit: () => of(undefined) } as any,
+      { emit: () => of(undefined) } as any,
     );
 
     await expect(

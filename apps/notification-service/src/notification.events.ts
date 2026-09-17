@@ -37,6 +37,14 @@ export interface ShopRejectedEvent {
   telegramChatId?: string | null;
 }
 
+export interface ProductHiddenEvent {
+  sellerUserId: string;
+  productId: string;
+  productName: string;
+  shopId: string;
+  reason: string;
+}
+
 export interface OrderCreatedEvent {
   orderId: string;
   orderNumber?: string;

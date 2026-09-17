@@ -130,6 +130,29 @@ export class AdminShopService {
     return this.shops.save(shop);
   }
 
+  async adminFeature(shopId: string, featured: boolean): Promise<Shop> {
+    const shop = await this.getById(shopId);
+    if (featured && shop.status !== ShopStatus.ACTIVE) {
+      throw new ConflictException(
+        'Faqat ACTIVE do‘konni tavsiya etilganlar ro‘yxatiga qo‘shish mumkin',
+      );
+    }
+    if (shop.isFeatured === featured) return shop;
+    shop.isFeatured = featured;
+    return this.shops.save(shop);
+  }
+
+  async adminUpdateTariffs(
+    shopId: string,
+    tariffHome: number,
+    tariffCenter: number,
+  ): Promise<Shop> {
+    const shop = await this.getById(shopId);
+    shop.tariffHome = tariffHome;
+    shop.tariffCenter = tariffCenter;
+    return this.shops.save(shop);
+  }
+
   /**
    * `shop.approved` event'ni chiqaradi (HAM notification, HAM elchi-integration —
    * har biri o'z queue'sida tinglaydi, shu bois IKKALASIGA emit qilinadi).
@@ -142,6 +165,10 @@ export class AdminShopService {
     shopId: string;
     shopName?: string;
     phone?: string | null;
+    regionId?: string | null;
+    districtId?: string | null;
+    tariffHome?: number;
+    tariffCenter?: number;
   }): Promise<void> {
     await this.emit(this.notifications, 'shop.approved', payload);
     await this.emit(this.integration, 'shop.approved', payload);

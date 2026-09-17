@@ -29,6 +29,7 @@ interface SellerOrderWebhookRow {
 
 const STATUS_MAP: Record<string, SalesOrderSellerStatus> = {
   shipment_created: SalesOrderSellerStatus.SHIPMENT_CREATED,
+  received: SalesOrderSellerStatus.RECEIVED,
   on_the_road: SalesOrderSellerStatus.ON_THE_ROAD,
   delivered: SalesOrderSellerStatus.DELIVERED,
   sold: SalesOrderSellerStatus.DELIVERED,

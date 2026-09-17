@@ -4,7 +4,12 @@ import { SellerOrdersController } from './seller-orders.controller';
 
 describe('SellerOrdersController — operator scope (C1.38)', () => {
   it('orders + updateOrder SELLER va OPERATOR uchun (@Roles)', () => {
-    for (const m of ['orders', 'updateOrder'] as const) {
+    for (const m of [
+      'orders',
+      'updateOrder',
+      'label',
+      'labelsBatch',
+    ] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, SellerOrdersController.prototype[m]),
       ).toEqual([Role.SELLER, Role.OPERATOR]);

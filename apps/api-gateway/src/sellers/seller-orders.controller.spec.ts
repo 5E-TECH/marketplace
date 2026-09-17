@@ -47,4 +47,30 @@ describe('SellerOrdersController', () => {
       { ownerUserId: '401' },
     );
   });
+
+  it('C1.45: seller o‘z buyurtmasining PDF yorlig‘ini yuklaydi', async () => {
+    const pdf = Buffer.from('%PDF-test');
+    const send = jest.fn(() =>
+      of({
+        fileName: 'shipment-1251131.pdf',
+        contentType: 'application/pdf',
+        base64: pdf.toString('base64'),
+      }),
+    );
+    const controller = new SellerOrdersController({ send } as never);
+
+    const result = await controller.label(
+      { sub: '401', role: Role.SELLER } as never,
+      '9',
+    );
+
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'seller.orders.label' },
+      { ownerUserId: '401', orderId: '9' },
+    );
+    expect(result.getHeaders()).toMatchObject({
+      type: 'application/pdf',
+      disposition: 'attachment; filename="shipment-1251131.pdf"',
+    });
+  });
 });

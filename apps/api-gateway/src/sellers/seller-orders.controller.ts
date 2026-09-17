@@ -7,12 +7,14 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
 import {
@@ -25,6 +27,7 @@ import {
   CreateShipmentDto,
   SellerOrdersPageDto,
   SellerOrdersQueryDto,
+  ShippingLabelsBatchDto,
   UpdateSellerOrderStatusDto,
   sendRpc,
 } from '@app/common';
@@ -76,6 +79,68 @@ export class SellerOrdersController {
       { cmd: 'seller.orders.items' },
       { ...this.scope(u), orderId: id },
     );
+  }
+
+  @Get('orders/:id/label')
+  @Roles(Role.SELLER, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Buyurtmaning 100x150 mm Elchi QR yorlig‘ini olish',
+  })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    description: 'Chop etishga tayyor PDF yorliq',
+    content: {
+      'application/pdf': {
+        schema: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async label(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+  ): Promise<StreamableFile> {
+    const document = await sendRpc<{
+      fileName: string;
+      contentType: string;
+      base64: string;
+    }>(
+      this.checkout,
+      { cmd: 'seller.orders.label' },
+      { ...this.scope(user), orderId: id },
+    );
+    return this.pdf(document);
+  }
+
+  @Post('orders/labels')
+  @Roles(Role.SELLER, Role.OPERATOR)
+  @ApiOperation({ summary: 'Bir nechta Elchi QR yorlig‘ini bitta PDFda olish' })
+  @ApiProduces('application/pdf')
+  async labelsBatch(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ShippingLabelsBatchDto,
+  ): Promise<StreamableFile> {
+    const document = await sendRpc<{
+      fileName: string;
+      contentType: string;
+      base64: string;
+    }>(
+      this.checkout,
+      { cmd: 'seller.orders.labels' },
+      { ...this.scope(user), orderIds: dto.orderIds },
+    );
+    return this.pdf(document);
+  }
+
+  private pdf(document: {
+    fileName: string;
+    contentType: string;
+    base64: string;
+  }): StreamableFile {
+    return new StreamableFile(Buffer.from(document.base64, 'base64'), {
+      type: document.contentType,
+      disposition: `attachment; filename="${document.fileName}"`,
+      length: Buffer.byteLength(document.base64, 'base64'),
+    });
   }
   @Get('orders/:id/history') @Roles(Role.SELLER, Role.OPERATOR) history(
     @CurrentUser() u: JwtUser,

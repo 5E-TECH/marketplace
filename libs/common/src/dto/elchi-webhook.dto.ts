@@ -12,6 +12,7 @@ import {
 
 export const ELCHI_WEBHOOK_STATUSES = [
   'shipment_created',
+  'received',
   'on_the_road',
   'delivered',
   'sold',

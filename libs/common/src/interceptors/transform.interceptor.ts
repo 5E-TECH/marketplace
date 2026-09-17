@@ -2,6 +2,7 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
+  StreamableFile,
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
@@ -35,6 +36,11 @@ export class TransformInterceptor<T> implements NestInterceptor<
     return next.handle().pipe(
       map((payload: any) => {
         const statusCode: number = res.statusCode ?? 200;
+        // PDF/image kabi fayl javoblarini JSON qobig‘iga o‘rash faylni buzadi.
+        // Nest StreamableFile'ni o‘zi Content-Type/Disposition bilan uzatadi.
+        if (payload instanceof StreamableFile) {
+          return payload as unknown as ApiResponse<T>;
+        }
         if (
           payload &&
           typeof payload === 'object' &&

@@ -11,11 +11,36 @@ function makeController(send: jest.Mock) {
 
 describe('AdminOrdersController (C1.30/C6.4)', () => {
   it('TC4: list/get faqat ADMIN/SUPERADMIN (@Roles)', () => {
-    for (const m of ['list', 'get'] as const) {
+    for (const m of ['list', 'get', 'label', 'labelsBatch'] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype[m]),
       ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
     }
+  });
+
+  it('C1.45 TC4/TC5: admin bitta va batch yorliqni checkoutdan oladi', async () => {
+    const send = jest.fn(() =>
+      of({
+        fileName: 'shipments.pdf',
+        contentType: 'application/pdf',
+        base64: 'JVBERg==',
+      }),
+    );
+    const ctrl = makeController(send);
+
+    await ctrl.label('9');
+    await ctrl.labelsBatch({ orderIds: ['9', '10'] });
+
+    expect(send).toHaveBeenNthCalledWith(
+      1,
+      { cmd: 'checkout.admin.order-label' },
+      { orderId: '9' },
+    );
+    expect(send).toHaveBeenNthCalledWith(
+      2,
+      { cmd: 'checkout.admin.order-labels' },
+      { orderIds: ['9', '10'] },
+    );
   });
 
   it('C6.4: cancel ADMIN/SUPERADMIN, refund faqat SUPERADMIN', () => {
