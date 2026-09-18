@@ -152,7 +152,7 @@ export class AdminInventoryQueryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const [rows, total] = await builder
-      .orderBy('movement.created_at', 'DESC')
+      .orderBy('movement.createdAt', 'DESC')
       .addOrderBy('movement.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)

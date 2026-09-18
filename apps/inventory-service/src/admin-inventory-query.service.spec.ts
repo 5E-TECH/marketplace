@@ -107,5 +107,7 @@ describe('AdminInventoryQueryService (C6.7)', () => {
     });
     expect(qb.skip).toHaveBeenCalledWith(0);
     expect(qb.take).toHaveBeenCalledWith(20);
+    expect(qb.orderBy).toHaveBeenCalledWith('movement.createdAt', 'DESC');
+    expect(qb.addOrderBy).toHaveBeenCalledWith('movement.id', 'DESC');
   });
 });
