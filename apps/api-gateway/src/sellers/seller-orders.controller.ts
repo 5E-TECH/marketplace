@@ -84,7 +84,7 @@ export class SellerOrdersController {
   @Get('orders/:id/label')
   @Roles(Role.SELLER, Role.OPERATOR)
   @ApiOperation({
-    summary: 'Buyurtmaning 100x150 mm Elchi QR yorlig‘ini olish',
+    summary: 'Buyurtmaning 100x60 mm Elchi QR yorlig‘ini olish',
   })
   @ApiProduces('application/pdf')
   @ApiOkResponse({

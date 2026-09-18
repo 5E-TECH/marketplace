@@ -40,3 +40,9 @@ export class GeoSyncResultDto {
   @ApiProperty({ example: 3 }) updated: number;
   @ApiProperty({ example: 1 }) deleted: number;
 }
+
+export class MarketTariffSyncResultDto {
+  @ApiProperty({ example: 7 }) total: number;
+  @ApiProperty({ example: 7 }) updated: number;
+  @ApiProperty({ example: 0 }) failed: number;
+}

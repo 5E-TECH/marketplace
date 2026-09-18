@@ -11,6 +11,8 @@ import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { ElchiWebhookService } from './elchi-webhook.service';
 import { ReviewEligibilityService } from './review-eligibility.service';
+import { AdminIntegrationQueryService } from './admin-integration-query.service';
+import { AdminShipmentsQueryDto, AdminWebhooksQueryDto } from '@app/common';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -20,7 +22,18 @@ export class CheckoutController {
     private readonly confirmer: ConfirmSalesOrderService,
     private readonly elchiWebhook: ElchiWebhookService,
     private readonly reviewEligibility: ReviewEligibilityService,
+    private readonly adminIntegration: AdminIntegrationQueryService,
   ) {}
+
+  @MessagePattern({ cmd: 'checkout.admin.integration.shipments-list' })
+  adminShipments(@Payload() data: { query: AdminShipmentsQueryDto }) {
+    return this.adminIntegration.shipments(data.query);
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.integration.webhooks-list' })
+  adminWebhooks(@Payload() data: { query: AdminWebhooksQueryDto }) {
+    return this.adminIntegration.webhooks(data.query);
+  }
 
   @MessagePattern({ cmd: 'checkout.payment-context' })
   paymentContext(@Payload() data: { orderId: string; customerId: string }) {

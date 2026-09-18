@@ -41,6 +41,16 @@ export class ElchiIntegrationController {
     return this.service.updateMarketTariffs(input);
   }
 
+  @MessagePattern({ cmd: 'integration.market.sync-tariffs' })
+  syncMarketTariffs() {
+    return this.service.syncMarketTariffs();
+  }
+
+  @MessagePattern({ cmd: 'integration.market.reprovision' })
+  reprovisionMarket(@Payload() input: { shopId: string }) {
+    return this.service.reprovisionMarket(input.shopId);
+  }
+
   @MessagePattern({ cmd: 'integration.regions.list' })
   getRegions() {
     return this.service.getRegions();
