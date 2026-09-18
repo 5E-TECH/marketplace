@@ -2528,7 +2528,7 @@
             "bearer": []
           }
         ],
-        "summary": "Buyurtmaning 100x150 mm Elchi QR yorlig‘ini olish",
+        "summary": "Buyurtmaning 100x60 mm Elchi QR yorlig‘ini olish",
         "tags": [
           "seller"
         ]
@@ -6534,6 +6534,303 @@
         ]
       }
     },
+    "/api/v1/admin/integration/markets/sync-tariffs": {
+      "post": {
+        "operationId": "AdminIntegrationController_syncMarketTariffs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketTariffSyncResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mavjud Elchi marketlari tariflarini catalog bilan sinxronlash",
+        "tags": [
+          "admin-integration"
+        ]
+      }
+    },
+    "/api/v1/admin/integration/shipments": {
+      "get": {
+        "operationId": "AdminIntegrationController_shipments",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "15",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "CONFIRMED",
+                "SHIPMENT_CREATED",
+                "RECEIVED",
+                "ON_THE_ROAD",
+                "DELIVERED",
+                "CANCELLED",
+                "RETURNED"
+              ]
+            }
+          },
+          {
+            "name": "shipmentId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "1251131",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30T23:59:59.999Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, total, page, limit, totalPages }"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi posilkalari holati va tracking ro‘yxati",
+        "tags": [
+          "admin-integration"
+        ]
+      }
+    },
+    "/api/v1/admin/integration/webhooks": {
+      "get": {
+        "operationId": "AdminIntegrationController_webhooks",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "eventId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "evt_123",
+              "type": "string"
+            }
+          },
+          {
+            "name": "shipmentId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "1251131",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sellerOrderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "9",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "CONFIRMED",
+                "SHIPMENT_CREATED",
+                "RECEIVED",
+                "ON_THE_ROAD",
+                "DELIVERED",
+                "CANCELLED",
+                "RETURNED"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30T23:59:59.999Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, total, page, limit, totalPages }"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi webhook xabarlari tarixi",
+        "tags": [
+          "admin-integration"
+        ]
+      }
+    },
+    "/api/v1/admin/integration/shops/{id}/reprovision": {
+      "post": {
+        "operationId": "AdminIntegrationController_reprovision",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ shopId, elchiMarketId, status, reprovisioned, error }"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Do‘konni Elchi marketida idempotent qayta provision",
+        "tags": [
+          "admin-integration"
+        ]
+      }
+    },
     "/api/v1/regions": {
       "get": {
         "operationId": "RegionsController_getRegions",
@@ -6730,6 +7027,285 @@
         "summary": "Xaridor yoki guest buyurtmasi va posilkalarini kuzatish",
         "tags": [
           "orders"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/stock": {
+      "get": {
+        "operationId": "AdminInventoryController_stock",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "3",
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "88",
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "12",
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "iphone",
+              "type": "string"
+            }
+          },
+          {
+            "name": "lowOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "example": false,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "15",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStockPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Butun platformadagi sotuvchilar qoldig‘i",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/movements": {
+      "get": {
+        "operationId": "AdminInventoryController_movements",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "15",
+              "type": "string"
+            }
+          },
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "3",
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "88",
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INBOUND",
+                "OUTBOUND",
+                "RESERVE",
+                "RELEASE",
+                "COMMIT",
+                "ADJUST",
+                "TRANSFER"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30T23:59:59.999Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStockMovementsPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Butun platformadagi qoldiq harakati jurnali",
+        "tags": [
+          "admin-inventory"
         ]
       }
     }
@@ -9568,6 +10144,15 @@
           "districtId": {
             "type": "string",
             "example": "101"
+          },
+          "whereDeliver": {
+            "type": "string",
+            "enum": [
+              "ADDRESS",
+              "CENTER"
+            ],
+            "default": "ADDRESS",
+            "description": "ADDRESS — uyga, CENTER — Elchi markaziga yetkazish"
           }
         },
         "required": [
@@ -10250,6 +10835,28 @@
           "deleted"
         ]
       },
+      "MarketTariffSyncResultDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "example": 7
+          },
+          "updated": {
+            "type": "number",
+            "example": 7
+          },
+          "failed": {
+            "type": "number",
+            "example": 0
+          }
+        },
+        "required": [
+          "total",
+          "updated",
+          "failed"
+        ]
+      },
       "RegionDto": {
         "type": "object",
         "properties": {
@@ -10631,6 +11238,210 @@
           "orderStatus",
           "updatedAt",
           "shipments"
+        ]
+      },
+      "AdminStockItemDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "88"
+          },
+          "productName": {
+            "type": "string",
+            "example": "iPhone 16 Pro"
+          },
+          "variantName": {
+            "type": "object",
+            "example": "Qora / 256 GB",
+            "nullable": true
+          },
+          "sku": {
+            "type": "string",
+            "example": "IPHONE-16-BLACK-256"
+          },
+          "warehouseId": {
+            "type": "string",
+            "example": "3"
+          },
+          "warehouseName": {
+            "type": "string",
+            "example": "Asosiy ombor"
+          },
+          "onHand": {
+            "type": "number",
+            "example": 15
+          },
+          "reserved": {
+            "type": "number",
+            "example": 3
+          },
+          "available": {
+            "type": "number",
+            "example": 12
+          },
+          "lowStockThreshold": {
+            "type": "number",
+            "example": 5
+          },
+          "shopId": {
+            "type": "string",
+            "example": "15"
+          }
+        },
+        "required": [
+          "variantId",
+          "productName",
+          "variantName",
+          "sku",
+          "warehouseId",
+          "warehouseName",
+          "onHand",
+          "reserved",
+          "available",
+          "lowStockThreshold",
+          "shopId"
+        ]
+      },
+      "AdminStockPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStockItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 25
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 2
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "AdminStockMovementItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shopId": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string"
+          },
+          "warehouseId": {
+            "type": "string"
+          },
+          "warehouseName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "OUTBOUND",
+              "RESERVE",
+              "RELEASE",
+              "COMMIT",
+              "ADJUST",
+              "TRANSFER"
+            ]
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "onHandAfter": {
+            "type": "number"
+          },
+          "reservedAfter": {
+            "type": "number"
+          },
+          "referenceType": {
+            "type": "object",
+            "nullable": true
+          },
+          "referenceId": {
+            "type": "object",
+            "nullable": true
+          },
+          "reason": {
+            "type": "object",
+            "nullable": true
+          },
+          "actorId": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "variantId",
+          "warehouseId",
+          "warehouseName",
+          "type",
+          "quantity",
+          "onHandAfter",
+          "reservedAfter",
+          "referenceType",
+          "referenceId",
+          "reason",
+          "actorId",
+          "createdAt"
+        ]
+      },
+      "AdminStockMovementsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStockMovementItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
         ]
       }
     }

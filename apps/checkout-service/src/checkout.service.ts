@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
+  CheckoutDeliveryDestination,
   CheckoutPaymentMethod,
   CheckoutResultDto,
   CreateCheckoutDto,
@@ -234,6 +235,8 @@ export class CheckoutService {
             shopId,
             regionId: address.regionId ?? null,
             districtId: address.districtId ?? null,
+            whereDeliver:
+              address.whereDeliver ?? CheckoutDeliveryDestination.ADDRESS,
           },
         );
         const deliveryFee = Number(tariff.amount);
@@ -273,8 +276,8 @@ export class CheckoutService {
   ) {
     const [order] = await manager.query(
       `INSERT INTO checkout.sales_order
-       (customer_id,buyer_name,status,payment_method,total_amount,delivery_fee,delivery_address,region_id,district_id,session_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id::text`,
+       (customer_id,buyer_name,status,payment_method,total_amount,delivery_fee,delivery_address,region_id,district_id,where_deliver,session_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text`,
       [
         customerId,
         dto.address.recipientName,
@@ -285,6 +288,7 @@ export class CheckoutService {
         `${dto.address.address}\n${dto.address.phone}`,
         dto.address.regionId || null,
         dto.address.districtId || null,
+        dto.address.whereDeliver ?? CheckoutDeliveryDestination.ADDRESS,
         sessionId?.trim() || null,
       ],
     );

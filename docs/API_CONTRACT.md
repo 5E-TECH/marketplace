@@ -323,7 +323,7 @@ majburiy:
 
 **`GET /seller/orders` · SELLER** — o'z sub-buyurtmalari (`sales_order_seller` + Elchi status), pagination.
 **`GET /seller/orders/:id/label` · SELLER / OPERATOR ✅ C1.45** — o‘z
-do‘konidagi shipment uchun 100x150 mm `application/pdf` yorliq. QR ichida
+do‘konidagi shipment uchun 100x60 mm `application/pdf` yorliq. QR ichida
 Elchi `qr_code_token`; yorliqda qabul qiluvchi, telefon, manzil, mahsulotlar va
 COD summa mavjud. Shipment/token yo‘q → `409`, begona do‘kon buyurtmasi → `404`.
 **`POST /seller/orders/labels` · SELLER / OPERATOR ✅ C1.45** —
@@ -394,6 +394,16 @@ so‘roviga `tariff_home`/`tariff_center` sifatida yuboriladi. Retry snapshot ay
 shu qiymatlarni saqlaydi. Elchi market allaqachon yaratilgan bo‘lsa, idempotent
 provisioning shu marketning tariflarini yangilaydi.
 
+**`POST /admin/integration/markets/sync-tariffs` · ADMIN / SUPERADMIN ✅ C1.46** —
+mavjud barcha Elchi marketlarini catalogdagi joriy tariflar bilan idempotent
+qayta provision qiladi; `{ total, updated, failed }` qaytaradi va auditga
+yoziladi. Shu backfill har kuni 02:30 da ham avtomatik bajariladi.
+
+Checkout `address.whereDeliver` maydoni `ADDRESS | CENTER` qabul qiladi
+(default `ADDRESS`). Qiymat delivery-preview tarif so‘roviga uzatiladi,
+`sales_order.where_deliver`da saqlanadi va Elchiga mos ravishda
+`where_deliver=address|center` yuboriladi.
+
 **`POST /admin/shops/:id/reject` · ADMIN** — `{ "reason":"..." }` (majburiy) → `shop.REJECTED` + notify.
 **`POST /admin/shops/:id/suspend` · ADMIN** — `active → suspended`, mahsulotlari storefront'da yashirinadi.
 **`POST /admin/shops/:id/activate` · ADMIN** — `suspended → active`.
@@ -424,8 +434,12 @@ sotuvchiga sabab bilan xabar beradi va amalni audit jurnaliga yozadi.
 **`POST /admin/orders/:id/refund` · SUPERADMIN ◻︎** — `{ reason, amount? }` → refund oqimi.
 
 ### 8.7 Sklad nazorati ◻︎
-**`GET /admin/inventory/stock` · ADMIN** — istalgan do'kon qoldig'i (query: `shopId, warehouseId, variantId`).
-**`GET /admin/inventory/movements` · ADMIN** — jurnal (audit uchun).
+**`GET /admin/inventory/stock` · ADMIN / SUPERADMIN ✅ C6.7** — barcha
+sotuvchilar qoldig‘i. Query: `shopId, warehouseId, variantId, productId,
+search, lowOnly, page, limit`.
+**`GET /admin/inventory/movements` · ADMIN / SUPERADMIN ✅ C6.7** — global
+qoldiq harakati jurnali. Query: `shopId, warehouseId, variantId, type,
+dateFrom, dateTo, page, limit`.
 
 ### 8.8 To'lovlar ◻︎
 **`GET /admin/payments` · ADMIN** — hamma tranzaksiya (query: `provider?, status?, orderId?, dateFrom/To?`).
@@ -438,9 +452,16 @@ sotuvchiga sabab bilan xabar beradi va amalni audit jurnaliga yozadi.
 **`GET/POST/PATCH /admin/finance/commissions` · SUPERADMIN** — `{ scope:"global|category|shop", refId?, type:(PERCENT|FIXED), value }`.
 **`GET /admin/finance/reports` · ADMIN** — daromad, COD vs online reconciliation.
 
-### 8.10 Elchi integratsiya ◻︎
-**`GET /admin/integration/shipments` · ADMIN** · **`GET /admin/integration/webhooks` · ADMIN** — loglar.
-**`POST /admin/integration/shops/:id/reprovision` · ADMIN** — Elchi market qayta ochish (xato bo'lsa).
+### 8.10 Elchi integratsiya ✅ C6.7
+**`GET /admin/integration/shipments` · ADMIN / SUPERADMIN** — Elchi shipment
+IDsi mavjud posilkalar; `shopId, status, shipmentId, dateFrom, dateTo` filtrlari
+va pagination.
+**`GET /admin/integration/webhooks` · ADMIN / SUPERADMIN** — original payload
+bilan webhook tarixi; `eventId, shipmentId, sellerOrderId, status, dateFrom,
+dateTo` filtrlari va pagination.
+**`POST /admin/integration/shops/:id/reprovision` · ADMIN / SUPERADMIN** —
+catalogdagi joriy profil va tariflar bilan Elchi marketni idempotent qayta
+provision qiladi; natija auditga yoziladi, xatolar retry cron orqali tiklanadi.
 
 ### 8.11 Broadcast / bildirishnoma ◻︎
 **`POST /admin/broadcast` · ADMIN** — `{ audience:"sellers|buyers|all", channel:"inapp|sms|email|telegram", title, body }`.

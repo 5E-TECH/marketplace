@@ -2,6 +2,10 @@ import QRCode from 'qrcode';
 import { ShippingLabelService } from './shipping-label.service';
 
 describe('ShippingLabelService (C1.45)', () => {
+  const pdfBuffer = (base64: string) => Buffer.from(base64, 'base64');
+  const pageCount = (pdf: Buffer) =>
+    (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) ?? []).length;
+
   const label = (id: string) => ({
     sellerOrderId: id,
     salesOrderId: '5',
@@ -14,7 +18,7 @@ describe('ShippingLabelService (C1.45)', () => {
     items: [{ productName: 'Telefon', quantity: 1 }],
   });
 
-  it('100x150 PDF yaratadi va QR ichiga Elchi tokenini yozadi', async () => {
+  it('100x60 PDF yaratadi, bitta sahifada qoladi va QR tokenini yozadi', async () => {
     const qr = jest.spyOn(QRCode, 'toBuffer');
     const service = new ShippingLabelService();
 
@@ -38,8 +42,11 @@ describe('ShippingLabelService (C1.45)', () => {
       fileName: 'shipment-1251131.pdf',
       contentType: 'application/pdf',
     });
-    expect(Buffer.from(result.base64, 'base64').subarray(0, 5).toString()).toBe(
-      '%PDF-',
+    const pdf = pdfBuffer(result.base64);
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pageCount(pdf)).toBe(1);
+    expect(pdf.toString('latin1')).toMatch(
+      /\/MediaBox\s*\[0\s+0\s+283\.465\s+170\.079\]/,
     );
     qr.mockRestore();
   });
@@ -52,9 +59,9 @@ describe('ShippingLabelService (C1.45)', () => {
 
     expect(qr).toHaveBeenCalledTimes(2);
     expect(result.fileName).toBe('shipments-2.pdf');
-    expect(Buffer.from(result.base64, 'base64').subarray(0, 5).toString()).toBe(
-      '%PDF-',
-    );
+    const pdf = pdfBuffer(result.base64);
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pageCount(pdf)).toBe(2);
     qr.mockRestore();
   });
 });

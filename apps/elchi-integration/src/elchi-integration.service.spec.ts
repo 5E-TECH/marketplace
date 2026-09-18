@@ -1,4 +1,5 @@
 import { of } from 'rxjs';
+import { CheckoutDeliveryDestination } from '@app/common';
 import { ElchiIntegrationService } from './elchi-integration.service';
 
 type AnyMock = Record<string, jest.Mock>;
@@ -69,6 +70,20 @@ describe('ElchiIntegrationService (C1.6)', () => {
     expect(elchi.getTariff).toHaveBeenCalledWith({
       elchi_market_id: '500',
       where_deliver: 'address',
+    });
+  });
+
+  it('C1.46 TC4: CENTER tanlansa Elchidan center tarifini oladi', async () => {
+    const { service, elchi } = makeService();
+
+    await service.getTariff({
+      shopId: '9',
+      whereDeliver: CheckoutDeliveryDestination.CENTER,
+    });
+
+    expect(elchi.getTariff).toHaveBeenCalledWith({
+      elchi_market_id: '500',
+      where_deliver: 'center',
     });
   });
 
@@ -275,6 +290,99 @@ describe('ElchiIntegrationService (C1.6)', () => {
       tariff_home: 30000,
       tariff_center: 18000,
     });
+  });
+
+  it('C6.7 TC5: do‘konni joriy catalog ma’lumoti bilan qayta provision qiladi', async () => {
+    const record: any = {
+      shopId: '9',
+      status: 'done',
+      elchiMarketId: '500',
+      retryCount: 0,
+      lastError: null,
+    };
+    const { service, elchi } = makeService({
+      provisionRepo: {
+        findOne: jest.fn(() => Promise.resolve(record)),
+        save: jest.fn((value: unknown) => Promise.resolve(value)),
+      },
+    });
+    await expect(service.reprovisionMarket('9')).resolves.toEqual({
+      shopId: '9',
+      elchiMarketId: '500',
+      status: 'done',
+      reprovisioned: true,
+      error: null,
+    });
+    expect(elchi.provisionMarket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        external_seller_id: '9',
+        tariff_home: 15000,
+        tariff_center: 10000,
+      }),
+    );
+  });
+
+  it('C1.46 TC2: eski DONE marketlarni catalog tariflari bilan backfill qiladi', async () => {
+    const records = [
+      {
+        shopId: '4',
+        status: 'done',
+        elchiMarketId: '142',
+        tariffHome: 0,
+        tariffCenter: 0,
+        retryCount: 0,
+        lastError: null,
+      },
+      {
+        shopId: '5',
+        status: 'done',
+        elchiMarketId: '152',
+        tariffHome: 0,
+        tariffCenter: 0,
+        retryCount: 0,
+        lastError: null,
+      },
+    ];
+    const catalogSend = jest.fn(
+      (_pattern: { cmd: string }, input: { shopId: string }) =>
+        of({
+          id: input.shopId,
+          name: `Shop ${input.shopId}`,
+          phone: '+998901234567',
+          regionId: '1',
+          districtId: '10',
+          tariffHome: 25000,
+          tariffCenter: 15000,
+          elchiMarketId: input.shopId === '4' ? '142' : '152',
+        }),
+    );
+    const provisionMarket = jest.fn((body: { external_seller_id: string }) =>
+      Promise.resolve({
+        elchi_market_id: body.external_seller_id === '4' ? '142' : '152',
+      }),
+    );
+    const { service } = makeService({
+      provisionRepo: {
+        find: jest.fn(() => Promise.resolve(records)),
+        findOne: jest.fn((_options: unknown) => {
+          const call = catalogSend.mock.calls.length;
+          return Promise.resolve(records[Math.max(0, call - 1)]);
+        }),
+        save: jest.fn((value: unknown) => Promise.resolve(value)),
+      },
+      catalogSend,
+      elchi: { provisionMarket },
+    });
+
+    await expect(service.syncMarketTariffs()).resolves.toEqual({
+      total: 2,
+      updated: 2,
+      failed: 0,
+    });
+    expect(provisionMarket).toHaveBeenCalledTimes(2);
+    expect(provisionMarket).toHaveBeenCalledWith(
+      expect.objectContaining({ tariff_home: 25000, tariff_center: 15000 }),
+    );
   });
 
   it('C1.44 TC1/TC2: 181 tuman sync bo‘ladi va har yozuv sato_code bilan saqlanadi', async () => {

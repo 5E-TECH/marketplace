@@ -51,6 +51,7 @@ import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
 import { BuyerOrdersController } from './orders/buyer-orders.controller';
 import { CurrentRoleGuard } from './auth/current-role.guard';
+import { AdminInventoryController } from './admin/admin-inventory.controller';
 
 @Module({
   imports: [
@@ -182,6 +183,7 @@ import { CurrentRoleGuard } from './auth/current-role.guard';
     AdminIntegrationController,
     RegionsController,
     BuyerOrdersController,
+    AdminInventoryController,
   ],
   providers: [
     AppService,

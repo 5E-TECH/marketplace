@@ -75,6 +75,12 @@ export enum CheckoutPaymentMethod {
   COD = 'cod',
 }
 
+/** Elchi posilkasi uy manziliga yoki topshirish markaziga yetkaziladi. */
+export enum CheckoutDeliveryDestination {
+  ADDRESS = 'ADDRESS',
+  CENTER = 'CENTER',
+}
+
 export class CheckoutAddressDto {
   @ApiProperty({ example: 'Dilshodbek Aliyev' })
   @IsString()
@@ -99,6 +105,16 @@ export class CheckoutAddressDto {
   @IsOptional()
   @IsString()
   districtId?: string;
+
+  @ApiPropertyOptional({
+    enum: CheckoutDeliveryDestination,
+    default: CheckoutDeliveryDestination.ADDRESS,
+    description: 'ADDRESS — uyga, CENTER — Elchi markaziga yetkazish',
+  })
+  @IsOptional()
+  @IsEnum(CheckoutDeliveryDestination)
+  whereDeliver?: CheckoutDeliveryDestination =
+    CheckoutDeliveryDestination.ADDRESS;
 }
 
 export class CreateCheckoutDto {

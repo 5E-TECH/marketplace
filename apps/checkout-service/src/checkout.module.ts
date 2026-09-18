@@ -32,6 +32,7 @@ import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-
 import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-add-cart-item-product-name';
 import { AddSellerOrderQrToken1726502400000 } from './migrations/1726502400000-add-seller-order-qr-token';
 import { ShippingLabelService } from './shipping-label.service';
+import { AdminIntegrationQueryService } from './admin-integration-query.service';
 
 @Module({
   imports: [
@@ -118,6 +119,7 @@ import { ShippingLabelService } from './shipping-label.service';
     ElchiWebhookService,
     ReviewEligibilityService,
     ShippingLabelService,
+    AdminIntegrationQueryService,
   ],
 })
 export class CheckoutModule {}

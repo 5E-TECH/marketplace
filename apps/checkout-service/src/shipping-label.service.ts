@@ -20,7 +20,7 @@ export interface ShippingLabelDocument {
   base64: string;
 }
 
-/** C1.45 — 100x150 mm termal printer uchun Elchi shipment yorlig‘i. */
+/** C1.45 — Gainscha GS-2408D uchun 100x60 mm Elchi shipment yorlig‘i. */
 @Injectable()
 export class ShippingLabelService {
   async generate(data: ShippingLabelData): Promise<ShippingLabelDocument> {
@@ -47,10 +47,10 @@ export class ShippingLabelService {
   }
 
   private async renderBatch(labels: ShippingLabelData[]): Promise<Buffer> {
-    // 1 mm = 2.83465 pt; termal label standarti 100x150 mm.
+    // 1 mm = 2.83465 pt; Elchi termal printer standarti 100x60 mm landscape.
     const width = 283.465;
-    const height = 425.197;
-    const margin = 16;
+    const height = 170.079;
+    const margin = 6;
     const qrCodes = await Promise.all(
       labels.map((data) =>
         QRCode.toBuffer(data.qrCodeToken, {
@@ -94,92 +94,124 @@ export class ShippingLabelService {
     height: number,
     margin: number,
   ): void {
+    const leftWidth = 80;
+    const rightX = margin + leftWidth + 5;
+    const rightWidth = width - rightX - margin;
+
     doc
-      .lineWidth(1)
-      .rect(6, 6, width - 12, height - 12)
+      .lineWidth(0.7)
+      .rect(3, 3, width - 6, height - 6)
       .stroke();
-    doc.font('Helvetica-Bold').fontSize(17).text('ELCHI', margin, 14, {
-      width: 150,
+    doc
+      .moveTo(rightX - 3, margin)
+      .lineTo(rightX - 3, height - margin)
+      .stroke();
+
+    // Chap panel: brend, skanerlanadigan QR va identifikatorlar.
+    doc.font('Helvetica-Bold').fontSize(13).text('ELCHI', margin, 7, {
+      width: leftWidth,
+      align: 'center',
+      lineBreak: false,
     });
-    doc.fontSize(9).text('YETKAZIB BERISH YORLIG‘I', margin, 36, {
-      width: 155,
+    doc.image(qr, margin + 9, 24, { width: 62, height: 62 });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text(`Shipment: ${data.shipmentId}`, margin, 90, {
+        width: leftWidth,
+        align: 'center',
+        height: 9,
+        ellipsis: true,
+        lineBreak: false,
+      })
+      .text(`Order: ${data.salesOrderId}/${data.sellerOrderId}`, margin, 101, {
+        width: leftWidth,
+        align: 'center',
+        height: 9,
+        ellipsis: true,
+        lineBreak: false,
+      });
+    doc.font('Helvetica').fontSize(4.5).text(data.qrCodeToken, margin, 113, {
+      width: leftWidth,
+      height: 20,
+      align: 'center',
+      ellipsis: true,
+    });
+
+    // O‘ng panel: qabul qiluvchi va manzil.
+    doc.font('Helvetica-Bold').fontSize(6).text('QABUL QILUVCHI', rightX, 7, {
+      lineBreak: false,
+    });
+    doc.fontSize(10).text(data.buyerName || 'Mijoz', rightX, 16, {
+      width: rightWidth,
+      height: 13,
+      ellipsis: true,
+      lineBreak: false,
     });
     doc
       .font('Helvetica')
       .fontSize(8)
-      .text(`Shipment: ${data.shipmentId}`, margin, 57)
-      .text(`Buyurtma: ${data.salesOrderId}/${data.sellerOrderId}`, margin, 69);
-
-    doc.image(qr, width - 104, 14, { width: 88, height: 88 });
-    doc
-      .font('Helvetica')
-      .fontSize(5.5)
-      .text(data.qrCodeToken, width - 108, 104, {
-        width: 96,
-        align: 'center',
+      .text(data.buyerPhone || '-', rightX, 31, {
+        width: rightWidth,
+        height: 10,
+        ellipsis: true,
+        lineBreak: false,
       });
-
-    doc
-      .moveTo(margin, 122)
-      .lineTo(width - margin, 122)
-      .stroke();
-    doc.font('Helvetica-Bold').fontSize(8).text('QABUL QILUVCHI', margin, 130);
-    doc.fontSize(13).text(data.buyerName || 'Mijoz', margin, 144, {
-      width: width - margin * 2,
-      height: 32,
-      ellipsis: true,
-    });
-    doc
-      .font('Helvetica')
-      .fontSize(10)
-      .text(data.buyerPhone || '-', margin, 178, {
-        width: width - margin * 2,
-      });
-    doc.fontSize(9).text(data.deliveryAddress || '-', margin, 195, {
-      width: width - margin * 2,
-      height: 52,
+    doc.fontSize(7).text(data.deliveryAddress || '-', rightX, 43, {
+      width: rightWidth,
+      height: 20,
       ellipsis: true,
     });
 
     doc
-      .moveTo(margin, 253)
-      .lineTo(width - margin, 253)
+      .moveTo(rightX, 66)
+      .lineTo(width - margin, 66)
       .stroke();
-    doc.font('Helvetica-Bold').fontSize(8).text('MAHSULOTLAR', margin, 261);
-    const visibleItems = data.items.slice(0, 5);
-    let y = 276;
+    doc.font('Helvetica-Bold').fontSize(6).text('MAHSULOTLAR', rightX, 70, {
+      lineBreak: false,
+    });
+    const visibleItems = data.items.slice(0, 4);
+    let itemY = 80;
     for (const item of visibleItems) {
       doc
         .font('Helvetica')
-        .fontSize(8)
-        .text(`${item.quantity} x ${item.productName}`, margin, y, {
-          width: width - margin * 2,
-          height: 16,
+        .fontSize(6.5)
+        .text(`${item.quantity} x ${item.productName}`, rightX, itemY, {
+          width: rightWidth,
+          height: 9,
           ellipsis: true,
+          lineBreak: false,
         });
-      y += 17;
+      itemY += 10;
     }
     if (data.items.length > visibleItems.length) {
       doc
-        .fontSize(7)
+        .fontSize(6)
         .text(
           `+ yana ${data.items.length - visibleItems.length} ta pozitsiya`,
-          margin,
-          y,
+          rightX,
+          120,
+          { width: rightWidth, height: 8, lineBreak: false },
         );
     }
 
     doc
-      .moveTo(margin, 366)
-      .lineTo(width - margin, 366)
+      .moveTo(rightX, 131)
+      .lineTo(width - margin, 131)
       .stroke();
     doc
       .font('Helvetica-Bold')
-      .fontSize(10)
-      .text('OLINADIGAN SUMMA (COD)', margin, 375, { width: 150 });
-    doc.fontSize(15).text(this.money(data.codAmount), margin, 392, {
-      width: width - margin * 2,
+      .fontSize(7)
+      .text('OLINADIGAN SUMMA (COD)', rightX, 135, {
+        width: rightWidth,
+        height: 9,
+        lineBreak: false,
+      });
+    doc.fontSize(12).text(this.money(data.codAmount), rightX, 147, {
+      width: rightWidth,
       align: 'right',
+      height: 15,
+      lineBreak: false,
     });
   }
 

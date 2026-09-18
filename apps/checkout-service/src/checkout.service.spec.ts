@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
-import { CheckoutPaymentMethod } from '@app/common';
+import {
+  CheckoutDeliveryDestination,
+  CheckoutPaymentMethod,
+} from '@app/common';
 import { CheckoutService } from './checkout.service';
 import { Cart } from './entities/cart.entity';
 
@@ -174,7 +177,7 @@ describe('CheckoutService (C2.9)', () => {
       entry.sql.includes('INSERT INTO checkout.sales_order\n'),
     );
     expect(insert?.params[0]).toBe('77');
-    expect(insert?.params[9]).toBe('guest-session');
+    expect(insert?.params[10]).toBe('guest-session');
     expect(cart.status).toBe('converted');
   });
 
@@ -249,6 +252,43 @@ describe('CheckoutService (C2.9)', () => {
       { cmd: 'integration.tariff.get' },
       expect.objectContaining({ districtId: '3' }),
     );
+  });
+
+  it('C1.46 TC4: CENTER preview Elchidan markaz tarifini so‘raydi', async () => {
+    const { service, integration } = setup();
+    const address = {
+      ...dto().address,
+      whereDeliver: CheckoutDeliveryDestination.CENTER,
+    };
+
+    await service.preview('5', undefined, address);
+
+    expect(integration.send).toHaveBeenCalledTimes(2);
+    expect(integration.send).toHaveBeenCalledWith(
+      { cmd: 'integration.tariff.get' },
+      expect.objectContaining({
+        whereDeliver: CheckoutDeliveryDestination.CENTER,
+      }),
+    );
+  });
+
+  it('C1.46 TC4: tanlangan yetkazish turi sales_orderga saqlanadi', async () => {
+    const { service, queries } = setup();
+    const checkout = {
+      ...dto(),
+      address: {
+        ...dto().address,
+        whereDeliver: CheckoutDeliveryDestination.CENTER,
+      },
+    };
+
+    await service.create('5', checkout);
+
+    const insert = queries.find((entry) =>
+      entry.sql.includes('INSERT INTO checkout.sales_order\n'),
+    );
+    expect(insert?.sql).toContain('where_deliver');
+    expect(insert?.params[9]).toBe(CheckoutDeliveryDestination.CENTER);
   });
 
   it('mahsulot nomi buyurtma bandiga o‘tadi, surat yo‘q bo‘lsa zaxira nom yoziladi', async () => {

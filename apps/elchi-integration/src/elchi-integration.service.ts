@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
-import { RmqClient } from '@app/common';
+import { CheckoutDeliveryDestination, RmqClient } from '@app/common';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
 import {
@@ -55,6 +55,12 @@ export interface UpdateMarketTariffsInput {
   districtId?: string | null;
   tariffHome: number;
   tariffCenter: number;
+}
+
+export interface MarketTariffSyncResult {
+  total: number;
+  updated: number;
+  failed: number;
 }
 
 const STATUS = { PENDING: 'pending', DONE: 'done', FAILED: 'failed' } as const;
@@ -179,6 +185,66 @@ export class ElchiIntegrationService {
   }
 
   /**
+   * C1.46 backfill — integratsiya qo‘shilishidan oldin yaratilgan barcha Elchi
+   * marketlarini catalogdagi joriy tariflar bilan qayta provision qiladi.
+   * Elchi external_seller_id bo‘yicha idempotent yangilaydi; yangi market
+   * ochilmaydi. Xato yozuv FAILED bo‘ladi va odatiy retry cron davom ettiradi.
+   */
+  async syncMarketTariffs(): Promise<MarketTariffSyncResult> {
+    const records = await this.provisionRepo.find({
+      where: { status: STATUS.DONE, isDeleted: false },
+      order: { shopId: 'ASC' },
+    });
+    const result: MarketTariffSyncResult = {
+      total: records.length,
+      updated: 0,
+      failed: 0,
+    };
+
+    for (const record of records) {
+      try {
+        const shop = await this.getCatalogShop(record.shopId);
+        const update = await this.updateMarketTariffs({
+          shopId: shop.id,
+          shopName: shop.name,
+          phone: shop.phone,
+          regionId: shop.regionId,
+          districtId: shop.districtId,
+          tariffHome: Number(shop.tariffHome),
+          tariffCenter: Number(shop.tariffCenter),
+        });
+        if (update.updated) result.updated++;
+        else result.failed++;
+      } catch (error) {
+        result.failed++;
+        this.logger.error(
+          `market tariff sync xato (shop=${record.shopId}): ${(error as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Market tariff sync yakunlandi: total=${result.total}, updated=${result.updated}, failed=${result.failed}`,
+    );
+    return result;
+  }
+
+  /** Har kuni drift va eski marketlarni avtomatik tuzatadi. */
+  @Cron('0 30 2 * * *', {
+    name: 'elchi-market-tariff-daily-sync',
+    timeZone: 'Asia/Tashkent',
+  })
+  async syncMarketTariffsDaily(): Promise<void> {
+    try {
+      await this.syncMarketTariffs();
+    } catch (error) {
+      this.logger.error(
+        `Kunlik market tariff sync xato: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
    * C1.46 — mavjud Elchi market uchun idempotent provisioning so‘rovini yangi
    * tariflar bilan takrorlaydi. Elchi shu external_seller_id marketini yangilaydi;
    * xatoda snapshot FAILED bo‘lib, odatiy cron orqali qayta urinadi.
@@ -209,6 +275,30 @@ export class ElchiIntegrationService {
 
     await this.attemptProvision(record);
     return { updated: record.status === STATUS.DONE, status: record.status };
+  }
+
+  /** C6.7 — bitta do‘konni catalogdagi joriy ma’lumot bilan qayta provision. */
+  async reprovisionMarket(shopId: string) {
+    const shop = await this.getCatalogShop(String(shopId));
+    const result = await this.updateMarketTariffs({
+      shopId: shop.id,
+      shopName: shop.name,
+      phone: shop.phone,
+      regionId: shop.regionId,
+      districtId: shop.districtId,
+      tariffHome: Number(shop.tariffHome),
+      tariffCenter: Number(shop.tariffCenter),
+    });
+    const record = await this.provisionRepo.findOne({
+      where: { shopId: String(shopId), isDeleted: false },
+    });
+    return {
+      shopId: String(shopId),
+      elchiMarketId: record?.elchiMarketId ?? null,
+      status: result.status,
+      reprovisioned: result.updated,
+      error: record?.lastError ?? null,
+    };
   }
 
   /**
@@ -391,10 +481,14 @@ export class ElchiIntegrationService {
     shopId: string;
     regionId?: string | null;
     districtId?: string | null;
+    whereDeliver?: CheckoutDeliveryDestination;
   }) {
     return this.elchi.getTariff({
       elchi_market_id: await this.resolveElchiMarketId(input.shopId),
-      where_deliver: 'address',
+      where_deliver:
+        input.whereDeliver === CheckoutDeliveryDestination.CENTER
+          ? 'center'
+          : 'address',
     });
   }
 
