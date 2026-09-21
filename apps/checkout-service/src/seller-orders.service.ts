@@ -976,7 +976,14 @@ export class SellerOrdersService {
       this.integration,
       { cmd: 'integration.shipment.create' },
       {
-        external_order_id: `seller-order-${id}`,
+        // AYNAN `sales_order_seller.id` — boshqa hech qanday shaklda emas.
+        // Elchi statusni qaytarganda `elchi-webhook.service.ts` buyurtmani
+        // `WHERE s.id = externalOrderId` bo'yicha qidiradi, DTO esa
+        // `^[1-9]\d*$` regex'ini talab qiladi. Ilgari bu yerda
+        // `seller-order-${id}` yozilardi (confirm-sales-order.service.ts esa
+        // to'g'ri yozardi) — natijada shu yo'l bilan yaratilgan posilkalarning
+        // qaytish zanjiri BUTUNLAY uzilardi.
+        external_order_id: String(id),
         // `shopId` ATAYLAB: bu marketplace'ning ICHKI do'kon id'si, Elchi
         // market id'si emas. O'girish elchi-integration servisida bo'ladi —
         // mapping o'sha yerda saqlanadi. Avval bu qiymat to'g'ridan-to'g'ri
