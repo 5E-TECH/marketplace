@@ -48,4 +48,29 @@ if [ -z "${domain:-}" ] || [ "${domain#:}" != "$domain" ]; then
   printf '  Production uchun .env.production ga DOMAIN va TLS_EMAIL qo‘shing.\n' >&2
 fi
 
+# TRUST_PROXY_HOPS haqiqiy proxy zanjiriga teng bo'lishi SHART (C4.8).
+# Kam bo'lsa audit jurnaliga proksining ichki IP'si tushadi va rate limit
+# hamma foydalanuvchini bitta IP deb sanaydi; ko'p bo'lsa mijoz
+# `X-Forwarded-For` ni o'zi to'qib, jurnalga soxta IP yozdira oladi.
+# Shuning uchun bu yerda ogohlantirish emas, QAT'IY tekshiruv turadi —
+# 2026-09-17 da aynan shu qiymat jimgina 1 bo'lib qolgani uchun butun audit
+# jurnali foydasiz bo'lgan edi. Batafsil: docs/C4.8-TRUST-PROXY.md
+trust_hops=$(sed -n 's/^TRUST_PROXY_HOPS=//p' "$env_file" | tail -n 1)
+compose_profiles=$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file" | tail -n 1)
+case ",${compose_profiles}," in
+  *,tunnel,*) expected_hops=2 ;;  # cloudflared -> caddy -> api-gateway
+  *) expected_hops=1 ;;           # caddy -> api-gateway
+esac
+if [ -z "${trust_hops:-}" ]; then
+  printf 'TRUST_PROXY_HOPS berilmagan — sukut qiymati 1, zanjir esa %s bosqichli.\n' "$expected_hops" >&2
+  printf '  %s ga qo‘shing: TRUST_PROXY_HOPS=%s\n' "$env_file" "$expected_hops" >&2
+  exit 1
+fi
+if [ "$trust_hops" != "$expected_hops" ]; then
+  printf 'TRUST_PROXY_HOPS=%s, lekin proxy zanjiri %s bosqichli (COMPOSE_PROFILES=%s).\n' \
+    "$trust_hops" "$expected_hops" "${compose_profiles:-<bo‘sh>}" >&2
+  printf '  Zanjir ataylab o‘zgargan bo‘lsa shu skriptdagi kutilgan qiymatni ham yangilang.\n' >&2
+  exit 1
+fi
+
 printf 'Production env audit muvaffaqiyatli: %s\n' "$env_file"
