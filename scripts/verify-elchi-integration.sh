@@ -11,7 +11,8 @@
 # =============================================================================
 set -eu
 
-API=${API:-http://169.58.98.223/api/v1}
+# IP+HTTP default C5.3 da olib tashlandi — domen 2026-09 dan beri ishlaydi.
+API=${API:-https://api.elchimarket.uz/api/v1}
 MARKET_HOST=${MARKET_HOST:-marketplace}
 MARKET_DIR=${MARKET_DIR:-/srv/marketplace}
 SESSION="verify-elchi-$(date -u +%Y%m%d%H%M%S)"
