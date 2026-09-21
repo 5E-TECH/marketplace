@@ -8,7 +8,7 @@ C7.1 uchun haqiqiy sinov hisoblari, kalitlar va ikkala provayderdagi muvaffaqiya
 
 **Payme Business uchun yuboriladigan matn:**
 
-> Assalomu alaykum. Elchi Marketplace uchun Payme Merchant API orqali bir martalik buyurtma to'lovini ulayapmiz. Sinov uchun merchant kabineti/web-kassa, Merchant ID (kassa ID), TEST_KEY va sandbox kirishini taqdim etishingizni so'raymiz. Hisob maydoni `account.order_id`, turi bir martalik bo'ladi. Callback URL: `https://API_DOMEN/api/v1/payments/payme/callback`. Sandbox tekshiruvi va production'ga o'tish uchun talab qilinadigan hujjatlar hamda qabul tartibini yuboring. Keyinchalik production key kerak bo'ladi.
+> Assalomu alaykum. Elchi Marketplace uchun Payme Merchant API orqali bir martalik buyurtma to'lovini ulayapmiz. Sinov uchun merchant kabineti/web-kassa, Merchant ID (kassa ID), TEST_KEY va sandbox kirishini taqdim etishingizni so'raymiz. Hisob maydoni `account.order_id`, turi bir martalik bo'ladi. Callback URL: `https://api.elchimarket.uz/api/v1/payments/payme/callback`. Sandbox tekshiruvi va production'ga o'tish uchun talab qilinadigan hujjatlar hamda qabul tartibini yuboring. Keyinchalik production key kerak bo'ladi.
 
 Payme rasmiy qo'llanmasida web-kassa `key` va `TEST_KEY` berishi, sandbox uchun Merchant ID + TEST_KEY ishlatilishi ko'rsatilgan:
 https://developer.help.paycom.uz/pesochnitsa/
@@ -16,7 +16,7 @@ Sandbox: https://test.paycom.uz
 
 **Click uchun yuboriladigan matn:**
 
-> Assalomu alaykum. Elchi Marketplace uchun Click Shop API (Prepare/Complete) ulayapmiz. Merchant kabinetiga kirish, merchant_id, service_id, secret_key hamda sinov muhiti/test to'lov tartibini taqdim etishingizni so'raymiz. Prepare URL: `https://API_DOMEN/api/v1/payments/click/prepare`; Complete URL: `https://API_DOMEN/api/v1/payments/click/complete`. `merchant_trans_id` bizning payment ID bo'ladi. Test karta/telefon yoki tester ma'lumotlarini, natijani tasdiqlash va production'ga o'tish tartibini yuboring. Agar Merchant API/refund uchun alohida merchant_user_id va ruxsat kerak bo'lsa, ularni ham taqdim eting.
+> Assalomu alaykum. Elchi Marketplace uchun Click Shop API (Prepare/Complete) ulayapmiz. Merchant kabinetiga kirish, merchant_id, service_id, secret_key hamda sinov muhiti/test to'lov tartibini taqdim etishingizni so'raymiz. Prepare URL: `https://api.elchimarket.uz/api/v1/payments/click/prepare`; Complete URL: `https://api.elchimarket.uz/api/v1/payments/click/complete`. `merchant_trans_id` bizning payment ID bo'ladi. Test karta/telefon yoki tester ma'lumotlarini, natijani tasdiqlash va production'ga o'tish tartibini yuboring. Agar Merchant API/refund uchun alohida merchant_user_id va ruxsat kerak bo'lsa, ularni ham taqdim eting.
 
 Click Shop API hujjatlari: https://docs.click.uz/
 Click'ning aniq test hisobi va kirish tartibini ularning texnik xodimi bilan tasdiqlang; bu repoda tashqi hisob ochilmaydi.
