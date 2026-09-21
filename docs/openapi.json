@@ -5350,6 +5350,7 @@
     },
     "/api/v1/webhooks/elchi": {
       "post": {
+        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Elchi’ning ortiqcha moliyaviy maydonlari e’tiborsiz qoldiriladi. `webhook.test` ping’i va xaritalanmagan statuslar (`closed`, `paid`, `partly_paid`) 200 oladi, lekin hech qanday holat o‘zgarmaydi.",
         "operationId": "ElchiWebhookController_receive",
         "parameters": [
           {

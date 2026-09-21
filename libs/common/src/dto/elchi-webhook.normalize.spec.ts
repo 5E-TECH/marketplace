@@ -72,11 +72,37 @@ describe('normalizeElchiWebhook', () => {
     expect(event?.externalOrderId).toBe('9');
   });
 
-  it('sotuv holatlarining uchalasi ham `sold` ga tushadi', () => {
-    for (const raw of ['sold', 'paid', 'partly_paid']) {
-      const { event } = normalizeElchiWebhook(elchiBody({ status: raw }));
-      expect(event?.status).toBe('sold');
+  it('faqat `sold` sotuv deb qabul qilinadi', () => {
+    const { event } = normalizeElchiWebhook(elchiBody({ status: 'sold' }));
+    expect(event?.status).toBe('sold');
+  });
+
+  it('`paid` va `partly_paid` e\u2019tiborsiz \u2014 noto\u2018g\u2018ri payout otilmaydi', () => {
+    // `partly_paid` -> `sold` -> DELIVERED bo'lsa, naqd bo'lmagan buyurtmada
+    // `finance.payout.requested` TO'LIQ subtotal bilan otilardi.
+    for (const raw of ['paid', 'partly_paid']) {
+      const { event, ignored } = normalizeElchiWebhook(
+        elchiBody({ status: raw }),
+      );
+      expect(event).toBeUndefined();
+      expect(ignored?.status).toBe(raw);
     }
+  });
+
+  it('Elchi\u2019ning sinov ping\u2019i (webhook.test) 200 bilan e\u2019tiborsiz qoldiriladi', () => {
+    // Manba: Elchi-Backend integration-service `testPartnerWebhook` \u2014 statussiz,
+    // haqiqiy imzo bilan. Bu sir tengligini isbotlashning yagona nol ta'sirli yo'li,
+    // shuning uchun 400 berish MUMKIN EMAS.
+    const { event, ignored } = normalizeElchiWebhook({
+      event: 'webhook.test',
+      event_id: 'b2c3d4e5-0000-4000-8000-111122223333',
+      test: true,
+      partner_id: '2',
+      message: 'Elchi sinov webhooki',
+      occurred_at: new Date().toISOString(),
+    });
+    expect(event).toBeUndefined();
+    expect(ignored?.status).toBe('webhook.test');
   });
 
   it('`cancelled (sent)` va `returned_to_market` xaritalanadi', () => {
@@ -104,6 +130,7 @@ describe('normalizeElchiWebhook', () => {
     expect(event).toBeUndefined();
     expect(ignored?.status).toBe('closed');
     expect(ELCHI_IGNORED_STATUSES.has('closed')).toBe(true);
+    expect(ELCHI_IGNORED_STATUSES.has('partly_paid')).toBe(true);
   });
 
   it('noma’lum status 400 beradi (jimgina yutilmaydi)', () => {
@@ -144,6 +171,32 @@ describe('normalizeElchiWebhook', () => {
       BadRequestException,
     );
     expect(() => normalizeElchiWebhook(null)).toThrow(BadRequestException);
+  });
+
+  it('Elchi ROSTDAN yuboradigan statuslarning hammasi qamrab olingan', () => {
+    /*
+     * Elchi webhook signalini FAQAT `resolveSyncAction` null qaytarmagan
+     * o'tishlarda chiqaradi:
+     * Elchi-Backend/apps/order-service/src/lifecycle/order-lifecycle.service.ts
+     * -> cancelled, cancelled (sent), paid, partly_paid, sold,
+     *    returned_to_market, waiting, waiting_customer.
+     * ⚠️ `received` va `on the road` HECH QACHON yuborilmaydi \u2014 ular uchun
+     * Elchi tomonida alohida ish kerak (C1.40 izohiga qarang).
+     */
+    const elchiSignals = [
+      'cancelled',
+      'cancelled (sent)',
+      'paid',
+      'partly_paid',
+      'sold',
+      'returned_to_market',
+      'waiting',
+      'waiting_customer',
+    ];
+    const uncovered = elchiSignals.filter(
+      (s) => !ELCHI_STATUS_ALIASES[s] && !ELCHI_IGNORED_STATUSES.has(s),
+    );
+    expect(uncovered).toEqual([]);
   });
 
   it('xarita Elchi Order_status lug‘atini to‘liq qoplaydi', () => {

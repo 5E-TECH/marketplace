@@ -54,15 +54,10 @@ export const ELCHI_STATUS_ALIASES: Readonly<Record<string, string>> = {
   waiting: 'on_the_road',
   waiting_customer: 'on_the_road',
 
-  // — Sotuv holatlari —
-  // Elchi'ning o'zi bu uchtasini bitta to'plam deb qaraydi: `sold` ⟺
-  // `paid_amount = 0`, `paid`/`partly_paid` esa Elchi↔market hisob-kitobidagi
-  // qoldiqni bildiradi, tovar baribir SOTILGAN. Marketplace uchun uchalasi
-  // ham yetkazib berilgan degani (ONLINE to'lovda payout shu yerda boshlanadi;
-  // xaridor pulni allaqachon to'lagan, ya'ni qoldiq Elchi tomonidagi masala).
+  // — Sotuv —
+  // Faqat `sold` bir ma'noli: tovar sotilgan va hisob yopilgan
+  // (Elchi'da `sold` ⟺ `paid_amount = 0`).
   sold: 'sold',
-  paid: 'sold',
-  partly_paid: 'sold',
 
   // — Bekor qilish va qaytarish —
   cancelled: 'cancelled',
@@ -76,13 +71,43 @@ export const ELCHI_STATUS_ALIASES: Readonly<Record<string, string>> = {
  * ATAYLAB e'tiborsiz qoldiriladigan statuslar: 200 qaytariladi (Elchi outbox
  * qayta urinmasin), lekin buyurtma holati ham, pul ham QIMIRLAMAYDI.
  *
- * `closed` shu yerda, chunki uni `settled` ga xaritalash `finance.cod.settled`
- * hodisasini uyg'otadi va `collectedAmount` bo'yicha COD hisob-kitobini
- * YOPADI. Elchi'ning `closed` i bizning `settled` imiz bilan bir xil ma'noda
- * ekani TASDIQLANMAGAN, noto'g'ri xarita esa noto'g'ri pul harakati degani.
- * Biznes qarori kelguncha — tegmaymiz.
+ * Uchalasi ham PUL bilan bog'liq va ma'no tengligi TASDIQLANMAGAN — noto'g'ri
+ * xarita noto'g'ri pul harakati degani, shuning uchun biznes qarori kelguncha
+ * tegmaymiz:
+ *
+ *   `closed`      -> bizning `settled` ga tushsa `finance.cod.settled` ni
+ *                    uyg'otadi va COD hisob-kitobini `collectedAmount`
+ *                    bo'yicha YOPADI.
+ *   `partly_paid` -> `sold` ga tushsa DELIVERED bo'ladi; naqd bo'lmagan
+ *                    buyurtmada `finance.payout.requested` TO'LIQ subtotal
+ *                    bilan otiladi, holbuki pul QISMAN to'langan.
+ *   `paid`        -> Elchi lug'atida bu Elchi↔market hisob-kitobini
+ *                    bildiradi, xaridor to'lovini emas; `sold` bilan tenglashi
+ *                    tekshirilmagan.
+ *
+ * Qaror qabul qilingach qiymatni shu to'plamdan `ELCHI_STATUS_ALIASES` ga
+ * ko'chirish kifoya — boshqa hech qayerga tegmaydi.
  */
-export const ELCHI_IGNORED_STATUSES: ReadonlySet<string> = new Set(['closed']);
+export const ELCHI_IGNORED_STATUSES: ReadonlySet<string> = new Set([
+  'closed',
+  'paid',
+  'partly_paid',
+]);
+
+/**
+ * Elchi'ning NOL TA'SIRLI diagnostika vositasi: hamkor panelidagi «sinov
+ * webhooki» tugmasi (`testPartnerWebhook`) haqiqiy imzo bilan, lekin
+ * `event: 'webhook.test'`, `test: true` va `status` maydonisiz POST yuboradi.
+ * Outbox'ga qator yozmaydi, buyurtmaga tegmaydi.
+ *
+ * Bu — SIR TENGLIGINI jonli isbotlashning yagona xavfsiz yo'li, shuning uchun
+ * uni 400 bilan rad etmaymiz: 200 qaytaramiz va hech narsa qilmaymiz.
+ */
+function isTestPing(raw: Record<string, unknown>): boolean {
+  return (
+    raw.test === true || asString(pick(raw, 'type', 'event')) === 'webhook.test'
+  );
+}
 
 /** `seller-order-9` kabi eski shakldan sof id ajratib olinadi. */
 const SELLER_ORDER_PREFIX = /^seller-order-/i;
@@ -124,6 +149,11 @@ export function normalizeElchiWebhook(body: unknown): NormalizedElchiWebhook {
   const eventId = asString(pick(raw, 'eventId', 'event_id')).trim();
   if (!eventId) {
     throw new BadRequestException('Webhook `event_id` maydoni yo‘q');
+  }
+
+  // Sinov ping'i statussiz keladi — status tekshiruvidan OLDIN ushlanadi.
+  if (isTestPing(raw)) {
+    return { ignored: { status: 'webhook.test', eventId } };
   }
 
   const rawStatus = asString(pick(raw, 'status')).trim().toLowerCase();

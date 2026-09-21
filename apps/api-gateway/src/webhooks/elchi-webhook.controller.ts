@@ -9,9 +9,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import {
+  ElchiWebhookDto,
   normalizeElchiWebhook,
   Public,
   rawResponse,
@@ -50,8 +51,21 @@ export class ElchiWebhookController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Elchi shipment status webhook receiver' })
+  @ApiOperation({
+    summary: 'Elchi shipment status webhook receiver',
+    description:
+      'Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, ' +
+      '`shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi ' +
+      'normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini ' +
+      'bitta shaklga keltiradi. Elchi’ning ortiqcha moliyaviy maydonlari ' +
+      'e’tiborsiz qoldiriladi. `webhook.test` ping’i va xaritalanmagan ' +
+      'statuslar (`closed`, `paid`, `partly_paid`) 200 oladi, lekin hech ' +
+      'qanday holat o‘zgarmaydi.',
+  })
   @ApiHeader({ name: 'X-Elchi-Signature', required: true })
+  // Faqat HUJJAT uchun: tana `@Body()` bilan bog‘lanmaydi (izohga qarang),
+  // shuning uchun bu dekorator validatsiya qilmaydi — kontraktni saqlaydi.
+  @ApiBody({ type: ElchiWebhookDto })
   async receive(
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-elchi-signature') signature: string | undefined,
