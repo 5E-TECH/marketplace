@@ -55,8 +55,12 @@ fi
 # Shuning uchun bu yerda ogohlantirish emas, QAT'IY tekshiruv turadi —
 # 2026-09-17 da aynan shu qiymat jimgina 1 bo'lib qolgani uchun butun audit
 # jurnali foydasiz bo'lgan edi. Batafsil: docs/C4.8-TRUST-PROXY.md
+# Skriptning qolgan qismi kabi: fayl bo'sh qolsa export qilingan qiymat olinadi
+# (CI deploy job'i bir qism kalitlarni env orqali uzatadi).
 trust_hops=$(sed -n 's/^TRUST_PROXY_HOPS=//p' "$env_file" | tail -n 1)
+trust_hops=${trust_hops:-${TRUST_PROXY_HOPS:-}}
 compose_profiles=$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file" | tail -n 1)
+compose_profiles=${compose_profiles:-${COMPOSE_PROFILES:-}}
 case ",${compose_profiles}," in
   *,tunnel,*) expected_hops=2 ;;  # cloudflared -> caddy -> api-gateway
   *) expected_hops=1 ;;           # caddy -> api-gateway
