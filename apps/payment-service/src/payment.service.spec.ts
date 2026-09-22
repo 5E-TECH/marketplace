@@ -64,7 +64,7 @@ describe('PaymentService (C3.1)', () => {
     };
   }
 
-  it('TC1: payment.create PENDING holatdagi payment yozadi', async () => {
+  it('TC1: payment.create javobda PENDING, bazada CREATED yozadi', async () => {
     const { service, paymentRows } = setup();
     await expect(
       service.create({
@@ -80,6 +80,11 @@ describe('PaymentService (C3.1)', () => {
       status: PaymentStatus.PENDING,
     });
     expect(paymentRows).toHaveLength(1);
+    // Bazada CREATED qolishi SHART: PENDING "provayderda tranzaksiya
+    // boshlandi" degani va click/payme dagi `competing` tekshiruvi orqali
+    // shu buyurtmadagi ikkinchi provayderni bloklaydi. Ikkalasini
+    // birlashtirish ikkala provayderni ham to'sib qo'yadi.
+    expect(paymentRows[0].status).toBe(PaymentStatus.CREATED);
   });
 
   it('payment.create takror chaqirilsa mavjud paymentni qaytaradi', async () => {

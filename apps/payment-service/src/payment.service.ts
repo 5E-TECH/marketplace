@@ -82,10 +82,11 @@ export class PaymentService {
       salesOrderId: dto.salesOrderId,
       provider: dto.provider,
       amount: dto.amount,
-      // PENDING (CREATED emas): yozuv yaratilishi bilan xaridor provayder
-      // sahifasiga yuboriladi, ya'ni to'lov kutilayotgan holatda. CREATED
-      // faqat eski qatorlarda uchraydi va tashqi javobda PENDING deb o'qiladi.
-      status: PaymentStatus.PENDING,
+      // Bazada CREATED bo'lib qoladi — PENDING "provayderda tranzaksiya
+      // boshlandi" degani va shu buyurtmada boshqa provayderni bloklaydi
+      // (click/payme dagi `competing` tekshiruvi). Mijozga esa
+      // `publicPaymentStatus()` orqali PENDING bo'lib chiqadi.
+      status: PaymentStatus.CREATED,
       externalTxnId: null,
       paidAt: null,
     });
