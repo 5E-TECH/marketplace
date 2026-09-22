@@ -25,6 +25,7 @@ import { PaymeService } from './payme.service';
 import { ClickService } from './click.service';
 import { PaymentEventsService } from './payment-events.service';
 import { PaymentRefundService } from './payment-refund.service';
+import { PaymentQueryService } from './payment-query.service';
 import { PaymentOutboxRelayService } from './payment-outbox-relay.service';
 import { HardenPaymentCallbacks1724414400000 } from './migrations/1724414400000-harden-payment-callbacks';
 
@@ -69,6 +70,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig, OutboxEvent];
     PaymentEventsService,
     PaymentOutboxRelayService,
     PaymentRefundService,
+    PaymentQueryService,
   ],
 })
 export class PaymentModule {}

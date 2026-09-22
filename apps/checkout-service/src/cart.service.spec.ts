@@ -37,16 +37,17 @@ describe('CartService', () => {
             : row;
         },
         delete: async (where: any) => {
-          const index = rows.findIndex((candidate) =>
+          // TypeORM mos keladigan BARCHA qatorni o'chiradi (cartId bo'yicha
+          // savatni bo'shatish shunga tayanadi).
+          const matches = rows.filter((candidate) =>
             typeof where === 'string'
               ? candidate.id === where
               : Object.entries(where).every(
                   (entry) => candidate[entry[0]] === entry[1],
                 ),
           );
-          if (index < 0) return { affected: 0 };
-          rows.splice(index, 1);
-          return { affected: 1 };
+          for (const row of matches) rows.splice(rows.indexOf(row), 1);
+          return { affected: matches.length };
         },
       };
     };
@@ -144,5 +145,55 @@ describe('CartService', () => {
     expect(carts.find((cart) => cart.sessionId === 'anon-3')?.status).toBe(
       'converted',
     );
+  });
+
+  it('savatni bo‘shatadi va bo‘sh savat qaytaradi', async () => {
+    const owner = { sessionId: 'guest-1' };
+    await service.add(owner, { productId: '1', variantId: '2', quantity: 3 }, {
+      productId: '1',
+      variantId: '2',
+      shopId: '5',
+      price: 1000,
+      productName: 'Mahsulot',
+    } as never);
+    await service.add(owner, { productId: '9', variantId: '8', quantity: 1 }, {
+      productId: '9',
+      variantId: '8',
+      shopId: '5',
+      price: 2000,
+      productName: 'Boshqa',
+    } as never);
+
+    await expect(service.clear(owner)).resolves.toMatchObject({
+      items: [],
+      totalQuantity: 0,
+      totalAmount: 0,
+    });
+    expect(items).toHaveLength(0);
+  });
+
+  it('faol savat bo‘lmasa ham 404 emas, bo‘sh savat qaytaradi', async () => {
+    await expect(service.clear({ sessionId: 'yo‘q' })).resolves.toMatchObject({
+      id: null,
+      items: [],
+      totalQuantity: 0,
+    });
+  });
+
+  it('savatni bo‘shatish takrorlansa ham xato bermaydi', async () => {
+    const owner = { sessionId: 'guest-1' };
+    await service.add(owner, { productId: '1', variantId: '2', quantity: 3 }, {
+      productId: '1',
+      variantId: '2',
+      shopId: '5',
+      price: 1000,
+      productName: 'Mahsulot',
+    } as never);
+    await service.clear(owner);
+    await expect(service.clear(owner)).resolves.toMatchObject({ items: [] });
+  });
+
+  it('owner berilmasa savatni bo‘shatishni rad etadi', async () => {
+    await expect(service.clear({})).rejects.toThrow('x-session-id');
   });
 });

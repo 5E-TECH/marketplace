@@ -10,6 +10,7 @@ import {
 import {
   CheckoutPaymentMethod,
   FinanceRefundRequestedEvent,
+  PaymentSummaryDto,
   RefundPaymentDto,
   ReturnOrderItemsDto,
   SellerDashboardDto,
@@ -184,11 +185,13 @@ export class SellerOrdersService {
       rows[0].orderUpdatedAt as Date | string,
     );
 
+    const summaries = await this.paymentSummaries([String(rows[0].orderId)]);
     return {
       orderId: String(rows[0].orderId),
       orderStatus,
       estimatedDeliveryAt: null,
       updatedAt,
+      payment: this.paymentView(summaries[String(rows[0].orderId)]),
       shipments: rows
         .filter((row) => row.sellerOrderId)
         .map((row) => ({
@@ -229,7 +232,8 @@ export class SellerOrdersService {
     const total = Number(countRow?.total ?? 0);
     const orders = (await this.dataSource.query(
       `SELECT id::text AS "orderId",created_at AS "createdAt",
-              status AS "orderStatus",total_amount::float8 AS "totalAmount",
+              status AS "orderStatus",payment_method AS "paymentMethod",
+              total_amount::float8 AS "totalAmount",
               delivery_fee::float8 AS "deliveryFee"
          FROM checkout.sales_order
         WHERE customer_id=$1
@@ -264,11 +268,15 @@ export class SellerOrdersService {
       });
       itemsByOrder.set(key, items);
     }
+    const summaries = await this.paymentSummaries(orderIds);
     return {
       items: orders.map((order) => ({
         orderId: String(order.orderId),
         createdAt: order.createdAt,
         orderStatus: order.orderStatus,
+        paymentMethod: String(order.paymentMethod ?? ''),
+        paymentProvider: summaries[String(order.orderId)]?.provider ?? null,
+        paymentStatus: summaries[String(order.orderId)]?.status ?? null,
         subtotal: Number(order.totalAmount) - Number(order.deliveryFee),
         deliveryFee: Number(order.deliveryFee),
         totalAmount: Number(order.totalAmount),
@@ -278,6 +286,49 @@ export class SellerOrdersService {
       page,
       limit,
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * To'lov holati payment-service'da — checkout `payment` sxemasiga kira
+   * olmaydi (least-privilege). Payment-service javob bermasa buyurtma
+   * ro'yxati baribir ochilishi kerak, shuning uchun xato yutiladi.
+   */
+  private async paymentSummaries(
+    orderIds: string[],
+  ): Promise<Record<string, PaymentSummaryDto>> {
+    if (!this.payment || !orderIds.length) return {};
+    try {
+      return await sendRpc<Record<string, PaymentSummaryDto>>(
+        this.payment,
+        { cmd: 'payment.summary-by-orders' },
+        { salesOrderIds: orderIds },
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * COD buyurtmada, shuningdek online tanlanib to'lov hali boshlanmagan
+   * buyurtmada payment yozuvi bo'lmaydi — `null` qaytadi.
+   */
+  private paymentView(summary?: PaymentSummaryDto): {
+    id: string;
+    provider: string;
+    amount: number;
+    status: string;
+    failureReason: string | null;
+    updatedAt: Date | string;
+  } | null {
+    if (!summary) return null;
+    return {
+      id: summary.paymentId,
+      provider: summary.provider,
+      amount: summary.amount,
+      status: summary.status,
+      failureReason: summary.failureReason ?? null,
+      updatedAt: summary.updatedAt,
     };
   }
 
@@ -621,6 +672,15 @@ export class SellerOrdersService {
           'Bu buyurtmani cancel qilish mumkin emas; to‘langan order uchun refund ishlating',
         );
       }
+      // Avval to'lovni yopamiz: bekor qilingan buyurtmani xaridor provayder
+      // sahifasida to'lab yuborishi mumkin bo'lmasin.
+      if (this.payment && order.payment_method !== CheckoutPaymentMethod.COD) {
+        await sendRpc(
+          this.payment,
+          { cmd: 'payment.cancel-open' },
+          { salesOrderId: input.orderId, reason: input.reason },
+        );
+      }
       await sendRpc(
         this.inventory!,
         { cmd: 'inventory.release' },
@@ -667,6 +727,65 @@ export class SellerOrdersService {
     }
     const { customerId: _customerId, shopIds: _shopIds, ...response } = result;
     return response;
+  }
+
+  /**
+   * Xaridorning o'z buyurtmasini qaytarishi. Bitta endpoint ikki holatni
+   * qoplaydi, chunki xaridor uchun bu bir xil amal ("buyurtmani qaytarish"):
+   *   • hali to'lanmagan (DRAFT/PENDING_PAYMENT) → bekor qilinadi, rezerv
+   *     bo'shatiladi, ochiq to'lov yozuvi yopiladi;
+   *   • to'langan, lekin posilka hali sotuvchidan chiqmagan → to'liq refund.
+   * Posilka yo'lga chiqqandan keyin o'z-o'ziga xizmat qilish yopiladi —
+   * bunda operator `POST /admin/orders/:id/refund` bilan hal qiladi.
+   */
+  async buyerRefundOrder(input: {
+    orderId: string;
+    reason: string;
+    customerId?: string;
+    sessionId?: string;
+  }) {
+    await this.assertBuyerOwnership(
+      input.orderId,
+      input.customerId,
+      input.sessionId,
+    );
+    const [order] = (await this.dataSource.query(
+      `SELECT status,payment_method AS "paymentMethod" FROM checkout.sales_order WHERE id=$1`,
+      [input.orderId],
+    )) as Array<{ status: string; paymentMethod: string }>;
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+
+    if (order.status === 'CANCELLED')
+      return { id: input.orderId, status: 'CANCELLED', idempotent: true };
+    if (order.status === 'REFUNDED')
+      return { id: input.orderId, status: 'REFUNDED', idempotent: true };
+
+    const reason = input.reason?.trim() || 'Xaridor buyurtmani qaytardi';
+    const actorId = input.customerId ?? input.sessionId ?? 'guest';
+
+    if (['DRAFT', 'PENDING_PAYMENT'].includes(order.status)) {
+      return this.adminCancelOrder({ orderId: input.orderId, reason, actorId });
+    }
+
+    if (order.paymentMethod === CheckoutPaymentMethod.COD) {
+      throw new BadRequestException(
+        'Naqd to‘lovli buyurtmani bu yerdan qaytarib bo‘lmaydi — kuryerga rad javobini bering',
+      );
+    }
+
+    const shipped = (await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total FROM checkout.sales_order_seller
+        WHERE sales_order_id=$1
+          AND status NOT IN ('PENDING','CONFIRMED','SHIPMENT_CREATED')`,
+      [input.orderId],
+    )) as CountRow[];
+    if (Number(shipped[0]?.total ?? 0) > 0) {
+      throw new BadRequestException(
+        'Posilka yo‘lga chiqqan — qaytarish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling',
+      );
+    }
+
+    return this.adminRefundOrder({ orderId: input.orderId, reason, actorId });
   }
 
   async adminRefundOrder(input: {

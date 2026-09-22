@@ -66,6 +66,23 @@ export class AdminOrderActionDto {
   reason: string;
 }
 
+/** `cancel` va `refund` javoblari bir xil shaklda. */
+export class OrderActionResultDto {
+  @ApiProperty({ example: '42' })
+  id: string;
+
+  @ApiProperty({ enum: ['CANCELLED', 'REFUNDED'], example: 'REFUNDED' })
+  status: string;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'true — buyurtma allaqachon shu holatda edi va hech qanday yangi ' +
+      'yon ta’sir bo‘lmadi (provayderga refund takror yuborilmaydi).',
+  })
+  idempotent: boolean;
+}
+
 export class AdminOrderRefundDto extends AdminOrderActionDto {
   @ApiPropertyOptional({
     example: 125000,

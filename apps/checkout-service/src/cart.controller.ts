@@ -45,6 +45,11 @@ export class CartController {
     return this.carts.remove(data.owner, data.itemId);
   }
 
+  @MessagePattern({ cmd: 'cart.clear' })
+  clear(@Payload() data: { owner: CartOwnerDto }) {
+    return this.carts.clear(data.owner);
+  }
+
   @MessagePattern({ cmd: 'cart.merge' })
   merge(@Payload() data: { customerId: string; sessionId: string }) {
     return this.carts.merge(data.customerId, data.sessionId);

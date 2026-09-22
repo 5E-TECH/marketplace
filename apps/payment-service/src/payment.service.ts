@@ -10,11 +10,22 @@ import {
   PaymentProvider,
   PaymentResultDto,
   PaymentStatus,
+  publicPaymentStatus,
   UpsertProviderConfigDto,
 } from '@app/common';
 import { Payment } from './entities/payment.entity';
 import { ProviderConfig } from './entities/provider-config.entity';
 import { paymentAtomic, validReference } from './payment-atomic';
+
+/**
+ * Provayderning hosted checkout sahifasi. Admin `baseUrl` kiritsa (masalan
+ * Payme sandbox `https://test.paycom.uz`) o'sha ishlatiladi, aks holda shu
+ * production manzillari. Callback host'i bilan bir xil bo'lishi shart emas.
+ */
+const CHECKOUT_BASE_URL: Record<PaymentProvider, string> = {
+  [PaymentProvider.PAYME]: 'https://checkout.paycom.uz',
+  [PaymentProvider.CLICK]: 'https://my.click.uz/services/pay',
+};
 
 @Injectable()
 export class PaymentService {
@@ -64,18 +75,129 @@ export class PaymentService {
           'Buyurtma uchun mavjud to‘lov summasi mos emas',
         );
       }
-      return this.toResult(existing);
+      return this.toResult(existing, await this.checkoutUrl(existing, dto));
     }
 
     const payment = this.payments.create({
       salesOrderId: dto.salesOrderId,
       provider: dto.provider,
       amount: dto.amount,
-      status: PaymentStatus.CREATED,
+      // PENDING (CREATED emas): yozuv yaratilishi bilan xaridor provayder
+      // sahifasiga yuboriladi, ya'ni to'lov kutilayotgan holatda. CREATED
+      // faqat eski qatorlarda uchraydi va tashqi javobda PENDING deb o'qiladi.
+      status: PaymentStatus.PENDING,
       externalTxnId: null,
       paidAt: null,
     });
-    return this.toResult(await this.payments.save(payment));
+    const saved = await this.payments.save(payment);
+    return this.toResult(saved, await this.checkoutUrl(saved, dto));
+  }
+
+  /**
+   * Buyurtma bekor qilinganda yakunlanmagan (CREATED/PENDING) to'lov
+   * yozuvlarini yopadi. Aks holda xaridor allaqachon bekor qilingan
+   * buyurtmani provayder sahifasida to'lab yuborishi mumkin edi: Payme
+   * `PerformTransaction` va Click `Complete` faqat CREATED/PENDING holatni
+   * qabul qiladi, CANCELLED esa ularni rad etadi.
+   */
+  async cancelOpen(data: {
+    salesOrderId: string;
+    reason?: string;
+  }): Promise<{ salesOrderId: string; cancelled: number }> {
+    if (!validReference(data?.salesOrderId))
+      throw new BadRequestException('Buyurtma ID noto‘g‘ri');
+    return paymentAtomic(this.payments, (manager) =>
+      new PaymentService(
+        manager.getRepository(Payment),
+        manager.getRepository(ProviderConfig),
+        this.config,
+      ).cancelOpenLocked(data.salesOrderId),
+    );
+  }
+
+  private async cancelOpenLocked(
+    salesOrderId: string,
+  ): Promise<{ salesOrderId: string; cancelled: number }> {
+    const rows = await this.payments.find({ where: { salesOrderId } });
+    if (rows.some((payment) => payment.status === PaymentStatus.PAID))
+      throw new BadRequestException(
+        'Buyurtma to‘langan — bekor qilish o‘rniga refund kerak',
+      );
+    const open = rows.filter((payment) =>
+      [PaymentStatus.CREATED, PaymentStatus.PENDING].includes(payment.status),
+    );
+    for (const payment of open) payment.status = PaymentStatus.CANCELLED;
+    if (open.length) await this.payments.save(open);
+    return { salesOrderId, cancelled: open.length };
+  }
+
+  /**
+   * Xaridor yo'naltiriladigan provayder sahifasi. Provayder kaliti yoki
+   * merchant/service ID hali kiritilmagan bo'lsa `null` — frontend bunda
+   * "to'lov hozircha mavjud emas" deb ko'rsatadi, 500 bermaydi.
+   */
+  private async checkoutUrl(
+    payment: Payment,
+    dto: CreatePaymentDto,
+  ): Promise<string | null> {
+    if (
+      ![PaymentStatus.CREATED, PaymentStatus.PENDING].includes(payment.status)
+    )
+      return null;
+    const config = await this.providerConfigs.findOne({
+      where: { provider: payment.provider, isActive: true },
+      select: {
+        id: true,
+        provider: true,
+        merchantId: true,
+        serviceId: true,
+        baseUrl: true,
+      },
+    });
+    if (!config?.merchantId) return null;
+    const base = (
+      config.baseUrl ?? CHECKOUT_BASE_URL[payment.provider]
+    ).replace(/\/+$/, '');
+    return payment.provider === PaymentProvider.PAYME
+      ? this.paymeCheckoutUrl(base, config.merchantId, payment, dto.returnUrl)
+      : this.clickCheckoutUrl(base, config, payment, dto.returnUrl);
+  }
+
+  /**
+   * Payme checkout: `<base>/<base64(m=..;ac.order_id=..;a=..;c=..)>`.
+   * `ac.order_id` — payment ID (callback ham shu bo'yicha qidiradi),
+   * `a` — tiyin, `c` — qaytish manzili.
+   */
+  private paymeCheckoutUrl(
+    base: string,
+    merchantId: string,
+    payment: Payment,
+    returnUrl?: string,
+  ): string {
+    const params = [
+      `m=${merchantId}`,
+      `ac.order_id=${payment.id}`,
+      `a=${Math.round(Number(payment.amount) * 100)}`,
+    ];
+    if (returnUrl) params.push(`c=${returnUrl}`);
+    return `${base}/${Buffer.from(params.join(';'), 'utf8').toString('base64')}`;
+  }
+
+  /** Click checkout: summa so'mda, `transaction_param` — payment ID. */
+  private clickCheckoutUrl(
+    base: string,
+    config: ProviderConfig,
+    payment: Payment,
+    returnUrl?: string,
+  ): string | null {
+    if (!config.serviceId) return null;
+    const url = new URL(base);
+    url.searchParams.set('service_id', config.serviceId);
+    url.searchParams.set('merchant_id', String(config.merchantId));
+    url.searchParams.set('amount', Number(payment.amount).toFixed(2));
+    url.searchParams.set('transaction_param', payment.id);
+    if (returnUrl) url.searchParams.set('return_url', returnUrl);
+    return url.toString();
   }
 
   async upsertProviderConfig(
@@ -169,14 +291,18 @@ export class PaymentService {
     return this.config.getOrThrow<string>('INTEGRATION_CREDENTIAL_SECRET');
   }
 
-  private toResult(payment: Payment): PaymentResultDto {
+  private toResult(
+    payment: Payment,
+    redirectUrl: string | null = null,
+  ): PaymentResultDto {
     return {
       id: payment.id,
       salesOrderId: payment.salesOrderId,
       provider: payment.provider,
       amount: Number(payment.amount),
-      status: payment.status,
+      status: publicPaymentStatus(payment.status),
       createdAt: payment.createdAt,
+      redirectUrl,
     };
   }
 

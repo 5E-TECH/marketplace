@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class BuyerOrdersQueryDto {
   @ApiPropertyOptional({ type: Number, example: 1, default: 1 })
@@ -19,6 +26,17 @@ export class BuyerOrdersQueryDto {
   limit = 20;
 }
 
+export class BuyerOrderRefundDto {
+  @ApiPropertyOptional({
+    example: 'Fikrimdan qaytdim',
+    description: 'Bo‘sh qoldirilsa standart sabab yoziladi.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+}
+
 export class BuyerOrderListItemProductDto {
   @ApiProperty({ example: '7' }) productId: string;
   @ApiProperty({ example: 'Mahsulot' }) name: string;
@@ -33,6 +51,24 @@ export class BuyerOrderListItemDto {
   @ApiProperty({ example: '2026-09-15T10:00:00.000Z' })
   createdAt: Date | string;
   @ApiProperty({ example: 'CONFIRMED' }) orderStatus: string;
+  @ApiProperty({ enum: ['online', 'cod'], example: 'cod' })
+  paymentMethod: string;
+  @ApiPropertyOptional({
+    type: String,
+    example: 'PAYME',
+    nullable: true,
+    description:
+      'Online to‘lov provayderi; COD yoki to‘lovsiz buyurtmada null.',
+  })
+  paymentProvider: string | null;
+  @ApiPropertyOptional({
+    type: String,
+    example: 'PAID',
+    nullable: true,
+    enum: ['PENDING', 'PAID', 'CANCELLED', 'FAILED', 'REFUNDED'],
+    description: 'COD buyurtmada yoki to‘lov hali boshlanmagan bo‘lsa null.',
+  })
+  paymentStatus: string | null;
   @ApiProperty({ example: 100000 }) subtotal: number;
   @ApiProperty({ example: 15000 }) deliveryFee: number;
   @ApiProperty({ example: 115000 }) totalAmount: number;
@@ -69,6 +105,34 @@ export class BuyerShipmentTrackingDto {
   updatedAt: Date | string;
 }
 
+export class BuyerOrderPaymentDto {
+  @ApiProperty({ example: '7', description: 'payment.id' })
+  id: string;
+
+  @ApiProperty({ enum: ['PAYME', 'CLICK'], example: 'PAYME' })
+  provider: string;
+
+  @ApiProperty({ example: 125000 })
+  amount: number;
+
+  @ApiProperty({
+    enum: ['PENDING', 'PAID', 'CANCELLED', 'FAILED', 'REFUNDED'],
+    example: 'PAID',
+  })
+  status: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Tranzaksiya vaqt tugashi sababli bekor qilindi',
+    nullable: true,
+    description: 'Faqat CANCELLED/FAILED holatida to‘ladi.',
+  })
+  failureReason: string | null;
+
+  @ApiProperty({ type: String, example: '2026-09-16T10:05:00.000Z' })
+  updatedAt: Date | string;
+}
+
 export class BuyerOrderTrackingDto {
   @ApiProperty({ example: '42' })
   orderId: string;
@@ -86,6 +150,13 @@ export class BuyerOrderTrackingDto {
 
   @ApiProperty({ example: '2026-09-14T10:30:00.000Z' })
   updatedAt: Date | string;
+
+  @ApiPropertyOptional({
+    type: BuyerOrderPaymentDto,
+    nullable: true,
+    description: 'COD buyurtmada yoki to‘lov hali boshlanmagan bo‘lsa null.',
+  })
+  payment: BuyerOrderPaymentDto | null;
 
   @ApiProperty({ type: [BuyerShipmentTrackingDto] })
   shipments: BuyerShipmentTrackingDto[];

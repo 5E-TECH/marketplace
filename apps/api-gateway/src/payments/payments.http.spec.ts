@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import { request } from 'http';
@@ -22,6 +23,7 @@ httpTests('Payment HTTP contract', () => {
       providers: [
         { provide: RmqClient.PAYMENT, useValue: payment },
         { provide: RmqClient.CHECKOUT, useValue: checkout },
+        { provide: ConfigService, useValue: new ConfigService({}) },
       ],
     }).compile();
     app = module.createNestApplication();

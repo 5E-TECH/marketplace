@@ -11,11 +11,14 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiProduces,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -23,6 +26,7 @@ import {
   AdminOrdersQueryDto,
   AdminOrderActionDto,
   AdminOrderRefundDto,
+  OrderActionResultDto,
   CurrentUser,
   JwtUser,
   AuthErrorResponseDto,
@@ -118,6 +122,20 @@ export class AdminOrdersController {
   @Post('admin/orders/:id/cancel')
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Buyurtmani majburiy bekor qilish',
+    description:
+      'Faqat DRAFT/PENDING_PAYMENT buyurtma. Rezerv bo‘shatiladi va ' +
+      'yakunlanmagan online to‘lov yozuvlari CANCELLED ga o‘tadi. ' +
+      'Idempotent: allaqachon CANCELLED bo‘lsa `idempotent: true` qaytadi.',
+  })
+  @ApiResponse({ status: 201, type: OrderActionResultDto })
+  @ApiBadRequestResponse({
+    description: 'Buyurtma holati bekor qilishga yo‘l qo‘ymaydi',
+  })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async cancel(
     @Param('id') id: string,
     @Body() dto: AdminOrderActionDto,
@@ -140,6 +158,24 @@ export class AdminOrdersController {
   @Post('admin/orders/:id/refund')
   @Roles(Role.SUPERADMIN)
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'To‘langan buyurtmani to‘liq qaytarish',
+    description:
+      'Provayderda refund, ombor qaytimi va har sotuvchi ledgeri bitta ' +
+      'oqimda bajariladi. Muvaffaqiyatdan keyin buyurtma REFUNDED, ' +
+      'sub-buyurtmalar RETURNED va to‘lov holati (GET /orders, ' +
+      'GET /orders/:id/tracking) REFUNDED bo‘ladi. Idempotent: takror ' +
+      'chaqirilsa provayderga hech narsa yuborilmaydi va ' +
+      '`idempotent: true` qaytadi. Hozircha faqat to‘liq summa: `amount` ' +
+      'berilsa u buyurtma totaliga teng bo‘lishi kerak. COD buyurtma rad etiladi.',
+  })
+  @ApiResponse({ status: 201, type: OrderActionResultDto })
+  @ApiBadRequestResponse({
+    description: 'COD buyurtma, qisman summa yoki refundga yaroqsiz holat',
+  })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async refund(
     @Param('id') id: string,
     @Body() dto: AdminOrderRefundDto,

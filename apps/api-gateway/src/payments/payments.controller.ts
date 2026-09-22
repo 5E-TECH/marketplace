@@ -13,6 +13,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -39,6 +40,7 @@ export class PaymentsController {
   constructor(
     @Inject(RmqClient.PAYMENT) private readonly payment: ClientProxy,
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
+    private readonly config: ConfigService,
   ) {}
 
   @Post('payments')
@@ -58,11 +60,40 @@ export class PaymentsController {
     );
     if (dto.amount !== context.amount)
       throw new BadRequestException('To‘lov summasi buyurtmaga mos emas');
-    return sendRpc(
+    return sendRpc<PaymentResultDto>(
       this.payment,
       { cmd: 'payment.create' },
-      { ...dto, amount: context.amount },
+      {
+        ...dto,
+        amount: context.amount,
+        returnUrl: this.returnUrl(dto.returnUrl),
+      },
     );
+  }
+
+  /**
+   * `returnUrl` provayder sahifasidan brauzerni qaytaradi — ya'ni ochiq
+   * redirect vektori. Shu bois faqat CORS_ORIGINS da e'lon qilingan frontend
+   * origin'lariga ruxsat. CORS_ORIGINS bo'sh bo'lsa (lokal ishlab chiqish)
+   * tekshiruv o'tkazib yuboriladi.
+   */
+  private returnUrl(candidate?: string): string | undefined {
+    if (!candidate) return undefined;
+    const allowed = this.config
+      .get<string>('CORS_ORIGINS', '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    if (!allowed.length) return candidate;
+    let origin: string;
+    try {
+      origin = new URL(candidate).origin;
+    } catch {
+      throw new BadRequestException('returnUrl formati noto‘g‘ri');
+    }
+    if (!allowed.includes(origin))
+      throw new BadRequestException('returnUrl ruxsat etilgan domenda emas');
+    return candidate;
   }
 
   @ProviderCallback()

@@ -78,12 +78,31 @@ export enum PaymentProvider {
 }
 
 export enum PaymentStatus {
+  /** @deprecated Faqat eski qatorlarda; tashqi javobda PENDING bo'lib chiqadi. */
   CREATED = 'CREATED',
   PENDING = 'PENDING',
   PAID = 'PAID',
   CANCELLED = 'CANCELLED',
   FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
+}
+
+/** Tashqi kontraktda ko'rinadigan to'lov holatlari (CREATED chiqarilmaydi). */
+export const PUBLIC_PAYMENT_STATUSES = [
+  PaymentStatus.PENDING,
+  PaymentStatus.PAID,
+  PaymentStatus.CANCELLED,
+  PaymentStatus.FAILED,
+  PaymentStatus.REFUNDED,
+] as const;
+
+/**
+ * Yangi to'lov darhol PENDING bo'ladi, lekin bazada avvalgi kod yozgan
+ * CREATED qatorlar qolgan. Mijoz ikkala holatni ham farqlay olmasligi uchun
+ * tashqariga chiqishda bittaga keltiriladi.
+ */
+export function publicPaymentStatus(status: PaymentStatus): PaymentStatus {
+  return status === PaymentStatus.CREATED ? PaymentStatus.PENDING : status;
 }
 
 export enum CommissionType {
