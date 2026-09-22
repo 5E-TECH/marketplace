@@ -97,6 +97,22 @@ export class CartService {
     });
   }
 
+  /**
+   * Savatni bo'shatish. Ataylab idempotent: faol savat bo'lmasa ham bo'sh
+   * savat qaytaradi. Buyurtma berilgandan keyin savat `converted` bo'ladi va
+   * frontend darhol "savatni tozalash"ni chaqiradi — bunda 404 berish mijozga
+   * xato ko'rsatib, hech narsani yaxshilamas edi.
+   */
+  async clear(owner: CartOwnerDto): Promise<CartDto> {
+    this.assertOwner(owner);
+    return this.dataSource.transaction(async (manager) => {
+      const cart = await this.findActive(manager, owner);
+      if (!cart) return this.toDto(null);
+      await manager.getRepository(CartItem).delete({ cartId: cart.id });
+      return this.toDto(await this.findById(manager, cart.id));
+    });
+  }
+
   async merge(customerId: string, sessionId: string): Promise<CartDto> {
     if (!customerId || !sessionId) {
       throw new BadRequestException('customerId va sessionId majburiy');

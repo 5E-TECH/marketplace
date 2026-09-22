@@ -18,6 +18,7 @@ import {
   FeaturedShopDto,
   Public,
   RmqClient,
+  StorefrontBannerDto,
   sendRpc,
   StorefrontProductDto,
   StorefrontProductsPageDto,
@@ -50,6 +51,18 @@ export class StorefrontController {
       { cmd: 'storefront.products.get' },
       { id: String(id) },
     );
+  }
+
+  @Get('banners')
+  @ApiOperation({
+    summary: 'Bosh sahifa bannerlari (faol va muddati o‘tmaganlari)',
+    description:
+      'Nofaol yoki muddati tugagan banner javobga tushmaydi. `sortOrder` ' +
+      'bo‘yicha tartiblangan.',
+  })
+  @ApiOkResponse({ type: [StorefrontBannerDto] })
+  banners() {
+    return sendRpc(this.catalog, { cmd: 'storefront.banners.list' }, {});
   }
 
   @Get('shops/featured')

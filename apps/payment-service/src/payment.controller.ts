@@ -13,6 +13,7 @@ import { PaymeRpcPayload } from './payme.types';
 import { ClickService } from './click.service';
 import { ClickRpcPayload } from './click.types';
 import { PaymentRefundService } from './payment-refund.service';
+import { PaymentQueryService } from './payment-query.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -22,11 +23,22 @@ export class PaymentController {
     private readonly payme: PaymeService,
     private readonly click: ClickService,
     private readonly refunds: PaymentRefundService,
+    private readonly queries: PaymentQueryService,
   ) {}
 
   @MessagePattern({ cmd: 'payment.refund' })
   refund(@Payload() dto: RefundPaymentDto) {
     return this.refunds.refund(dto);
+  }
+
+  @MessagePattern({ cmd: 'payment.cancel-open' })
+  cancelOpen(@Payload() data: { salesOrderId: string; reason?: string }) {
+    return this.service.cancelOpen(data);
+  }
+
+  @MessagePattern({ cmd: 'payment.summary-by-orders' })
+  summaryByOrders(@Payload() data: { salesOrderIds: string[] }) {
+    return this.queries.summaryByOrders(data?.salesOrderIds ?? []);
   }
 
   @MessagePattern({ cmd: 'payment.create' })

@@ -197,6 +197,19 @@ export class SellerOrdersController {
     );
   }
 
+  @MessagePattern({ cmd: 'checkout.order.refund' })
+  buyerRefundOrder(
+    @Payload()
+    data: {
+      orderId: string;
+      reason: string;
+      customerId?: string;
+      sessionId?: string;
+    },
+  ) {
+    return this.orders.buyerRefundOrder(data);
+  }
+
   @MessagePattern({ cmd: 'checkout.orders.list-by-buyer' })
   buyerOrders(
     @Payload()

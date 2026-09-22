@@ -432,6 +432,11 @@ sotuvchiga sabab bilan xabar beradi va amalni audit jurnaliga yozadi.
 **`GET /admin/orders/:id` · ADMIN ⭐** — to'liq: sub-buyurtmalar + itemlar + shipmentlar + to'lov + tarix.
 **`POST /admin/orders/:id/cancel` · ADMIN ◻︎** — `{ reason }` → majburiy bekor (reserve release + Elchi cancel).
 **`POST /admin/orders/:id/refund` · SUPERADMIN ◻︎** — `{ reason, amount? }` → refund oqimi.
+Javob `{ id, status, idempotent }`. Idempotent: takror chaqiriqda provayderga
+hech narsa yuborilmaydi, `idempotent: true` qaytadi. Muvaffaqiyatdan keyin
+buyurtma `REFUNDED`, sub-buyurtmalar `RETURNED`, `GET /orders` va
+`GET /orders/:id/tracking` dagi to'lov holati `REFUNDED` bo'ladi. Hozircha
+faqat to'liq summa; COD buyurtma rad etiladi.
 
 ### 8.7 Sklad nazorati ◻︎
 **`GET /admin/inventory/stock` · ADMIN / SUPERADMIN ✅ C6.7** — barcha
@@ -467,8 +472,23 @@ provision qiladi; natija auditga yoziladi, xatolar retry cron orqali tiklanadi.
 **`POST /admin/broadcast` · ADMIN** — `{ audience:"sellers|buyers|all", channel:"inapp|sms|email|telegram", title, body }`.
 **`GET /admin/notifications/templates` · ADMIN** — shablonlar.
 
-### 8.12 Kontent / bannerlar ◻︎
-**`GET/POST/PATCH/DELETE /admin/content/banners` · ADMIN** — storefront bosh sahifa bloklari.
+### 8.12 Kontent / bannerlar ✅ C6.9
+**`GET /admin/content/banners` · ADMIN, SUPERADMIN** — barcha bannerlar,
+`sortOrder` bo'yicha. Nofaol va muddati tugaganlari ham ko'rinadi; `isVisible`
+— shu daqiqada storefront'da chiqayotgani.
+**`POST /admin/content/banners`** — `{ title, imageUrl, linkUrl?, sortOrder?,
+isActive?, startsAt?, endsAt? }`. `imageUrl` — `POST /files/upload` qaytargan
+manzil. `endsAt` `startsAt` dan keyin bo'lishi shart (DB'da ham CHECK).
+**`PATCH /admin/content/banners/order`** — `{ items: [{ id, sortOrder }] }`,
+drag-and-drop tartibi. Bannerlardan biri topilmasa hech biri saqlanmaydi.
+**`PATCH /admin/content/banners/:id`** — tahrir (faol/nofaol va muddat ham).
+**`DELETE /admin/content/banners/:id`** — o'chirish; `{ id, deleted }`.
+Har o'zgarish auditga yoziladi (`entityType: "Banner"`).
+
+**`GET /storefront/banners` · public** — bosh sahifa uchun faol bannerlar:
+`[{ id, title, imageUrl, linkUrl, sortOrder }]`. Nofaol, hali boshlanmagan va
+muddati tugagan banner javobga tushmaydi — filtr SQL'da, ya'ni muddati
+tugaganda o'zi yo'qoladi, tozalovchi cron kerak emas.
 
 ### 8.13 Platforma sozlamalari ✅ C6.2
 **`GET /admin/settings` · ADMIN, SUPERADMIN** — joriy `{ commissionPercent, minimumOrderAmount, supportPhone, updatedBy, updatedAt }`.
@@ -563,4 +583,28 @@ Callback biznes javoblari HTTP 200; transport/infratuzilma xatolari 5xx bo'lishi
 Payment + tranzaksiya + paid outbox yozuvi bitta DB tranzaksiyasida saqlanadi.
 Checkout RPC muvaffaqiyatli javob bergach outbox processed bo'ladi; xatoda qayta yuboriladi.
 `POST /payments` buyurtma egasi, online/pending holati va summasini checkout orqali tekshiradi.
+So'rovga ixtiyoriy `returnUrl` qo'shiladi (to'lovdan keyin brauzer qaytadigan sahifa) —
+uning origin'i `CORS_ORIGINS` ro'yxatida bo'lishi shart, aks holda 400. Javobdagi
+`redirectUrl` — provayderning to'lov sahifasi; provayder kaliti hali kiritilmagan
+bo'lsa `null` (xato emas).
 Sozlash, sandbox va Done checklisti: [PAYMENT_INTEGRATION.md](PAYMENT_INTEGRATION.md).
+
+To'lov holati (`payment.status`) tashqi kontraktda: `PENDING | PAID |
+CANCELLED | FAILED | REFUNDED`. Yangi yozuv darhol `PENDING` bo'ladi; eski
+qatorlardagi `CREATED` ham tashqariga `PENDING` bo'lib chiqadi.
+
+Xaridor tomoni:
+- **`GET /orders`** har bandda `paymentMethod` (`online`/`cod`),
+  `paymentProvider` (`PAYME`/`CLICK`/`null`) va `paymentStatus` qaytaradi.
+  COD'da yoki to'lov hali boshlanmagan bo'lsa `paymentProvider`/`paymentStatus`
+  — `null`.
+- **`GET /orders/:id/tracking`** javobida
+  `payment: { id, provider, amount, status, failureReason, updatedAt }`;
+  COD'da yoki to'lov yozuvi yo'q bo'lsa `null`. `failureReason` faqat
+  `CANCELLED`/`FAILED` holatida to'ladi.
+- **`POST /orders/:id/refund`** — xaridor o'z buyurtmasini qaytaradi:
+  to'lanmagan bo'lsa bekor qilinadi (rezerv bo'shaydi, ochiq to'lov yopiladi),
+  to'langan-u posilka hali chiqmagan bo'lsa to'liq refund. Posilka yo'lga
+  chiqqach 400 — operator `POST /admin/orders/:id/refund` bilan hal qiladi.
+- **`DELETE /cart`** — savatni bo'shatadi, idempotent: faol savat bo'lmasa ham
+  200 va bo'sh savat qaytaradi.

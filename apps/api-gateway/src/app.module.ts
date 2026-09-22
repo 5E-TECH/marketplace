@@ -47,6 +47,7 @@ import { AdminAuditController } from './admin/admin-audit.controller';
 import { AdminTeamController } from './admin/admin-team.controller';
 import { AdminSettingsController } from './admin/admin-settings.controller';
 import { AdminIntegrationController } from './admin/admin-integration.controller';
+import { AdminContentController } from './admin/admin-content.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
 import { BuyerOrdersController } from './orders/buyer-orders.controller';
@@ -181,6 +182,7 @@ import { AdminInventoryController } from './admin/admin-inventory.controller';
     AdminTeamController,
     AdminSettingsController,
     AdminIntegrationController,
+    AdminContentController,
     RegionsController,
     BuyerOrdersController,
     AdminInventoryController,

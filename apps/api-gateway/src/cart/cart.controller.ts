@@ -80,6 +80,24 @@ export class CartController {
     );
   }
 
+  @Delete()
+  @ApiOperation({
+    summary: 'Savatni bo‘shatish',
+    description:
+      'Idempotent: faol savat bo‘lmasa ham 200 va bo‘sh savat qaytaradi.',
+  })
+  @ApiOkResponse({ type: CartDto })
+  clear(
+    @CurrentUser() user: JwtUser | undefined,
+    @Headers('x-session-id') sessionId?: string,
+  ) {
+    return sendRpc(
+      this.checkout,
+      { cmd: 'cart.clear' },
+      { owner: this.owner(user, sessionId) },
+    );
+  }
+
   @Delete('items/:id')
   @ApiOkResponse({ type: CartDto })
   remove(

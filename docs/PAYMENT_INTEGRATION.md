@@ -57,6 +57,50 @@ Imzo tekshiruviga `serviceId` va secret kiradi. `merchant_user_id` ushbu ikki ca
 Tekshirish: `GET /api/v1/admin/payments/providers/PAYME` yoki `/CLICK`.
 Javobda `configured`, `hasSecret`, `isActive`, `merchantId`, `serviceId` ko'rinadi. Secret qaytarilmaydi. `configured: true` maydonlar borligini bildiradi; provayder kalitni qabul qilganini tasdiqlamaydi.
 
+## Frontend kontrakti (to'lov oqimi)
+
+1. `POST /api/v1/payments` → `{ salesOrderId, provider, amount, returnUrl? }`.
+   `returnUrl` — to'lovdan keyin provayder brauzerni qaytaradigan sahifa.
+   Gateway uning origin'ini `CORS_ORIGINS` bilan solishtiradi; ro'yxatda
+   bo'lmasa 400 (ochiq redirect'ning oldini olish). `CORS_ORIGINS` bo'sh
+   bo'lsa (lokal) tekshiruv o'tkazib yuboriladi.
+2. Javob: `PaymentResultDto` + `redirectUrl`; yangi to'lov `status: "PENDING"`
+   bilan qaytadi (tashqi kontraktda `CREATED` yo'q). Xaridorni shu manzilga
+   yo'naltiring. `redirectUrl: null` bo'lsa provayder hali sozlanmagan
+   (`GET /admin/payments/providers/:provider` da `configured: false`) — bu
+   xato emas, shuning uchun UI "to'lov hozircha mavjud emas" deyishi kerak.
+   Checkout manzili `provider_config.base_url` dan olinadi; kiritilmagan
+   bo'lsa Payme uchun `https://checkout.paycom.uz`, Click uchun
+   `https://my.click.uz/services/pay`. Payme linki
+   `base64("m=..;ac.order_id=<payment.id>;a=<tiyin>;c=<returnUrl>")`,
+   Click linki `?service_id=..&merchant_id=..&amount=<so'm>&transaction_param=<payment.id>`.
+3. Qaytgach `GET /api/v1/orders/:id/tracking` dagi `payment` obyektini
+   o'qing: `{ id, provider, amount, status, failureReason, updatedAt }`.
+   `status` ∈ `PENDING | PAID | CANCELLED | FAILED | REFUNDED`. COD
+   buyurtmada yoki to'lov yozuvi umuman yo'q bo'lsa `payment: null`.
+   `failureReason` — `CANCELLED`/`FAILED` holatida o'qiladigan matn (Payme
+   `reason` kodi yoki Click `error_note`).
+4. Buyurtmalar ro'yxati (`GET /api/v1/orders`) ham har bandda
+   `paymentMethod`, `paymentProvider` va `paymentStatus` qaytaradi — ro'yxatda
+   "karta bilan to'langan" yoki "to'lanmagan" belgisini ko'rsatish uchun
+   alohida so'rov kerak emas.
+5. To'lanmagan buyurtmani yopish: `POST /api/v1/orders/:id/refund`.
+   To'lanmagan bo'lsa buyurtma `CANCELLED` bo'ladi, rezerv bo'shaydi va
+   ochiq payment yozuvlari `CANCELLED` ga o'tadi — ya'ni xaridor provayder
+   sahifasini eski tab'da ochiq qoldirgan bo'lsa ham to'lay olmaydi
+   (Payme `PerformTransaction` va Click `Complete` faqat `CREATED`/`PENDING`
+   ni qabul qiladi).
+
+6. Refund: `POST /api/v1/admin/orders/:id/refund` (SUPERADMIN) — idempotent,
+   javob `{ id, status, idempotent }`. Bajarilgach shu buyurtmaning
+   `paymentStatus` / `payment.status` qiymati `REFUNDED` ga o'tadi.
+
+Payment-service ichki RPC'lari: `payment.summary-by-orders`
+(checkout buyurtma ro'yxati/tracking'ni boyitadi — checkout `payment`
+sxemasiga to'g'ridan-to'g'ri kirmaydi) va `payment.cancel-open`
+(buyurtma bekor qilinganda yakunlanmagan to'lovlarni yopadi; to'langan
+buyurtmada xato beradi, refund kerak).
+
 ## Sinov tartibi
 
 1. Yangi migration'ni payment-service bazasiga qo'llang (loyihadagi migration deploy tartibi). Avval yangi checkout-service, keyin payment-service va api-gateway versiyasini deploy qiling: outbox `checkout.payment-paid` RPC'sini ishlatadi.

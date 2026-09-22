@@ -81,3 +81,24 @@ CREATE TABLE product_variant (
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     is_deleted      BOOLEAN      NOT NULL DEFAULT FALSE
 );
+
+-- C6.9 — storefront bosh sahifasidagi reklama bannerlari (admin boshqaradi)
+CREATE TABLE banner (
+    id          BIGSERIAL PRIMARY KEY,
+    title       VARCHAR(255)  NOT NULL,
+    image_url   VARCHAR(1000) NOT NULL,           -- file-service qaytargan manzil
+    link_url    VARCHAR(1000),                    -- bosilganda ochiladigan sahifa
+    sort_order  INTEGER       NOT NULL DEFAULT 0,
+    is_active   BOOLEAN       NOT NULL DEFAULT true,
+    starts_at   TIMESTAMPTZ,                      -- null = darhol
+    ends_at     TIMESTAMPTZ,                      -- null = muddatsiz
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT chk_catalog_banner_period
+      CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)
+);
+
+CREATE INDEX idx_catalog_banner_sort ON banner (sort_order, id);
+-- Storefront faqat faollarini o'qiydi; muddat filtri so'rov vaqtida qo'llanadi.
+CREATE INDEX idx_catalog_banner_visible ON banner (sort_order, id)
+  WHERE is_active = true;

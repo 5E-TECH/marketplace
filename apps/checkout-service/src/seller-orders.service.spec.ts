@@ -1,5 +1,5 @@
 import { SalesOrderSellerStatus } from '@app/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { SellerOrdersService } from './seller-orders.service';
 
 describe('SellerOrdersService', () => {
@@ -368,6 +368,7 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
           customerId: '9',
           sessionId: 'guest-session',
           orderStatus: 'CONFIRMED',
+          paymentMethod: 'cod',
           orderUpdatedAt: '2026-09-14T10:00:00.000Z',
           sellerOrderId: '11',
           shopId: '3',
@@ -382,6 +383,7 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
           customerId: '9',
           sessionId: 'guest-session',
           orderStatus: 'CONFIRMED',
+          paymentMethod: 'cod',
           orderUpdatedAt: '2026-09-14T10:00:00.000Z',
           sellerOrderId: '12',
           shopId: '4',
@@ -400,6 +402,7 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       orderStatus: 'IN_TRANSIT',
       estimatedDeliveryAt: null,
       updatedAt: '2026-09-14T10:30:00.000Z',
+      payment: null,
       shipments: [
         {
           shipmentId: '7',
@@ -587,6 +590,7 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
             orderId: '42',
             createdAt: '2026-09-15T10:00:00.000Z',
             orderStatus: 'CONFIRMED',
+            paymentMethod: 'cod',
             totalAmount: 115000,
             deliveryFee: 15000,
           },
@@ -612,6 +616,9 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
           orderId: '42',
           createdAt: '2026-09-15T10:00:00.000Z',
           orderStatus: 'CONFIRMED',
+          paymentMethod: 'cod',
+          paymentProvider: null,
+          paymentStatus: null,
           subtotal: 100000,
           deliveryFee: 15000,
           totalAmount: 115000,
@@ -636,6 +643,175 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       expect.stringContaining('WHERE customer_id=$1'),
       ['9', 20, 0],
     );
+  });
+
+  it('online buyurtma ro‘yxatida payment-service holatini ko‘rsatadi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            createdAt: '2026-09-15T10:00:00.000Z',
+            orderStatus: 'PENDING_PAYMENT',
+            paymentMethod: 'online',
+            totalAmount: 115000,
+            deliveryFee: 15000,
+          },
+        ])
+        .mockResolvedValueOnce([]),
+    };
+    const payment = {
+      send: jest.fn(() =>
+        of({
+          '42': {
+            paymentId: '5',
+            salesOrderId: '42',
+            provider: 'PAYME',
+            status: 'FAILED',
+            amount: 115000,
+            paidAt: null,
+            failureReason: 'Hisobdan yechishda xatolik',
+          },
+        }),
+      ),
+    };
+    const service = new SellerOrdersService(
+      dataSource as never,
+      undefined,
+      undefined,
+      undefined,
+      payment as never,
+    );
+
+    const page = await service.buyerOrders('9');
+    expect(page.items[0]).toMatchObject({
+      paymentMethod: 'online',
+      paymentProvider: 'PAYME',
+      paymentStatus: 'FAILED',
+    });
+    expect(payment.send).toHaveBeenCalledWith(
+      { cmd: 'payment.summary-by-orders' },
+      { salesOrderIds: ['42'] },
+    );
+  });
+
+  it('to‘lov boshlanmagan online buyurtmada paymentStatus null bo‘ladi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            createdAt: '2026-09-15T10:00:00.000Z',
+            orderStatus: 'PENDING_PAYMENT',
+            paymentMethod: 'online',
+            totalAmount: 115000,
+            deliveryFee: 15000,
+          },
+        ])
+        .mockResolvedValueOnce([]),
+    };
+    const service = new SellerOrdersService(dataSource as never);
+
+    const page = await service.buyerOrders('9');
+    expect(page.items[0]).toMatchObject({
+      paymentProvider: null,
+      paymentStatus: null,
+    });
+  });
+
+  it('payment-service javob bermasa ro‘yxat baribir ochiladi', async () => {
+    const dataSource = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([
+          {
+            orderId: '42',
+            createdAt: '2026-09-15T10:00:00.000Z',
+            orderStatus: 'PENDING_PAYMENT',
+            paymentMethod: 'online',
+            totalAmount: 115000,
+            deliveryFee: 15000,
+          },
+        ])
+        .mockResolvedValueOnce([]),
+    };
+    const payment = {
+      send: jest.fn(() => throwError(() => new Error('payment-service down'))),
+    };
+    const service = new SellerOrdersService(
+      dataSource as never,
+      undefined,
+      undefined,
+      undefined,
+      payment as never,
+    );
+
+    const page = await service.buyerOrders('9');
+    expect(page.items[0]).toMatchObject({
+      orderStatus: 'PENDING_PAYMENT',
+      paymentStatus: null,
+    });
+  });
+
+  it('tracking javobiga online to‘lov holati qo‘shiladi', async () => {
+    const dataSource = {
+      query: jest.fn().mockResolvedValue([
+        {
+          orderId: '42',
+          customerId: '9',
+          sessionId: null,
+          orderStatus: 'PENDING_PAYMENT',
+          paymentMethod: 'online',
+          orderUpdatedAt: '2026-09-14T10:00:00.000Z',
+          sellerOrderId: null,
+          shopId: null,
+          shopName: null,
+          shipmentId: null,
+          shipmentStatus: null,
+          trackingUrl: null,
+          updatedAt: null,
+        },
+      ]),
+    };
+    const payment = {
+      send: jest.fn(() =>
+        of({
+          '42': {
+            paymentId: '5',
+            salesOrderId: '42',
+            provider: 'CLICK',
+            status: 'CANCELLED',
+            amount: 115000,
+            paidAt: null,
+            updatedAt: '2026-09-14T10:02:00.000Z',
+            failureReason: 'Karta mablag‘i yetarli emas',
+          },
+        }),
+      ),
+    };
+    const service = new SellerOrdersService(
+      dataSource as never,
+      undefined,
+      undefined,
+      undefined,
+      payment as never,
+    );
+
+    await expect(service.buyerTracking('42', '9')).resolves.toMatchObject({
+      payment: {
+        id: '5',
+        provider: 'CLICK',
+        amount: 115000,
+        status: 'CANCELLED',
+        failureReason: 'Karta mablag‘i yetarli emas',
+        updatedAt: '2026-09-14T10:02:00.000Z',
+      },
+    });
   });
 
   it('buyer orderlari bo‘lmasa bo‘sh sahifa qaytaradi', async () => {

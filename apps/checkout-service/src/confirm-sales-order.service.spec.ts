@@ -150,8 +150,9 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
     const { service, inventory, notifications, queries, dataSource } = setup({
       failingShipment: true,
     });
+    // Elchi'ning xom xatosi mijozga ketmaydi — faqat umumiy xabar (sendRpc).
     await expect(service.confirm('1', '5')).rejects.toThrow(
-      'Elchi unavailable',
+      'Birozdan so‘ng qayta urinib ko‘ring',
     );
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(inventory.send).not.toHaveBeenCalled();
