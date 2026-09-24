@@ -2,7 +2,11 @@ import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'minio';
 import { randomUUID } from 'node:crypto';
-import { UploadFileCommand, UploadedFileDto } from '@app/common';
+import {
+  PUBLIC_MEDIA_FOLDERS,
+  UploadFileCommand,
+  UploadedFileDto,
+} from '@app/common';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const EXTENSIONS: Record<string, string> = {
@@ -64,7 +68,11 @@ export class FileServiceService implements OnModuleInit {
       );
     }
 
-    const objectName = `products/${Date.now()}-${randomUUID()}${extension}`;
+    const folder = command.folder ?? 'products';
+    if (!PUBLIC_MEDIA_FOLDERS.includes(folder)) {
+      throw new BadRequestException('Fayl papkasi noto‘g‘ri');
+    }
+    const objectName = `${folder}/${Date.now()}-${randomUUID()}${extension}`;
     await this.minioClient.putObject(
       this.bucketName,
       objectName,
@@ -98,7 +106,9 @@ export class FileServiceService implements OnModuleInit {
           Effect: 'Allow',
           Principal: '*',
           Action: ['s3:GetObject'],
-          Resource: [`arn:aws:s3:::${this.bucketName}/products/*`],
+          Resource: PUBLIC_MEDIA_FOLDERS.map(
+            (folder) => `arn:aws:s3:::${this.bucketName}/${folder}/*`,
+          ),
         },
       ],
     };

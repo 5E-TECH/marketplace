@@ -7066,6 +7066,78 @@
         ]
       }
     },
+    "/api/v1/admin/content/banners/image": {
+      "post": {
+        "operationId": "AdminContentController_uploadImage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedFileDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fayl yo‘q yoki formati noto‘g‘ri"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Fayl 5 MB dan katta"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Banner rasmini yuklash (JPEG/PNG/WEBP, 5 MB gacha)",
+        "tags": [
+          "admin-content"
+        ]
+      }
+    },
     "/api/v1/admin/content/banners/order": {
       "patch": {
         "description": "Butun ro‘yxat yangi `sortOrder` bilan yuboriladi. Bannerlardan biri topilmasa hech biri saqlanmaydi.",
@@ -9878,11 +9950,11 @@
           },
           "imageUrl": {
             "type": "string",
-            "example": "https://cdn.example.com/banners/autumn.jpg"
+            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg"
           },
           "linkUrl": {
             "type": "string",
-            "example": null,
+            "example": "/katalog/telefon",
             "nullable": true
           },
           "sortOrder": {
@@ -11432,11 +11504,11 @@
           },
           "imageUrl": {
             "type": "string",
-            "example": "https://cdn.example.com/banners/autumn.jpg"
+            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg"
           },
           "linkUrl": {
             "type": "string",
-            "example": null,
+            "example": "/katalog/telefon",
             "nullable": true
           },
           "sortOrder": {
@@ -11485,28 +11557,63 @@
           "updatedAt"
         ]
       },
+      "UploadedFileDto": {
+        "type": "object",
+        "properties": {
+          "objectName": {
+            "type": "string",
+            "example": "products/1722250000000-uuid.jpg"
+          },
+          "bucket": {
+            "type": "string",
+            "example": "marketplace-media"
+          },
+          "url": {
+            "type": "string",
+            "example": "http://localhost:9000/marketplace-media/products/1722250000000-uuid.jpg"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/jpeg"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          }
+        },
+        "required": [
+          "objectName",
+          "bucket",
+          "url",
+          "mimeType",
+          "size"
+        ]
+      },
       "CreateBannerDto": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
-            "example": "50% chegirma"
+            "example": "50% chegirma",
+            "description": "Storefront’da banner rasmi ustida yoziladi."
           },
           "imageUrl": {
             "type": "string",
-            "example": "https://cdn.example.com/banners/autumn.jpg",
-            "description": "`POST /files/upload` qaytargan manzil."
+            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg",
+            "description": "`POST /admin/content/banners/image` qaytargan manzil. Faqat platforma media omboridagi rasm qabul qilinadi — boshqa hostdagi rasm storefront’da chiqmaydi."
           },
           "linkUrl": {
-            "type": "object",
-            "example": "/storefront/products?categoryId=7",
+            "type": "string",
+            "example": "/katalog/telefon",
             "nullable": true,
-            "description": "Bannerga bosilganda ochiladigan sahifa."
+            "description": "Bannerga bosilganda ochiladigan sahifa: '/' bilan boshlanuvchi yo'l yoki https:// manzil. Bo'sh — banner bosilmaydi."
           },
           "sortOrder": {
             "type": "number",
             "example": 10,
-            "default": 0
+            "default": 0,
+            "minimum": 0,
+            "maximum": 2147483647
           },
           "isActive": {
             "type": "boolean",
@@ -11514,13 +11621,13 @@
             "default": true
           },
           "startsAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-09-25T00:00:00.000Z",
             "nullable": true,
             "description": "Shu vaqtgacha storefront’da ko‘rinmaydi; null — darhol."
           },
           "endsAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-10-01T00:00:00.000Z",
             "nullable": true,
             "description": "Shu vaqtdan keyin o‘zi yo‘qoladi; null — muddatsiz."
@@ -11540,7 +11647,9 @@
           },
           "sortOrder": {
             "type": "number",
-            "example": 0
+            "example": 0,
+            "minimum": 0,
+            "maximum": 2147483647
           }
         },
         "required": [
@@ -11552,6 +11661,8 @@
         "type": "object",
         "properties": {
           "items": {
+            "minItems": 1,
+            "maxItems": 100,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReorderBannerItemDto"
@@ -11571,36 +11682,33 @@
           },
           "imageUrl": {
             "type": "string",
-            "example": "https://cdn.example.com/banners/autumn.jpg",
-            "description": "`POST /files/upload` qaytargan manzil."
+            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg"
           },
           "linkUrl": {
-            "type": "object",
-            "example": "/storefront/products?categoryId=7",
+            "type": "string",
+            "example": "/katalog/telefon",
             "nullable": true,
-            "description": "Bannerga bosilganda ochiladigan sahifa."
+            "description": "Bo'sh qiymat yoki null havolani olib tashlaydi."
           },
           "sortOrder": {
             "type": "number",
             "example": 10,
-            "default": 0
+            "minimum": 0,
+            "maximum": 2147483647
           },
           "isActive": {
             "type": "boolean",
-            "example": true,
-            "default": true
+            "example": true
           },
           "startsAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-09-25T00:00:00.000Z",
-            "nullable": true,
-            "description": "Shu vaqtgacha storefront’da ko‘rinmaydi; null — darhol."
+            "nullable": true
           },
           "endsAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-10-01T00:00:00.000Z",
-            "nullable": true,
-            "description": "Shu vaqtdan keyin o‘zi yo‘qoladi; null — muddatsiz."
+            "nullable": true
           }
         }
       },

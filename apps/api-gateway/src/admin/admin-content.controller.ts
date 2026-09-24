@@ -1,4 +1,7 @@
+/// <reference types="multer" />
+
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,16 +11,22 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -34,7 +43,11 @@ import {
   RmqClient,
   sendRpc,
   UpdateBannerDto,
+  UploadedFileDto,
 } from '@app/common';
+
+const MAX_BANNER_IMAGE_SIZE = 5 * 1024 * 1024;
+const BANNER_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 /**
  * C6.9 — storefront bosh sahifasidagi reklama bannerlari. Har o'zgarish
@@ -48,6 +61,7 @@ export class AdminContentController {
   constructor(
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.FILE) private readonly files: ClientProxy,
   ) {}
 
   @Get()
@@ -62,6 +76,63 @@ export class AdminContentController {
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list() {
     return sendRpc(this.catalog, { cmd: 'content.banners.admin-list' }, {});
+  }
+
+  /**
+   * Banner rasmi. `POST /files/upload` sotuvchi uchun va rasmni mahsulotga
+   * biriktiradi, shuning uchun admin undan foydalana olmaydi. Bu endpoint
+   * rasmni MinIO'ning ochiq `banners/` papkasiga yuklaydi; qaytgan `url`
+   * banner yaratish/tahrirlashda `imageUrl` sifatida yuboriladi.
+   */
+  @Post('image')
+  @ApiOperation({
+    summary: 'Banner rasmini yuklash (JPEG/PNG/WEBP, 5 MB gacha)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiCreatedResponse({ type: UploadedFileDto })
+  @ApiBadRequestResponse({ description: 'Fayl yo‘q yoki formati noto‘g‘ri' })
+  @ApiPayloadTooLargeResponse({ description: 'Fayl 5 MB dan katta' })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_BANNER_IMAGE_SIZE },
+      fileFilter: (_request, file, callback) => {
+        if (!BANNER_IMAGE_TYPES.has(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Faqat JPEG, PNG va WEBP formatlari ruxsat etilgan',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<UploadedFileDto> {
+    if (!file) throw new BadRequestException('Fayl yuborilmadi');
+    return sendRpc<UploadedFileDto>(
+      this.files,
+      { cmd: 'file.upload' },
+      {
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        base64: file.buffer.toString('base64'),
+        folder: 'banners',
+      },
+    );
   }
 
   @Post()
