@@ -10,13 +10,22 @@ describe('AdminContentController (C6.9)', () => {
   function setup(response: unknown = { id: '3' }) {
     const catalog = { send: jest.fn(() => of(response)) };
     const identity = { send: jest.fn(() => of({ id: '1' })) };
+    const files = {
+      send: jest.fn(() =>
+        of({
+          url: 'https://api.elchimarket.uz/media/marketplace-media/banners/a.jpg',
+        }),
+      ),
+    };
     return {
       controller: new AdminContentController(
         catalog as never,
         identity as never,
+        files as never,
       ),
       catalog,
       identity,
+      files,
     };
   }
 
@@ -97,6 +106,7 @@ describe('AdminContentController (C6.9)', () => {
     const controller = new AdminContentController(
       catalog as never,
       identity as never,
+      { send: jest.fn() } as never,
     );
     await expect(
       controller.create(
@@ -105,6 +115,39 @@ describe('AdminContentController (C6.9)', () => {
         '',
       ),
     ).resolves.toEqual({ id: '3' });
+  });
+
+  it('rasmni ochiq banners/ papkasiga yuklaydi', async () => {
+    const { controller, files } = setup();
+    const buffer = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+    await expect(
+      controller.uploadImage({
+        originalname: 'kuz.jpg',
+        mimetype: 'image/jpeg',
+        size: buffer.length,
+        buffer,
+      } as never),
+    ).resolves.toEqual({
+      url: 'https://api.elchimarket.uz/media/marketplace-media/banners/a.jpg',
+    });
+    expect(files.send).toHaveBeenCalledWith(
+      { cmd: 'file.upload' },
+      {
+        originalName: 'kuz.jpg',
+        mimeType: 'image/jpeg',
+        size: 4,
+        base64: buffer.toString('base64'),
+        folder: 'banners',
+      },
+    );
+  });
+
+  it('fayl yuborilmasa 400 beradi va file-service chaqirilmaydi', async () => {
+    const { controller, files } = setup();
+    await expect(controller.uploadImage(undefined)).rejects.toThrow(
+      'Fayl yuborilmadi',
+    );
+    expect(files.send).not.toHaveBeenCalled();
   });
 
   it('`order` route `:id` dan oldin e’lon qilingan', () => {

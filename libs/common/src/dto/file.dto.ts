@@ -46,9 +46,19 @@ export class ProductImageUploadResultDto extends UploadedFileDto {
   isCover: boolean;
 }
 
+/**
+ * MinIO ichidagi ochiq papkalar. Bucket siyosati faqat shularni o'qishga
+ * ochadi, shuning uchun yangi papka qo'shilsa file-service siyosati ham
+ * yangilanadi (FileServiceService.configurePublicReadPolicy).
+ */
+export const PUBLIC_MEDIA_FOLDERS = ['products', 'banners'] as const;
+export type MediaFolder = (typeof PUBLIC_MEDIA_FOLDERS)[number];
+
 export type UploadFileCommand = {
   originalName: string;
   mimeType: string;
   size: number;
   base64: string;
+  /** Berilmasa `products` — mavjud mahsulot rasmlari oqimi o'zgarmaydi. */
+  folder?: MediaFolder;
 };

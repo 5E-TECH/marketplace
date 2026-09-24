@@ -473,22 +473,42 @@ provision qiladi; natija auditga yoziladi, xatolar retry cron orqali tiklanadi.
 **`GET /admin/notifications/templates` · ADMIN** — shablonlar.
 
 ### 8.12 Kontent / bannerlar ✅ C6.9
+**`POST /admin/content/banners/image` · ADMIN, SUPERADMIN** · `multipart/form-data`,
+maydon `file` (JPEG/PNG/WEBP, 5 MB gacha). Rasmni MinIO'ning ochiq `banners/`
+papkasiga yuklaydi va `{ url, objectName, bucket, mimeType, size }` qaytaradi.
+`POST /files/upload` bu yerda ishlatilmaydi: u faqat SELLER uchun va rasmni
+mahsulotga biriktiradi.
 **`GET /admin/content/banners` · ADMIN, SUPERADMIN** — barcha bannerlar,
-`sortOrder` bo'yicha. Nofaol va muddati tugaganlari ham ko'rinadi; `isVisible`
-— shu daqiqada storefront'da chiqayotgani.
+`sortOrder`, keyin `id` bo'yicha. Nofaol va muddati tugaganlari ham ko'rinadi;
+`isVisible` — shu daqiqada storefront'da chiqayotgani.
 **`POST /admin/content/banners`** — `{ title, imageUrl, linkUrl?, sortOrder?,
-isActive?, startsAt?, endsAt? }`. `imageUrl` — `POST /files/upload` qaytargan
-manzil. `endsAt` `startsAt` dan keyin bo'lishi shart (DB'da ham CHECK).
-**`PATCH /admin/content/banners/order`** — `{ items: [{ id, sortOrder }] }`,
-drag-and-drop tartibi. Bannerlardan biri topilmasa hech biri saqlanmaydi.
-**`PATCH /admin/content/banners/:id`** — tahrir (faol/nofaol va muddat ham).
+isActive?, startsAt?, endsAt? }`, javob `201`.
+- `imageUrl` — faqat platforma media omboridagi rasm
+  (`{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/banners/...` yoki `/products/...`).
+  Boshqa host `400` — aks holda storefront uni kulrang placeholder bilan
+  almashtirardi, admin CSP esa preview'ni bloklardi.
+- `linkUrl` — `/` bilan boshlanuvchi sayt yo'li yoki `http(s)://` manzil.
+  `//host`, `/\host`, `/api/...`, `/storefront/...` (storefront'da JSON
+  qaytaradi) va sxemasiz qiymatlar (`katalog/telefon`) `400`. Bo'sh — havolasiz.
+- `sortOrder` `0..2147483647`; `endsAt` `startsAt` dan keyin bo'lishi shart
+  (DB'da ham CHECK).
+- Jami bannerlar `100` tadan oshmaydi (`400`).
+
+**`PATCH /admin/content/banners/order`** — `{ items: [{ id, sortOrder }] }`
+(1..100 element), drag-and-drop tartibi. Bitta tranzaksiyada, qatorlar
+qulflangan holda: biri topilmasa hech biri saqlanmaydi.
+**`PATCH /admin/content/banners/:id`** — faqat yuborilgan maydonlar o'zgaradi.
+Majburiy maydonga (`title`, `imageUrl`, `sortOrder`, `isActive`) `null`
+yuborilsa `400`; `linkUrl`/`startsAt`/`endsAt` ga `null` — tozalash.
 **`DELETE /admin/content/banners/:id`** — o'chirish; `{ id, deleted }`.
+Mavjud bo'lmagan yoki bigint'dan katta id — `404`.
 Har o'zgarish auditga yoziladi (`entityType: "Banner"`).
 
-**`GET /storefront/banners` · public** — bosh sahifa uchun faol bannerlar:
-`[{ id, title, imageUrl, linkUrl, sortOrder }]`. Nofaol, hali boshlanmagan va
-muddati tugagan banner javobga tushmaydi — filtr SQL'da, ya'ni muddati
-tugaganda o'zi yo'qoladi, tozalovchi cron kerak emas.
+**`GET /storefront/banners` · public** — bosh sahifa uchun faol bannerlar,
+eng ko'pi `12` ta: `[{ id, title, imageUrl, linkUrl, sortOrder }]`. Nofaol,
+hali boshlanmagan va muddati tugagan banner javobga tushmaydi — filtr SQL'da.
+Storefront bu endpointni keshsiz (`no-store`) chaqiradi, shuning uchun muddati
+tugagan yoki o'chirilgan banner keyingi sahifa ochilishidayoq yo'qoladi.
 
 ### 8.13 Platforma sozlamalari ✅ C6.2
 **`GET /admin/settings` · ADMIN, SUPERADMIN** — joriy `{ commissionPercent, minimumOrderAmount, supportPhone, updatedBy, updatedAt }`.
@@ -532,9 +552,9 @@ Rol o'zgartirish va o'chirish faol refresh sessiyalarni bekor qiladi. Har o'zgar
 | Route guruhi | public | SELLER | ADMIN | SUPERADMIN |
 |---|:--:|:--:|:--:|:--:|
 | `/auth/*` (register,login,refresh) | ✅ | — | — | — |
-| `/categories` GET | ✅ | ✅ | ✅ | ✅ |
+| `/categories` GET, `/storefront/banners` GET | ✅ | ✅ | ✅ | ✅ |
 | `/sellers/me`, `/products/*`, `/inventory/*`, `/seller/*`, `/files/upload` | — | ✅ | — | — |
-| `/admin/*` (dashboard, shops, users, orders ko'rish, kategoriya) | — | — | ✅ | ✅ |
+| `/admin/*` (dashboard, shops, users, orders ko'rish, kategoriya, `/admin/content/banners*` shu jumladan rasm yuklash) | — | — | ✅ | ✅ |
 | `/admin/finance/*`, `/admin/settings` PUT, `/admin/team/*`, `/admin/payments/providers`, rol/impersonate | — | — | ❌ | ✅ |
 | `/webhooks/elchi` | ✅(HMAC) | — | — | — |
 
