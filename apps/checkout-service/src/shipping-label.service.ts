@@ -7,18 +7,37 @@ export interface ShippingLabelData {
   salesOrderId: string;
   shipmentId: string;
   qrCodeToken: string;
+  /** Jo'natuvchi do'kon nomi. */
+  senderName: string;
   buyerName: string;
   buyerPhone: string;
+  regionName?: string | null;
+  districtName?: string | null;
   deliveryAddress: string;
   codAmount: number;
   items: Array<{ productName: string; quantity: number }>;
+}
+
+/** Partiyada chiqmay qolgan yorliq va sababi — butun PDF yiqilmaydi. */
+export interface SkippedShippingLabel {
+  orderId: string;
+  sellerOrderId?: string;
+  reason: string;
 }
 
 export interface ShippingLabelDocument {
   fileName: string;
   contentType: 'application/pdf';
   base64: string;
+  /** Partiyada chiqmay qolganlar (gateway `X-Labels-Skipped` ga yozadi). */
+  skipped?: SkippedShippingLabel[];
 }
+
+/**
+ * 100x60 mm ga sig'adigan mahsulot satrlari. Qolganlari "+ yana N ta" bo'lib
+ * chiqadi — to'liq tarkib Elchi tizimida va buyurtma tafsilotida bor.
+ */
+export const LABEL_MAX_ITEMS = 4;
 
 /** C1.45 — Gainscha GS-2408D uchun 100x60 mm Elchi shipment yorlig‘i. */
 @Injectable()
@@ -34,6 +53,7 @@ export class ShippingLabelService {
 
   async generateBatch(
     labels: ShippingLabelData[],
+    skipped: SkippedShippingLabel[] = [],
   ): Promise<ShippingLabelDocument> {
     if (labels.length === 0) {
       throw new Error('Kamida bitta yorliq kerak');
@@ -43,6 +63,7 @@ export class ShippingLabelService {
       fileName: `shipments-${labels.length}.pdf`,
       contentType: 'application/pdf',
       base64: pdf.toString('base64'),
+      ...(skipped.length ? { skipped } : {}),
     };
   }
 
@@ -137,6 +158,17 @@ export class ShippingLabelService {
       align: 'center',
       ellipsis: true,
     });
+    doc.font('Helvetica-Bold').fontSize(5).text("JO'NATUVCHI", margin, 137, {
+      width: leftWidth,
+      align: 'center',
+      lineBreak: false,
+    });
+    doc.fontSize(7).text(data.senderName || '-', margin, 145, {
+      width: leftWidth,
+      height: 17,
+      align: 'center',
+      ellipsis: true,
+    });
 
     // O‘ng panel: qabul qiluvchi va manzil.
     doc.font('Helvetica-Bold').fontSize(6).text('QABUL QILUVCHI', rightX, 7, {
@@ -157,11 +189,26 @@ export class ShippingLabelService {
         ellipsis: true,
         lineBreak: false,
       });
-    doc.fontSize(7).text(data.deliveryAddress || '-', rightX, 43, {
-      width: rightWidth,
-      height: 20,
-      ellipsis: true,
-    });
+    const area = [data.regionName, data.districtName]
+      .filter(Boolean)
+      .join(', ');
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text(area || '-', rightX, 42, {
+        width: rightWidth,
+        height: 9,
+        ellipsis: true,
+        lineBreak: false,
+      });
+    doc
+      .font('Helvetica')
+      .fontSize(6)
+      .text(data.deliveryAddress || '-', rightX, 51, {
+        width: rightWidth,
+        height: 14,
+        ellipsis: true,
+      });
 
     doc
       .moveTo(rightX, 66)
@@ -170,7 +217,7 @@ export class ShippingLabelService {
     doc.font('Helvetica-Bold').fontSize(6).text('MAHSULOTLAR', rightX, 70, {
       lineBreak: false,
     });
-    const visibleItems = data.items.slice(0, 4);
+    const visibleItems = data.items.slice(0, LABEL_MAX_ITEMS);
     let itemY = 80;
     for (const item of visibleItems) {
       doc

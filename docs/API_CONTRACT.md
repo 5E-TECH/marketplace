@@ -120,6 +120,31 @@ List endpoint'lar query oladi: `?page=1&limit=20&sort=createdAt:desc&search=...`
 - `POST /auth/logout` → refresh bekor qilinadi.
 - FE: access'ni memory/localStorage, refresh'ni saqlaydi; 401 da bir marta refresh, keyin login'ga.
 
+### 2.2.1 HttpOnly cookie rejimi (tavsiya etiladi)
+`login`, `register` va `refresh` tokenlarni body'dan tashqari HttpOnly cookie'ga
+ham yozadi: `accessToken` (`Path=/api/v1`) va `refreshToken`
+(`Path=/api/v1/auth`). JS ularni o'qiy olmaydi — XSS'da token o'g'irlanmaydi.
+HTTPS'da `Secure; SameSite=None`, HTTP'da `SameSite=Lax`.
+
+FE cookie rejimiga o'tish uchun:
+- Barcha so'rovlar `credentials: 'include'` (axios: `withCredentials: true`) bilan.
+- Barcha so'rovlarga `X-Requested-With: XMLHttpRequest` sarlavhasi. Cookie
+  bilan kelgan `POST/PUT/PATCH/DELETE` shu sarlavhasiz **`403`** (CSRF
+  himoyasi); ochiq (`public`) route'da esa cookie e'tiborsiz qoladi — so'rov
+  anonim bajariladi.
+- Tokenni localStorage'ga yozmaslik va `Authorization` yubormaslik. Header
+  berilsa u cookie'dan **ustuvor** (impersonation tokeni shu orqali ishlaydi).
+- 401 oqimi o'zgarmaydi: muddati o'tgan access cookie ham yuboriladi → `401` →
+  bir marta `POST /auth/refresh` (body'siz, cookie'dan o'qiladi). Refresh rad
+  etilsa backend ikkala cookie'ni o'zi tozalaydi.
+- Chiqish — `POST /auth/logout` (ikkala cookie tozalanadi).
+
+O'tish davrida tokenlar body'da ham qaytadi (`AUTH_TOKENS_IN_BODY=true`,
+default). FE to'liq cookie'ga o'tgach serverda `AUTH_TOKENS_IN_BODY=false`
+qilinadi: `login`/`refresh` → `{}`, `register` → `{ user }` — tokenlar faqat
+cookie'da. Body'da qolgan token XSS'da `POST /auth/refresh` orqali o'qilishi
+mumkin, shuning uchun to'liq himoya faqat shu flag o'chgach.
+
 ### 2.3 OTP qarori (MVP)
 - **MVP'da telefon OTP YO'Q.** Sabab: sotuvchi baribir **admin approve**'dan o'tadi (soxta ro'yxat bloklanadi), SMS xarajati/murakkabligi keyinga. `phone` **unique** bilan himoyalanadi.
 - Buyer OTP (Faza 2) — keyin qo'shiladi. *(Bu qarorni o'zgartirmoqchi bo'lsangiz — ayting.)*
@@ -324,12 +349,29 @@ majburiy:
 **`GET /seller/orders` · SELLER** — o'z sub-buyurtmalari (`sales_order_seller` + Elchi status), pagination.
 **`GET /seller/orders/:id/label` · SELLER / OPERATOR ✅ C1.45** — o‘z
 do‘konidagi shipment uchun 100x60 mm `application/pdf` yorliq. QR ichida
-Elchi `qr_code_token`; yorliqda qabul qiluvchi, telefon, manzil, mahsulotlar va
-COD summa mavjud. Shipment/token yo‘q → `409`, begona do‘kon buyurtmasi → `404`.
+Elchi `qr_code_token`; yorliqda jo‘natuvchi do‘kon, qabul qiluvchi, telefon,
+viloyat/tuman, manzil, mahsulotlar (4 tagacha, qolgani "+ yana N") va kuryer
+oladigan summa (Elchi `to_be_paid`) mavjud. Token bazada bo‘lmasa Elchi’dan
+olinib saqlanadi. Shipment yoki (Elchi’da ham) token yo‘q → `409`, begona do‘kon
+buyurtmasi → `404`.
 **`POST /seller/orders/labels` · SELLER / OPERATOR ✅ C1.45** —
 `{ "orderIds":["101","102"] }`; 1–100 ta yorliqni bitta ko‘p sahifali PDF qiladi.
-**`GET /admin/orders/:id/label` · ADMIN / SUPERADMIN ✅ C1.45** — istalgan
-seller-order yorlig‘i. **`POST /admin/orders/labels`** — admin batch PDF.
+Yorlig‘i chiqmaganlar partiyani yiqitmaydi: ular `X-Labels-Skipped` headerida
+(URI-encoded JSON `[{ orderId, sellerOrderId?, reason }]`) qaytadi. Birortasi
+ham chiqmasa `409` (sabablar bo‘yicha guruhlangan xabar).
+**`GET /admin/orders/:id/label` · ADMIN / SUPERADMIN ✅ C1.45** — `:id` =
+**sales_order** id (admin ro‘yxati va `GET /admin/orders/:id` bilan bir xil);
+buyurtmaning har bir do‘kon posilkasi alohida sahifa.
+**`GET /admin/orders/:id/sellers/:sellerOrderId/label`** — bitta posilka;
+posilka shu buyurtmaga tegishli bo‘lmasa `404`.
+**`POST /admin/orders/labels`** — `orderIds` = sales_order id’lari, batch PDF
+(`X-Labels-Skipped` seller bilan bir xil).
+**`POST /admin/orders/shipment-tokens/sync` · SUPERADMIN** —
+`{ afterId?, limit?(1–50), dryRun? }`; tokeni yo‘q yoki Elchi’dagidan farq
+qiladigan posilkalarni Elchi `GET /partner/shipments/:id` bo‘yicha tuzatadi.
+`nextAfterId` null bo‘lguncha takrorlanadi.
+Admin ro‘yxati `items[].shipmentsCount` — posilkasi bor sub-buyurtmalar soni
+(0 bo‘lsa chop etish belgisi o‘chiriladi).
 Elchi `received` webhook statusi seller-order holatini `RECEIVED` ga o‘tkazadi.
 - Query: `status(SalesOrderSellerStatus)?, dateFrom?, dateTo?, search?`.
 - `items[]`: `{ id, salesOrderId, buyerName, subtotal, codAmount, status, elchiShipmentId, trackingUrl, itemsCount, createdAt }`.
@@ -617,7 +659,12 @@ Xaridor tomoni:
 - **`GET /orders`** har bandda `paymentMethod` (`online`/`cod`),
   `paymentProvider` (`PAYME`/`CLICK`/`null`) va `paymentStatus` qaytaradi.
   COD'da yoki to'lov hali boshlanmagan bo'lsa `paymentProvider`/`paymentStatus`
-  — `null`.
+  — `null`. Har mahsulot qatorida `id` — `sales_order_item` ID; sharh
+  yozishda (`POST /products/:productId/reviews`) aynan shu qiymat
+  `orderItemId` sifatida yuboriladi. `sellerOrderStatus` — shu mahsulot
+  sotuvchisi sub-buyurtmasining holati; sharh faqat `DELIVERED` bo'lganda
+  qabul qilinadi (ko'p sotuvchili buyurtmada `orderStatus` farq qilishi
+  mumkin). Takroriy sharh → `409`.
 - **`GET /orders/:id/tracking`** javobida
   `payment: { id, provider, amount, status, failureReason, updatedAt }`;
   COD'da yoki to'lov yozuvi yo'q bo'lsa `null`. `failureReason` faqat

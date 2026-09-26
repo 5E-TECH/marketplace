@@ -31,6 +31,7 @@ import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-deli
 import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-add-sales-order-session-id';
 import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-add-cart-item-product-name';
 import { AddSellerOrderQrToken1726502400000 } from './migrations/1726502400000-add-seller-order-qr-token';
+import { AddSellerOrderToBePaid1726588800000 } from './migrations/1726588800000-add-seller-order-to-be-paid';
 import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
 
@@ -104,6 +105,7 @@ import { AdminIntegrationQueryService } from './admin-integration-query.service'
             AddSalesOrderSessionId1726329600000,
             AddCartItemProductName1726416000000,
             AddSellerOrderQrToken1726502400000,
+            AddSellerOrderToBePaid1726588800000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

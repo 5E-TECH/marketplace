@@ -62,6 +62,7 @@ describe('SellerOrdersController', () => {
     const result = await controller.label(
       { sub: '401', role: Role.SELLER } as never,
       '9',
+      { setHeader: jest.fn() } as never,
     );
 
     expect(send).toHaveBeenCalledWith(

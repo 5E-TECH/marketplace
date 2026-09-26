@@ -8,6 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { SalesOrderSellerStatus } from '../enums';
 
 export class BuyerOrdersQueryDto {
   @ApiPropertyOptional({ type: Number, example: 1, default: 1 })
@@ -38,12 +39,27 @@ export class BuyerOrderRefundDto {
 }
 
 export class BuyerOrderListItemProductDto {
+  @ApiProperty({
+    example: '31',
+    description:
+      'sales_order_item ID — `POST /products/:productId/reviews` dagi `orderItemId`',
+  })
+  id: string;
   @ApiProperty({ example: '7' }) productId: string;
   @ApiProperty({ example: 'Mahsulot' }) name: string;
   @ApiProperty({ example: 1 }) quantity: number;
   @ApiProperty({ example: 100000 }) unitPrice: number;
   @ApiPropertyOptional({ example: null, nullable: true }) imageUrl:
     string | null;
+  @ApiProperty({
+    enum: SalesOrderSellerStatus,
+    example: SalesOrderSellerStatus.DELIVERED,
+    description:
+      'Shu mahsulot tegishli sotuvchi sub-buyurtmasining holati. Sharh faqat ' +
+      '`DELIVERED` bo‘lganda qabul qilinadi (ko‘p sotuvchili buyurtmada ' +
+      '`orderStatus` bundan farq qilishi mumkin).',
+  })
+  sellerOrderStatus: SalesOrderSellerStatus;
 }
 
 export class BuyerOrderListItemDto {

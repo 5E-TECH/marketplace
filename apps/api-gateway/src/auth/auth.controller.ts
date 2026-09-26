@@ -7,12 +7,14 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Optional,
   Param,
   Patch,
   Post,
   Req,
   Res,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
@@ -28,10 +30,12 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
+  ACCESS_TOKEN_COOKIE,
   AuthErrorResponseDto,
   AuthSuccessResponseDto,
   ForgotPasswordDto,
   CurrentUser,
+  IgnoreAuthCookie,
   JwtUser,
   LoginDto,
   RefreshTokenDto,
@@ -44,6 +48,7 @@ import {
   UpdateProfileDto,
   VerifyPhoneDto,
   rawResponse,
+  readCookie,
   sendRpc,
 } from '@app/common';
 
@@ -52,12 +57,23 @@ import {
 export class AuthController {
   private static readonly REFRESH_COOKIE_NAME = 'refreshToken';
   private static readonly REFRESH_COOKIE_PATH = '/api/v1/auth';
+  private static readonly ACCESS_COOKIE_PATH = '/api/v1';
   private static readonly FALLBACK_REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
   constructor(
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     private readonly jwt: JwtService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /**
+   * `AUTH_TOKENS_IN_BODY=false` — tokenlar faqat HttpOnly cookie'da. Body'da
+   * qolsa XSS `POST /auth/refresh`ni chaqirib access tokenni o'qib olishi
+   * mumkin; frontend cookie rejimiga o'tgach o'chiriladi.
+   */
+  private get tokensInBody(): boolean {
+    return String(this.config?.get('AUTH_TOKENS_IN_BODY') ?? true) !== 'false';
+  }
 
   /**
    * Cookie bayroqlari NODE_ENV emas, so'rovning haqiqiy protokoli bo'yicha
@@ -74,37 +90,60 @@ export class AuthController {
     return request.secure || request.headers['x-forwarded-proto'] === 'https';
   }
 
-  private setRefreshCookie(
+  /**
+   * Access cookie refresh bilan birga yashaydi (uning `exp`i emas): muddati
+   * o'tgan access baribir yuboriladi va guard 401 qaytaradi — frontend xuddi
+   * Bearer rejimidagidek refresh qiladi. Aks holda brauzer cookie'ni jim
+   * tashlab yuborar, @Public() route'lar esa xaridorni anonim deb bilardi.
+   */
+  private setAuthCookies(
     request: Request,
     response: Response,
-    refreshToken: string,
+    tokens: { accessToken: string; refreshToken: string },
   ): void {
-    const decoded = this.jwt.decode(refreshToken) as { exp?: number } | null;
+    const decoded = this.jwt.decode(tokens.refreshToken) as {
+      exp?: number;
+    } | null;
     const expiresAt = decoded?.exp
       ? decoded.exp * 1000
       : Date.now() + AuthController.FALLBACK_REFRESH_TTL_MS;
     const https = AuthController.isHttps(request);
-
-    response.cookie(AuthController.REFRESH_COOKIE_NAME, refreshToken, {
+    const options = {
       httpOnly: true,
       secure: https,
-      sameSite: https ? 'none' : 'lax',
-      path: AuthController.REFRESH_COOKIE_PATH,
+      sameSite: https ? ('none' as const) : ('lax' as const),
       maxAge: Math.max(1, expiresAt - Date.now()),
+    };
+
+    response.cookie(AuthController.REFRESH_COOKIE_NAME, tokens.refreshToken, {
+      ...options,
+      path: AuthController.REFRESH_COOKIE_PATH,
+    });
+    response.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
+      ...options,
+      path: AuthController.ACCESS_COOKIE_PATH,
     });
   }
 
-  private clearRefreshCookie(request: Request, response: Response): void {
+  private clearAuthCookies(request: Request, response: Response): void {
     const https = AuthController.isHttps(request);
-    response.clearCookie(AuthController.REFRESH_COOKIE_NAME, {
+    const options = {
       httpOnly: true,
       secure: https,
-      sameSite: https ? 'none' : 'lax',
+      sameSite: https ? ('none' as const) : ('lax' as const),
+    };
+    response.clearCookie(AuthController.REFRESH_COOKIE_NAME, {
+      ...options,
       path: AuthController.REFRESH_COOKIE_PATH,
+    });
+    response.clearCookie(ACCESS_TOKEN_COOKIE, {
+      ...options,
+      path: AuthController.ACCESS_COOKIE_PATH,
     });
   }
 
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
   @ApiOperation({ summary: 'Yangi foydalanuvchini ro‘yxatdan o‘tkazish' })
@@ -120,21 +159,34 @@ export class AuthController {
     description: 'Telefon raqami allaqachon ro‘yxatdan o‘tgan',
     type: AuthErrorResponseDto,
   })
-  register(@Body() dto: RegisterDto) {
-    return sendRpc(this.identity, { cmd: 'auth.register' }, dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{
+      accessToken: string;
+      refreshToken: string;
+    }>(this.identity, { cmd: 'auth.register' }, dto);
+    this.setAuthCookies(request, response, result);
+    if (this.tokensInBody) return result;
+    const { accessToken: _access, refreshToken: _refresh, ...rest } = result;
+    return rest;
   }
 
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Telefon va parol orqali tizimga kirish' })
   @ApiCreatedResponse({
     description:
-      'Login muvaffaqiyatli; access token body’da, refresh token HttpOnly cookie’da qaytarildi',
+      'Login muvaffaqiyatli; access token body’da va HttpOnly accessToken ' +
+      'cookie’da, refresh token HttpOnly cookie’da qaytarildi',
     type: LoginSuccessResponseDto,
     headers: {
       'Set-Cookie': {
-        description: 'HttpOnly refreshToken cookie',
+        description: 'HttpOnly accessToken va refreshToken cookie',
         schema: { type: 'string' },
       },
     },
@@ -158,13 +210,14 @@ export class AuthController {
       refreshToken: string;
     }>(this.identity, { cmd: 'auth.login' }, dto);
 
-    this.setRefreshCookie(request, response, result.refreshToken);
-    return rawResponse({
-      accessToken: result.accessToken,
-    });
+    this.setAuthCookies(request, response, result);
+    return rawResponse(
+      this.tokensInBody ? { accessToken: result.accessToken } : {},
+    );
   }
 
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -173,23 +226,27 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const cookie = req.headers.cookie
-      ?.split(';')
-      .map((v) => v.trim())
-      .find((v) => v.startsWith('refreshToken='))
-      ?.slice('refreshToken='.length);
-    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
-      this.identity,
-      { cmd: 'auth.refresh' },
-      {
-        refreshToken:
-          dto.refreshToken ?? (cookie ? decodeURIComponent(cookie) : ''),
-      },
+    const cookie = readCookie(req.headers, AuthController.REFRESH_COOKIE_NAME);
+    let result: { accessToken: string; refreshToken: string };
+    try {
+      result = await sendRpc(
+        this.identity,
+        { cmd: 'auth.refresh' },
+        { refreshToken: dto.refreshToken ?? cookie ?? '' },
+      );
+    } catch (error) {
+      // HttpOnly cookie'ni JS o'chira olmaydi. Refresh o'lgan bo'lsa eski
+      // access cookie har so'rovda 401 berib qolmasligi uchun shu yerda tozalaymiz.
+      this.clearAuthCookies(req, res);
+      throw error;
+    }
+    this.setAuthCookies(req, res, result);
+    return rawResponse(
+      this.tokensInBody ? { accessToken: result.accessToken } : {},
     );
-    this.setRefreshCookie(req, res, result.refreshToken);
-    return rawResponse({ accessToken: result.accessToken });
   }
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
@@ -197,6 +254,7 @@ export class AuthController {
     return sendRpc(this.identity, { cmd: 'auth.forgot-password' }, dto);
   }
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
@@ -204,6 +262,7 @@ export class AuthController {
     return sendRpc(this.identity, { cmd: 'auth.reset-password' }, dto);
   }
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('verify-phone')
   @HttpCode(HttpStatus.OK)
@@ -211,6 +270,7 @@ export class AuthController {
     return sendRpc(this.identity, { cmd: 'auth.verify-phone' }, dto);
   }
   @Public()
+  @IgnoreAuthCookie()
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('resend-code')
   @HttpCode(HttpStatus.OK)
@@ -286,7 +346,7 @@ export class AuthController {
         userId: user.sub,
       },
     );
-    this.clearRefreshCookie(request, response);
+    this.clearAuthCookies(request, response);
     return result;
   }
 }

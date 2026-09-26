@@ -64,7 +64,8 @@ async function bootstrap() {
     origin: configuredOrigins.length > 0 ? configuredOrigins : !isProduction,
     credentials: true,
     // Frontend xatoni log bilan solishtira olishi uchun ID'ni ochamiz.
-    exposedHeaders: ['X-Request-Id'],
+    // `X-Labels-Skipped` — partiyada chiqmay qolgan yorliqlar (C1.45).
+    exposedHeaders: ['X-Request-Id', 'X-Labels-Skipped'],
   });
 
   // API_CONTRACT.md §1.1 — barcha route /api/v1 prefiksi bilan

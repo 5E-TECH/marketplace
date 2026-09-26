@@ -29,6 +29,11 @@ export class ElchiIntegrationController {
     return this.service.createShipment(input);
   }
 
+  @MessagePattern({ cmd: 'integration.shipment.get' })
+  getShipment(@Payload() input: { shipmentId: string }) {
+    return this.service.getShipment(input.shipmentId);
+  }
+
   @MessagePattern({ cmd: 'integration.tariff.get' })
   getTariff(
     @Payload() input: Parameters<ElchiIntegrationService['getTariff']>[0],

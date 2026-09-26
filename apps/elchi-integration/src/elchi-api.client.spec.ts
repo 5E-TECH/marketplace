@@ -136,10 +136,12 @@ describe('ElchiApiClient config (C2.20)', () => {
       where_deliver: string;
     };
 
-  const shipmentClient = () => {
+  const shipmentClient = (
+    data: Record<string, unknown> = { shipment_id: '55' },
+  ) => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      text: async () => JSON.stringify({ data: { shipment_id: '55' } }),
+      text: async () => JSON.stringify({ data }),
     } as Response);
     const client = new ElchiApiClient(
       config({
@@ -173,5 +175,63 @@ describe('ElchiApiClient config (C2.20)', () => {
       expect(sentBody(fetchMock).where_deliver).toBe('address');
       fetchMock.mockRestore();
     }
+  });
+
+  it('C1.45: javobdagi qr_code_token va to_be_paid (0 ham) qaytariladi', async () => {
+    for (const [toBePaid, expected] of [
+      ['45000.00', 45000],
+      [0, 0],
+    ] as const) {
+      const { fetchMock, client } = shipmentClient({
+        shipment_id: '1251131',
+        order_status: 'new',
+        qr_code_token: '3e3a70f78d54064348bde43a',
+        to_be_paid: toBePaid,
+      });
+      await expect(
+        client.createShipment(shipmentBody('ADDRESS') as never),
+      ).resolves.toEqual({
+        shipment_id: '1251131',
+        qr_code_token: '3e3a70f78d54064348bde43a',
+        to_be_paid: expected,
+      });
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('C1.45: getShipment Elchi `tracking`/`cod_amount` nomlaridan token va summani oladi', async () => {
+    const { fetchMock, client } = shipmentClient({
+      shipment_id: '1251128',
+      external_order_id: '7',
+      status: 'new',
+      cod_amount: 38000,
+      tracking: 'a1b2c3d4e5f60718293a4b5c',
+    });
+
+    await expect(client.getShipment('1251128')).resolves.toEqual({
+      shipment_id: '1251128',
+      qr_code_token: 'a1b2c3d4e5f60718293a4b5c',
+      to_be_paid: 38000,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.elchi.uz/partner/shipments/1251128',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ 'x-api-key': 'secret-key' }),
+      }),
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('C1.45: getShipment javobida token bo‘lmasa maydon qo‘shilmaydi', async () => {
+    const { fetchMock, client } = shipmentClient({
+      shipment_id: '1251128',
+      tracking: null,
+    });
+
+    await expect(client.getShipment('1251128')).resolves.toEqual({
+      shipment_id: '1251128',
+    });
+    fetchMock.mockRestore();
   });
 });

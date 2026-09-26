@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
 import {
   CheckoutPaymentMethod,
+  ElchiShipmentResult,
   FinanceRefundRequestedEvent,
   PaymentSummaryDto,
   RefundPaymentDto,
@@ -21,14 +23,37 @@ import { DataSource } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { RmqClient, sendRpc } from '@app/common';
 import { firstValueFrom } from 'rxjs';
-import { ShippingLabelData } from './shipping-label.service';
+import {
+  ShippingLabelData,
+  SkippedShippingLabel,
+} from './shipping-label.service';
 
 interface CountRow {
   total: string | number;
 }
 
+/** Yorliq so'ralgan seller-order (sales_order_seller) va uning do'koni. */
+export interface ShippingLabelTarget {
+  shopId: string;
+  sellerOrderId: string;
+  /** Chaqiruvchi ko'rgan id: sotuvchi uchun seller-order, admin uchun sales_order. */
+  orderId: string;
+}
+
+/**
+ * Bitta partiya ichidagi takroriy RPC'lar keshi: 100 ta yorliq bitta do'kon
+ * yoki viloyatdan bo'lsa, nomlar bir marta so'raladi (sendRpc 10 s chegarasi).
+ */
+interface LabelLookupCache {
+  shops: Map<string, Promise<string | null>>;
+  regions?: Promise<Map<string, string>>;
+  districts: Map<string, Promise<Map<string, string>>>;
+}
+
 @Injectable()
 export class SellerOrdersService {
+  private readonly logger = new Logger(SellerOrdersService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @Optional()
@@ -244,9 +269,10 @@ export class SellerOrdersService {
     const orderIds = orders.map((order) => String(order.orderId));
     const itemRows = orderIds.length
       ? ((await this.dataSource.query(
-          `SELECT s.sales_order_id::text AS "orderId",i.product_id::text AS "productId",
+          `SELECT s.sales_order_id::text AS "orderId",i.id::text AS id,
+                  i.product_id::text AS "productId",
                   i.product_name AS name,i.quantity,i.unit_price::float8 AS "unitPrice",
-                  p.image_url AS "imageUrl"
+                  p.image_url AS "imageUrl",s.status AS "sellerOrderStatus"
              FROM checkout.sales_order_item i
              JOIN checkout.sales_order_seller s ON s.id=i.sales_order_seller_id
              LEFT JOIN catalog.product p ON p.id=i.product_id
@@ -260,11 +286,13 @@ export class SellerOrdersService {
       const key = String(item.orderId);
       const items = itemsByOrder.get(key) ?? [];
       items.push({
+        id: String(item.id),
         productId: String(item.productId),
         name: String(item.name),
         quantity: Number(item.quantity),
         unitPrice: Number(item.unitPrice),
         imageUrl: item.imageUrl ? String(item.imageUrl) : null,
+        sellerOrderStatus: String(item.sellerOrderStatus),
       });
       itemsByOrder.set(key, items);
     }
@@ -522,7 +550,10 @@ export class SellerOrdersService {
               so.delivery_fee AS "deliveryFee",
               so.created_at AS "createdAt",
               (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
-                 WHERE s.sales_order_id = so.id) AS "sellersCount"
+                 WHERE s.sales_order_id = so.id) AS "sellersCount",
+              (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
+                 WHERE s.sales_order_id = so.id
+                   AND s.elchi_shipment_id IS NOT NULL) AS "shipmentsCount"
          FROM checkout.sales_order so
         WHERE ${where}
         ORDER BY so.created_at DESC
@@ -539,6 +570,9 @@ export class SellerOrdersService {
         totalAmount: Number(r.totalAmount),
         deliveryFee: Number(r.deliveryFee),
         sellersCount: Number(r.sellersCount),
+        // Yorliq faqat posilkasi bor sub-buyurtma uchun chiqadi — admin
+        // jadvali shunga qarab chop etish belgisini o'chiradi (C1.45).
+        shipmentsCount: Number(r.shipmentsCount ?? 0),
         createdAt: r.createdAt,
       })),
       total,
@@ -582,7 +616,8 @@ export class SellerOrdersService {
                 sos.cod_amount AS "codAmount",
                 sos.status,
                 sos.elchi_shipment_id AS "elchiShipmentId",
-                sos.tracking_url AS "trackingUrl"
+                sos.tracking_url AS "trackingUrl",
+                sos.qr_code_token IS NOT NULL AS "hasQrToken"
            FROM checkout.sales_order_seller sos
           WHERE sos.sales_order_id = $1 ORDER BY sos.id`,
         [orderId],
@@ -637,6 +672,7 @@ export class SellerOrdersService {
         status: s.status,
         elchiShipmentId: s.elchiShipmentId ? String(s.elchiShipmentId) : null,
         trackingUrl: (s.trackingUrl as string) ?? null,
+        hasQrToken: Boolean(s.hasQrToken),
         items: itemsBySeller.get(String(s.id)) ?? [],
       })),
     };
@@ -980,7 +1016,7 @@ export class SellerOrdersService {
 
   async getSellerOrder(shopId: string, id: string) {
     const rows = await this.dataSource.query(
-      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.delivery_fee AS "deliveryFee",s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.qr_code_token AS "qrCodeToken",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
+      `SELECT s.id,s.sales_order_id AS "salesOrderId",s.shop_id AS "shopId",o.buyer_name AS "buyerName",o.delivery_address AS "deliveryAddress",o.region_id AS "regionId",o.district_id AS "districtId",o.where_deliver AS "whereDeliver",s.subtotal,s.delivery_fee AS "deliveryFee",s.cod_amount AS "codAmount",s.status,s.elchi_shipment_id AS "elchiShipmentId",s.tracking_url AS "trackingUrl",s.qr_code_token AS "qrCodeToken",s.elchi_to_be_paid AS "elchiToBePaid",s.created_at AS "createdAt",s.updated_at AS "updatedAt" FROM checkout.sales_order_seller s JOIN checkout.sales_order o ON o.id=s.sales_order_id WHERE s.id=$1 AND s.shop_id=$2`,
       [id, shopId],
     );
     if (!rows[0])
@@ -996,6 +1032,10 @@ export class SellerOrdersService {
       // chiqib ketardi — qolgan summalar son bo'lgani holda.
       deliveryFee: Number(r.deliveryFee),
       codAmount: Number(r.codAmount),
+      elchiToBePaid:
+        r.elchiToBePaid === null || r.elchiToBePaid === undefined
+          ? null
+          : Number(r.elchiToBePaid),
     };
   }
   async getItems(shopId: string, id: string) {
@@ -1018,6 +1058,7 @@ export class SellerOrdersService {
   async getShippingLabelData(
     shopId: string,
     id: string,
+    cache: LabelLookupCache = this.newLabelCache(),
   ): Promise<ShippingLabelData> {
     // getSellerOrder shop_id bilan scope qiladi: begona do‘kon uchun 404.
     const order: any = await this.getSellerOrder(shopId, id);
@@ -1026,20 +1067,34 @@ export class SellerOrdersService {
         'Yorliq uchun avval Elchi shipment yaratish kerak',
       );
     }
+    // Buyurtma id'sini QR ga yozish (Elchi frontidagi fallback) ATAYLAB yo'q:
+    // Elchi skaneri (`order.find_by_qr`) faqat `qr_code_token` bo'yicha
+    // qidiradi, ya'ni bunday yorliq chop etilsa ham pochtada skanerlanmaydi.
+    // Uning o'rniga yo'qolgan token Elchi'dan qayta olinadi.
+    if (!order.qrCodeToken) await this.recoverShipmentToken(order);
     if (!order.qrCodeToken) {
       throw new ConflictException('Elchi shipment QR tokeni mavjud emas');
     }
-    const items = await this.getItems(shopId, id);
+    const [items, senderName, geo] = await Promise.all([
+      this.getItems(shopId, id),
+      this.shopName(String(order.shopId), cache),
+      this.geoNames(order.regionId, order.districtId, cache),
+    ]);
     const delivery = this.parseDelivery(order.deliveryAddress);
     return {
       sellerOrderId: String(order.id),
       salesOrderId: String(order.salesOrderId),
       shipmentId: String(order.elchiShipmentId),
       qrCodeToken: String(order.qrCodeToken),
+      senderName: senderName ?? `Do‘kon #${order.shopId}`,
       buyerName: String(order.buyerName ?? 'Mijoz'),
       buyerPhone: delivery.phone,
+      regionName: geo.regionName,
+      districtName: geo.districtName,
       deliveryAddress: delivery.address,
-      codAmount: Number(order.codAmount),
+      // Kuryer Elchi aytgan summani oladi; u bo'lmasa (eski satrlar) o'zimiz
+      // hisoblagan `cod_amount`.
+      codAmount: Number(order.elchiToBePaid ?? order.codAmount),
       items: items.map((item: any) => ({
         productName: String(item.productName),
         quantity: Number(item.quantity),
@@ -1047,16 +1102,309 @@ export class SellerOrdersService {
     };
   }
 
-  async getShippingLabelDataForAdmin(id: string): Promise<ShippingLabelData> {
-    const rows = await this.dataSource.query(
-      `SELECT shop_id AS "shopId"
+  /**
+   * Bir nechta yorliq: har biri alohida — bittasi yiqilsa qolganlari chiqadi.
+   * Avval `Promise.all` bitta tokensiz buyurtma bilan butun partiyani (PDF ni)
+   * yo'qotardi.
+   */
+  async collectShippingLabels(targets: ShippingLabelTarget[]): Promise<{
+    labels: ShippingLabelData[];
+    skipped: SkippedShippingLabel[];
+  }> {
+    const cache = this.newLabelCache();
+    const results = await Promise.allSettled(
+      targets.map((target) =>
+        this.getShippingLabelData(target.shopId, target.sellerOrderId, cache),
+      ),
+    );
+    const labels: ShippingLabelData[] = [];
+    const skipped: SkippedShippingLabel[] = [];
+    results.forEach((result, index) => {
+      const target = targets[index];
+      if (result.status === 'fulfilled') {
+        labels.push(result.value);
+        return;
+      }
+      skipped.push({
+        orderId: target.orderId,
+        ...(target.sellerOrderId !== target.orderId
+          ? { sellerOrderId: target.sellerOrderId }
+          : {}),
+        reason: this.errorMessage(result.reason),
+      });
+    });
+    return { labels, skipped };
+  }
+
+  /**
+   * Admin yorlig'i uchun maqsadlar. `orderIds` — `sales_order.id`, ya'ni admin
+   * ro'yxati, `GET /admin/orders/:id` va `:id/cancel` bilan BIR XIL id fazosi.
+   * Avval bu yerda id `sales_order_seller.id` deb o'qilardi: ikki do'konli
+   * buyurtmadan keyin ketma-ketliklar ajralib, admin BOSHQA xaridorning
+   * yorlig'ini jimgina chop etardi. Endi buyurtmaning har bir posilkasi
+   * (do'koni) uchun alohida yorliq chiqadi.
+   */
+  async adminShippingLabelTargets(orderIds: string[]): Promise<{
+    targets: ShippingLabelTarget[];
+    missing: SkippedShippingLabel[];
+  }> {
+    const ids = orderIds.map(String);
+    // Raqam bo'lmagan id `::bigint[]` cast'ini yiqitib, butun partiyani 500
+    // qilardi — u shunchaki "topilmadi" bo'lib qoladi.
+    const valid = ids.filter((id) => /^[1-9]\d*$/.test(id));
+    const rows = (await this.dataSource.query(
+      `SELECT id::text AS "sellerOrderId", sales_order_id::text AS "orderId",
+              shop_id::text AS "shopId"
          FROM checkout.sales_order_seller
-        WHERE id=$1`,
-      [String(id)],
+        WHERE sales_order_id = ANY($1::bigint[])
+        ORDER BY sales_order_id, id`,
+      [valid],
+    )) as ShippingLabelTarget[];
+    const byOrder = new Map<string, ShippingLabelTarget[]>();
+    for (const row of rows) {
+      const list = byOrder.get(row.orderId) ?? [];
+      list.push(row);
+      byOrder.set(row.orderId, list);
+    }
+    const targets: ShippingLabelTarget[] = [];
+    const missing: SkippedShippingLabel[] = [];
+    // So'ralgan tartib saqlanadi — admin belgilagan ketma-ketlikda chop etadi.
+    for (const id of ids) {
+      const list = byOrder.get(id);
+      if (list?.length) targets.push(...list);
+      else missing.push({ orderId: id, reason: 'Buyurtma topilmadi' });
+    }
+    return { targets, missing };
+  }
+
+  /** Admin: bitta posilka yorlig'i — seller-order shu buyurtmaga tegishli bo'lsin. */
+  async getShippingLabelDataForAdmin(
+    orderId: string,
+    sellerOrderId: string,
+  ): Promise<ShippingLabelData> {
+    const rows = await this.dataSource.query(
+      `SELECT shop_id::text AS "shopId"
+         FROM checkout.sales_order_seller
+        WHERE id=$1 AND sales_order_id=$2`,
+      [String(sellerOrderId), String(orderId)],
     );
     if (!rows[0]) throw new NotFoundException('Buyurtma topilmadi');
-    return this.getShippingLabelData(String(rows[0].shopId), String(id));
+    return this.getShippingLabelData(
+      String(rows[0].shopId),
+      String(sellerOrderId),
+    );
   }
+
+  /**
+   * Posilkasi bor, lekin tokeni NULL (yoki soxta) satrlarni Elchi bilan
+   * tenglashtiradi — bir martalik backfill (C1.45). Xaridor oqimi 2026-09
+   * gacha tokenni saqlamagan, 9-buyurtmada esa qo'lda yozilgan test tokeni
+   * turibdi; ularni `createShipment` qayta chaqirib tuzatib bo'lmaydi, chunki
+   * shipment id bor bo'lsa u darhol qaytib ketadi.
+   *
+   * Kursor bilan (`afterId`) bo'lak-bo'lak: har satr Elchi'ga bitta so'rov,
+   * gateway esa RPC javobini 10 s kutadi.
+   */
+  async syncShipmentTokens(input: {
+    afterId?: string;
+    limit?: number;
+    dryRun?: boolean;
+  }) {
+    if (!this.integration)
+      throw new BadRequestException('Yetkazib berish servisi mavjud emas');
+    const limit = Math.min(50, Math.max(1, Number(input.limit ?? 20)));
+    const rows = (await this.dataSource.query(
+      `SELECT id::text, elchi_shipment_id::text AS "shipmentId",
+              qr_code_token AS "qrCodeToken",
+              elchi_to_be_paid::text AS "toBePaid"
+         FROM checkout.sales_order_seller
+        WHERE elchi_shipment_id IS NOT NULL AND id > $1
+        ORDER BY id
+        LIMIT $2`,
+      [String(input.afterId ?? '0'), limit],
+    )) as Array<{
+      id: string;
+      shipmentId: string;
+      qrCodeToken: string | null;
+      toBePaid: string | null;
+    }>;
+    const items: Array<{
+      sellerOrderId: string;
+      shipmentId: string;
+      action: 'updated' | 'unchanged' | 'failed';
+      tokenBefore: string | null;
+      tokenAfter: string | null;
+      error?: string;
+    }> = [];
+    for (const row of rows) {
+      try {
+        const shipment = await sendRpc<ElchiShipmentResult>(
+          this.integration,
+          { cmd: 'integration.shipment.get' },
+          { shipmentId: row.shipmentId },
+        );
+        const token = shipment.qr_code_token ?? null;
+        const toBePaid = shipment.to_be_paid ?? null;
+        const changed =
+          token !== row.qrCodeToken ||
+          (toBePaid !== null &&
+            (row.toBePaid === null || Number(row.toBePaid) !== toBePaid));
+        if (!token) {
+          items.push({
+            sellerOrderId: row.id,
+            shipmentId: row.shipmentId,
+            action: 'failed',
+            tokenBefore: row.qrCodeToken,
+            tokenAfter: null,
+            error: 'Elchi javobida qr_code_token yo‘q',
+          });
+          continue;
+        }
+        if (changed && !input.dryRun) {
+          await this.dataSource.query(
+            `UPDATE checkout.sales_order_seller
+                SET qr_code_token=$1,
+                    elchi_to_be_paid=COALESCE($2, elchi_to_be_paid),
+                    updated_at=now()
+              WHERE id=$3`,
+            [token, toBePaid, row.id],
+          );
+        }
+        items.push({
+          sellerOrderId: row.id,
+          shipmentId: row.shipmentId,
+          action: changed ? 'updated' : 'unchanged',
+          tokenBefore: row.qrCodeToken,
+          tokenAfter: token,
+        });
+      } catch (error) {
+        items.push({
+          sellerOrderId: row.id,
+          shipmentId: row.shipmentId,
+          action: 'failed',
+          tokenBefore: row.qrCodeToken,
+          tokenAfter: null,
+          error: this.errorMessage(error),
+        });
+      }
+    }
+    return {
+      dryRun: Boolean(input.dryRun),
+      items,
+      nextAfterId: rows.length === limit ? rows[rows.length - 1].id : null,
+    };
+  }
+
+  /**
+   * Token bazada yo'q, lekin posilka bor — Elchi'dan olib saqlaydi va
+   * `order` ni joyida yangilaydi. Elchi javob bermasa jim qoladi: chaqiruvchi
+   * aniq 409 xabarini beradi, xato esa log'ga tushadi.
+   */
+  private async recoverShipmentToken(order: any): Promise<void> {
+    if (!this.integration) return;
+    let shipment: ElchiShipmentResult;
+    try {
+      shipment = await sendRpc<ElchiShipmentResult>(
+        this.integration,
+        { cmd: 'integration.shipment.get' },
+        { shipmentId: String(order.elchiShipmentId) },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `seller-order ${order.id}: Elchi'dan QR token olinmadi — ${this.errorMessage(error)}`,
+      );
+      return;
+    }
+    if (!shipment.qr_code_token) return;
+    await this.dataSource.query(
+      `UPDATE checkout.sales_order_seller
+          SET qr_code_token=$1,
+              elchi_to_be_paid=COALESCE(elchi_to_be_paid,$2),
+              updated_at=now()
+        WHERE id=$3 AND qr_code_token IS NULL`,
+      [shipment.qr_code_token, shipment.to_be_paid ?? null, String(order.id)],
+    );
+    order.qrCodeToken = shipment.qr_code_token;
+    order.elchiToBePaid ??= shipment.to_be_paid ?? null;
+  }
+
+  private newLabelCache(): LabelLookupCache {
+    return { shops: new Map(), districts: new Map() };
+  }
+
+  /** Jo'natuvchi do'kon nomi; catalog javob bermasa yorliq baribir chiqadi. */
+  private shopName(
+    shopId: string,
+    cache: LabelLookupCache,
+  ): Promise<string | null> {
+    let name = cache.shops.get(shopId);
+    if (!name) {
+      name = this.catalog
+        ? sendRpc<{ name?: string }>(
+            this.catalog,
+            { cmd: 'catalog.shop.get-by-id' },
+            { shopId },
+          )
+            .then((shop) => shop?.name?.trim() || null)
+            .catch(() => null)
+        : Promise.resolve(null);
+      cache.shops.set(shopId, name);
+    }
+    return name;
+  }
+
+  /** Viloyat/tuman NOMI (bazada faqat Elchi id'lari turadi). */
+  private async geoNames(
+    regionId: string | null,
+    districtId: string | null,
+    cache: LabelLookupCache,
+  ): Promise<{ regionName: string | null; districtName: string | null }> {
+    if (!this.integration || !regionId) {
+      return { regionName: null, districtName: null };
+    }
+    const integration = this.integration;
+    const toMap = (rows: Array<{ id: string; name: string }>) =>
+      new Map(rows.map((row) => [String(row.id), row.name]));
+    cache.regions ??= sendRpc<Array<{ id: string; name: string }>>(
+      integration,
+      { cmd: 'integration.regions.list' },
+      {},
+    )
+      .then(toMap)
+      .catch(() => new Map<string, string>());
+    const regionKey = String(regionId);
+    let districts = cache.districts.get(regionKey);
+    if (!districts) {
+      districts = sendRpc<Array<{ id: string; name: string }>>(
+        integration,
+        { cmd: 'integration.districts.list' },
+        { regionId: regionKey },
+      )
+        .then(toMap)
+        .catch(() => new Map<string, string>());
+      cache.districts.set(regionKey, districts);
+    }
+    const [regions, districtNames] = await Promise.all([
+      cache.regions,
+      districts,
+    ]);
+    return {
+      regionName: regions.get(regionKey) ?? null,
+      districtName: districtId
+        ? (districtNames.get(String(districtId)) ?? null)
+        : null,
+    };
+  }
+
+  private errorMessage(error: unknown): string {
+    const e = error as {
+      response?: { message?: unknown };
+      message?: unknown;
+    };
+    const message = e?.response?.message ?? e?.message ?? error;
+    return Array.isArray(message) ? message.join(', ') : String(message);
+  }
+
   async history(shopId: string, id: string) {
     const order = await this.getSellerOrder(shopId, id);
     const rows = await this.dataSource.query(
@@ -1087,11 +1435,7 @@ export class SellerOrdersService {
     const items: any[] = await this.getItems(shopId, id);
     if (!this.integration)
       throw new BadRequestException('Yetkazib berish servisi mavjud emas');
-    const result = await sendRpc<{
-      shipment_id: string;
-      tracking_url?: string;
-      qr_code_token?: string;
-    }>(
+    const result = await sendRpc<ElchiShipmentResult>(
       this.integration,
       { cmd: 'integration.shipment.create' },
       {
@@ -1117,13 +1461,14 @@ export class SellerOrdersService {
       },
     );
     await this.dataSource.query(
-      `UPDATE checkout.sales_order_seller SET elchi_shipment_id=$1,tracking_url=$2,qr_code_token=$3,status='SHIPMENT_CREATED',updated_at=now() WHERE id=$4 AND shop_id=$5`,
+      `UPDATE checkout.sales_order_seller SET elchi_shipment_id=$1,tracking_url=$2,qr_code_token=$3,elchi_to_be_paid=$4,status='SHIPMENT_CREATED',updated_at=now() WHERE id=$5 AND shop_id=$6`,
       [
         result.shipment_id,
         result.tracking_url ?? null,
         // Pochta posilkani shu token bo'yicha skanerlab qabul qiladi va
         // yorliqdagi QR ichiga ham shu yoziladi (C1.45).
         result.qr_code_token ?? null,
+        result.to_be_paid ?? null,
         id,
         shopId,
       ],

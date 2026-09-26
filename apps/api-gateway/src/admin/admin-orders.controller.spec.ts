@@ -11,7 +11,13 @@ function makeController(send: jest.Mock) {
 
 describe('AdminOrdersController (C1.30/C6.4)', () => {
   it('TC4: list/get faqat ADMIN/SUPERADMIN (@Roles)', () => {
-    for (const m of ['list', 'get', 'label', 'labelsBatch'] as const) {
+    for (const m of [
+      'list',
+      'get',
+      'label',
+      'sellerOrderLabel',
+      'labelsBatch',
+    ] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype[m]),
       ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
@@ -27,9 +33,11 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
       }),
     );
     const ctrl = makeController(send);
+    const res = { setHeader: jest.fn() };
 
-    await ctrl.label('9');
-    await ctrl.labelsBatch({ orderIds: ['9', '10'] });
+    await ctrl.label('9', res as never);
+    await ctrl.labelsBatch({ orderIds: ['9', '10'] }, res as never);
+    await ctrl.sellerOrderLabel('14', '15', res as never);
 
     expect(send).toHaveBeenNthCalledWith(
       1,
@@ -40,6 +48,69 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
       2,
       { cmd: 'checkout.admin.order-labels' },
       { orderIds: ['9', '10'] },
+    );
+    // Bitta posilka: buyurtma id'si ham uzatiladi — posilka shu buyurtmaga
+    // tegishliligi checkoutda tekshiriladi (id fazolari aralashmasin).
+    expect(send).toHaveBeenNthCalledWith(
+      3,
+      { cmd: 'checkout.admin.seller-order-label' },
+      { orderId: '14', sellerOrderId: '15' },
+    );
+    expect(res.setHeader).not.toHaveBeenCalled();
+  });
+
+  it('C1.45: partiyada chiqmagan yorliqlar X-Labels-Skipped headerida', async () => {
+    const skipped = [
+      { orderId: '7', reason: 'Elchi shipment QR tokeni mavjud emas' },
+    ];
+    const send = jest.fn(() =>
+      of({
+        fileName: 'shipments-1.pdf',
+        contentType: 'application/pdf',
+        base64: 'JVBERg==',
+        skipped,
+      }),
+    );
+    const res = { setHeader: jest.fn() };
+
+    await makeController(send).labelsBatch(
+      { orderIds: ['9', '7'] },
+      res as never,
+    );
+
+    const [name, value] = res.setHeader.mock.calls[0];
+    expect(name).toBe('X-Labels-Skipped');
+    // Header faqat ASCII bo'lishi shart — sabablar esa o'zbekcha.
+    expect(value).toMatch(/^[\x20-\x7e]+$/);
+    expect(JSON.parse(decodeURIComponent(value))).toEqual(skipped);
+  });
+
+  it('C1.45: token backfill faqat SUPERADMIN, dryRun audit yozmaydi', async () => {
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminOrdersController.prototype.syncShipmentTokens,
+      ),
+    ).toEqual([Role.SUPERADMIN]);
+    const checkoutSend = jest.fn(() => of({ items: [], nextAfterId: null }));
+    const identitySend = jest.fn(() => of({}));
+    const controller = new AdminOrdersController(
+      { send: checkoutSend } as never,
+      { send: identitySend } as never,
+    );
+    const admin = { sub: '1', role: Role.SUPERADMIN } as never;
+
+    await controller.syncShipmentTokens({ dryRun: true }, admin, '127.0.0.1');
+    expect(identitySend).not.toHaveBeenCalled();
+
+    await controller.syncShipmentTokens({ afterId: '6' }, admin, '127.0.0.1');
+    expect(checkoutSend).toHaveBeenLastCalledWith(
+      { cmd: 'checkout.admin.shipment-tokens-sync' },
+      { afterId: '6' },
+    );
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({ action: 'order.shipment-tokens-sync' }),
     );
   });
 

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -8,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -94,4 +96,36 @@ export class AdminOrderRefundDto extends AdminOrderActionDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount?: number;
+}
+
+/**
+ * C1.45 — posilka QR tokenlarini Elchi bilan tenglashtirish (backfill).
+ * Kursorli: javobdagi `nextAfterId` keyingi chaqiruvga `afterId` bo'lib
+ * beriladi, `null` bo'lsa tugadi.
+ */
+export class AdminShipmentTokensSyncDto {
+  @ApiPropertyOptional({
+    example: '0',
+    description: 'Shu seller-order id dan keyingilar',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+$/)
+  afterId?: string;
+
+  @ApiPropertyOptional({ example: 20, minimum: 1, maximum: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'true — hech narsa yozilmaydi, faqat nima o‘zgarishi ko‘rsatiladi',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }

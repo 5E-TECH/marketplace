@@ -598,11 +598,13 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
         .mockResolvedValueOnce([
           {
             orderId: '42',
+            id: '31',
             productId: '7',
             name: 'Mahsulot',
             quantity: 1,
             unitPrice: 100000,
             imageUrl: null,
+            sellerOrderStatus: 'DELIVERED',
           },
         ]),
     };
@@ -624,11 +626,13 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
           totalAmount: 115000,
           items: [
             {
+              id: '31',
               productId: '7',
               name: 'Mahsulot',
               quantity: 1,
               unitPrice: 100000,
               imageUrl: null,
+              sellerOrderStatus: 'DELIVERED',
             },
           ],
         },
@@ -642,6 +646,11 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
       2,
       expect.stringContaining('WHERE customer_id=$1'),
       ['9', 20, 0],
+    );
+    expect(dataSource.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('i.id::text AS id'),
+      [['42']],
     );
   });
 

@@ -50,6 +50,86 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
   });
 });
 
+describe('JwtAuthGuard — HttpOnly accessToken cookie', () => {
+  const jwt = {
+    verify: (t: string) => {
+      if (t === 'good') return { sub: '1', role: Role.BUYER };
+      throw new Error('bad');
+    },
+  } as any;
+  const reflectorWith = (keys: string[] = []) =>
+    ({ getAllAndOverride: (key: string) => keys.includes(key) }) as any;
+  const run = (req: any, keys?: string[]) => {
+    const context = {
+      switchToHttp: () => ({ getRequest: () => req }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
+    } as any;
+    return new JwtAuthGuard(jwt, reflectorWith(keys)).canActivate(context);
+  };
+
+  it('GET so‘rovda cookie’dagi token bilan req.user to‘ladi', () => {
+    const req: any = { method: 'GET', headers: { cookie: 'accessToken=good' } };
+    expect(run(req)).toBe(true);
+    expect(req.user).toEqual({ sub: '1', role: Role.BUYER });
+  });
+
+  it('cookie bilan POST X-Requested-With’siz -> 403 (CSRF)', () => {
+    const req: any = {
+      method: 'POST',
+      headers: { cookie: 'accessToken=good' },
+    };
+    expect(() => run(req)).toThrow(ForbiddenException);
+    expect(req.user).toBeUndefined();
+  });
+
+  it('cookie bilan POST X-Requested-With bilan o‘tadi', () => {
+    const req: any = {
+      method: 'POST',
+      headers: {
+        cookie: 'accessToken=good',
+        'x-requested-with': 'XMLHttpRequest',
+      },
+    };
+    expect(run(req)).toBe(true);
+    expect(req.user).toEqual({ sub: '1', role: Role.BUYER });
+  });
+
+  it('@Public() route’da CSRF sarlavhasisiz cookie e’tiborsiz — anonim', () => {
+    const req: any = {
+      method: 'POST',
+      headers: { cookie: 'accessToken=good' },
+    };
+    expect(run(req, ['isPublic'])).toBe(true);
+    expect(req.user).toBeUndefined();
+  });
+
+  it('muddati o‘tgan cookie @Public() route’da ham 401 — frontend refresh qiladi', () => {
+    const req: any = { method: 'GET', headers: { cookie: 'accessToken=bad' } };
+    expect(() => run(req, ['isPublic'])).toThrow(UnauthorizedException);
+  });
+
+  it('@IgnoreAuthCookie() route’da eski cookie login/refresh’ni to‘smaydi', () => {
+    const req: any = {
+      method: 'POST',
+      headers: {
+        cookie: 'accessToken=bad',
+        'x-requested-with': 'XMLHttpRequest',
+      },
+    };
+    expect(run(req, ['isPublic', 'ignoreAuthCookie'])).toBe(true);
+    expect(req.user).toBeUndefined();
+  });
+
+  it('Authorization header cookie’dan ustuvor', () => {
+    const req: any = {
+      method: 'GET',
+      headers: { authorization: 'Bearer bad', cookie: 'accessToken=good' },
+    };
+    expect(() => run(req)).toThrow(UnauthorizedException);
+  });
+});
+
 describe('RolesGuard (TC3 — 403)', () => {
   const ctx = (role?: Role) =>
     ({
