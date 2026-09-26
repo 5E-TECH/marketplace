@@ -65,6 +65,8 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
         return of({
           shipment_id: `shipment-${shipmentCall}`,
           tracking_url: `https://track/${shipmentCall}`,
+          qr_code_token: `3e3a70f78d54064348bde4${shipmentCall}0`,
+          to_be_paid: shipmentCall === 1 ? 200 : 300,
         });
       }),
     };
@@ -108,6 +110,38 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
           entry.sql.includes("status='SHIPMENT_CREATED'"),
       ),
     ).toHaveLength(2);
+  });
+
+  /**
+   * C1.45 BLOKER regressiyasi: posilkalarning asosiy qismi shu oqimda
+   * yaratiladi, lekin avval UPDATE `qr_code_token` ni tashlab yuborardi —
+   * prodda 7/8/11/14/15-satrlar tokensiz qolib, yorliq 409 berardi.
+   */
+  it('C1.45 TC1: Elchi qaytargan qr_code_token va to_be_paid saqlanadi, tarixga yoziladi', async () => {
+    const { service, queries } = setup();
+    await service.confirm('1', '5');
+
+    const updates = queries.filter(
+      (entry) =>
+        entry.sql.includes('UPDATE checkout.sales_order_seller') &&
+        entry.sql.includes('qr_code_token=$3'),
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates[0].sql).toContain('elchi_to_be_paid=$4');
+    expect(updates[0].params).toEqual([
+      'shipment-1',
+      'https://track/1',
+      '3e3a70f78d54064348bde410',
+      200,
+      '11',
+    ]);
+    expect(updates[1].params).toEqual(
+      expect.arrayContaining(['3e3a70f78d54064348bde420', 300, '12']),
+    );
+    const history = queries.filter((entry) =>
+      entry.sql.includes('INSERT INTO checkout.sales_order_seller_history'),
+    );
+    expect(history.map((entry) => entry.params)).toEqual([['11'], ['12']]);
   });
 
   it('TC2: shipmentlardan keyin inventory commit va confirmed qiladi', async () => {

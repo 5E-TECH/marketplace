@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { RmqClient, sendRpc } from '@app/common';
+import { ElchiShipmentResult, RmqClient, sendRpc } from '@app/common';
 import { firstValueFrom } from 'rxjs';
 import { DataSource } from 'typeorm';
 
@@ -179,10 +179,7 @@ export class ConfirmSalesOrderService {
           quantity: number;
         }>;
         const address = this.delivery(order.delivery_address);
-        const shipment = await sendRpc<{
-          shipment_id: string;
-          tracking_url?: string;
-        }>(
+        const shipment = await sendRpc<ElchiShipmentResult>(
           this.integration,
           { cmd: 'integration.shipment.create' },
           {
@@ -203,11 +200,28 @@ export class ConfirmSalesOrderService {
             cod_amount: options.prepaid ? 0 : Number(seller.subtotal),
           },
         );
+        // `qr_code_token` va `to_be_paid` shu yerda ham saqlanishi SHART:
+        // posilkalarning asosiy qismi sotuvchi qo'lda emas, xaridor tasdiqlagan
+        // paytda shu oqimda yaratiladi. Avval bu UPDATE tokenni tashlab
+        // yuborardi va prodda yorliqlar "QR tokeni mavjud emas" (409) berardi
+        // — C1.45. Tarix yozuvi ham qo'lda yaratish yo'li bilan bir xil.
         await manager.query(
           `UPDATE checkout.sales_order_seller
-           SET elchi_shipment_id=$1, tracking_url=$2, status='SHIPMENT_CREATED', updated_at=now()
-           WHERE id=$3`,
-          [shipment.shipment_id, shipment.tracking_url ?? null, seller.id],
+           SET elchi_shipment_id=$1, tracking_url=$2, qr_code_token=$3,
+               elchi_to_be_paid=$4, status='SHIPMENT_CREATED', updated_at=now()
+           WHERE id=$5`,
+          [
+            shipment.shipment_id,
+            shipment.tracking_url ?? null,
+            shipment.qr_code_token ?? null,
+            shipment.to_be_paid ?? null,
+            seller.id,
+          ],
+        );
+        await manager.query(
+          `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status,comment)
+           VALUES($1,'SHIPMENT_CREATED','Yetkazib berish yaratildi')`,
+          [seller.id],
         );
         seller.elchi_shipment_id = shipment.shipment_id;
         shipmentResults.push({

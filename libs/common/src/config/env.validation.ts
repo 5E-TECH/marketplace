@@ -60,6 +60,9 @@ export const envValidationSchema = Joi.object({
   JWT_EXPIRES_IN: Joi.string().default('1h'),
   JWT_REFRESH_SECRET: Joi.string().min(16).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  // false — login/register/refresh tokenni body'da qaytarmaydi, faqat
+  // HttpOnly cookie'da (API_CONTRACT.md §2.2.1). Frontend cookie'ga o'tgach.
+  AUTH_TOKENS_IN_BODY: Joi.boolean().default(true),
 
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),

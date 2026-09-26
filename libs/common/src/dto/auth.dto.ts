@@ -160,17 +160,21 @@ export class AuthTokensDto {
   @ApiProperty({ type: AuthUserDto })
   user: AuthUserDto;
 
-  @ApiProperty({
-    description: 'Himoyalangan endpointlar uchun Bearer access token',
+  @ApiPropertyOptional({
+    description:
+      'Himoyalangan endpointlar uchun Bearer access token. ' +
+      '`AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
-  accessToken: string;
+  accessToken?: string;
 
-  @ApiProperty({
-    description: 'Sessiyani yangilash yoki logout qilish uchun refresh token',
+  @ApiPropertyOptional({
+    description:
+      'Sessiyani yangilash yoki logout qilish uchun refresh token. ' +
+      '`AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 export class AuthSuccessResponseDto {
@@ -185,11 +189,13 @@ export class AuthSuccessResponseDto {
 }
 
 export class LoginSuccessResponseDto {
-  @ApiProperty({
-    description: 'Himoyalangan endpointlar uchun Bearer access token',
+  @ApiPropertyOptional({
+    description:
+      'Himoyalangan endpointlar uchun Bearer access token. ' +
+      '`AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
-  accessToken: string;
+  accessToken?: string;
 }
 
 export class LogoutSuccessResponseDto {

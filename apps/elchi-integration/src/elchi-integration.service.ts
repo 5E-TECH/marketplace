@@ -4,7 +4,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
-import { CheckoutDeliveryDestination, RmqClient } from '@app/common';
+import {
+  CheckoutDeliveryDestination,
+  ElchiShipmentResult,
+  RmqClient,
+} from '@app/common';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
 import {
@@ -469,12 +473,17 @@ export class ElchiIntegrationService {
    */
   async createShipment(
     input: CreateElchiShipmentInput & { shopId?: string },
-  ): Promise<{ shipment_id: string; tracking_url?: string }> {
+  ): Promise<ElchiShipmentResult> {
     const { shopId, ...body } = input;
     if (shopId) {
       body.elchi_market_id = await this.resolveElchiMarketId(shopId);
     }
     return this.elchi.createShipment(body);
+  }
+
+  /** Mavjud posilka tokenini Elchi'dan qayta olish (C1.45 tiklash yo'li). */
+  async getShipment(shipmentId: string): Promise<ElchiShipmentResult> {
+    return this.elchi.getShipment(String(shipmentId));
   }
 
   async getTariff(input: {

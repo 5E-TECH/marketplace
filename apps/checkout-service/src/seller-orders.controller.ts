@@ -1,4 +1,10 @@
-import { Controller, Inject, UseFilters } from '@nestjs/common';
+import {
+  ConflictException,
+  Controller,
+  Inject,
+  NotFoundException,
+  UseFilters,
+} from '@nestjs/common';
 import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   RmqClient,
@@ -7,8 +13,14 @@ import {
   sendRpc,
   StockPageDto,
 } from '@app/common';
-import { SellerOrdersService } from './seller-orders.service';
-import { ShippingLabelService } from './shipping-label.service';
+import {
+  SellerOrdersService,
+  ShippingLabelTarget,
+} from './seller-orders.service';
+import {
+  ShippingLabelService,
+  SkippedShippingLabel,
+} from './shipping-label.service';
 
 interface SellerShop {
   id: string;
@@ -125,29 +137,81 @@ export class SellerOrdersController {
     },
   ) {
     const shopId = await this.resolveShopId(data);
-    const labels = await Promise.all(
-      data.orderIds.map((id) =>
-        this.orders.getShippingLabelData(shopId, String(id)),
-      ),
+    return this.batchLabels(
+      data.orderIds.map((id) => ({
+        shopId,
+        sellerOrderId: String(id),
+        orderId: String(id),
+      })),
     );
-    return this.labels.generateBatch(labels);
   }
 
+  /** Admin: `orderId` = sales_order.id — buyurtmaning barcha posilkalari. */
   @MessagePattern({ cmd: 'checkout.admin.order-label' })
   async adminLabel(@Payload() data: { orderId: string }) {
-    return this.labels.generate(
-      await this.orders.getShippingLabelDataForAdmin(String(data.orderId)),
-    );
+    const { targets, missing } = await this.orders.adminShippingLabelTargets([
+      String(data.orderId),
+    ]);
+    if (!targets.length) throw new NotFoundException(missing[0].reason);
+    return this.batchLabels(targets);
   }
 
   @MessagePattern({ cmd: 'checkout.admin.order-labels' })
   async adminLabelsBatch(@Payload() data: { orderIds: string[] }) {
-    const labels = await Promise.all(
-      data.orderIds.map((id) =>
-        this.orders.getShippingLabelDataForAdmin(String(id)),
+    const { targets, missing } = await this.orders.adminShippingLabelTargets(
+      data.orderIds,
+    );
+    return this.batchLabels(targets, missing);
+  }
+
+  /** Admin: bitta posilka (buyurtma tafsilotidagi do'kon bo'limi). */
+  @MessagePattern({ cmd: 'checkout.admin.seller-order-label' })
+  async adminSellerOrderLabel(
+    @Payload() data: { orderId: string; sellerOrderId: string },
+  ) {
+    return this.labels.generate(
+      await this.orders.getShippingLabelDataForAdmin(
+        String(data.orderId),
+        String(data.sellerOrderId),
       ),
     );
-    return this.labels.generateBatch(labels);
+  }
+
+  @MessagePattern({ cmd: 'checkout.admin.shipment-tokens-sync' })
+  adminSyncShipmentTokens(
+    @Payload() data: { afterId?: string; limit?: number; dryRun?: boolean },
+  ) {
+    return this.orders.syncShipmentTokens(data ?? {});
+  }
+
+  /**
+   * Chiqqan yorliqlar bitta PDF; chiqmaganlari `skipped` da. Birortasi ham
+   * chiqmasa — 409 va har biri sababi bilan (foydalanuvchi nimani tuzatishni
+   * ko'rsin).
+   */
+  private async batchLabels(
+    targets: ShippingLabelTarget[],
+    missing: SkippedShippingLabel[] = [],
+  ) {
+    const { labels, skipped } =
+      await this.orders.collectShippingLabels(targets);
+    const all = [...missing, ...skipped];
+    if (!labels.length) {
+      // Sabab bo'yicha guruhlanadi: 100 ta buyurtmada ham xabar qisqa
+      // qoladi (frontend uzun server matnini ko'rsatmaydi).
+      const byReason = new Map<string, Set<string>>();
+      for (const item of all) {
+        const ids = byReason.get(item.reason) ?? new Set<string>();
+        ids.add(`#${item.orderId}`);
+        byReason.set(item.reason, ids);
+      }
+      throw new ConflictException(
+        `Yorliq chiqmadi — ${[...byReason]
+          .map(([reason, ids]) => `${reason}: ${[...ids].join(', ')}`)
+          .join('; ')}`,
+      );
+    }
+    return this.labels.generateBatch(labels, all);
   }
 
   /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */

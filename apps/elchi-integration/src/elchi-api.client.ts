@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ElchiShipmentResult } from '@app/common';
 
 export interface ElchiRegion {
   id: string;
@@ -96,11 +97,9 @@ export class ElchiApiClient {
   }
 
   /** POST /partner/shipments — external_order_id Elchi tomonida idempotency kaliti. */
-  async createShipment(body: CreateElchiShipmentInput): Promise<{
-    shipment_id: string;
-    tracking_url?: string;
-    qr_code_token?: string;
-  }> {
+  async createShipment(
+    body: CreateElchiShipmentInput,
+  ): Promise<ElchiShipmentResult> {
     // `where_deliver` ni Elchi faqat KICHIK harfda qabul qiladi
     // ('center' yoki 'address'), aks holda butun so'rovni 400 bilan rad etadi.
     // Bizning `checkout.sales_order.where_deliver` ustuni esa 'ADDRESS' saqlaydi
@@ -123,10 +122,40 @@ export class ElchiApiClient {
     // Elchi uni javobda qaytaradi (PARTNER_API.md §3.3), lekin avval biz uni
     // tashlab yuborardik. Yorliqdagi QR ichiga aynan shu yoziladi — C1.45.
     const qrToken = this.pluck(res, 'qr_code_token');
+    const toBePaid = this.money(this.pluck(res, 'to_be_paid'));
     return {
       shipment_id: String(id),
       ...(trackingUrl ? { tracking_url: String(trackingUrl) } : {}),
       ...(qrToken ? { qr_code_token: String(qrToken) } : {}),
+      ...(toBePaid !== undefined ? { to_be_paid: toBePaid } : {}),
+    };
+  }
+
+  /**
+   * GET /partner/shipments/:id — mavjud posilkaning tokeni va summasi.
+   *
+   * Posilka yaratish javobida token yo'qolgan satrlarni tiklash uchun (C1.45):
+   * `createShipment` qayta chaqirilmaydi, chunki bizda shipment id bor bo'lsa
+   * u darhol qaytib ketadi. Elchi bu endpointda tokenni `tracking` nomi bilan
+   * beradi (`integration-service.service.ts` getPartnerShipment), summani esa
+   * `cod_amount` (= `to_be_paid`) nomi bilan — ikkala nomni ham qabul qilamiz.
+   */
+  async getShipment(shipmentId: string): Promise<ElchiShipmentResult> {
+    const res = await this.request(
+      'GET',
+      `/partner/shipments/${encodeURIComponent(shipmentId)}`,
+    );
+    const id = this.pluck(res, 'shipment_id');
+    if (!id) throw new Error('Elchi javobida shipment_id yo‘q');
+    const qrToken =
+      this.pluck(res, 'qr_code_token') ?? this.pluck(res, 'tracking');
+    const toBePaid = this.money(
+      this.pluck(res, 'to_be_paid') ?? this.pluck(res, 'cod_amount'),
+    );
+    return {
+      shipment_id: String(id),
+      ...(qrToken ? { qr_code_token: String(qrToken) } : {}),
+      ...(toBePaid !== undefined ? { to_be_paid: toBePaid } : {}),
     };
   }
 
@@ -210,6 +239,13 @@ export class ElchiApiClient {
   private pluck(res: unknown, key: string): unknown {
     const r = res as Record<string, any> | null;
     return r?.[key] ?? r?.data?.[key] ?? r?.data?.data?.[key] ?? undefined;
+  }
+
+  /** Summa maydoni: yo'q yoki son bo'lmasa `undefined` (0 ni saqlaydi). */
+  private money(value: unknown): number | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : undefined;
   }
 
   /** Javobdan massivni ajratadi (`data` yoki `data.data` yoki to‘g‘ridan). */

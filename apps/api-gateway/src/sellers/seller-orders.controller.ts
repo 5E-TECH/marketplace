@@ -7,9 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   StreamableFile,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -31,6 +33,7 @@ import {
   UpdateSellerOrderStatusDto,
   sendRpc,
 } from '@app/common';
+import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
 @ApiTags('seller')
 @ApiBearerAuth()
@@ -98,50 +101,39 @@ export class SellerOrdersController {
   async label(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const document = await sendRpc<{
-      fileName: string;
-      contentType: string;
-      base64: string;
-    }>(
+    const document = await sendRpc<LabelDocument>(
       this.checkout,
       { cmd: 'seller.orders.label' },
       { ...this.scope(user), orderId: id },
     );
-    return this.pdf(document);
+    return labelPdf(res, document);
   }
 
   @Post('orders/labels')
   @Roles(Role.SELLER, Role.OPERATOR)
-  @ApiOperation({ summary: 'Bir nechta Elchi QR yorlig‘ini bitta PDFda olish' })
+  @ApiOperation({
+    summary: 'Bir nechta Elchi QR yorlig‘ini bitta PDFda olish',
+    description:
+      'Yorlig‘i chiqmagan buyurtmalar partiyani yiqitmaydi: ular ' +
+      '`X-Labels-Skipped` headerida (URI-encoded JSON) sababi bilan ' +
+      'qaytadi. Birortasi ham chiqmasa 409.',
+  })
   @ApiProduces('application/pdf')
   async labelsBatch(
     @CurrentUser() user: JwtUser,
     @Body() dto: ShippingLabelsBatchDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const document = await sendRpc<{
-      fileName: string;
-      contentType: string;
-      base64: string;
-    }>(
+    const document = await sendRpc<LabelDocument>(
       this.checkout,
       { cmd: 'seller.orders.labels' },
       { ...this.scope(user), orderIds: dto.orderIds },
     );
-    return this.pdf(document);
+    return labelPdf(res, document);
   }
 
-  private pdf(document: {
-    fileName: string;
-    contentType: string;
-    base64: string;
-  }): StreamableFile {
-    return new StreamableFile(Buffer.from(document.base64, 'base64'), {
-      type: document.contentType,
-      disposition: `attachment; filename="${document.fileName}"`,
-      length: Buffer.byteLength(document.base64, 'base64'),
-    });
-  }
   @Get('orders/:id/history') @Roles(Role.SELLER, Role.OPERATOR) history(
     @CurrentUser() u: JwtUser,
     @Param('id') id: string,

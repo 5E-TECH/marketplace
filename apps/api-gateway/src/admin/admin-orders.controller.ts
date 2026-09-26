@@ -7,8 +7,10 @@ import {
   Param,
   Post,
   Query,
+  Res,
   StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
@@ -26,6 +28,7 @@ import {
   AdminOrdersQueryDto,
   AdminOrderActionDto,
   AdminOrderRefundDto,
+  AdminShipmentTokensSyncDto,
   OrderActionResultDto,
   CurrentUser,
   JwtUser,
@@ -36,6 +39,7 @@ import {
   sendRpc,
   ShippingLabelsBatchDto,
 } from '@app/common';
+import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
 /**
  * C1.30 — Admin buyurtma nazorati (faqat o'qish). Butun platformadagi buyurtmalar
@@ -87,14 +91,50 @@ export class AdminOrdersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiProduces('application/pdf')
-  @ApiOperation({ summary: 'Seller-order Elchi QR yorlig‘ini PDF olish' })
-  async label(@Param('id') id: string): Promise<StreamableFile> {
-    const document = await sendRpc<{
-      fileName: string;
-      contentType: string;
-      base64: string;
-    }>(this.checkout, { cmd: 'checkout.admin.order-label' }, { orderId: id });
-    return this.pdf(document);
+  @ApiOperation({
+    summary: 'Buyurtmaning barcha posilka yorliqlari (bitta PDF)',
+    description:
+      '`:id` — admin ro‘yxatidagi buyurtma id’si (sales_order), boshqa ' +
+      'admin endpointlari bilan bir xil. Har do‘kon posilkasi alohida ' +
+      '100x60 mm sahifa. Chiqmay qolgan posilkalar `X-Labels-Skipped` ' +
+      'headerida (URI-encoded JSON); birortasi ham chiqmasa 409.',
+  })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiResponse({ status: 409, description: 'Birorta yorliq chiqmadi' })
+  async label(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const document = await sendRpc<LabelDocument>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-label' },
+      { orderId: id },
+    );
+    return labelPdf(res, document);
+  }
+
+  @Get('admin/orders/:id/sellers/:sellerOrderId/label')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiProduces('application/pdf')
+  @ApiOperation({
+    summary: 'Buyurtmaning bitta posilkasi (do‘koni) yorlig‘i',
+  })
+  @ApiNotFoundResponse({
+    description: 'Posilka topilmadi yoki shu buyurtmaga tegishli emas',
+  })
+  @ApiResponse({ status: 409, description: 'Posilka yoki QR token yo‘q' })
+  async sellerOrderLabel(
+    @Param('id') id: string,
+    @Param('sellerOrderId') sellerOrderId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const document = await sendRpc<LabelDocument>(
+      this.checkout,
+      { cmd: 'checkout.admin.seller-order-label' },
+      { orderId: id, sellerOrderId },
+    );
+    return labelPdf(res, document);
   }
 
   @Post('admin/orders/labels')
@@ -102,21 +142,49 @@ export class AdminOrdersController {
   @ApiBearerAuth()
   @ApiProduces('application/pdf')
   @ApiOperation({
-    summary: 'Bir nechta seller-order yorlig‘ini bitta PDF olish',
+    summary: 'Bir nechta buyurtma yorliqlari bitta PDF da',
+    description:
+      '`orderIds` — sales_order id’lari. Yorlig‘i chiqmagan posilkalar ' +
+      'partiyani yiqitmaydi: ular `X-Labels-Skipped` headerida sababi ' +
+      'bilan qaytadi. Birortasi ham chiqmasa 409.',
   })
+  @ApiResponse({ status: 409, description: 'Birorta yorliq chiqmadi' })
   async labelsBatch(
     @Body() dto: ShippingLabelsBatchDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const document = await sendRpc<{
-      fileName: string;
-      contentType: string;
-      base64: string;
-    }>(
+    const document = await sendRpc<LabelDocument>(
       this.checkout,
       { cmd: 'checkout.admin.order-labels' },
       { orderIds: dto.orderIds },
     );
-    return this.pdf(document);
+    return labelPdf(res, document);
+  }
+
+  @Post('admin/orders/shipment-tokens/sync')
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Posilka QR tokenlarini Elchi bilan tenglashtirish (backfill)',
+    description:
+      'Tokeni yo‘q yoki Elchi’dagidan farq qiladigan posilkalarni ' +
+      'tuzatadi. Avval `dryRun: true` bilan ko‘ring. Javobdagi ' +
+      '`nextAfterId` null bo‘lguncha `afterId` bilan takrorlang.',
+  })
+  async syncShipmentTokens(
+    @Body() dto: AdminShipmentTokensSyncDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const result = await sendRpc(
+      this.checkout,
+      { cmd: 'checkout.admin.shipment-tokens-sync' },
+      dto,
+    );
+    if (!dto.dryRun) {
+      this.audit(admin.sub, 'order.shipment-tokens-sync', 'all', ip, dto);
+    }
+    return result;
   }
 
   @Post('admin/orders/:id/cancel')
@@ -214,17 +282,5 @@ export class AdminOrdersController {
         meta: { ...meta, ip: ip || null },
       },
     ).catch(() => undefined);
-  }
-
-  private pdf(document: {
-    fileName: string;
-    contentType: string;
-    base64: string;
-  }): StreamableFile {
-    return new StreamableFile(Buffer.from(document.base64, 'base64'), {
-      type: document.contentType,
-      disposition: `attachment; filename="${document.fileName}"`,
-      length: Buffer.byteLength(document.base64, 'base64'),
-    });
   }
 }

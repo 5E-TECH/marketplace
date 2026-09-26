@@ -127,10 +127,10 @@
         },
         "responses": {
           "201": {
-            "description": "Login muvaffaqiyatli; access token body’da, refresh token HttpOnly cookie’da qaytarildi",
+            "description": "Login muvaffaqiyatli; access token body’da va HttpOnly accessToken cookie’da, refresh token HttpOnly cookie’da qaytarildi",
             "headers": {
               "Set-Cookie": {
-                "description": "HttpOnly refreshToken cookie",
+                "description": "HttpOnly accessToken va refreshToken cookie",
                 "schema": {
                   "type": "string"
                 }
@@ -2536,6 +2536,7 @@
     },
     "/api/v1/seller/orders/labels": {
       "post": {
+        "description": "Yorlig‘i chiqmagan buyurtmalar partiyani yiqitmaydi: ular `X-Labels-Skipped` headerida (URI-encoded JSON) sababi bilan qaytadi. Birortasi ham chiqmasa 409.",
         "operationId": "SellerOrdersController_labelsBatch",
         "parameters": [],
         "requestBody": {
@@ -4373,6 +4374,7 @@
     },
     "/api/v1/admin/orders/{id}/label": {
       "get": {
+        "description": "`:id` — admin ro‘yxatidagi buyurtma id’si (sales_order), boshqa admin endpointlari bilan bir xil. Har do‘kon posilkasi alohida 100x60 mm sahifa. Chiqmay qolgan posilkalar `X-Labels-Skipped` headerida (URI-encoded JSON); birortasi ham chiqmasa 409.",
         "operationId": "AdminOrdersController_label",
         "parameters": [
           {
@@ -4385,8 +4387,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "404": {
+            "description": "Buyurtma topilmadi"
+          },
+          "409": {
+            "description": "Birorta yorliq chiqmadi"
           }
         },
         "security": [
@@ -4394,7 +4399,47 @@
             "bearer": []
           }
         ],
-        "summary": "Seller-order Elchi QR yorlig‘ini PDF olish",
+        "summary": "Buyurtmaning barcha posilka yorliqlari (bitta PDF)",
+        "tags": [
+          "admin-orders"
+        ]
+      }
+    },
+    "/api/v1/admin/orders/{id}/sellers/{sellerOrderId}/label": {
+      "get": {
+        "operationId": "AdminOrdersController_sellerOrderLabel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sellerOrderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Posilka topilmadi yoki shu buyurtmaga tegishli emas"
+          },
+          "409": {
+            "description": "Posilka yoki QR token yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buyurtmaning bitta posilkasi (do‘koni) yorlig‘i",
         "tags": [
           "admin-orders"
         ]
@@ -4402,6 +4447,7 @@
     },
     "/api/v1/admin/orders/labels": {
       "post": {
+        "description": "`orderIds` — sales_order id’lari. Yorlig‘i chiqmagan posilkalar partiyani yiqitmaydi: ular `X-Labels-Skipped` headerida sababi bilan qaytadi. Birortasi ham chiqmasa 409.",
         "operationId": "AdminOrdersController_labelsBatch",
         "parameters": [],
         "requestBody": {
@@ -4410,6 +4456,37 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ShippingLabelsBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "Birorta yorliq chiqmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bir nechta buyurtma yorliqlari bitta PDF da",
+        "tags": [
+          "admin-orders"
+        ]
+      }
+    },
+    "/api/v1/admin/orders/shipment-tokens/sync": {
+      "post": {
+        "description": "Tokeni yo‘q yoki Elchi’dagidan farq qiladigan posilkalarni tuzatadi. Avval `dryRun: true` bilan ko‘ring. Javobdagi `nextAfterId` null bo‘lguncha `afterId` bilan takrorlang.",
+        "operationId": "AdminOrdersController_syncShipmentTokens",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminShipmentTokensSyncDto"
               }
             }
           }
@@ -4424,7 +4501,7 @@
             "bearer": []
           }
         ],
-        "summary": "Bir nechta seller-order yorlig‘ini bitta PDF olish",
+        "summary": "Posilka QR tokenlarini Elchi bilan tenglashtirish (backfill)",
         "tags": [
           "admin-orders"
         ]
@@ -8001,19 +8078,17 @@
           },
           "accessToken": {
             "type": "string",
-            "description": "Himoyalangan endpointlar uchun Bearer access token",
+            "description": "Himoyalangan endpointlar uchun Bearer access token. `AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da",
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           },
           "refreshToken": {
             "type": "string",
-            "description": "Sessiyani yangilash yoki logout qilish uchun refresh token",
+            "description": "Sessiyani yangilash yoki logout qilish uchun refresh token. `AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da",
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           }
         },
         "required": [
-          "user",
-          "accessToken",
-          "refreshToken"
+          "user"
         ]
       },
       "AuthSuccessResponseDto": {
@@ -8119,13 +8194,10 @@
         "properties": {
           "accessToken": {
             "type": "string",
-            "description": "Himoyalangan endpointlar uchun Bearer access token",
+            "description": "Himoyalangan endpointlar uchun Bearer access token. `AUTH_TOKENS_IN_BODY=false` bo‘lsa qaytmaydi — faqat HttpOnly cookie’da",
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           }
-        },
-        "required": [
-          "accessToken"
-        ]
+        }
       },
       "RefreshTokenDto": {
         "type": "object",
@@ -10524,6 +10596,27 @@
           "user"
         ]
       },
+      "AdminShipmentTokensSyncDto": {
+        "type": "object",
+        "properties": {
+          "afterId": {
+            "type": "string",
+            "example": "0",
+            "description": "Shu seller-order id dan keyingilar"
+          },
+          "limit": {
+            "type": "number",
+            "example": 20,
+            "minimum": 1,
+            "maximum": 50
+          },
+          "dryRun": {
+            "type": "boolean",
+            "example": true,
+            "description": "true — hech narsa yozilmaydi, faqat nima o‘zgarishi ko‘rsatiladi"
+          }
+        }
+      },
       "AdminOrderActionDto": {
         "type": "object",
         "properties": {
@@ -11788,6 +11881,11 @@
       "BuyerOrderListItemProductDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "example": "31",
+            "description": "sales_order_item ID — `POST /products/:productId/reviews` dagi `orderItemId`"
+          },
           "productId": {
             "type": "string",
             "example": "7"
@@ -11808,13 +11906,30 @@
             "type": "object",
             "example": null,
             "nullable": true
+          },
+          "sellerOrderStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CONFIRMED",
+              "SHIPMENT_CREATED",
+              "RECEIVED",
+              "ON_THE_ROAD",
+              "DELIVERED",
+              "CANCELLED",
+              "RETURNED"
+            ],
+            "example": "DELIVERED",
+            "description": "Shu mahsulot tegishli sotuvchi sub-buyurtmasining holati. Sharh faqat `DELIVERED` bo‘lganda qabul qilinadi (ko‘p sotuvchili buyurtmada `orderStatus` bundan farq qilishi mumkin)."
           }
         },
         "required": [
+          "id",
           "productId",
           "name",
           "quantity",
-          "unitPrice"
+          "unitPrice",
+          "sellerOrderStatus"
         ]
       },
       "BuyerOrderListItemDto": {
