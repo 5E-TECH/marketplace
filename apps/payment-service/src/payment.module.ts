@@ -28,8 +28,16 @@ import { PaymentRefundService } from './payment-refund.service';
 import { PaymentQueryService } from './payment-query.service';
 import { PaymentOutboxRelayService } from './payment-outbox-relay.service';
 import { HardenPaymentCallbacks1724414400000 } from './migrations/1724414400000-harden-payment-callbacks';
+import { CreatePaymentRefund1727481600000 } from './migrations/1727481600000-create-payment-refund';
+import { PaymentRefund } from './entities/payment-refund.entity';
 
-const entities = [Payment, PaymentTransaction, ProviderConfig, OutboxEvent];
+const entities = [
+  Payment,
+  PaymentTransaction,
+  PaymentRefund,
+  ProviderConfig,
+  OutboxEvent,
+];
 
 @Module({
   imports: [
@@ -55,6 +63,7 @@ const entities = [Payment, PaymentTransaction, ProviderConfig, OutboxEvent];
             CreatePaymentTables1724241600000,
             AddPaymeTransactionState1724328000000,
             HardenPaymentCallbacks1724414400000,
+            CreatePaymentRefund1727481600000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

@@ -2,11 +2,20 @@ import { of } from 'rxjs';
 import { SellerOrdersService } from './seller-orders.service';
 
 describe('C6.4 admin order actions', () => {
-  function setup(options: { status?: string; paymentMethod?: string } = {}) {
+  function setup(
+    options: {
+      status?: string;
+      paymentMethod?: string;
+      approvedReturns?: number;
+    } = {},
+  ) {
     const queries: string[] = [];
     const manager = {
       query: jest.fn(async (sql: string) => {
         queries.push(sql);
+        if (sql.includes('FROM checkout.return_request')) {
+          return [{ total: options.approvedReturns ?? 0 }];
+        }
         if (sql.includes('FROM checkout.sales_order WHERE')) {
           return [
             {
@@ -167,6 +176,15 @@ describe('C6.4 admin order actions', () => {
       actorId: '1',
     });
     expect(payment.send).not.toHaveBeenCalled();
+  });
+
+  it('C4.2: tasdiqlangan qaytarish so‘rovi bor buyurtma to‘liq refund qilinmaydi', async () => {
+    const { service, payment, inventory } = setup({ approvedReturns: 1 });
+    await expect(
+      service.adminRefundOrder({ orderId: '10', reason: 'x', actorId: '1' }),
+    ).rejects.toThrow('qaytarish so‘rovlari orqali');
+    expect(payment.send).not.toHaveBeenCalled();
+    expect(inventory.send).not.toHaveBeenCalled();
   });
 
   it('partial refundni providerga yubormasdan rad etadi', async () => {

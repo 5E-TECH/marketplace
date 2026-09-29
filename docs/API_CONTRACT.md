@@ -386,6 +386,63 @@ Elchi `received` webhook statusi seller-order holatini `RECEIVED` ga o‘tkazadi
 ```
 - Ma'lumot yo'q davr → nol/bo'sh massivlar (xato emas).
 
+### 7.1 Qaytarish so'rovlari (returns) ✅ C4.2
+
+> Biznes qoidalari va qo'lda tekshirish: `C4.2-RETURNS.md`.
+
+Holatlar: `SUBMITTED → IN_REVIEW → APPROVED | REJECTED → REFUNDED`. Har o'tish
+`history[]` ga yoziladi (`fromStatus, toStatus, actorRole, comment, createdAt`).
+Bitta so'rov = bitta posilka (`sales_order_seller`): uni o'sha do'kon ko'rib chiqadi.
+
+**Xaridor · BUYER (token majburiy)**
+- **`POST /orders/:orderId/returns`** —
+  `{ items:[{ orderItemId, quantity }], reason, comment? }` → `201 { items: ReturnRequest[] }`.
+  `orderItemId` — `GET /orders` dagi `items[].id`. `reason`:
+  `DEFECTIVE | DAMAGED | INCOMPLETE | WRONG_ITEM | NOT_AS_DESCRIBED | CHANGED_MIND | OTHER`
+  (`OTHER` da `comment` majburiy). Faqat `DELIVERED` posilka, yetkazilgandan
+  keyin `RETURN_WINDOW_DAYS` (default **10**) kun ichida. Qisman qaytarish:
+  miqdor rad etilmagan boshqa so'rovlar bilan birga buyurtmadagidan oshmaydi.
+  Turli do'kon tovarlari → har posilkaga alohida so'rov.
+  Xatolar: `400` (yetkazilmagan, muddat o'tgan, miqdor ortiq, tovar begona,
+  buyurtma bekor/to'liq qaytarilgan), `403` begona buyurtma, `404`.
+- **`GET /returns`** — `status?, page?, limit?` → sahifa. **`GET /returns/:id`** — tarix bilan; begonasi `404`.
+
+**Sotuvchi / operator · SELLER, OPERATOR (o'z do'koni)**
+- **`GET /seller/returns?status=`**, **`GET /seller/returns/:id`**.
+- **`POST /seller/returns/:id/review`** `{ comment? }` — `SUBMITTED → IN_REVIEW` (tovar qabul qilindi, tekshirilmoqda).
+- **`POST /seller/returns/:id/approve`** `{ comment? }` — `SUBMITTED|IN_REVIEW → APPROVED`.
+- **`POST /seller/returns/:id/reject`** `{ reason }` — `SUBMITTED|IN_REVIEW → REJECTED`.
+  Qaror bir marta beriladi; keyin uni faqat admin o'zgartiradi. Takroriy
+  bir xil qaror — yon ta'sirsiz.
+
+**Admin**
+- **`GET /admin/returns` · ADMIN** — `status?, shopId?, orderId?, dateFrom?, dateTo?, page?, limit?`. **`GET /admin/returns/:id` · ADMIN**.
+- **`POST /admin/returns/:id/approve` · ADMIN** `{ comment? }` — `SUBMITTED|IN_REVIEW|REJECTED → APPROVED`
+  (rad etilganni qayta tasdiqlashda tovar boshqa so'rovga band bo'lsa `409`).
+- **`POST /admin/returns/:id/reject` · ADMIN** `{ reason }` — `SUBMITTED|IN_REVIEW|APPROVED → REJECTED`.
+- **`POST /admin/returns/:id/refund` · SUPERADMIN** `{ amount?, restock?, comment? }` — `APPROVED → REFUNDED`.
+  `amount` berilmasa so'rovdagi tovarlar summasi; kichikroq — **qisman refund**.
+  Online: provayder to'lovidan shu summa qaytariladi (to'lov `PAID` qoladi, qoldiq
+  nolga tushsa `REFUNDED`). COD: pul xaridorga qo'lda qaytariladi, `comment`
+  majburiy. Ikkalasida sotuvchi ledgeriga `REFUND` (summa − komissiya ulushi);
+  to'lanmagan payout shuncha kamayadi, aks holda keyingi payout'dan netting.
+  `restock` default: sifat sababi (`DEFECTIVE/DAMAGED/INCOMPLETE/WRONG_ITEM`) → `false`, qolgani → `true`.
+  Idempotent (`return-refund:<id>` kaliti): takror chaqiruv pulni ikkinchi marta qaytarmaydi.
+
+`ReturnRequest`:
+```jsonc
+{ "id":"3", "orderId":"42", "sellerOrderId":"51", "shopId":"7", "shopName":"Nova",
+  "buyerName":"Ali", "status":"APPROVED", "reason":"DEFECTIVE", "comment":"...",
+  "paymentMethod":"online", "requestedAmount":99000, "refundedAmount":null,
+  "restocked":null, "decisionComment":"Tekshirildi", "decidedAt":"...", "refundedAt":null,
+  "createdAt":"...", "updatedAt":"...",
+  "items":[{ "id":"5", "orderItemId":"31", "productId":"7", "variantId":"12",
+             "productName":"...", "imageUrl":null, "quantity":1, "unitPrice":99000, "lineTotal":99000 }] }
+```
+
+Bildirishnoma: har o'tishda `return.status-changed` (yangi so'rov → sotuvchiga,
+qaror → xaridorga, refund → ikkalasiga).
+
 ---
 
 ## 8. Admin / Platform Back-office
@@ -478,7 +535,9 @@ Javob `{ id, status, idempotent }`. Idempotent: takror chaqiriqda provayderga
 hech narsa yuborilmaydi, `idempotent: true` qaytadi. Muvaffaqiyatdan keyin
 buyurtma `REFUNDED`, sub-buyurtmalar `RETURNED`, `GET /orders` va
 `GET /orders/:id/tracking` dagi to'lov holati `REFUNDED` bo'ladi. Hozircha
-faqat to'liq summa; COD buyurtma rad etiladi.
+faqat to'liq summa; COD buyurtma rad etiladi. Buyurtmada `APPROVED`/`REFUNDED`
+qaytarish so'rovi bo'lsa `400` — qisman qaytarilgan pul/qoldiq ikkinchi marta
+qaytmasligi uchun bunday buyurtma §7.1 orqali yakunlanadi.
 
 ### 8.7 Sklad nazorati ◻︎
 **`GET /admin/inventory/stock` · ADMIN / SUPERADMIN ✅ C6.7** — barcha
@@ -597,7 +656,7 @@ Rol o'zgartirish va o'chirish faol refresh sessiyalarni bekor qiladi. Har o'zgar
 | `/categories` GET, `/storefront/banners` GET | ✅ | ✅ | ✅ | ✅ |
 | `/sellers/me`, `/products/*`, `/inventory/*`, `/seller/*`, `/files/upload` | — | ✅ | — | — |
 | `/admin/*` (dashboard, shops, users, orders ko'rish, kategoriya, `/admin/content/banners*` shu jumladan rasm yuklash) | — | — | ✅ | ✅ |
-| `/admin/finance/*`, `/admin/settings` PUT, `/admin/team/*`, `/admin/payments/providers`, rol/impersonate | — | — | ❌ | ✅ |
+| `/admin/finance/*`, `/admin/settings` PUT, `/admin/team/*`, `/admin/payments/providers`, `/admin/returns/:id/refund`, rol/impersonate | — | — | ❌ | ✅ |
 | `/webhooks/elchi` | ✅(HMAC) | — | — | — |
 
 ---

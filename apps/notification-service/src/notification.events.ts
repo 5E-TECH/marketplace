@@ -57,3 +57,13 @@ export interface OrderAdminActionEvent {
   reason: string;
   recipients: NotificationRecipient[];
 }
+
+/** C4.2 — qaytarish so'rovi holati o'zgardi (checkout emit qiladi). */
+export interface ReturnStatusChangedEvent {
+  returnId: string;
+  orderId: string;
+  status: 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'REFUNDED';
+  comment?: string | null;
+  amount?: number;
+  recipients: NotificationRecipient[];
+}

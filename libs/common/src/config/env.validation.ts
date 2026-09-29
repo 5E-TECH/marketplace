@@ -79,4 +79,8 @@ export const envValidationSchema = Joi.object({
   EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),
   SMS_WEBHOOK_URL: Joi.string().uri().optional(),
   TELEGRAM_BOT_TOKEN: Joi.string().optional(),
+
+  // C4.2 — xaridor posilka yetkazilgandan keyin necha kun ichida qaytarish
+  // so'rovi yubora oladi (O'zbekiston qonuni / Uzum: sifatli tovar — 10 kun).
+  RETURN_WINDOW_DAYS: Joi.number().integer().min(1).max(365).default(10),
 });

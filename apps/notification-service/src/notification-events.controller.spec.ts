@@ -80,4 +80,37 @@ describe('NotificationEventsController', () => {
       }),
     );
   });
+
+  it('C4.2 qaytarish holati: rad etish sababi va refund summasi matnda', async () => {
+    await controller.returnStatusChanged({
+      returnId: '3',
+      orderId: '50',
+      status: 'REJECTED',
+      comment: 'Tovar ishlatilgan',
+      recipients: [{ userId: '10' }],
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'return_rejected',
+        title: 'Qaytarish so‘rovi rad etildi',
+        body: expect.stringContaining('Sabab: Tovar ishlatilgan'),
+        data: { returnId: '3', orderId: '50', status: 'REJECTED' },
+      }),
+    );
+
+    await controller.returnStatusChanged({
+      returnId: '3',
+      orderId: '50',
+      status: 'REFUNDED',
+      amount: 150000,
+      recipients: [{ userId: '10' }, { userId: '11' }],
+    });
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'return_refunded',
+        body: expect.stringContaining('150'),
+      }),
+    );
+  });
 });

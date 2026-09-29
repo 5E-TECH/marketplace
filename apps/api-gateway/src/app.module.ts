@@ -53,6 +53,9 @@ import { ReadinessService } from './readiness.service';
 import { BuyerOrdersController } from './orders/buyer-orders.controller';
 import { CurrentRoleGuard } from './auth/current-role.guard';
 import { AdminInventoryController } from './admin/admin-inventory.controller';
+import { BuyerReturnsController } from './returns/buyer-returns.controller';
+import { SellerReturnsController } from './sellers/seller-returns.controller';
+import { AdminReturnsController } from './admin/admin-returns.controller';
 
 @Module({
   imports: [
@@ -186,6 +189,9 @@ import { AdminInventoryController } from './admin/admin-inventory.controller';
     RegionsController,
     BuyerOrdersController,
     AdminInventoryController,
+    BuyerReturnsController,
+    SellerReturnsController,
+    AdminReturnsController,
   ],
   providers: [
     AppService,
