@@ -144,6 +144,34 @@ tashqaridan javob bermaydi; uchala sayt esa tunnel orqali 200 qaytaradi.
 Bular IP+HTTP bilan sinash uchun **ataylab** qo'yilgan edi. Domen ishlagach
 hammasi olib tashlanmasa, production HTTPS'siz qolib ketadi.
 
+> ### ✅ Bajarildi — 2026-09-21
+>
+> 3.1–3.5 ning hammasi jonli muhitda qayta o'lchandi:
+>
+> | Band | Holat | O'lchov |
+> | --- | --- | --- |
+> | 3.1 backend env | ✅ | `CORS_ORIGINS=https://admin.elchimarket.uz,https://elchimarket.uz`; `MINIO_PUBLIC_URL=https://api.elchimarket.uz/media`; `TLS_EMAIL` haqiqiy |
+> | 3.2 kabinet | ✅ | prod bundle'da yagona manzil `https://api.elchimarket.uz/api/v1`; bayroq repodan butunlay olib tashlandi |
+> | 3.3 storefront | ✅ | `NEXT_PUBLIC_SITE_URL` https |
+> | 3.4 Elchi tomoni | ✅ | hamkor `webhook_url` = `https://api.elchimarket.uz/api/v1/webhooks/elchi` |
+> | 3.5 bazadagi havolalar | ✅ | 0 ta `http://` rasm havolasi qoldi |
+>
+> **TC natijalari:** TC1 bayroqsiz build exit 0 ✅ · TC2 CORS faqat ikkita
+> https originga javob beradi, IP va localhost originlariga `ACAO` YO'Q ✅ ·
+> TC3 media https orqali 200 ✅ · TC4 to'rtala hostda `http → https` 301 ✅
+>
+> **`DOMAIN=http://api.elchimarket.uz` chetlashuv EMAS.** Cloudflare tunnel
+> ortida Caddy oddiy HTTP beradi va `http://` prefiksi uning ACME urinishini
+> ataylab o'chiradi (`deploy/Caddyfile` izohiga qarang). Brauzer ko'radigan
+> manzil `API_ORIGIN=https://api.elchimarket.uz`.
+>
+> ⚠️ **Ochiq qolgan kamchilik (C5.3 doirasidan tashqari, alohida karta kerak):**
+> `https://elchimarket.uz` da birorta xavfsizlik sarlavhasi YO'Q — na HSTS,
+> na CSP, na `X-Frame-Options`. Sabab: `deploy/Caddyfile` da faqat `{$DOMAIN}`
+> va `{$APP_DOMAIN}` bloklari bor, tunnel esa apex domenni to'g'ridan-to'g'ri
+> `storefront:3001` ga olib boradi — ya'ni Caddy chetlab o'tiladi.
+> `api` va `admin` subdomenlarida sarlavhalar to'liq.
+
 ### 3.1 Backend — `/srv/marketplace/.env.production`
 
 ```diff
@@ -185,10 +213,12 @@ cd /home/deploy/marketplace-frontend
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
-⚠️ Ikki qatorni **birga** o'zgartiring. `VITE_ALLOW_INSECURE_API` ni olib
-tashlab, manzilni `https://` ga o'tkazmasangiz — build yashil bo'ladi, lekin
-kabinet brauzerda umuman ochilmaydi (`resolveApiUrl` modul yuklanayotganda
-xato tashlaydi).
+⚠️ **2026-09-21 dan beri bu tuzoq yo'q.** Ilgari HTTPS tekshiruvi faqat
+RUNTIME'da ishlardi: `http://` manzil bilan build yashil chiqib, kabinet
+brauzerda umuman ochilmasdi (`resolveApiUrl` modul yuklanayotganda xato
+tashlardi). Endi `Dockerfile` da BUILD vaqtidagi darvoza bor — `VITE_API_URL`
+`https://` yoki nisbiy (`/api/v1`) bo'lmasa build darhol to'xtaydi.
+`VITE_ALLOW_INSECURE_API` bayrog'i esa repodan butunlay olib tashlandi.
 
 ### 3.3 Storefront — `/home/deploy/marketplace-storefront/.env.production`
 

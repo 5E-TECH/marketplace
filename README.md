@@ -74,8 +74,12 @@ docs/               PRD, API kontrakt, DB sxema, Trello
 | Kuzatuv           | Har so'rovga `X-Request-Id`; xato javobida ham qaytadi               |
 | Migratsiya        | `DB_AUTO_MIGRATE=false` bilan nazoratli rollout qilish mumkin        |
 
-Rate limiting `X-Forwarded-For` bo'yicha ishlaydi — `TRUST_PROXY_HOPS`
-reverse proxy qatlamlari soniga teng bo'lishi shart (Caddy = 1).
+Rate limiting va audit jurnalidagi IP `X-Forwarded-For` bo'yicha aniqlanadi —
+`TRUST_PROXY_HOPS` HAQIQIY proxy zanjiriga teng bo'lishi shart. Productionda
+zanjir Cloudflare tunnel bilan ikki bosqichli (`cloudflared → caddy →
+api-gateway`), ya'ni **2**; tunnelsiz faqat Caddy bo'lsa — 1. Kam qo'yilsa
+jurnalga proksining ichki IP'si tushadi, ko'p qo'yilsa mijoz soxta IP
+yozdira oladi. Batafsil: `docs/C4.8-TRUST-PROXY.md`.
 
 ## Stack (rejalashtirilgan)
 

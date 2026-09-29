@@ -31,8 +31,12 @@ set -eu
 ELCHI_API=${ELCHI_API:-https://api.elchipochta.uz}
 MARKET_HOST=${MARKET_HOST:-marketplace}
 MARKET_DIR=${MARKET_DIR:-/srv/marketplace}
-# Elchi shu manzilga webhook uradi. Domen olingach https manzilga o'zgartiring.
-MARKET_WEBHOOK_URL=${MARKET_WEBHOOK_URL:-http://169.58.98.223/api/v1/webhooks/elchi}
+# Marketplace API ning tashqi manzili. IP+HTTP defaultlari C5.3 doirasida
+# olib tashlandi: skriptni eski qiymat bilan yurgizish Elchi'dagi hamkor
+# yozuvini HTTP manzilga qaytarib, webhook zanjirini buzardi.
+MARKET_API=${MARKET_API:-https://api.elchimarket.uz/api/v1}
+# Elchi shu manzilga webhook uradi.
+MARKET_WEBHOOK_URL=${MARKET_WEBHOOK_URL:-$MARKET_API/webhooks/elchi}
 # Marketplace Elchiga shu manzil orqali murojaat qiladi.
 PARTNER_API_URL=${PARTNER_API_URL:-$ELCHI_API}
 
@@ -94,9 +98,9 @@ echo
 echo "== Tekshiruv =="
 sleep 15
 printf '%-46s ' 'API /health'
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 15 http://169.58.98.223/api/v1/health
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 15 "$MARKET_API/health"
 printf '%-46s ' 'webhook (imzosiz -> 401 kutilyapti)'
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 15 -X POST http://169.58.98.223/api/v1/webhooks/elchi \
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 15 -X POST "$MARKET_WEBHOOK_URL" \
   -H 'Content-Type: application/json' -d '{}'
 echo
 echo "Endi to'liq uchma-uch tekshiruv:"
