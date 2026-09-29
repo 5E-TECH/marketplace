@@ -27,6 +27,7 @@ import {
   ShippingLabelData,
   SkippedShippingLabel,
 } from './shipping-label.service';
+import { shopOwnerUserId } from './catalog-shop.util';
 
 interface CountRow {
   total: string | number;
@@ -864,6 +865,19 @@ export class SellerOrdersService {
           'Hozir faqat to‘liq refund qo‘llab-quvvatlanadi',
         );
       }
+      // C4.2: qisman qaytarilgan tovar pulini va qoldig'ini to'liq refund
+      // ikkinchi marta qaytarib yubormasin — bunday buyurtma qaytarish
+      // so'rovlari orqali yakunlanadi.
+      const [returns] = (await manager.query(
+        `SELECT COUNT(*)::int AS total FROM checkout.return_request
+          WHERE sales_order_id=$1 AND status IN ('APPROVED','REFUNDED')`,
+        [input.orderId],
+      )) as CountRow[];
+      if (Number(returns?.total ?? 0) > 0) {
+        throw new BadRequestException(
+          'Buyurtmada tasdiqlangan qaytarish so‘rovi bor — pulni qaytarish so‘rovlari orqali qaytaring',
+        );
+      }
       const sellers = await manager.query(
         `SELECT id::text,shop_id::text FROM checkout.sales_order_seller WHERE sales_order_id=$1 ORDER BY id`,
         [input.orderId],
@@ -941,14 +955,7 @@ export class SellerOrdersService {
     if (!this.notifications) return;
     const sellerUserIds = this.catalog
       ? await Promise.all(
-          shopIds.map(async (shopId) => {
-            const shop = await sendRpc<{ ownerUserId: string }>(
-              this.catalog!,
-              { cmd: 'catalog.shop.get-by-id' },
-              { shopId },
-            );
-            return String(shop.ownerUserId);
-          }),
+          shopIds.map((shopId) => shopOwnerUserId(this.catalog!, shopId)),
         )
       : [];
     const recipients = [customerId, ...sellerUserIds]

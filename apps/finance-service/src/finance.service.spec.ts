@@ -16,6 +16,41 @@ describe('FinanceService (C3.5)', () => {
     const query = jest.fn(async (sql: string, params: any[] = []) => {
       if (sql.includes('pg_advisory_xact_lock')) return [];
       if (
+        sql.includes('FROM finance.seller_ledger') &&
+        sql.includes("reference_type='return_request'")
+      ) {
+        const row = ledgers.find(
+          (item) =>
+            item.shopId === params[0] &&
+            item.entryType === FinanceLedgerEntryType.REFUND &&
+            item.referenceType === 'return_request' &&
+            item.referenceId === params[2],
+        );
+        return row ? [row] : [];
+      }
+      if (sql.includes("reference_type='cod_seller_order' AND entry_type IN")) {
+        return ledgers
+          .filter(
+            (item) =>
+              item.shopId === params[0] &&
+              item.referenceId === params[1] &&
+              ((item.referenceType === 'seller_order' &&
+                ['SALE', 'COMMISSION'].includes(item.entryType)) ||
+                (item.referenceType === 'cod_seller_order' &&
+                  ['COD_SALE', 'COMMISSION'].includes(item.entryType))),
+          )
+          .map((item) => ({ entryType: item.entryType, amount: item.amount }));
+      }
+      if (sql.includes('SET amount=GREATEST(0,amount-$2)')) {
+        const row = payouts.find(
+          (item) =>
+            item.referenceId === params[0] &&
+            ['PENDING', 'APPROVED'].includes(item.status),
+        );
+        if (row) row.amount = Math.max(0, row.amount - Number(params[1]));
+        return [];
+      }
+      if (
         sql.includes('FROM finance.cod_reconciliation WHERE seller_order_id')
       ) {
         const row = reconciliations.find(
@@ -291,6 +326,73 @@ describe('FinanceService (C3.5)', () => {
       }),
     ).resolves.toMatchObject({ entry: null, skipped: true, idempotent: true });
     expect(ledgers).toHaveLength(0);
+  });
+
+  describe('C4.2 qaytarish bo‘yicha qisman refund', () => {
+    const returnRefund = (amount: number, sellerOrderId = '55') => ({
+      eventId: 'return-refund:3',
+      sellerOrderId,
+      shopId: '7',
+      occurredAt: new Date().toISOString(),
+      amount,
+      returnRequestId: '3',
+    });
+
+    it('online: summa minus komissiya ulushi yechiladi, pending payout kamayadi', async () => {
+      const { service, ledgers, payouts } = setup();
+      await service.processPayoutRequested(delivered);
+
+      await expect(service.refund(returnRefund(300))).resolves.toMatchObject({
+        balance: 630,
+        idempotent: false,
+        entry: { amount: -270, referenceType: 'return_request' },
+      });
+      expect(payouts[0]).toMatchObject({ amount: 630, status: 'PENDING' });
+
+      await expect(service.refund(returnRefund(300))).resolves.toMatchObject({
+        idempotent: true,
+      });
+      expect(
+        ledgers.filter(
+          (row) => row.entryType === FinanceLedgerEntryType.REFUND,
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('COD: sotuvchida turgan naqd pul uchun qarz yoziladi (netting)', async () => {
+      const { service, ledgers } = setup();
+      await service.processCodSettled({
+        eventId: 'settled-1',
+        sellerOrderId: '77',
+        salesOrderId: '70',
+        shopId: '7',
+        expectedAmount: 1000,
+        collectedAmount: 1000,
+        occurredAt: new Date().toISOString(),
+      });
+
+      await expect(
+        service.refund(returnRefund(400, '77')),
+      ).resolves.toMatchObject({ balance: -460, entry: { amount: -360 } });
+      expect(ledgers.at(-1)).toMatchObject({
+        entryType: FinanceLedgerEntryType.REFUND,
+        referenceId: '3',
+      });
+    });
+
+    it('sotuv hali ledgerda bo‘lmasa komissiya joriy qoida bilan hisoblanadi', async () => {
+      const { service } = setup();
+      await expect(service.refund(returnRefund(200))).resolves.toMatchObject({
+        balance: -180,
+        entry: { amount: -180 },
+      });
+    });
+
+    it('noto‘g‘ri summa rad etiladi', async () => {
+      const { service } = setup();
+      // Mavjud validatsiya kabi sinxron otiladi (RMQ handler ikkalasini ushlaydi).
+      expect(() => service.refund(returnRefund(0))).toThrow('Refund summasi');
+    });
   });
 
   it('C4.3 TC1: COD settled sale, settlement va commission ledger yozadi', async () => {

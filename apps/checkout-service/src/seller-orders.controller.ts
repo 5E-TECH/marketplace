@@ -21,10 +21,11 @@ import {
   ShippingLabelService,
   SkippedShippingLabel,
 } from './shipping-label.service';
-
-interface SellerShop {
-  id: string;
-}
+import {
+  resolveSellerShopId,
+  SellerScope,
+  sellerShop,
+} from './catalog-shop.util';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -215,13 +216,8 @@ export class SellerOrdersController {
   }
 
   /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */
-  private async resolveShopId(data: {
-    ownerUserId?: string;
-    shopId?: string;
-  }): Promise<string> {
-    if (data.shopId) return String(data.shopId);
-    const shop = await this.shop(String(data.ownerUserId));
-    return shop.id;
+  private resolveShopId(data: SellerScope): Promise<string> {
+    return resolveSellerShopId(this.catalog, data);
   }
 
   @MessagePattern({ cmd: 'checkout.admin.stats' })
@@ -347,11 +343,7 @@ export class SellerOrdersController {
     return this.orders.dashboard(shop.id, lowStock.total);
   }
 
-  private shop(ownerUserId: string): Promise<SellerShop> {
-    return sendRpc(
-      this.catalog,
-      { cmd: 'seller.shop.get-me' },
-      { ownerUserId },
-    );
+  private shop(ownerUserId: string): Promise<{ id: string }> {
+    return sellerShop(this.catalog, ownerUserId);
   }
 }

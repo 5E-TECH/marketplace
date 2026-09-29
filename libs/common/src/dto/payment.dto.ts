@@ -161,13 +161,23 @@ export interface RefundPaymentDto {
   sellerOrderId: string;
   reason: string;
   idempotencyKey: string;
+  /**
+   * C4.2 — qisman refund summasi. Berilmasa to'lov to'liq qaytariladi
+   * (eski oqim). Berilsa `idempotencyKey` bo'yicha bir marta yoziladi.
+   */
+  amount?: number;
 }
 
 export interface RefundPaymentResult {
   paymentId: string;
   salesOrderId: string;
   provider: PaymentProvider;
-  status: PaymentStatus.REFUNDED;
+  /** Qisman refunddan keyin to'lov PAID qoladi; to'liq qaytgach REFUNDED. */
+  status: PaymentStatus.PAID | PaymentStatus.REFUNDED;
   providerTransactionId: string | null;
   idempotent: boolean;
+  /** Shu chaqiruvda qaytarilgan summa (qisman refundda). */
+  amount?: number;
+  /** To'lov bo'yicha jami qaytarilgan summa (qisman refundda). */
+  refundedTotal?: number;
 }

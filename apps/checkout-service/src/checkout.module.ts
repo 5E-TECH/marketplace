@@ -34,6 +34,12 @@ import { AddSellerOrderQrToken1726502400000 } from './migrations/1726502400000-a
 import { AddSellerOrderToBePaid1726588800000 } from './migrations/1726588800000-add-seller-order-to-be-paid';
 import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
+import { CreateReturnRequests1727481600000 } from './migrations/1727481600000-create-return-requests';
+import { ReturnRequestsController } from './return-requests.controller';
+import { ReturnRequestService } from './return-request.service';
+import { ReturnRequestQueryService } from './return-request-query.service';
+import { ReturnRefundService } from './return-refund.service';
+import { ReturnNotifierService } from './return-notifier.service';
 
 @Module({
   imports: [
@@ -106,13 +112,19 @@ import { AdminIntegrationQueryService } from './admin-integration-query.service'
             AddCartItemProductName1726416000000,
             AddSellerOrderQrToken1726502400000,
             AddSellerOrderToBePaid1726588800000,
+            CreateReturnRequests1727481600000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
       },
     }),
   ],
-  controllers: [SellerOrdersController, CartController, CheckoutController],
+  controllers: [
+    SellerOrdersController,
+    CartController,
+    CheckoutController,
+    ReturnRequestsController,
+  ],
   providers: [
     SellerOrdersService,
     CartService,
@@ -122,6 +134,10 @@ import { AdminIntegrationQueryService } from './admin-integration-query.service'
     ReviewEligibilityService,
     ShippingLabelService,
     AdminIntegrationQueryService,
+    ReturnRequestService,
+    ReturnRequestQueryService,
+    ReturnRefundService,
+    ReturnNotifierService,
   ],
 })
 export class CheckoutModule {}

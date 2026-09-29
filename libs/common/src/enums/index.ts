@@ -126,3 +126,35 @@ export enum FinancePayoutStatus {
   HELD = 'HELD',
   PAID = 'PAID',
 }
+
+/** C4.2 — xaridorning qaytarish so'rovi holatlari (har o'tish tarixga yoziladi). */
+export enum ReturnRequestStatus {
+  SUBMITTED = 'SUBMITTED',
+  IN_REVIEW = 'IN_REVIEW',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  REFUNDED = 'REFUNDED',
+}
+
+/** C4.2 — qaytarish sababi (Uzum uslubida: sifat muammosi yoki xaridor qarori). */
+export enum ReturnReason {
+  DEFECTIVE = 'DEFECTIVE',
+  DAMAGED = 'DAMAGED',
+  INCOMPLETE = 'INCOMPLETE',
+  WRONG_ITEM = 'WRONG_ITEM',
+  NOT_AS_DESCRIBED = 'NOT_AS_DESCRIBED',
+  CHANGED_MIND = 'CHANGED_MIND',
+  OTHER = 'OTHER',
+}
+
+/**
+ * Sotuvchi aybi bilan qaytgan tovar (brak, shikast, to'liq emas, boshqa tovar)
+ * qayta sotuvga chiqmaydi — sotuvchiga qaytariladi. Qolgan sabablarda tovar
+ * refund paytida omborga qayta qo'shiladi (admin buni o'zgartira oladi).
+ */
+export const QUALITY_RETURN_REASONS: readonly ReturnReason[] = [
+  ReturnReason.DEFECTIVE,
+  ReturnReason.DAMAGED,
+  ReturnReason.INCOMPLETE,
+  ReturnReason.WRONG_ITEM,
+];

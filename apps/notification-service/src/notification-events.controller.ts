@@ -5,6 +5,7 @@ import {
   OrderCreatedEvent,
   ProductHiddenEvent,
   OrderAdminActionEvent,
+  ReturnStatusChangedEvent,
   SellerRegistrationCreatedEvent,
   ShopApprovedEvent,
   ShopRejectedEvent,
@@ -106,6 +107,43 @@ export class NotificationEventsController {
       event,
       'order_refunded',
       'Buyurtma puli qaytarildi',
+    );
+  }
+
+  @EventPattern('return.status-changed')
+  async returnStatusChanged(@Payload() event: ReturnStatusChangedEvent) {
+    const titles: Record<ReturnStatusChangedEvent['status'], string> = {
+      SUBMITTED: 'Yangi qaytarish so‘rovi',
+      IN_REVIEW: 'Qaytarish so‘rovi ko‘rib chiqilmoqda',
+      APPROVED: 'Qaytarish so‘rovi tasdiqlandi',
+      REJECTED: 'Qaytarish so‘rovi rad etildi',
+      REFUNDED: 'Qaytarish bo‘yicha pul qaytarildi',
+    };
+    const parts = [`#${event.orderId} buyurtma, so‘rov #${event.returnId}.`];
+    if (event.amount !== undefined) {
+      parts.push(`Summa: ${event.amount.toLocaleString('ru-RU')} so‘m.`);
+    }
+    if (event.comment) {
+      parts.push(
+        event.status === 'REJECTED'
+          ? `Sabab: ${event.comment}`
+          : `Izoh: ${event.comment}`,
+      );
+    }
+    await Promise.all(
+      event.recipients.map((recipient) =>
+        this.notifications.create({
+          recipient,
+          type: `return_${event.status.toLowerCase()}`,
+          title: titles[event.status] ?? 'Qaytarish so‘rovi yangilandi',
+          body: parts.join(' '),
+          data: {
+            returnId: event.returnId,
+            orderId: event.orderId,
+            status: event.status,
+          },
+        }),
+      ),
     );
   }
 

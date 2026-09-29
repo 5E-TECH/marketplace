@@ -248,6 +248,7 @@ export class FinanceService {
     if (!event?.sellerOrderId || !event?.shopId) {
       throw new BadRequestException('Refund eventi noto‘g‘ri');
     }
+    if (event.amount !== undefined) return this.refundReturn(event);
     return this.dataSource.transaction(async (manager) => {
       await this.lockShop(manager, event.shopId);
       const [existing] = (await manager.query(
@@ -304,6 +305,89 @@ export class FinanceService {
         `UPDATE finance.payout SET status='HELD',updated_at=now()
           WHERE reference_id=$1 AND status IN ('PENDING','APPROVED')`,
         [event.sellerOrderId],
+      );
+      return { entry, balance, idempotent: false };
+    });
+  }
+
+  /**
+   * C4.2 — qaytarish so'rovi bo'yicha qisman teskari yozuv (online va COD).
+   * Komissiya faqat sotilgan tovardan olinadi: sotuvchidan qaytarilgan summa
+   * minus shu summaga to'g'ri keladigan komissiya ulushi yechiladi. Payout
+   * hali to'lanmagan bo'lsa shuncha kamayadi; to'langan bo'lsa manfiy qoldiq
+   * keyingi online payout'dan ushlanadi (COD qarzi bilan bir xil netting).
+   */
+  private refundReturn(event: FinanceRefundRequestedEvent): Promise<{
+    entry: LedgerRow;
+    balance: number;
+    idempotent: boolean;
+  }> {
+    const amount = this.money(Number(event.amount));
+    if (!(amount > 0)) {
+      throw new BadRequestException('Refund summasi noto‘g‘ri');
+    }
+    const referenceId = String(event.returnRequestId ?? event.eventId);
+    return this.dataSource.transaction(async (manager) => {
+      await this.lockShop(manager, event.shopId);
+      const [existing] = (await manager.query(
+        `SELECT id::text,"shop_id"::text AS "shopId","entry_type" AS "entryType",
+                amount::float8,"balance_after"::float8 AS "balanceAfter",
+                "reference_type" AS "referenceType","reference_id" AS "referenceId",
+                "created_at" AS "createdAt"
+           FROM finance.seller_ledger
+          WHERE shop_id=$1 AND entry_type=$2 AND reference_type='return_request'
+            AND reference_id=$3`,
+        [event.shopId, FinanceLedgerEntryType.REFUND, referenceId],
+      )) as LedgerRow[];
+      if (existing) {
+        return {
+          entry: existing,
+          balance: Number(existing.balanceAfter),
+          idempotent: true,
+        };
+      }
+
+      const source = (await manager.query(
+        `SELECT entry_type AS "entryType",amount::float8
+           FROM finance.seller_ledger
+          WHERE shop_id=$1 AND reference_id=$2
+            AND ((reference_type='seller_order' AND entry_type IN ('SALE','COMMISSION'))
+              OR (reference_type='cod_seller_order' AND entry_type IN ('COD_SALE','COMMISSION')))`,
+        [event.shopId, event.sellerOrderId],
+      )) as Array<{ entryType: FinanceLedgerEntryType; amount: number }>;
+      const sale = source
+        .filter((row) => row.entryType !== FinanceLedgerEntryType.COMMISSION)
+        .reduce((total, row) => total + Number(row.amount), 0);
+      const commission = -source
+        .filter((row) => row.entryType === FinanceLedgerEntryType.COMMISSION)
+        .reduce((total, row) => total + Number(row.amount), 0);
+      // Sotuv ledgerga hali tushmagan bo'lsa (masalan, COD settlement
+      // kelmagan) — komissiya ulushi joriy qoida bo'yicha hisoblanadi;
+      // keyin kelgan settlement to'liq summadan komissiya olib, balansni
+      // tenglashtiradi.
+      const commissionShare =
+        sale > 0
+          ? this.money(commission * Math.min(1, amount / sale))
+          : this.commissionAmount(
+              amount,
+              await this.commissionFor(manager, event.shopId),
+            );
+      const net = this.money(amount - commissionShare);
+      const balance = this.money(
+        (await this.balance(manager, event.shopId)) - net,
+      );
+      const entry = await this.insertLedger(manager, {
+        shopId: event.shopId,
+        entryType: FinanceLedgerEntryType.REFUND,
+        amount: -net,
+        balance,
+        referenceType: 'return_request',
+        referenceId,
+      });
+      await manager.query(
+        `UPDATE finance.payout SET amount=GREATEST(0,amount-$2),updated_at=now()
+          WHERE reference_id=$1 AND status IN ('PENDING','APPROVED')`,
+        [event.sellerOrderId, net],
       );
       return { entry, balance, idempotent: false };
     });

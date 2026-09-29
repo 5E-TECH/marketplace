@@ -28,6 +28,14 @@ export interface FinanceRefundRequestedEvent {
   sellerOrderId: string;
   shopId: string;
   occurredAt: string;
+  /**
+   * C4.2 — qisman qaytarish: sotuvchidan faqat shu summa (komissiyaning
+   * mos ulushi qaytarilgan holda) yechiladi. Berilmasa butun sotuv teskari
+   * yoziladi (eski oqim).
+   */
+  amount?: number;
+  /** Qisman qaytarishda idempotentlik kaliti — return_request ID. */
+  returnRequestId?: string;
 }
 
 export interface FinanceCodSettledEvent {

@@ -7948,6 +7948,768 @@
           "admin-inventory"
         ]
       }
+    },
+    "/api/v1/orders/{orderId}/returns": {
+      "post": {
+        "description": "Faqat DELIVERED posilkadagi tovarlar, yetkazilgandan keyin `RETURN_WINDOW_DAYS` (default 10) kun ichida. Qisman qaytarish mumkin: har tovar uchun miqdor beriladi. Tovarlar turli do‘konlardan bo‘lsa, har posilka uchun alohida so‘rov yaratiladi.",
+        "operationId": "BuyerReturnsController_create",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReturnRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateReturnRequestsResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Posilka yetkazilmagan, muddat o‘tgan, miqdor ortiq yoki tovar buyurtmaga tegishli emas"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Buyurtma boshqa xaridorniki"
+          },
+          "404": {
+            "description": "Buyurtma topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yetkazilgan tovarni qaytarish so‘rovi",
+        "tags": [
+          "returns"
+        ]
+      }
+    },
+    "/api/v1/returns": {
+      "get": {
+        "operationId": "BuyerReturnsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SUBMITTED",
+                "IN_REVIEW",
+                "APPROVED",
+                "REJECTED",
+                "REFUNDED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestsPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xaridorning qaytarish so‘rovlari",
+        "tags": [
+          "returns"
+        ]
+      }
+    },
+    "/api/v1/returns/{id}": {
+      "get": {
+        "operationId": "BuyerReturnsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi yoki boshqaniki"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarish so‘rovi va uning tarixi",
+        "tags": [
+          "returns"
+        ]
+      }
+    },
+    "/api/v1/seller/returns": {
+      "get": {
+        "operationId": "SellerReturnsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SUBMITTED",
+                "IN_REVIEW",
+                "APPROVED",
+                "REJECTED",
+                "REFUNDED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestsPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Do‘konga kelgan qaytarish so‘rovlari",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/returns/{id}": {
+      "get": {
+        "operationId": "SellerReturnsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi yoki boshqa do‘konniki"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarish so‘rovi va uning tarixi",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/returns/{id}/review": {
+      "post": {
+        "description": "SUBMITTED → IN_REVIEW",
+        "operationId": "SellerReturnsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Holat o‘tishga yo‘l qo‘ymaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ko‘rib chiqishga olish (tovar qabul qilindi, tekshirilmoqda)",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/returns/{id}/approve": {
+      "post": {
+        "description": "SUBMITTED/IN_REVIEW → APPROVED. Pulni admin qaytaradi (`POST /admin/returns/:id/refund`).",
+        "operationId": "SellerReturnsController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnApproveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Holat o‘tishga yo‘l qo‘ymaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarishni tasdiqlash",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/returns/{id}/reject": {
+      "post": {
+        "description": "SUBMITTED/IN_REVIEW → REJECTED",
+        "operationId": "SellerReturnsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnRejectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sabab yo‘q yoki holat mos emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarishni rad etish (sabab majburiy)",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/admin/returns": {
+      "get": {
+        "operationId": "AdminReturnsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SUBMITTED",
+                "IN_REVIEW",
+                "APPROVED",
+                "REJECTED",
+                "REFUNDED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "7",
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "description": "sales_order ID",
+            "schema": {
+              "example": "42",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestsPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarish so‘rovlari (holat/do‘kon/buyurtma/sana filtri)",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/admin/returns/{id}": {
+      "get": {
+        "operationId": "AdminReturnsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarish so‘rovi va uning tarixi",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/admin/returns/{id}/approve": {
+      "post": {
+        "description": "SUBMITTED/IN_REVIEW/REJECTED → APPROVED",
+        "operationId": "AdminReturnsController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnApproveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Holat o‘tishga yo‘l qo‘ymaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tasdiqlash (sotuvchi rad etgan bo‘lsa ham)",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/admin/returns/{id}/reject": {
+      "post": {
+        "description": "SUBMITTED/IN_REVIEW/APPROVED → REJECTED",
+        "operationId": "AdminReturnsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnRejectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sabab yo‘q yoki holat mos emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rad etish (sotuvchi tasdiqlagan bo‘lsa ham, pul qaytarilgunicha)",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/admin/returns/{id}/refund": {
+      "post": {
+        "description": "APPROVED → REFUNDED. `amount` berilmasa so‘rovdagi tovarlar summasi to‘liq qaytariladi, kichikroq summa — qisman refund. Online to‘lovda provayder to‘lovidan shu summa qaytariladi; COD da pul xaridorga qo‘lda qaytariladi va `comment` majburiy. Ikkala holatda summa (komissiya ulushi qaytarilgan holda) sotuvchi hisobidan yechiladi. Sifatli tovar omborga qaytadi (`restock`). Idempotent: takror chaqiruv pulni ikkinchi marta qaytarmaydi.",
+        "operationId": "AdminReturnsController_refund",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReturnRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnRequestDetailsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "So‘rov tasdiqlanmagan, summa ortiq, COD da izoh yo‘q yoki buyurtma to‘liq qaytarilgan"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tasdiqlangan qaytarish bo‘yicha pulni qaytarish (qisman ham)",
+        "tags": [
+          "admin-returns"
+        ]
+      }
     }
   },
   "info": {
@@ -12528,6 +13290,527 @@
           "limit",
           "totalPages"
         ]
+      },
+      "ReturnRequestItemInputDto": {
+        "type": "object",
+        "properties": {
+          "orderItemId": {
+            "type": "string",
+            "example": "31",
+            "description": "sales_order_item ID — `GET /orders` javobidagi `items[].id`"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1,
+            "minimum": 1
+          }
+        },
+        "required": [
+          "orderItemId",
+          "quantity"
+        ]
+      },
+      "CreateReturnRequestDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Qaytariladigan tovarlar. Turli do‘konlarning tovarlari bo‘lsa, har posilka uchun alohida so‘rov yaratiladi.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestItemInputDto"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "DEFECTIVE",
+              "DAMAGED",
+              "INCOMPLETE",
+              "WRONG_ITEM",
+              "NOT_AS_DESCRIBED",
+              "CHANGED_MIND",
+              "OTHER"
+            ],
+            "example": "DEFECTIVE"
+          },
+          "comment": {
+            "type": "string",
+            "example": "Ekranda chiziq bor",
+            "description": "`OTHER` sababida majburiy"
+          }
+        },
+        "required": [
+          "items",
+          "reason"
+        ]
+      },
+      "ReturnRequestItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "5"
+          },
+          "orderItemId": {
+            "type": "string",
+            "example": "31"
+          },
+          "productId": {
+            "type": "string",
+            "example": "7"
+          },
+          "variantId": {
+            "type": "string",
+            "example": "12"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Smartfon Nova 12"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 99000
+          },
+          "lineTotal": {
+            "type": "number",
+            "example": 99000
+          }
+        },
+        "required": [
+          "id",
+          "orderItemId",
+          "productId",
+          "variantId",
+          "productName",
+          "imageUrl",
+          "quantity",
+          "unitPrice",
+          "lineTotal"
+        ]
+      },
+      "ReturnRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "3"
+          },
+          "orderId": {
+            "type": "string",
+            "example": "42",
+            "description": "sales_order ID"
+          },
+          "sellerOrderId": {
+            "type": "string",
+            "example": "51",
+            "description": "Posilka (sales_order_seller) ID"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "7"
+          },
+          "shopName": {
+            "type": "string",
+            "example": "Nova Store",
+            "nullable": true
+          },
+          "buyerName": {
+            "type": "string",
+            "example": "Ali Valiyev",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "IN_REVIEW",
+              "APPROVED",
+              "REJECTED",
+              "REFUNDED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "DEFECTIVE",
+              "DAMAGED",
+              "INCOMPLETE",
+              "WRONG_ITEM",
+              "NOT_AS_DESCRIBED",
+              "CHANGED_MIND",
+              "OTHER"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "paymentMethod": {
+            "type": "string",
+            "example": "online",
+            "enum": [
+              "online",
+              "cod"
+            ]
+          },
+          "requestedAmount": {
+            "type": "number",
+            "example": 99000,
+            "description": "Tanlangan tovarlar summasi"
+          },
+          "refundedAmount": {
+            "type": "number",
+            "example": null,
+            "nullable": true
+          },
+          "restocked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true
+          },
+          "decisionComment": {
+            "type": "string",
+            "nullable": true,
+            "description": "Oxirgi qaror izohi (rad etish sababi yoki tasdiq izohi)"
+          },
+          "decidedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "refundedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestItemDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "sellerOrderId",
+          "shopId",
+          "shopName",
+          "buyerName",
+          "status",
+          "reason",
+          "comment",
+          "paymentMethod",
+          "requestedAmount",
+          "refundedAmount",
+          "restocked",
+          "decisionComment",
+          "decidedAt",
+          "refundedAt",
+          "createdAt",
+          "updatedAt",
+          "items"
+        ]
+      },
+      "CreateReturnRequestsResultDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Har posilka (do‘kon) uchun bitta so‘rov",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ReturnRequestsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "ReturnRequestHistoryDto": {
+        "type": "object",
+        "properties": {
+          "fromStatus": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "IN_REVIEW",
+              "APPROVED",
+              "REJECTED",
+              "REFUNDED"
+            ],
+            "nullable": true
+          },
+          "toStatus": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "IN_REVIEW",
+              "APPROVED",
+              "REJECTED",
+              "REFUNDED"
+            ]
+          },
+          "actorRole": {
+            "type": "string",
+            "example": "SELLER"
+          },
+          "comment": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fromStatus",
+          "toStatus",
+          "actorRole",
+          "comment",
+          "createdAt"
+        ]
+      },
+      "ReturnRequestDetailsDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "3"
+          },
+          "orderId": {
+            "type": "string",
+            "example": "42",
+            "description": "sales_order ID"
+          },
+          "sellerOrderId": {
+            "type": "string",
+            "example": "51",
+            "description": "Posilka (sales_order_seller) ID"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "7"
+          },
+          "shopName": {
+            "type": "string",
+            "example": "Nova Store",
+            "nullable": true
+          },
+          "buyerName": {
+            "type": "string",
+            "example": "Ali Valiyev",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "IN_REVIEW",
+              "APPROVED",
+              "REJECTED",
+              "REFUNDED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "DEFECTIVE",
+              "DAMAGED",
+              "INCOMPLETE",
+              "WRONG_ITEM",
+              "NOT_AS_DESCRIBED",
+              "CHANGED_MIND",
+              "OTHER"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "paymentMethod": {
+            "type": "string",
+            "example": "online",
+            "enum": [
+              "online",
+              "cod"
+            ]
+          },
+          "requestedAmount": {
+            "type": "number",
+            "example": 99000,
+            "description": "Tanlangan tovarlar summasi"
+          },
+          "refundedAmount": {
+            "type": "number",
+            "example": null,
+            "nullable": true
+          },
+          "restocked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true
+          },
+          "decisionComment": {
+            "type": "string",
+            "nullable": true,
+            "description": "Oxirgi qaror izohi (rad etish sababi yoki tasdiq izohi)"
+          },
+          "decidedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "refundedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestItemDto"
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnRequestHistoryDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "sellerOrderId",
+          "shopId",
+          "shopName",
+          "buyerName",
+          "status",
+          "reason",
+          "comment",
+          "paymentMethod",
+          "requestedAmount",
+          "refundedAmount",
+          "restocked",
+          "decisionComment",
+          "decidedAt",
+          "refundedAt",
+          "createdAt",
+          "updatedAt",
+          "items",
+          "history"
+        ]
+      },
+      "ReturnReviewDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Tovar qabul qilindi, tekshirilmoqda"
+          }
+        }
+      },
+      "ReturnApproveDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Tovar qabul qilindi, tekshirilmoqda"
+          }
+        }
+      },
+      "ReturnRejectDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Tovar ishlatilgan, qadog‘i yo‘q"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "AdminReturnRefundDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 99000,
+            "description": "Qaytariladigan summa. Berilmasa so‘rovdagi tovarlar summasi to‘liq qaytariladi; kichikroq summa (masalan, xaridor aybi bilan shikast) — qisman refund."
+          },
+          "restock": {
+            "type": "boolean",
+            "example": true,
+            "description": "Tovar omborga qayta qo‘shilsinmi. Default: sifat muammosi (DEFECTIVE/DAMAGED/INCOMPLETE/WRONG_ITEM) bo‘lsa `false`, aks holda `true`."
+          },
+          "comment": {
+            "type": "string",
+            "example": "Karta orqali qaytarildi, chek #123"
+          }
+        }
       }
     }
   }
