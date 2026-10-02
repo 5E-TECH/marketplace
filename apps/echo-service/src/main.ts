@@ -6,7 +6,7 @@ import { EchoModule } from './echo.module';
 
 /**
  * Microservice (RMQ tinglaydi, HTTP emas). Barcha real servislar shu shablonda:
- * ConfigModule → connectMicroservice(rmqOptions) → startAllMicroservices.
+ * ConfigModule → connectMicroservice(rmqOptions) → startAllMicroservices → init.
  */
 async function bootstrap() {
   const app = await NestFactory.create(EchoModule);
@@ -15,6 +15,9 @@ async function bootstrap() {
 
   app.connectMicroservice(rmqOptions([url], RmqQueue.ECHO));
   await app.startAllMicroservices();
+  // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da
+  // ishga tushadi — connectMicroservice ularni chaqirmaydi.
+  await app.init();
 
   Logger.log(`📨 echo-service RMQ tinglayapti (${RmqQueue.ECHO})`, 'Bootstrap');
 }

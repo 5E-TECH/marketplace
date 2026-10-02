@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThanOrEqual, Repository } from 'typeorm';
+import { In, LessThan, LessThanOrEqual, Repository } from 'typeorm';
 import { NotificationsQueryDto } from '@app/common';
 import {
   NOTIFICATION_ADAPTERS,
@@ -26,6 +26,8 @@ interface CreateNotificationInput {
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private readonly maxAttempts = 5;
+  /** Kechikkan xabar (masalan bir haftalik "yangi buyurtma") chalkashtiradi. */
+  private readonly maxDeliveryAgeMs = 24 * 60 * 60 * 1000;
 
   constructor(
     @InjectRepository(Notification)
@@ -117,6 +119,7 @@ export class NotificationService {
   }
 
   async retryDue(): Promise<number> {
+    await this.expireStale();
     const due = await this.deliveries.find({
       where: {
         status: In([DeliveryStatus.PENDING, DeliveryStatus.RETRY]),
@@ -137,6 +140,22 @@ export class NotificationService {
       if (notification) await this.attemptDelivery(delivery, notification);
     }
     return due.length;
+  }
+
+  /** 24 soatda yetkazilmagan xabar qayta yuborilmaydi; asl xato saqlanadi. */
+  private async expireStale(): Promise<void> {
+    await this.deliveries.update(
+      {
+        status: In([DeliveryStatus.PENDING, DeliveryStatus.RETRY]),
+        createdAt: LessThan(new Date(Date.now() - this.maxDeliveryAgeMs)),
+      },
+      {
+        status: DeliveryStatus.FAILED,
+        nextRetryAt: null,
+        lastError: () =>
+          `'Eskirgan (24 soatdan oshdi): ' || COALESCE(last_error, '')`,
+      },
+    );
   }
 
   private async attemptDelivery(

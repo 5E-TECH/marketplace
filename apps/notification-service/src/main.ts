@@ -14,6 +14,9 @@ async function bootstrap() {
     ),
   );
   await app.startAllMicroservices();
+  // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da
+  // ishga tushadi — connectMicroservice ularni chaqirmaydi.
+  await app.init();
   Logger.log(
     `🔔 notification-service RMQ tinglayapti (${RmqQueue.NOTIFICATION})`,
     'Bootstrap',

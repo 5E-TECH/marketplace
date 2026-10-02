@@ -127,6 +127,13 @@ export enum FinancePayoutStatus {
   PAID = 'PAID',
 }
 
+/** Sotuvchiga pul o'tkazish chastotasi — do'kon o'zi tanlaydi. */
+export enum PayoutScheduleFrequency {
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+}
+
 /** C4.2 — xaridorning qaytarish so'rovi holatlari (har o'tish tarixga yoziladi). */
 export enum ReturnRequestStatus {
   SUBMITTED = 'SUBMITTED',

@@ -15,6 +15,9 @@ import { Product } from './entities/product.entity';
 import { Not, QueryFailedError, Repository } from 'typeorm';
 import { ProductVariant } from './entities/product-variant.entity';
 
+/** Admin qoldiq qidiruvida bitta so'rovga beriladigan variant id'lari chegarasi. */
+export const ADMIN_VARIANT_SEARCH_LIMIT = 1000;
+
 @Injectable()
 export class ProductVariantService {
   constructor(
@@ -230,6 +233,50 @@ export class ProductVariantService {
       variantName: variant.name,
       sku: variant.sku,
     }));
+  }
+
+  /**
+   * C6.7 — admin qoldiq qidiruvi uchun: matn (mahsulot nomi, variant nomi,
+   * SKU) yoki mahsulot bo'yicha BARCHA do'konlardagi variant id'lari.
+   *
+   * Qoldiq inventory bazasida, nomlar esa shu yerda. Avval admin qoldig'i
+   * hamma qatorni xotiraga yuklab, nom bo'yicha xotirada filtrlardi; endi
+   * qidiruv avval id'larga aylanadi va inventory SQL'da sahifalaydi.
+   */
+  async searchVariantIdsForAdmin(input: {
+    search?: string;
+    productId?: string;
+  }): Promise<{ variantIds: string[]; truncated: boolean }> {
+    const qb = this.productVariants
+      .createQueryBuilder('variant')
+      .innerJoin('variant.product', 'product')
+      .select('variant.id', 'id')
+      .where('variant.is_deleted = FALSE')
+      .andWhere('product.is_deleted = FALSE');
+    if (input.productId) {
+      qb.andWhere('variant.product_id = :productId', {
+        productId: input.productId,
+      });
+    }
+    const search = input.search?.trim();
+    if (search) {
+      // `%`/`_` foydalanuvchi matnida joker bo'lib qolmasin.
+      const pattern = `%${search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+      qb.andWhere(
+        '(product.name ILIKE :pattern OR variant.name ILIKE :pattern OR variant.sku ILIKE :pattern)',
+        { pattern },
+      );
+    }
+    const rows = await qb
+      .orderBy('variant.id', 'ASC')
+      .limit(ADMIN_VARIANT_SEARCH_LIMIT + 1)
+      .getRawMany<{ id: string }>();
+    return {
+      variantIds: rows
+        .slice(0, ADMIN_VARIANT_SEARCH_LIMIT)
+        .map((row) => String(row.id)),
+      truncated: rows.length > ADMIN_VARIANT_SEARCH_LIMIT,
+    };
   }
 
   async getCartVariant(productId: string, variantId: string) {

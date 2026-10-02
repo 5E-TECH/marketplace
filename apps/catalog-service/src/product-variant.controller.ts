@@ -88,6 +88,11 @@ export class ProductVariantController {
     return this.variants.getInventoryDetails(data.shopId, data.variantIds);
   }
 
+  @MessagePattern({ cmd: 'catalog.admin.variant-search' })
+  adminVariantSearch(@Payload() data: { search?: string; productId?: string }) {
+    return this.variants.searchVariantIdsForAdmin(data ?? {});
+  }
+
   @MessagePattern({ cmd: 'cart.variant.get' })
   cartVariant(@Payload() data: { productId: string; variantId: string }) {
     return this.variants.getCartVariant(data.productId, data.variantId);

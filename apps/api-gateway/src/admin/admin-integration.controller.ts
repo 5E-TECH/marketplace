@@ -98,9 +98,18 @@ export class AdminIntegrationController {
   }
 
   @Get('shipments')
-  @ApiOperation({ summary: 'Elchi posilkalari holati va tracking ro‘yxati' })
+  @ApiOperation({
+    summary: 'Elchi posilkalari va Elchi’ga topshirilmagan buyurtmalar',
+    description:
+      '`shipmentState`: `all` (sukut), `created` — posilkasi bor, ' +
+      '`missing` — tasdiqlangan/to‘langan, lekin posilkasi yaratilmagan ' +
+      '(qotib qolgan). Qatorda `orderStatus` va `paymentMethod` ham bor.',
+  })
   @ApiOkResponse({
-    description: '{ items, total, page, limit, totalPages }',
+    description:
+      '{ items: [{ id, salesOrderId, shopId, shipmentId|null, status, ' +
+      'orderStatus, paymentMethod, codAmount, buyerName, createdAt, ' +
+      'updatedAt, ... }], total, page, limit, totalPages }',
   })
   shipments(@Query() query: AdminShipmentsQueryDto) {
     return sendRpc(

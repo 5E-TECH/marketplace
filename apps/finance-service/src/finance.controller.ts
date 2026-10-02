@@ -3,20 +3,26 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreateCommissionDto,
   FinanceCodSettledEvent,
-  FinancePageQueryDto,
+  FinanceDateRangeQueryDto,
+  FinanceLedgerQueryDto,
   FinancePayoutQueryDto,
   FinancePayoutRequestedEvent,
   FinanceRefundRequestedEvent,
   FinanceReconciliationQueryDto,
+  PayoutScheduleFrequency,
   RpcHttpExceptionFilter,
   UpdateCommissionDto,
 } from '@app/common';
 import { FinanceService } from './finance.service';
+import { SellerFinanceService } from './seller-finance.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class FinanceController {
-  constructor(private readonly finance: FinanceService) {}
+  constructor(
+    private readonly finance: FinanceService,
+    private readonly sellerFinance: SellerFinanceService,
+  ) {}
 
   @EventPattern('finance.payout.requested')
   payoutRequested(@Payload() event: FinancePayoutRequestedEvent) {
@@ -46,8 +52,27 @@ export class FinanceController {
   }
 
   @MessagePattern({ cmd: 'finance.ledger.list' })
-  listLedger(@Payload() data: { query: FinancePageQueryDto }) {
+  listLedger(@Payload() data: { query: FinanceLedgerQueryDto }) {
     return this.finance.listLedger(data.query);
+  }
+
+  @MessagePattern({ cmd: 'finance.seller.summary' })
+  sellerSummary(
+    @Payload() data: { shopId: string; query?: FinanceDateRangeQueryDto },
+  ) {
+    return this.sellerFinance.summary(data.shopId, data.query);
+  }
+
+  @MessagePattern({ cmd: 'finance.payout-schedule.get' })
+  getPayoutSchedule(@Payload() data: { shopId: string }) {
+    return this.sellerFinance.getSchedule(data.shopId);
+  }
+
+  @MessagePattern({ cmd: 'finance.payout-schedule.update' })
+  updatePayoutSchedule(
+    @Payload() data: { shopId: string; frequency: PayoutScheduleFrequency },
+  ) {
+    return this.sellerFinance.updateSchedule(data.shopId, data.frequency);
   }
 
   @MessagePattern({ cmd: 'finance.payouts.list' })

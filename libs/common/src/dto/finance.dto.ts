@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  IntersectionType,
+  OmitType,
+} from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsDateString,
@@ -11,7 +16,11 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { CommissionType, FinancePayoutStatus } from '../enums';
+import {
+  CommissionType,
+  FinancePayoutStatus,
+  PayoutScheduleFrequency,
+} from '../enums';
 
 export interface FinancePayoutRequestedEvent {
   eventId: string;
@@ -48,12 +57,8 @@ export interface FinanceCodSettledEvent {
   occurredAt: string;
 }
 
-export class FinanceReconciliationQueryDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  shopId?: string;
-
+/** Davr filtri: ikkala chegara ham kun bo'yicha, `dateTo` kuni ham kiradi. */
+export class FinanceDateRangeQueryDto {
   @ApiPropertyOptional({ example: '2026-09-01' })
   @IsOptional()
   @IsDateString()
@@ -63,6 +68,13 @@ export class FinanceReconciliationQueryDto {
   @IsOptional()
   @IsDateString()
   dateTo?: string;
+}
+
+export class FinanceReconciliationQueryDto extends FinanceDateRangeQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  shopId?: string;
 }
 
 export class FinancePageQueryDto {
@@ -87,11 +99,34 @@ export class FinancePageQueryDto {
   limit?: number;
 }
 
+export class FinanceLedgerQueryDto extends IntersectionType(
+  FinancePageQueryDto,
+  FinanceDateRangeQueryDto,
+) {}
+
 export class FinancePayoutQueryDto extends FinancePageQueryDto {
   @ApiPropertyOptional({ enum: FinancePayoutStatus })
   @IsOptional()
   @IsEnum(FinancePayoutStatus)
   status?: FinancePayoutStatus;
+}
+
+// Sotuvchi query'larida `shopId` yo'q: do'kon faqat tokendan aniqlanadi.
+// Global `forbidNonWhitelisted` tufayli `?shopId=` yuborilsa 400 qaytadi.
+export class SellerFinanceLedgerQueryDto extends OmitType(
+  FinanceLedgerQueryDto,
+  ['shopId'] as const,
+) {}
+
+export class SellerFinancePayoutQueryDto extends OmitType(
+  FinancePayoutQueryDto,
+  ['shopId'] as const,
+) {}
+
+export class UpdatePayoutScheduleDto {
+  @ApiProperty({ enum: PayoutScheduleFrequency, example: 'WEEKLY' })
+  @IsEnum(PayoutScheduleFrequency)
+  frequency: PayoutScheduleFrequency;
 }
 
 export class CreateCommissionDto {
