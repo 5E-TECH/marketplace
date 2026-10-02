@@ -11,6 +11,9 @@ async function bootstrap() {
     rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.PAYMENT),
   );
   await app.startAllMicroservices();
+  // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da
+  // ishga tushadi — connectMicroservice ularni chaqirmaydi.
+  await app.init();
   Logger.log(
     `💳 payment-service RMQ tinglayapti (${RmqQueue.PAYMENT})`,
     'Bootstrap',

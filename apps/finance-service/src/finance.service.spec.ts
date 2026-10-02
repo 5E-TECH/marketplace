@@ -1,3 +1,4 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   CommissionType,
   FinanceLedgerEntryType,
@@ -455,5 +456,90 @@ describe('FinanceService (C3.5)', () => {
       difference: 0,
       expectedCommission: 100,
     });
+  });
+
+  it('ledger davr bo‘yicha filtrlanadi, dateTo kuni ham kiradi', async () => {
+    const query = jest.fn(async (sql: string, _params?: unknown[]) =>
+      sql.includes('COUNT(*)') ? [{ total: 11 }] : [],
+    );
+    const service = new FinanceService({ query } as never);
+
+    await expect(
+      service.listLedger({
+        shopId: '7',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        page: 2,
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({ total: 11, page: 2, totalPages: 2 });
+
+    const [countSql, countParams] = query.mock.calls[0];
+    expect(countSql).toContain(
+      `WHERE shop_id=$1 AND created_at >= $2 AND created_at < ($3::date + INTERVAL '1 day')`,
+    );
+    expect(countParams).toEqual(['7', '2026-09-01', '2026-09-30']);
+    expect(query.mock.calls[1][1]).toEqual([
+      '7',
+      '2026-09-01',
+      '2026-09-30',
+      10,
+      10,
+    ]);
+  });
+
+  it('UPDATE ... RETURNING drayver shaklida: topilmasa 404, to‘langan bo‘lsa 409', async () => {
+    // TypeORM postgres UPDATE uchun [qatorlar, soni] qaytaradi.
+    const query = jest.fn(async (sql: string, params: unknown[] = []) => {
+      if (sql.includes('UPDATE finance.payout SET status=$2')) return [[], 0];
+      if (sql.includes('UPDATE finance.commission')) return [[], 0];
+      if (sql.includes('FROM finance.payout WHERE id=$1'))
+        return params[0] === '7' ? [{ id: '7', status: 'PAID' }] : [];
+      return [];
+    });
+    const service = new FinanceService({
+      query,
+      manager: { query },
+      transaction: async (run: (m: unknown) => unknown) => run({ query }),
+    } as never);
+
+    await expect(service.approvePayout('7')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    await expect(service.holdPayout('8')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(
+      service.updateCommission('9', { value: 5 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('release va komissiya tahriri massiv emas, bitta obyekt qaytaradi', async () => {
+    const payout = { id: '7', shopId: '1', amount: 100, status: 'APPROVED' };
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes('pg_advisory_xact_lock')) return [];
+      if (sql.includes('FROM finance.payout WHERE id=$1')) return [payout];
+      if (sql.includes('SELECT balance_after')) return [{ balance: 500 }];
+      if (sql.includes('INSERT INTO finance.seller_ledger'))
+        return [{ id: '1' }];
+      if (sql.includes("SET status='PAID'"))
+        return [[{ ...payout, status: 'PAID' }], 1];
+      if (sql.includes('UPDATE finance.commission'))
+        return [[{ id: '3', value: 12 }], 1];
+      return [];
+    });
+    const service = new FinanceService({
+      query,
+      manager: { query },
+      transaction: async (run: (m: unknown) => unknown) => run({ query }),
+    } as never);
+
+    await expect(service.releasePayout('7')).resolves.toEqual({
+      ...payout,
+      status: 'PAID',
+    });
+    await expect(service.updateCommission('3', { value: 12 })).resolves.toEqual(
+      { id: '3', value: 12 },
+    );
   });
 });

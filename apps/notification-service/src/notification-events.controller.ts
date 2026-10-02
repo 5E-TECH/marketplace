@@ -1,6 +1,8 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { NotificationService } from './notification.service';
+import { NotificationTemplateService } from './notification-template.service';
+import { TemplateKey } from './notification-templates';
 import {
   OrderCreatedEvent,
   ProductHiddenEvent,
@@ -13,10 +15,13 @@ import {
 
 @Controller()
 export class NotificationEventsController {
-  constructor(private readonly notifications: NotificationService) {}
+  constructor(
+    private readonly notifications: NotificationService,
+    private readonly templates: NotificationTemplateService,
+  ) {}
 
   @EventPattern('seller.registration.created')
-  sellerRegistered(@Payload() event: SellerRegistrationCreatedEvent) {
+  async sellerRegistered(@Payload() event: SellerRegistrationCreatedEvent) {
     return this.notifications.create({
       recipient: {
         userId: event.sellerUserId,
@@ -25,14 +30,16 @@ export class NotificationEventsController {
         telegramChatId: event.telegramChatId,
       },
       type: 'register',
-      title: 'Arizangiz qabul qilindi',
-      body: `${event.shopName} do‘koni ro‘yxatdan o‘tdi va tasdiqlash uchun yuborildi.`,
+      ...(await this.templates.render('register', {
+        shopName: event.shopName,
+        sellerName: event.sellerName,
+      })),
       data: { shopId: event.shopId },
     });
   }
 
   @EventPattern('shop.approved')
-  shopApproved(@Payload() event: ShopApprovedEvent) {
+  async shopApproved(@Payload() event: ShopApprovedEvent) {
     return this.notifications.create({
       recipient: {
         userId: event.sellerUserId,
@@ -41,14 +48,15 @@ export class NotificationEventsController {
         telegramChatId: event.telegramChatId,
       },
       type: 'shop_approved',
-      title: 'Do‘kon tasdiqlandi',
-      body: `${event.shopName} do‘koningiz faol holatga o‘tdi.`,
+      ...(await this.templates.render('shop_approved', {
+        shopName: event.shopName,
+      })),
       data: { shopId: event.shopId },
     });
   }
 
   @EventPattern('shop.rejected')
-  shopRejected(@Payload() event: ShopRejectedEvent) {
+  async shopRejected(@Payload() event: ShopRejectedEvent) {
     return this.notifications.create({
       recipient: {
         userId: event.sellerUserId,
@@ -57,21 +65,24 @@ export class NotificationEventsController {
         telegramChatId: event.telegramChatId,
       },
       type: 'shop_rejected',
-      title: 'Do‘kon rad etildi',
-      body: `${event.shopName} do‘koningiz rad etildi.${
-        event.reason ? ` Sabab: ${event.reason}` : ''
-      }`,
+      ...(await this.templates.render('shop_rejected', {
+        shopName: event.shopName,
+        reason: event.reason ?? '',
+        reasonSentence: event.reason ? ` Sabab: ${event.reason}` : '',
+      })),
       data: { shopId: event.shopId },
     });
   }
 
   @EventPattern('product.hidden')
-  productHidden(@Payload() event: ProductHiddenEvent) {
+  async productHidden(@Payload() event: ProductHiddenEvent) {
     return this.notifications.create({
       recipient: { userId: event.sellerUserId },
       type: 'product_hidden',
-      title: 'Mahsulot yashirildi',
-      body: `${event.productName} mahsulotingiz ko‘rinishdan olib tashlandi. Sabab: ${event.reason}`,
+      ...(await this.templates.render('product_hidden', {
+        productName: event.productName,
+        reason: event.reason,
+      })),
       data: {
         productId: event.productId,
         shopId: event.shopId,
@@ -82,14 +93,16 @@ export class NotificationEventsController {
 
   @EventPattern('order.created')
   async orderCreated(@Payload() event: OrderCreatedEvent) {
-    const orderLabel = event.orderNumber ?? event.orderId;
+    const message = await this.templates.render('order_created', {
+      orderNumber: event.orderNumber ?? event.orderId,
+      totalAmount: event.totalAmount,
+    });
     await Promise.all(
       event.recipients.map((recipient) =>
         this.notifications.create({
           recipient,
           type: 'order_created',
-          title: 'Yangi buyurtma',
-          body: `${orderLabel} raqamli buyurtma yaratildi.`,
+          ...message,
           data: { orderId: event.orderId, totalAmount: event.totalAmount },
         }),
       ),
@@ -98,16 +111,12 @@ export class NotificationEventsController {
 
   @EventPattern('order.cancelled')
   orderCancelled(@Payload() event: OrderAdminActionEvent) {
-    return this.orderAction(event, 'order_cancelled', 'Buyurtma bekor qilindi');
+    return this.orderAction(event, 'order_cancelled');
   }
 
   @EventPattern('order.refunded')
   orderRefunded(@Payload() event: OrderAdminActionEvent) {
-    return this.orderAction(
-      event,
-      'order_refunded',
-      'Buyurtma puli qaytarildi',
-    );
+    return this.orderAction(event, 'order_refunded');
   }
 
   @EventPattern('return.status-changed')
@@ -149,16 +158,18 @@ export class NotificationEventsController {
 
   private async orderAction(
     event: OrderAdminActionEvent,
-    type: string,
-    title: string,
+    type: Extract<TemplateKey, 'order_cancelled' | 'order_refunded'>,
   ) {
+    const message = await this.templates.render(type, {
+      orderId: event.orderId,
+      reason: event.reason,
+    });
     await Promise.all(
       event.recipients.map((recipient) =>
         this.notifications.create({
           recipient,
           type,
-          title,
-          body: `#${event.orderId} buyurtma. Sabab: ${event.reason}`,
+          ...message,
           data: { orderId: event.orderId, reason: event.reason },
         }),
       ),

@@ -12,6 +12,9 @@ async function bootstrap() {
     rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.INVENTORY),
   );
   await app.startAllMicroservices();
+  // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da
+  // ishga tushadi — connectMicroservice ularni chaqirmaydi.
+  await app.init();
 
   Logger.log(
     `📦 inventory-service RMQ tinglayapti (${RmqQueue.INVENTORY})`,

@@ -5618,11 +5618,36 @@
               "default": 20,
               "type": "number"
             }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceLedgerPageDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5686,7 +5711,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePayoutPageDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5705,14 +5737,6 @@
         "operationId": "AdminFinanceController_reconciliation[0]",
         "parameters": [
           {
-            "name": "shopId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "dateFrom",
             "required": false,
             "in": "query",
@@ -5729,11 +5753,26 @@
               "example": "2026-09-30",
               "type": "string"
             }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceReconciliationReportDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5752,14 +5791,6 @@
         "operationId": "AdminFinanceController_reconciliation[1]",
         "parameters": [
           {
-            "name": "shopId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "dateFrom",
             "required": false,
             "in": "query",
@@ -5776,11 +5807,26 @@
               "example": "2026-09-30",
               "type": "string"
             }
+          },
+          {
+            "name": "shopId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceReconciliationReportDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5809,7 +5855,20 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePayoutDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Payout topilmadi"
+          },
+          "409": {
+            "description": "To‘langan payout o‘zgarmaydi"
           }
         },
         "security": [
@@ -5837,7 +5896,20 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePayoutDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Payout topilmadi"
+          },
+          "409": {
+            "description": "To‘langan payout o‘zgarmaydi"
           }
         },
         "security": [
@@ -5865,7 +5937,20 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePayoutDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Payout topilmadi"
+          },
+          "409": {
+            "description": "APPROVED emas yoki ledger balansi yetarli emas"
           }
         },
         "security": [
@@ -5884,7 +5969,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinanceCommissionDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5911,7 +6006,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceCommissionDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5949,7 +6051,17 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceCommissionDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Komissiya topilmadi"
           }
         },
         "security": [
@@ -6417,6 +6529,394 @@
         ]
       }
     },
+    "/api/v1/admin/notifications/templates": {
+      "get": {
+        "operationId": "AdminNotificationsController_templates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationTemplateDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Avtomatik xabar shablonlari",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/notifications/templates/{key}": {
+      "patch": {
+        "description": "Faqat shablon `variables` ro‘yxatidagi `{nomi}` o‘zgaruvchilari; boshqasi 400. Keyingi xabardan boshlab ishlatiladi.",
+        "operationId": "AdminNotificationsController_updateTemplate",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTemplateDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Shablonni tahrirlash",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/notifications/templates/{key}/reset": {
+      "post": {
+        "operationId": "AdminNotificationsController_resetTemplate",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTemplateDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Shablonni standart matnga qaytarish",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/broadcast/preview": {
+      "post": {
+        "description": "Qabul qiluvchilar sonini va `previewToken` ni qaytaradi. Hech narsa yuborilmaydi.",
+        "operationId": "AdminNotificationsController_preview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastPreviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastPreviewResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ommaviy xabarni oldindan ko‘rish",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/broadcast": {
+      "post": {
+        "description": "Faqat `preview` bergan token bilan: xabar yoki qabul qiluvchilar soni o‘zgargan bo‘lsa 409. Bir xil token ikkinchi marta yubormaydi (`idempotent: true`). Yuborish fonda — holati `GET /admin/broadcasts` da.",
+        "operationId": "AdminNotificationsController_send",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastSendDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ommaviy xabar yuborish (faqat SUPERADMIN)",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
+    "/api/v1/admin/broadcasts": {
+      "get": {
+        "operationId": "AdminNotificationsController_broadcasts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastsPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ommaviy xabarlar tarixi va yuborish holati",
+        "tags": [
+          "admin-notifications"
+        ]
+      }
+    },
     "/api/v1/admin/team": {
       "get": {
         "operationId": "AdminTeamController_list",
@@ -6787,6 +7287,7 @@
     },
     "/api/v1/admin/integration/shipments": {
       "get": {
+        "description": "`shipmentState`: `all` (sukut), `created` — posilkasi bor, `missing` — tasdiqlangan/to‘langan, lekin posilkasi yaratilmagan (qotib qolgan). Qatorda `orderStatus` va `paymentMethod` ham bor.",
         "operationId": "AdminIntegrationController_shipments",
         "parameters": [
           {
@@ -6817,6 +7318,21 @@
                 {
                   "$ref": "#/components/schemas/Object"
                 }
+              ]
+            }
+          },
+          {
+            "name": "shipmentState",
+            "required": false,
+            "in": "query",
+            "description": "created — Elchi posilkasi bor; missing — Elchi’ga topshirilmagan, lekin topshirilishi kerak (buyurtma tasdiqlangan/to‘langan, sub-buyurtma yakunlanmagan); all — hammasi",
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": [
+                "all",
+                "created",
+                "missing"
               ]
             }
           },
@@ -6877,7 +7393,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items, total, page, limit, totalPages }"
+            "description": "{ items: [{ id, salesOrderId, shopId, shipmentId|null, status, orderStatus, paymentMethod, codAmount, buyerName, createdAt, updatedAt, ... }], total, page, limit, totalPages }"
           }
         },
         "security": [
@@ -6885,7 +7401,7 @@
             "bearer": []
           }
         ],
-        "summary": "Elchi posilkalari holati va tracking ro‘yxati",
+        "summary": "Elchi posilkalari va Elchi’ga topshirilmagan buyurtmalar",
         "tags": [
           "admin-integration"
         ]
@@ -7764,6 +8280,16 @@
               "example": "15",
               "type": "string"
             }
+          },
+          {
+            "name": "warehouseActive",
+            "required": false,
+            "in": "query",
+            "description": "true — faqat faol, false — faqat o‘chirilgan omborlar",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -7842,6 +8368,16 @@
                   "$ref": "#/components/schemas/Object"
                 }
               ]
+            }
+          },
+          {
+            "name": "warehouseActive",
+            "required": false,
+            "in": "query",
+            "description": "true — faqat faol, false — faqat o‘chirilgan omborlar",
+            "schema": {
+              "example": true,
+              "type": "boolean"
             }
           },
           {
@@ -8709,6 +9245,248 @@
         "summary": "Tasdiqlangan qaytarish bo‘yicha pulni qaytarish (qisman ham)",
         "tags": [
           "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/seller/finance/ledger": {
+      "get": {
+        "operationId": "SellerFinanceController_ledger",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceLedgerPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Do‘kon ledger yozuvlari (sotuv, komissiya, payout, refund)",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/finance/payouts": {
+      "get": {
+        "operationId": "SellerFinanceController_payouts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "APPROVED",
+                "HELD",
+                "PAID"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePayoutPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Do‘kon payout’lari",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/finance/summary": {
+      "get": {
+        "description": "`dateFrom`/`dateTo` faqat davr ko‘rsatkichlariga ta’sir qiladi (`paidPayoutAmount`, `cod`); balans va kutilayotgan payout — hozirgi holat.",
+        "operationId": "SellerFinanceController_summary",
+        "parameters": [
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerFinanceSummaryDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Moliya jamlanmasi: balans, payout’lar, COD reconciliation",
+        "tags": [
+          "seller"
+        ]
+      }
+    },
+    "/api/v1/seller/finance/payout-schedule": {
+      "get": {
+        "operationId": "SellerFinanceController_getPayoutSchedule",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutScheduleDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Payout chastotasi va keyingi to‘lov kuni",
+        "tags": [
+          "seller"
+        ]
+      },
+      "put": {
+        "operationId": "SellerFinanceController_updatePayoutSchedule",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePayoutScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Noma’lum chastota"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Payout chastotasini tanlash (DAILY | WEEKLY | MONTHLY)",
+        "tags": [
+          "seller"
         ]
       }
     }
@@ -11934,6 +12712,295 @@
           "occurredAt"
         ]
       },
+      "FinanceLedgerEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "501"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "7"
+          },
+          "entryType": {
+            "type": "string",
+            "enum": [
+              "SALE",
+              "COD_SALE",
+              "COD_SETTLEMENT",
+              "COMMISSION",
+              "PAYOUT",
+              "REFUND",
+              "ADJUST"
+            ],
+            "example": "SALE"
+          },
+          "amount": {
+            "type": "number",
+            "example": 250000,
+            "description": "Musbat — sotuvchiga kirim, manfiy — yechim"
+          },
+          "balanceAfter": {
+            "type": "number",
+            "example": 1180000,
+            "description": "Shu yozuvdan keyingi balans"
+          },
+          "referenceType": {
+            "type": "string",
+            "example": "seller_order",
+            "description": "seller_order | cod_seller_order | seller_order_refund | return_request | payout"
+          },
+          "referenceId": {
+            "type": "string",
+            "example": "1203"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-28T10:15:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "entryType",
+          "amount",
+          "balanceAfter",
+          "referenceType",
+          "referenceId",
+          "createdAt"
+        ]
+      },
+      "FinanceLedgerPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinanceLedgerEntryDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 42
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "FinancePayoutDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "88"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "7"
+          },
+          "amount": {
+            "type": "number",
+            "example": 225000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "HELD",
+              "PAID"
+            ],
+            "example": "PENDING"
+          },
+          "method": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "referenceId": {
+            "type": "string",
+            "example": "1203",
+            "description": "Payout qaysi posilka (sales_order_seller) uchun ochilgan"
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-28T10:15:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-28T10:15:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "amount",
+          "status",
+          "method",
+          "referenceId",
+          "paidAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "FinancePayoutPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinancePayoutDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 12
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "FinanceReconciliationReportDto": {
+        "type": "object",
+        "properties": {
+          "settlementsCount": {
+            "type": "number",
+            "example": 14,
+            "description": "Elchi hisob-kitob qilgan COD posilkalar"
+          },
+          "expectedCodAmount": {
+            "type": "number",
+            "example": 3400000
+          },
+          "collectedCodAmount": {
+            "type": "number",
+            "example": 3400000
+          },
+          "difference": {
+            "type": "number",
+            "example": 0,
+            "description": "collected − expected"
+          },
+          "expectedCommission": {
+            "type": "number",
+            "example": 340000,
+            "description": "COD sotuvlardan komissiya"
+          },
+          "nettedCommission": {
+            "type": "number",
+            "example": 200000,
+            "description": "Online payout’lardan ushlab qolingan qismi"
+          },
+          "outstandingCommission": {
+            "type": "number",
+            "example": 140000,
+            "description": "Hali undirilmagan komissiya"
+          }
+        },
+        "required": [
+          "settlementsCount",
+          "expectedCodAmount",
+          "collectedCodAmount",
+          "difference",
+          "expectedCommission",
+          "nettedCommission",
+          "outstandingCommission"
+        ]
+      },
+      "FinanceCommissionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "shopId": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PERCENT",
+              "FIXED"
+            ],
+            "example": "PERCENT"
+          },
+          "value": {
+            "type": "number",
+            "example": 10
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-01T00:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "categoryId",
+          "type",
+          "value",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "CreateCommissionDto": {
         "type": "object",
         "properties": {
@@ -12087,6 +13154,324 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "NotificationTemplateDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "shop_approved"
+          },
+          "name": {
+            "type": "string",
+            "example": "Do‘kon tasdiqlandi"
+          },
+          "description": {
+            "type": "string",
+            "example": "Admin do‘konni tasdiqlaganda sotuvchiga"
+          },
+          "variables": {
+            "type": "object",
+            "example": {
+              "shopName": "Do‘kon nomi"
+            },
+            "description": "Shablonda ishlatish mumkin bo‘lgan o‘zgaruvchilar"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "customized": {
+            "type": "boolean",
+            "description": "false — standart matn"
+          },
+          "defaultTitle": {
+            "type": "string"
+          },
+          "defaultBody": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "variables",
+          "title",
+          "body",
+          "customized",
+          "defaultTitle",
+          "defaultBody",
+          "updatedAt"
+        ]
+      },
+      "UpdateNotificationTemplateDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Do‘kon tasdiqlandi",
+            "maxLength": 255
+          },
+          "body": {
+            "type": "string",
+            "example": "{shopName} do‘koningiz faol holatga o‘tdi.",
+            "maxLength": 2000,
+            "description": "O‘zgaruvchilar `{nomi}` ko‘rinishida; faqat shablon ro‘yxatidagilari"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "BroadcastPreviewDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "all",
+              "sellers",
+              "buyers"
+            ],
+            "example": "sellers"
+          },
+          "channels": {
+            "type": "array",
+            "example": [],
+            "description": "In-app doim. Qo‘shimcha kanallar ixtiyoriy.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sms",
+                "email"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "example": "Yangi aksiya",
+            "maxLength": 255
+          },
+          "body": {
+            "type": "string",
+            "example": "Bugundan 20% chegirma!",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "audience",
+          "title",
+          "body"
+        ]
+      },
+      "BroadcastPreviewResultDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "all",
+              "sellers",
+              "buyers"
+            ]
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sms",
+                "email"
+              ]
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "recipientsCount": {
+            "type": "number",
+            "example": 42
+          },
+          "previewToken": {
+            "type": "string",
+            "description": "Yuborishda qaytarilishi shart"
+          }
+        },
+        "required": [
+          "audience",
+          "channels",
+          "title",
+          "body",
+          "recipientsCount",
+          "previewToken"
+        ]
+      },
+      "BroadcastSendDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "all",
+              "sellers",
+              "buyers"
+            ],
+            "example": "sellers"
+          },
+          "channels": {
+            "type": "array",
+            "example": [],
+            "description": "In-app doim. Qo‘shimcha kanallar ixtiyoriy.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sms",
+                "email"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "example": "Yangi aksiya",
+            "maxLength": 255
+          },
+          "body": {
+            "type": "string",
+            "example": "Bugundan 20% chegirma!",
+            "maxLength": 2000
+          },
+          "previewToken": {
+            "type": "string",
+            "description": "`POST /admin/broadcast/preview` javobidagi token — aynan ko‘rib chiqilgan xabar yuboriladi"
+          }
+        },
+        "required": [
+          "audience",
+          "title",
+          "body",
+          "previewToken"
+        ]
+      },
+      "BroadcastDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "all",
+              "sellers",
+              "buyers"
+            ]
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sms",
+                "email"
+              ]
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "recipientsCount": {
+            "type": "number"
+          },
+          "sentCount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "SENDING",
+              "DONE",
+              "FAILED"
+            ]
+          },
+          "createdBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotent": {
+            "type": "boolean",
+            "description": "true — shu token bilan allaqachon yuborilgan (ikki marta bosish)"
+          }
+        },
+        "required": [
+          "id",
+          "audience",
+          "channels",
+          "title",
+          "body",
+          "recipientsCount",
+          "sentCount",
+          "status",
+          "createdBy",
+          "createdAt",
+          "finishedAt",
+          "lastError"
+        ]
+      },
+      "BroadcastsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BroadcastDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
         ]
       },
       "AdminTeamMemberDto": {
@@ -13095,9 +14480,15 @@
             "type": "string",
             "example": "88"
           },
+          "productId": {
+            "type": "object",
+            "example": "12",
+            "nullable": true
+          },
           "productName": {
-            "type": "string",
-            "example": "iPhone 16 Pro"
+            "type": "object",
+            "example": "iPhone 16 Pro",
+            "nullable": true
           },
           "variantName": {
             "type": "object",
@@ -13105,8 +14496,18 @@
             "nullable": true
           },
           "sku": {
+            "type": "object",
+            "example": "IPHONE-16-BLACK-256",
+            "nullable": true
+          },
+          "catalogMissing": {
+            "type": "boolean",
+            "example": false,
+            "description": "true — katalogda variant topilmadi (o‘chirilgan). Qator baribir qaytadi."
+          },
+          "shopId": {
             "type": "string",
-            "example": "IPHONE-16-BLACK-256"
+            "example": "15"
           },
           "warehouseId": {
             "type": "string",
@@ -13115,6 +14516,10 @@
           "warehouseName": {
             "type": "string",
             "example": "Asosiy ombor"
+          },
+          "warehouseActive": {
+            "type": "boolean",
+            "example": true
           },
           "onHand": {
             "type": "number",
@@ -13131,24 +14536,40 @@
           "lowStockThreshold": {
             "type": "number",
             "example": 5
-          },
-          "shopId": {
-            "type": "string",
-            "example": "15"
           }
         },
         "required": [
           "variantId",
+          "productId",
           "productName",
           "variantName",
           "sku",
+          "catalogMissing",
+          "shopId",
           "warehouseId",
           "warehouseName",
+          "warehouseActive",
           "onHand",
           "reserved",
           "available",
-          "lowStockThreshold",
-          "shopId"
+          "lowStockThreshold"
+        ]
+      },
+      "AdminCatalogWarningDto": {
+        "type": "object",
+        "properties": {
+          "shopId": {
+            "type": "string",
+            "example": "15"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Mikroservis belgilangan vaqtda javob bermadi"
+          }
+        },
+        "required": [
+          "shopId",
+          "reason"
         ]
       },
       "AdminStockPageDto": {
@@ -13175,6 +14596,17 @@
           "totalPages": {
             "type": "number",
             "example": 2
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCatalogWarningDto"
+            }
+          },
+          "searchTruncated": {
+            "type": "boolean",
+            "example": false,
+            "description": "true — qidiruvga mos variant juda ko‘p, natija qisqartirildi; so‘rovni aniqlashtiring"
           }
         },
         "required": [
@@ -13182,19 +14614,47 @@
           "total",
           "page",
           "limit",
-          "totalPages"
+          "totalPages",
+          "warnings",
+          "searchTruncated"
         ]
       },
       "AdminStockMovementItemDto": {
         "type": "object",
         "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "88"
+          },
+          "productId": {
+            "type": "object",
+            "example": "12",
+            "nullable": true
+          },
+          "productName": {
+            "type": "object",
+            "example": "iPhone 16 Pro",
+            "nullable": true
+          },
+          "variantName": {
+            "type": "object",
+            "example": "Qora / 256 GB",
+            "nullable": true
+          },
+          "sku": {
+            "type": "object",
+            "example": "IPHONE-16-BLACK-256",
+            "nullable": true
+          },
+          "catalogMissing": {
+            "type": "boolean",
+            "example": false,
+            "description": "true — katalogda variant topilmadi (o‘chirilgan). Qator baribir qaytadi."
+          },
           "id": {
             "type": "string"
           },
           "shopId": {
-            "type": "string"
-          },
-          "variantId": {
             "type": "string"
           },
           "warehouseId": {
@@ -13202,6 +14662,9 @@
           },
           "warehouseName": {
             "type": "string"
+          },
+          "warehouseActive": {
+            "type": "boolean"
           },
           "type": {
             "type": "string",
@@ -13246,11 +14709,17 @@
           }
         },
         "required": [
+          "variantId",
+          "productId",
+          "productName",
+          "variantName",
+          "sku",
+          "catalogMissing",
           "id",
           "shopId",
-          "variantId",
           "warehouseId",
           "warehouseName",
+          "warehouseActive",
           "type",
           "quantity",
           "onHandAfter",
@@ -13282,6 +14751,12 @@
           },
           "totalPages": {
             "type": "number"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCatalogWarningDto"
+            }
           }
         },
         "required": [
@@ -13289,7 +14764,8 @@
           "total",
           "page",
           "limit",
-          "totalPages"
+          "totalPages",
+          "warnings"
         ]
       },
       "ReturnRequestItemInputDto": {
@@ -13812,6 +15288,119 @@
             "example": "Karta orqali qaytarildi, chek #123"
           }
         }
+      },
+      "SellerFinanceSummaryDto": {
+        "type": "object",
+        "properties": {
+          "shopId": {
+            "type": "string",
+            "example": "7"
+          },
+          "balance": {
+            "type": "number",
+            "example": 1180000,
+            "description": "Joriy ledger balansi: musbat — platforma sotuvchiga qarzdor, manfiy — sotuvchining komissiya qarzi (keyingi payout’dan ushlanadi). Davrga bog‘liq emas"
+          },
+          "pendingPayoutAmount": {
+            "type": "number",
+            "example": 450000,
+            "description": "To‘lanishi kutilayotgan payout’lar (PENDING + APPROVED), hozirgi holat"
+          },
+          "heldPayoutAmount": {
+            "type": "number",
+            "example": 0,
+            "description": "Ushlab turilgan payout’lar (HELD)"
+          },
+          "paidPayoutAmount": {
+            "type": "number",
+            "example": 2300000,
+            "description": "Davr ichida to‘langan payout’lar (paid_at bo‘yicha)"
+          },
+          "cod": {
+            "description": "COD reconciliation — /admin/finance/reports bilan bir xil, davr bo‘yicha",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FinanceReconciliationReportDto"
+              }
+            ]
+          },
+          "payoutSchedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY"
+            ],
+            "example": "WEEKLY"
+          },
+          "nextPayoutDate": {
+            "type": "string",
+            "example": "2026-10-05"
+          }
+        },
+        "required": [
+          "shopId",
+          "balance",
+          "pendingPayoutAmount",
+          "heldPayoutAmount",
+          "paidPayoutAmount",
+          "cod",
+          "payoutSchedule",
+          "nextPayoutDate"
+        ]
+      },
+      "PayoutScheduleDto": {
+        "type": "object",
+        "properties": {
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY"
+            ],
+            "example": "WEEKLY"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "example": true,
+            "description": "Do‘kon hali tanlamagan — platforma default’i (WEEKLY)"
+          },
+          "nextPayoutDate": {
+            "type": "string",
+            "example": "2026-10-05",
+            "description": "Bugungi tushum o‘tadigan eng yaqin to‘lov kuni (Asia/Tashkent, bugundan keyin): DAILY — ertaga, WEEKLY — dushanba, MONTHLY — oyning 1-kuni"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "frequency",
+          "isDefault",
+          "nextPayoutDate",
+          "updatedAt"
+        ]
+      },
+      "UpdatePayoutScheduleDto": {
+        "type": "object",
+        "properties": {
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "WEEKLY",
+              "MONTHLY"
+            ],
+            "example": "WEEKLY"
+          }
+        },
+        "required": [
+          "frequency"
+        ]
       }
     }
   }

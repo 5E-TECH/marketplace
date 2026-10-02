@@ -443,6 +443,33 @@ Bitta so'rov = bitta posilka (`sales_order_seller`): uni o'sha do'kon ko'rib chi
 Bildirishnoma: har o'tishda `return.status-changed` (yangi so'rov → sotuvchiga,
 qaror → xaridorga, refund → ikkalasiga).
 
+### 7.2 Sotuvchi moliyasi ✅ C3.9
+
+Admin §8.9 dagi ma'lumotning o'z do'koni kesimi — yangi hisob-kitob yo'q.
+**Faqat SELLER (do'kon egasi)**; OPERATOR → `403`. Do'kon token egasidan
+aniqlanadi (`seller.shop.get-me`); query'da `shopId` yuborilsa → `400`.
+Biznes qoidalari: `C3.9-SELLER-FINANCE.md`.
+
+**`GET /seller/finance/ledger`** — query: `page?, limit?(≤100), dateFrom?, dateTo?`
+(kun bo'yicha, `dateTo` kuni ham kiradi). Javob `FinanceLedgerPageDto` — admin bilan bir xil.
+**`GET /seller/finance/payouts`** — query: `page?, limit?, status?(PENDING|APPROVED|HELD|PAID)`.
+**`GET /seller/finance/summary`** — query: `dateFrom?, dateTo?`.
+```jsonc
+// 200 data
+{ "shopId":"7",
+  "balance":1180000,            // joriy ledger balansi (davrga bog'liq emas); manfiy = komissiya qarzi
+  "pendingPayoutAmount":450000, // PENDING + APPROVED, hozirgi holat
+  "heldPayoutAmount":0,         // HELD, hozirgi holat
+  "paidPayoutAmount":2300000,   // davr ichida to'langan (paid_at)
+  "cod":{ /* GET /admin/finance/reports bilan bir xil, shu do'kon va davr */ },
+  "payoutSchedule":"WEEKLY", "nextPayoutDate":"2026-10-05" }
+```
+**`GET /seller/finance/payout-schedule`** →
+`{ "frequency":"WEEKLY", "isDefault":true, "nextPayoutDate":"2026-10-05", "updatedAt":null }`.
+**`PUT /seller/finance/payout-schedule`** — `{ "frequency":"DAILY|WEEKLY|MONTHLY" }` → shu shakl.
+`nextPayoutDate` — bugungi tushum o'tadigan eng yaqin to'lov kuni (Asia/Tashkent,
+doim bugundan keyin): DAILY — ertaga, WEEKLY — dushanba, MONTHLY — oyning 1-kuni.
+
 ---
 
 ## 8. Admin / Platform Back-office
@@ -541,27 +568,36 @@ qaytmasligi uchun bunday buyurtma §7.1 orqali yakunlanadi.
 
 ### 8.7 Sklad nazorati ◻︎
 **`GET /admin/inventory/stock` · ADMIN / SUPERADMIN ✅ C6.7** — barcha
-sotuvchilar qoldig‘i. Query: `shopId, warehouseId, variantId, productId,
-search, lowOnly, page, limit`.
+sotuvchilar qoldig‘i, SQL darajasida sahifalangan. Query: `shopId, warehouseId,
+variantId, productId, search, lowOnly, warehouseActive, page, limit`.
+Javobda `warnings: [{ shopId, reason }]` (katalogi javob bermagan do‘konlar —
+qatorlari nomsiz qaytadi) va `searchTruncated`. Katalogda topilmagan variant
+qatori `catalogMissing: true` bilan qaytadi (tushib qolmaydi).
 **`GET /admin/inventory/movements` · ADMIN / SUPERADMIN ✅ C6.7** — global
-qoldiq harakati jurnali. Query: `shopId, warehouseId, variantId, type,
-dateFrom, dateTo, page, limit`.
+qoldiq harakati jurnali (mahsulot nomi/SKU bilan). Query: `shopId, warehouseId,
+variantId, type, dateFrom, dateTo, warehouseActive, page, limit`.
+`warehouseActive` ikkalasida bir xil: berilmasa barcha omborlar.
 
 ### 8.8 To'lovlar ◻︎
 **`GET /admin/payments` · ADMIN** — hamma tranzaksiya (query: `provider?, status?, orderId?, dateFrom/To?`).
 **`GET /admin/payments/providers/:provider` · SUPERADMIN** — maxfiy kalitsiz sozlanish holati (`configured`, `hasSecret`). **`PUT /admin/payments/providers/:provider` · SUPERADMIN** — `merchantId`, Click uchun alohida `serviceId`, `secret` (AES; javobga kiritilmaydi), `baseUrl`, `isActive`.
 
 ### 8.9 Moliya: payout + komissiya ◻︎
-**`GET /admin/finance/ledger` · ADMIN** — seller ledger (query: `shopId?`).
-**`GET /admin/finance/payouts` · ADMIN** — payout ro'yxati (query: `shopId?, status?`).
+**`GET /admin/finance/ledger` · ADMIN** — seller ledger (query: `shopId?, dateFrom?, dateTo?, page?, limit?`).
+**`GET /admin/finance/payouts` · ADMIN** — payout ro'yxati (query: `shopId?, status?, page?, limit?`).
+Javob shakllari (Swagger): `FinanceLedgerPageDto`, `FinancePayoutPageDto`,
+`FinanceReconciliationReportDto`, `FinancePayoutDto` (approve/hold/release), `FinanceCommissionDto`.
+Sotuvchi tomoni — §7.2.
 **`POST /admin/finance/payouts/:id/approve|hold|release` · SUPERADMIN** — holat o'zgartirish. **Release idempotent** (2x → 1 marta).
 **`GET/POST/PATCH /admin/finance/commissions` · SUPERADMIN** — `{ scope:"global|category|shop", refId?, type:(PERCENT|FIXED), value }`.
 **`GET /admin/finance/reports` · ADMIN** — daromad, COD vs online reconciliation.
 
 ### 8.10 Elchi integratsiya ✅ C6.7
-**`GET /admin/integration/shipments` · ADMIN / SUPERADMIN** — Elchi shipment
-IDsi mavjud posilkalar; `shopId, status, shipmentId, dateFrom, dateTo` filtrlari
-va pagination.
+**`GET /admin/integration/shipments` · ADMIN / SUPERADMIN** — Elchi posilkalari
+va Elchi’ga topshirilmay qolgan buyurtmalar; `shipmentState (all|created|missing),
+shopId, status, shipmentId, dateFrom, dateTo` filtrlari va pagination.
+`missing` — tasdiqlangan/to‘langan, sub-buyurtmasi yakunlanmagan, lekin
+posilkasi yaratilmagan. Qatorda `orderStatus`, `paymentMethod` bor.
 **`GET /admin/integration/webhooks` · ADMIN / SUPERADMIN** — original payload
 bilan webhook tarixi; `eventId, shipmentId, sellerOrderId, status, dateFrom,
 dateTo` filtrlari va pagination.
@@ -569,9 +605,32 @@ dateTo` filtrlari va pagination.
 catalogdagi joriy profil va tariflar bilan Elchi marketni idempotent qayta
 provision qiladi; natija auditga yoziladi, xatolar retry cron orqali tiklanadi.
 
-### 8.11 Broadcast / bildirishnoma ◻︎
-**`POST /admin/broadcast` · ADMIN** — `{ audience:"sellers|buyers|all", channel:"inapp|sms|email|telegram", title, body }`.
-**`GET /admin/notifications/templates` · ADMIN** — shablonlar.
+### 8.11 Broadcast / bildirishnoma ✅ C6.8
+**Shablonlar · ADMIN / SUPERADMIN.** Avtomatik xabarlar (ro‘yxatdan o‘tish,
+do‘kon tasdiqlandi/rad etildi, mahsulot yashirildi, buyurtma yaratildi/bekor
+qilindi/puli qaytarildi) matni. Standart matn kodda, tahrirlangani bazada;
+tahrir **keyingi xabardan** ishlatiladi.
+- **`GET /admin/notifications/templates`** — `[{ key, name, description,
+  variables: { nomi: tavsif }, title, body, customized, defaultTitle,
+  defaultBody, updatedAt }]`.
+- **`PATCH /admin/notifications/templates/:key`** — `{ title, body }`; faqat
+  `variables` dagi `{nomi}` o‘zgaruvchilari, boshqasi `400`; noma’lum key `404`.
+- **`POST /admin/notifications/templates/:key/reset`** — standart matnga qaytarish.
+
+**Ommaviy xabar · faqat SUPERADMIN** (ADMIN → `403`).
+Auditoriya `all | sellers | buyers` (`all` — xaridor, sotuvchi, operator;
+adminlar kirmaydi; faqat faol, bloklanmagan, o‘chirilmagan). In-app har doim,
+`channels: ["sms","email"]` ixtiyoriy (SMS pulli — sukut bo‘yicha yo‘q).
+- **`POST /admin/broadcast/preview`** — `{ audience, channels?, title, body }` →
+  `{ ..., recipientsCount, previewToken }`. Hech narsa yuborilmaydi.
+- **`POST /admin/broadcast`** — preview bilan bir xil tana + `previewToken` →
+  `202 { id, status: "QUEUED", recipientsCount, ... }`. Xabar yoki qabul
+  qiluvchilar soni preview’dan keyin o‘zgargan bo‘lsa `409`. Bir xil token
+  ikkinchi marta yubormaydi (`idempotent: true`). Yuborish fonda, 50 tadan;
+  uzilsa to‘xtagan joyidan davom etadi (5 ketma-ket xatodan keyin `FAILED`).
+- **`GET /admin/broadcasts` · ADMIN / SUPERADMIN** — tarix: `status`
+  (`QUEUED|SENDING|DONE|FAILED`), `recipientsCount`, `sentCount`, `lastError`.
+Shablon tahriri va yuborish auditga yoziladi.
 
 ### 8.12 Kontent / bannerlar ✅ C6.9
 **`POST /admin/content/banners/image` · ADMIN, SUPERADMIN** · `multipart/form-data`,

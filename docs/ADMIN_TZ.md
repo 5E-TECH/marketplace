@@ -56,7 +56,8 @@ Enum: `Role { SELLER, BUYER, ADMIN, SUPERADMIN }` (`libs/common/enums`).
 | **Moliya: payout tasdiq/release** | ✅ | ❌ |
 | **Komissiya sozlash** | ✅ | ❌ |
 | **To'lov provayder kaliti (Payme/Click)** | ✅ | ❌ |
-| Bildirishnoma / broadcast | ✅ | ✅ |
+| Bildirishnoma: shablon/tarix ko'rish, broadcast preview | ✅ | ✅ |
+| **Broadcast yuborish** (C6.8) | ✅ | ❌ |
 | Impersonation (sotuvchi nomidan) | ✅ | ⚠️ (ruxsat berilsa) |
 | **Admin jamoa (rol berish/olish)** | ✅ | ❌ |
 | **Platforma sozlamalari / feature flag** | ✅ | ❌ |

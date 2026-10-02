@@ -10,14 +10,26 @@ import {
   CreateCommissionDto,
   FinanceLedgerEntryType,
   FinanceCodSettledEvent,
-  FinancePageQueryDto,
+  FinanceLedgerQueryDto,
   FinancePayoutQueryDto,
   FinancePayoutRequestedEvent,
   FinancePayoutStatus,
   FinanceRefundRequestedEvent,
   FinanceReconciliationQueryDto,
+  returningRows,
   UpdateCommissionDto,
 } from '@app/common';
+import { dateRangeConditions } from './finance-query.util';
+
+export interface ReconciliationReportRow {
+  settlementsCount: number;
+  expectedCodAmount: number;
+  collectedCodAmount: number;
+  difference: number;
+  expectedCommission: number;
+  nettedCommission: number;
+  outstandingCommission: number;
+}
 
 export interface LedgerRow {
   id: string;
@@ -214,16 +226,13 @@ export class FinanceService {
     });
   }
 
-  async reconciliationReport(query: FinanceReconciliationQueryDto) {
+  async reconciliationReport(
+    query: FinanceReconciliationQueryDto,
+  ): Promise<ReconciliationReportRow> {
     const params: unknown[] = [];
     const conditions: string[] = [];
     if (query.shopId) conditions.push(`shop_id=$${params.push(query.shopId)}`);
-    if (query.dateFrom)
-      conditions.push(`settled_at >= $${params.push(query.dateFrom)}`);
-    if (query.dateTo)
-      conditions.push(
-        `settled_at < ($${params.push(query.dateTo)}::date + INTERVAL '1 day')`,
-      );
+    conditions.push(...dateRangeConditions('settled_at', query, params));
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const [summary] = await this.dataSource.query(
       `SELECT COUNT(*)::int AS "settlementsCount",
@@ -424,27 +433,35 @@ export class FinanceService {
         referenceType: 'payout',
         referenceId: payout.id,
       });
-      const [updated] = (await manager.query(
-        `UPDATE finance.payout
-            SET status='PAID',paid_at=now(),updated_at=now()
-          WHERE id=$1
-          RETURNING id::text,"shop_id"::text AS "shopId",amount::float8,
-                    status,method,"reference_id" AS "referenceId",
-                    "paid_at" AS "paidAt","created_at" AS "createdAt",
-                    "updated_at" AS "updatedAt"`,
-        [id],
-      )) as PayoutRow[];
+      const [updated] = returningRows<PayoutRow>(
+        await manager.query(
+          `UPDATE finance.payout
+              SET status='PAID',paid_at=now(),updated_at=now()
+            WHERE id=$1
+            RETURNING id::text,"shop_id"::text AS "shopId",amount::float8,
+                      status,method,"reference_id" AS "referenceId",
+                      "paid_at" AS "paidAt","created_at" AS "createdAt",
+                      "updated_at" AS "updatedAt"`,
+          [id],
+        ),
+      );
       return updated;
     });
   }
 
-  async listLedger(query: FinancePageQueryDto) {
+  /** Do'konning joriy ledger balansi (oxirgi yozuvdagi `balance_after`). */
+  currentBalance(shopId: string): Promise<number> {
+    return this.balance(this.dataSource.manager, shopId);
+  }
+
+  async listLedger(query: FinanceLedgerQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const params: unknown[] = [];
-    const where = query.shopId
-      ? `WHERE shop_id=$${params.push(query.shopId)}`
-      : '';
+    const conditions: string[] = [];
+    if (query.shopId) conditions.push(`shop_id=$${params.push(query.shopId)}`);
+    conditions.push(...dateRangeConditions('created_at', query, params));
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const [{ total }] = (await this.dataSource.query(
       `SELECT COUNT(*)::int AS total FROM finance.seller_ledger ${where}`,
       params,
@@ -546,15 +563,17 @@ export class FinanceService {
     id: string,
     dto: UpdateCommissionDto,
   ): Promise<CommissionRow> {
-    const [updated] = (await manager.query(
-      `UPDATE finance.commission
-          SET type=COALESCE($2,type),value=COALESCE($3,value),updated_at=now()
-        WHERE id=$1
-        RETURNING id::text,"shop_id"::text AS "shopId",
-                  "category_id"::text AS "categoryId",type,value::float8,
-                  "created_at" AS "createdAt","updated_at" AS "updatedAt"`,
-      [id, dto.type ?? null, dto.value ?? null],
-    )) as CommissionRow[];
+    const [updated] = returningRows<CommissionRow>(
+      await manager.query(
+        `UPDATE finance.commission
+            SET type=COALESCE($2,type),value=COALESCE($3,value),updated_at=now()
+          WHERE id=$1
+          RETURNING id::text,"shop_id"::text AS "shopId",
+                    "category_id"::text AS "categoryId",type,value::float8,
+                    "created_at" AS "createdAt","updated_at" AS "updatedAt"`,
+        [id, dto.type ?? null, dto.value ?? null],
+      ),
+    );
     if (!updated) throw new NotFoundException('Komissiya topilmadi');
     return updated;
   }
@@ -563,15 +582,17 @@ export class FinanceService {
     id: string,
     status: FinancePayoutStatus.APPROVED | FinancePayoutStatus.HELD,
   ): Promise<PayoutRow> {
-    const [row] = (await this.dataSource.query(
-      `UPDATE finance.payout SET status=$2,updated_at=now()
-        WHERE id=$1 AND status<>'PAID'
-        RETURNING id::text,"shop_id"::text AS "shopId",amount::float8,
-                  status,method,"reference_id" AS "referenceId",
-                  "paid_at" AS "paidAt","created_at" AS "createdAt",
-                  "updated_at" AS "updatedAt"`,
-      [id, status],
-    )) as PayoutRow[];
+    const [row] = returningRows<PayoutRow>(
+      await this.dataSource.query(
+        `UPDATE finance.payout SET status=$2,updated_at=now()
+          WHERE id=$1 AND status<>'PAID'
+          RETURNING id::text,"shop_id"::text AS "shopId",amount::float8,
+                    status,method,"reference_id" AS "referenceId",
+                    "paid_at" AS "paidAt","created_at" AS "createdAt",
+                    "updated_at" AS "updatedAt"`,
+        [id, status],
+      ),
+    );
     if (row) return row;
     const existing = await this.payoutById(this.dataSource.manager, id, false);
     if (!existing) throw new NotFoundException('Payout topilmadi');

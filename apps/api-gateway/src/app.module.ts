@@ -44,6 +44,7 @@ import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
+import { AdminNotificationsController } from './admin/admin-notifications.controller';
 import { AdminTeamController } from './admin/admin-team.controller';
 import { AdminSettingsController } from './admin/admin-settings.controller';
 import { AdminIntegrationController } from './admin/admin-integration.controller';
@@ -55,6 +56,7 @@ import { CurrentRoleGuard } from './auth/current-role.guard';
 import { AdminInventoryController } from './admin/admin-inventory.controller';
 import { BuyerReturnsController } from './returns/buyer-returns.controller';
 import { SellerReturnsController } from './sellers/seller-returns.controller';
+import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
 
 @Module({
@@ -182,6 +184,7 @@ import { AdminReturnsController } from './admin/admin-returns.controller';
     ReviewsController,
     AdminProductsController,
     AdminAuditController,
+    AdminNotificationsController,
     AdminTeamController,
     AdminSettingsController,
     AdminIntegrationController,
@@ -192,6 +195,7 @@ import { AdminReturnsController } from './admin/admin-returns.controller';
     BuyerReturnsController,
     SellerReturnsController,
     AdminReturnsController,
+    SellerFinanceController,
   ],
   providers: [
     AppService,

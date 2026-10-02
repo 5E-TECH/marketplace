@@ -36,6 +36,8 @@ import { PlatformSettingsService } from './settings/platform-settings.service';
 import { AdminUserAccessController } from './admin-user-access/admin-user-access.controller';
 import { AdminUserAccessService } from './admin-user-access/admin-user-access.service';
 import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
+import { BroadcastRecipientsController } from './broadcast/broadcast-recipients.controller';
+import { BroadcastRecipientsService } from './broadcast/broadcast-recipients.service';
 
 const entities = [User, AuthSession, ActivityLog, PlatformSettings];
 
@@ -83,6 +85,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
     AdminTeamController,
     PlatformSettingsController,
     AdminUserAccessController,
+    BroadcastRecipientsController,
   ],
   providers: [
     AuthService,
@@ -91,6 +94,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
     AdminTeamService,
     PlatformSettingsService,
     AdminUserAccessService,
+    BroadcastRecipientsService,
   ],
 })
 export class IdentityModule {}

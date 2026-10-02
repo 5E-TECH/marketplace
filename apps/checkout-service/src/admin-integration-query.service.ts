@@ -1,14 +1,42 @@
 import { Injectable } from '@nestjs/common';
-import { AdminShipmentsQueryDto, AdminWebhooksQueryDto } from '@app/common';
+import {
+  AdminShipmentState,
+  AdminShipmentsQueryDto,
+  AdminWebhooksQueryDto,
+} from '@app/common';
 import { DataSource } from 'typeorm';
+
+const SHIPMENT_STATE_CONDITIONS: Record<AdminShipmentState, string[]> = {
+  all: [],
+  created: ['s.elchi_shipment_id IS NOT NULL'],
+  missing: [
+    's.elchi_shipment_id IS NULL',
+    "s.status NOT IN ('CANCELLED','RETURNED','DELIVERED')",
+    "o.status NOT IN ('DRAFT','PENDING_PAYMENT','CANCELLED','REFUNDED')",
+  ],
+};
 
 @Injectable()
 export class AdminIntegrationQueryService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /**
+   * C6.7 — Elchi posilkalari VA Elchi'ga topshirilmay qolgan buyurtmalar.
+   *
+   * Avval `elchi_shipment_id IS NOT NULL` qattiq yozilgan edi, ya'ni admin
+   * aynan "qotib qolgan" buyurtmani — tasdiqlangan, lekin posilkasi hech
+   * qachon yaratilmaganini — ko'ra olmasdi. `shipmentState=missing` shularni
+   * beradi; DRAFT/to'lanmagan buyurtmalar va yakunlangan sub-buyurtmalar
+   * unga kirmaydi (ular topshirilishi kutilmaydi).
+   */
   async shipments(query: AdminShipmentsQueryDto) {
     const params: unknown[] = [];
-    const where = ['s.elchi_shipment_id IS NOT NULL'];
+    // `all` shartsiz — ro'yxat bo'sh bo'lishi mumkin, shuning uchun TRUE bilan
+    // boshlanadi (aks holda filtrsiz so'rov `WHERE ORDER BY` bo'lib yiqilardi).
+    const where = [
+      'TRUE',
+      ...SHIPMENT_STATE_CONDITIONS[query.shipmentState ?? 'all'],
+    ];
     this.add(where, params, 's.shop_id', query.shopId);
     this.add(where, params, 's.status', query.status);
     this.add(where, params, 's.elchi_shipment_id', query.shipmentId);
@@ -30,6 +58,8 @@ export class AdminIntegrationQueryService {
               s.subtotal::float8,
               s.delivery_fee::float8 AS "deliveryFee",
               s.cod_amount::float8 AS "codAmount",
+              o.status AS "orderStatus",
+              o.payment_method AS "paymentMethod",
               o.buyer_name AS "buyerName",
               o.delivery_address AS "deliveryAddress",
               o.where_deliver AS "whereDeliver",
@@ -45,6 +75,7 @@ export class AdminIntegrationQueryService {
     const [count] = await this.dataSource.query(
       `SELECT count(*)::int AS total
          FROM checkout.sales_order_seller s
+         JOIN checkout.sales_order o ON o.id=s.sales_order_id
          ${condition}`,
       params,
     );

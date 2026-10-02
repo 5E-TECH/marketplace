@@ -137,7 +137,7 @@ describe('NotificationService', () => {
 
     await expect(service.retryDue()).resolves.toBe(1);
     expect(deliveries.update).toHaveBeenNthCalledWith(
-      1,
+      2,
       { id: '7', status: DeliveryStatus.RETRY },
       { status: DeliveryStatus.PROCESSING },
     );
@@ -150,6 +150,34 @@ describe('NotificationService', () => {
       '7',
       expect.objectContaining({ status: DeliveryStatus.SENT, attempts: 2 }),
     );
+  });
+
+  it('24 soatdan eski yetkazish qayta yuborilmaydi — FAILED bo‘ladi', async () => {
+    const deliveries = {
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({ affected: 3 }),
+    };
+    const service = new NotificationService({} as never, deliveries as never, [
+      emailAdapter,
+    ]);
+    const before = Date.now();
+
+    await expect(service.retryDue()).resolves.toBe(0);
+
+    const [where, patch] = deliveries.update.mock.calls[0];
+    expect(where.status.value).toEqual([
+      DeliveryStatus.PENDING,
+      DeliveryStatus.RETRY,
+    ]);
+    const cutoff = (where.createdAt.value as Date).getTime();
+    expect(before - cutoff).toBeGreaterThanOrEqual(24 * 60 * 60 * 1000);
+    expect(before - cutoff).toBeLessThan(24 * 60 * 60 * 1000 + 5_000);
+    expect(patch).toMatchObject({
+      status: DeliveryStatus.FAILED,
+      nextRetryAt: null,
+    });
+    expect(patch.lastError()).toContain('COALESCE(last_error');
+    expect(emailAdapter.send).not.toHaveBeenCalled();
   });
 
   it('TC1: in-app ro‘yxat faqat tegishli user xabarlarini so‘raydi', async () => {
