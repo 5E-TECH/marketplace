@@ -18,8 +18,6 @@ const validEnv = {
   ELCHI_PARTNER_API_URL: 'https://api.elchipochta.uz',
   ELCHI_PARTNER_API_KEY: 'elp_test_key',
   DOMAIN: ':80',
-  // C4.8: tunnelsiz zanjir caddy -> api-gateway (1 bosqich).
-  TRUST_PROXY_HOPS: '1',
 };
 
 // Validator fayl bo'sh qolsa export qilingan qiymatni oladi — CI/dev muhitidagi
@@ -27,6 +25,7 @@ const validEnv = {
 const {
   TRUST_PROXY_HOPS: _hops,
   COMPOSE_PROFILES: _profiles,
+  AUTH_TOKENS_IN_BODY: _authInBody,
   ...baseEnv
 } = process.env;
 
@@ -57,21 +56,31 @@ test('Elchi partner konfiguratsiyasi bilan production env auditdan o‘tadi', as
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('C4.8: TRUST_PROXY_HOPS berilmasa deploy to‘xtaydi', async (t) => {
-  const { TRUST_PROXY_HOPS: _, ...missingHops } = validEnv;
-  const result = await run(t, missingHops);
-
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /TRUST_PROXY_HOPS=1/);
+test('C4.8: TRUST_PROXY_HOPS talab qilinmaydi — tunnel bilan ham, tunnelsiz ham', async (t) => {
+  // Ishonchli proksilar endi tarmoq bo'yicha aniqlanadi
+  // (apps/api-gateway/src/trust-proxy.ts) — zanjir uzunligiga bog'liq emas.
+  for (const env of [validEnv, { ...validEnv, COMPOSE_PROFILES: 'tunnel' }]) {
+    const result = await run(t, env);
+    assert.equal(result.status, 0, result.stderr);
+  }
 });
 
-test('C4.8: Cloudflare tunnel bilan zanjir 2 bosqichli bo‘lishi shart', async (t) => {
-  const tunnel = { ...validEnv, COMPOSE_PROFILES: 'tunnel' };
+test('C4.8: eski TRUST_PROXY_HOPS qolsa deploy to‘xtamaydi, faqat eslatiladi', async (t) => {
+  const result = await run(t, { ...validEnv, TRUST_PROXY_HOPS: '2' });
 
-  const wrong = await run(t, tunnel);
-  assert.notEqual(wrong.status, 0);
-  assert.match(wrong.stderr, /2 bosqichli/);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /TRUST_PROXY_HOPS endi ishlatilmaydi/);
+});
 
-  const right = await run(t, { ...tunnel, TRUST_PROXY_HOPS: '2' });
-  assert.equal(right.status, 0, right.stderr);
+test('AUTH_TOKENS_IN_BODY false bo‘lmasa deploy to‘xtamaydi, lekin eslatiladi', async (t) => {
+  const legacy = await run(t, { ...validEnv, AUTH_TOKENS_IN_BODY: 'true' });
+  assert.equal(legacy.status, 0, legacy.stderr);
+  assert.match(legacy.stderr, /AUTH_TOKENS_IN_BODY=true/);
+
+  const cookieOnly = await run(t, {
+    ...validEnv,
+    AUTH_TOKENS_IN_BODY: 'false',
+  });
+  assert.equal(cookieOnly.status, 0, cookieOnly.stderr);
+  assert.doesNotMatch(cookieOnly.stderr, /AUTH_TOKENS_IN_BODY/);
 });

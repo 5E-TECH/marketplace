@@ -10,6 +10,7 @@ import {
   TransformInterceptor,
 } from '@app/common';
 import { AppModule } from './app.module';
+import { configureTrustProxy } from './trust-proxy';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -19,9 +20,10 @@ async function bootstrap() {
   const port = config.get<number>('API_GATEWAY_PORT', 3000);
   const isProduction = config.get<string>('NODE_ENV') === 'production';
 
-  // Caddy/nginx orqasida turamiz — haqiqiy mijoz IP'sini `X-Forwarded-For`dan
-  // olamiz. Rate limiting shu IP bo'yicha hisoblaydi, shuning uchun majburiy.
-  app.set('trust proxy', config.get<number>('TRUST_PROXY_HOPS', 1));
+  // Caddy va storefront proksisi orqasida turamiz — haqiqiy mijoz IP'sini
+  // `X-Forwarded-For`dan olamiz. Rate limiting va audit jurnali shu IP bo'yicha
+  // ishlaydi. Nega bosqichlar soni emas — trust-proxy.ts da.
+  configureTrustProxy(app);
 
   // Xavfsizlik sarlavhalari. Swagger UI o'z skript/uslublarini inline yuklaydi,
   // shuning uchun CSP'da 'unsafe-inline' ochiq — bu faqat API hostiga tegishli,

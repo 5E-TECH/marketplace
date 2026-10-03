@@ -81,9 +81,15 @@ export class CheckoutController {
       customerId?: string;
       sessionId?: string;
       address: CheckoutAddressDto;
+      cartItemIds?: string[];
     },
   ) {
-    return this.service.preview(data.customerId, data.sessionId, data.address);
+    return this.service.preview(
+      data.customerId,
+      data.sessionId,
+      data.address,
+      data.cartItemIds,
+    );
   }
 
   @MessagePattern({ cmd: 'checkout.confirm-cod' })

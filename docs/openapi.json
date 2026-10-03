@@ -4960,6 +4960,7 @@
     },
     "/api/v1/checkout/delivery-preview": {
       "post": {
+        "description": "`cartItemIds` berilsa faqat shu qatorlar hisoblanadi — `POST /checkout` ga aynan shu tanlov yuboriladi.",
         "operationId": "CheckoutController_preview",
         "parameters": [],
         "requestBody": {
@@ -4985,6 +4986,7 @@
     },
     "/api/v1/checkout": {
       "post": {
+        "description": "`cartItemIds` berilsa faqat shu savat qatorlari buyurtmaga o‘tadi va savatdan o‘chadi, qolganlari savatda qoladi. Berilmasa — butun savat. Savatda yo‘q id → 404. Idempotency-Key bitta tanlovga tegishli: tanlov o‘zgarsa yangi kalit yuboring.",
         "operationId": "CheckoutController_create",
         "parameters": [
           {
@@ -12289,6 +12291,17 @@
           "lineTotal": {
             "type": "number",
             "example": 250000
+          },
+          "productName": {
+            "type": "string",
+            "example": "Smartfon X 128GB",
+            "description": "Savatga qo‘shilgan paytdagi nom (narx kabi surat) — buyurtmaga ham shu nom o‘tadi"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/products/35/main.webp",
+            "nullable": true,
+            "description": "Variant rasmi, u bo‘lmasa mahsulotning asosiy rasmi. Katalogdan jonli olinadi"
           }
         },
         "required": [
@@ -12298,7 +12311,9 @@
           "shopId",
           "quantity",
           "unitPriceSnapshot",
-          "lineTotal"
+          "lineTotal",
+          "productName",
+          "imageUrl"
         ]
       },
       "CartDto": {
@@ -12423,6 +12438,18 @@
         "properties": {
           "address": {
             "$ref": "#/components/schemas/CheckoutAddressDto"
+          },
+          "cartItemIds": {
+            "example": [
+              "10",
+              "12"
+            ],
+            "maxItems": 100,
+            "description": "Faqat shu savat qatorlari (`GET /cart` → `items[].id`). Berilmasa — butun savat. Buyurtmadan keyin tanlangan qatorlar savatdan o‘chadi, qolganlari savatda qoladi.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -12432,20 +12459,32 @@
       "CreateCheckoutDto": {
         "type": "object",
         "properties": {
+          "address": {
+            "$ref": "#/components/schemas/CheckoutAddressDto"
+          },
+          "cartItemIds": {
+            "example": [
+              "10",
+              "12"
+            ],
+            "maxItems": 100,
+            "description": "Faqat shu savat qatorlari (`GET /cart` → `items[].id`). Berilmasa — butun savat. Buyurtmadan keyin tanlangan qatorlar savatdan o‘chadi, qolganlari savatda qoladi.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "paymentMethod": {
             "type": "string",
             "enum": [
               "online",
               "cod"
             ]
-          },
-          "address": {
-            "$ref": "#/components/schemas/CheckoutAddressDto"
           }
         },
         "required": [
-          "paymentMethod",
-          "address"
+          "address",
+          "paymentMethod"
         ]
       },
       "CreatePaymentDto": {

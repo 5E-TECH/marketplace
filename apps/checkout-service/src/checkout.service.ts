@@ -15,8 +15,9 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { Cart } from './entities/cart.entity';
+import { CartItem } from './entities/cart-item.entity';
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
 
@@ -86,8 +87,9 @@ export class CheckoutService {
       });
       if (!cart) throw new NotFoundException('Faol savat topilmadi');
       if (!cart.items.length) throw new BadRequestException('Savat bo‘sh');
+      const selected = this.selectItems(cart.items, dto.cartItemIds);
 
-      const quote = await this.quote(cart.items, dto.address);
+      const quote = await this.quote(selected, dto.address);
       if (quote.subtotal < Number(settings.minimumOrderAmount)) {
         throw new BadRequestException(
           `Minimal buyurtma summasi ${settings.minimumOrderAmount}`,
@@ -110,7 +112,7 @@ export class CheckoutService {
       );
       const sellerOrders = [] as CheckoutResultDto['sellerOrders'];
       const groups = new Map<string, typeof cart.items>();
-      for (const item of cart.items) {
+      for (const item of selected) {
         groups.set(item.shopId, [...(groups.get(item.shopId) ?? []), item]);
       }
       for (const [shopId, items] of groups) {
@@ -164,7 +166,7 @@ export class CheckoutService {
         { cmd: 'inventory.reserve' },
         {
           orderRef: order.id,
-          items: cart.items.map((item) => ({
+          items: selected.map((item) => ({
             variantId: item.variantId,
             quantity: item.quantity,
           })),
@@ -176,8 +178,19 @@ export class CheckoutService {
         `UPDATE checkout.sales_order SET reservation_id=$1 WHERE id=$2`,
         [reservation.reservationId, order.id],
       );
-      cart.status = 'converted';
-      await manager.getRepository(Cart).save(cart);
+      if (selected.length === cart.items.length) {
+        cart.status = 'converted';
+        await manager.getRepository(Cart).save(cart);
+      } else {
+        // Qisman checkout: faqat buyurtmaga o'tgan qatorlar savatdan ketadi,
+        // belgilanmaganlari faol savatda qoladi. Avval frontend ularni
+        // vaqtincha o'chirib, buyurtmadan keyin qayta qo'shardi — oraliqda
+        // xato bo'lsa xaridor mahsulotlarini yo'qotardi.
+        await manager.getRepository(CartItem).delete({
+          cartId: cart.id,
+          id: In(selected.map((item) => item.id)),
+        });
+      }
 
       return {
         id: order.id,
@@ -199,6 +212,7 @@ export class CheckoutService {
     customerId: string | undefined,
     sessionId: string | undefined,
     address: CreateCheckoutDto['address'],
+    cartItemIds?: string[],
   ): Promise<DeliveryPreviewResultDto> {
     if (!customerId && !sessionId) {
       throw new BadRequestException('customer yoki x-session-id majburiy');
@@ -211,7 +225,30 @@ export class CheckoutService {
     });
     if (!cart?.items.length)
       throw new NotFoundException('Faol savat topilmadi');
-    return this.quote(cart.items, address);
+    return this.quote(this.selectItems(cart.items, cartItemIds), address);
+  }
+
+  /**
+   * Tanlangan savat qatorlari. `cartItemIds` berilmasa — butun savat (eski
+   * xulq). Bitta id ham savatda topilmasa butun so'rov rad etiladi: qisman
+   * buyurtma xaridor kutmagan summani yaratib qo'yardi.
+   */
+  private selectItems(
+    items: Cart['items'],
+    cartItemIds?: string[],
+  ): Cart['items'] {
+    if (!cartItemIds) return items;
+    const ids = [...new Set(cartItemIds.map(String))];
+    if (!ids.length)
+      throw new BadRequestException('Savat qatorlari tanlanmagan');
+    const byId = new Map(items.map((item) => [String(item.id), item]));
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length) {
+      throw new NotFoundException(
+        `Savatda topilmagan qatorlar: ${missing.join(', ')}`,
+      );
+    }
+    return ids.map((id) => byId.get(id)!);
   }
 
   private async quote(

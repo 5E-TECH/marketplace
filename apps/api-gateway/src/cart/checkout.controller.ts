@@ -37,7 +37,12 @@ export class CheckoutController {
 
   @Public()
   @Post('delivery-preview')
-  @ApiOperation({ summary: 'Savatdagi har bir posilka uchun dostavka narxi' })
+  @ApiOperation({
+    summary: 'Savatdagi har bir posilka uchun dostavka narxi',
+    description:
+      '`cartItemIds` berilsa faqat shu qatorlar hisoblanadi — `POST /checkout` ga ' +
+      'aynan shu tanlov yuboriladi.',
+  })
   preview(
     @CurrentUser() user: JwtUser | undefined,
     @Headers('x-session-id') sessionId: string | undefined,
@@ -53,6 +58,7 @@ export class CheckoutController {
         customerId: user?.sub,
         sessionId: user?.sub ? undefined : sessionId,
         address: dto.address,
+        cartItemIds: dto.cartItemIds,
       },
     );
   }
@@ -61,6 +67,11 @@ export class CheckoutController {
   @Post()
   @ApiOperation({
     summary: 'Savatni do‘konlar bo‘yicha ajratib buyurtma yaratish',
+    description:
+      '`cartItemIds` berilsa faqat shu savat qatorlari buyurtmaga o‘tadi va ' +
+      'savatdan o‘chadi, qolganlari savatda qoladi. Berilmasa — butun savat. ' +
+      'Savatda yo‘q id → 404. Idempotency-Key bitta tanlovga tegishli: tanlov ' +
+      'o‘zgarsa yangi kalit yuboring.',
   })
   create(
     @CurrentUser() user: JwtUser | undefined,
