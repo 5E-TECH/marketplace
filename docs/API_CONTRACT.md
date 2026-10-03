@@ -145,6 +145,28 @@ qilinadi: `login`/`refresh` → `{}`, `register` → `{ user }` — tokenlar faq
 cookie'da. Body'da qolgan token XSS'da `POST /auth/refresh` orqali o'qilishi
 mumkin, shuning uchun to'liq himoya faqat shu flag o'chgach.
 
+`AUTH_TOKENS_IN_BODY=false` dan OLDIN ikkala frontendda tekshiring (aks holda
+kirgan foydalanuvchining `POST/PATCH/DELETE` so'rovlari `403` oladi, ochiq
+route'larda esa — savat, checkout — anonim bajariladi):
+- barcha so'rovlarda `X-Requested-With: XMLHttpRequest` bor (kabinet axios'i
+  va storefront `apiRequest`);
+- storefront `/api/backend/*` proksisi `X-Requested-With` ni backendga
+  uzatadi va `POST /auth/refresh` ga ruxsat beradi (aks holda access token
+  muddati tugagach sessiya tiklanmaydi);
+- storefront proksisi `X-Forwarded-Proto` ni ham uzatadi — HTTPS'da cookie
+  `Secure` bayrog'i bilan yoziladi.
+
+### 2.2.2 Proksi orqali mijoz IP'si
+Rate limit va audit jurnali mijoz IP'si bo'yicha ishlaydi. Storefront
+`/api/backend/*` proksisi o'ziga kelgan `X-Forwarded-For` sarlavhasini backendga
+**o'zgartirmasdan** uzatadi (qo'shmasdan, kesmasdan, chapdagi qiymatni
+tanlamasdan). Backend ichki tarmoq manzillarini (caddy, cloudflared,
+storefront) tashlab, birinchi ommaviy manzilni mijozniki deb oladi — mijoz
+o'zi yozib yuborgan qiymat Cloudflare qo'shgan haqiqiy IP'dan chapda qoladi va
+hisobga olinmaydi. Uzatilmasa barcha xaridorlar storefront konteynerining
+bitta IP'si bo'lib ko'rinadi: login limiti hammaga birdan ishlaydi. Batafsil:
+`docs/C4.8-TRUST-PROXY.md`.
+
 ### 2.3 OTP qarori (MVP)
 - **MVP'da telefon OTP YO'Q.** Sabab: sotuvchi baribir **admin approve**'dan o'tadi (soxta ro'yxat bloklanadi), SMS xarajati/murakkabligi keyinga. `phone` **unique** bilan himoyalanadi.
 - Buyer OTP (Faza 2) — keyin qo'shiladi. *(Bu qarorni o'zgartirmoqchi bo'lsangiz — ayting.)*
@@ -793,3 +815,17 @@ Xaridor tomoni:
   chiqqach 400 — operator `POST /admin/orders/:id/refund` bilan hal qiladi.
 - **`DELETE /cart`** — savatni bo'shatadi, idempotent: faol savat bo'lmasa ham
   200 va bo'sh savat qaytaradi.
+- **Savat qatori** (`GET /cart` va savatni o'zgartiruvchi barcha javoblar,
+  `items[]`) `productName` va `imageUrl` ni ham qaytaradi — katalogga har qator
+  uchun alohida so'rov kerak emas. `productName` — savatga qo'shilgan paytdagi
+  nom (narx kabi surat; buyurtmaga aynan shu nom o'tadi). `imageUrl` — variant
+  rasmi, u bo'lmasa mahsulotning asosiy rasmi, katalogdan jonli olinadi;
+  rasm umuman yo'q bo'lsa `null`.
+- **`POST /checkout`** va **`POST /checkout/delivery-preview`** ixtiyoriy
+  `cartItemIds: string[]` (savat qatori `items[].id`, 1..100 ta, takrorsiz)
+  qabul qiladi. Berilsa faqat shu qatorlar buyurtmaga o'tadi va savatdan
+  o'chadi; belgilanmagan qatorlar faol savatda qoladi (frontend ularni
+  vaqtincha o'chirib, qayta qo'shishi shart emas). Berilmasa — butun savat,
+  savat avvalgidek yopiladi. Savatda yo'q id → `404`, hech narsa
+  yaratilmaydi. Minimal buyurtma summasi tanlangan qatorlar bo'yicha
+  tekshiriladi. Tanlov o'zgarsa yangi `Idempotency-Key` yuboring.

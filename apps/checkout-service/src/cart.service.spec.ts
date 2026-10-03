@@ -4,11 +4,14 @@ import { Cart } from './entities/cart.entity';
 describe('CartService', () => {
   let carts: any[];
   let items: any[];
+  let catalogRows: any[];
+  let catalogQuery: jest.Mock;
   let service: CartService;
 
   beforeEach(() => {
     carts = [];
     items = [];
+    catalogRows = [];
     let cartSequence = 0;
     let itemSequence = 0;
     const repository = (entity: unknown) => {
@@ -51,7 +54,11 @@ describe('CartService', () => {
         },
       };
     };
-    const manager = { getRepository: jest.fn(repository) };
+    // `catalog.product_variant` JOIN `catalog.product` — so'ralgan variantlar.
+    catalogQuery = jest.fn(async (_sql: string, [variantIds]: string[][]) =>
+      catalogRows.filter((row) => variantIds.includes(row.variantId)),
+    );
+    const manager = { getRepository: jest.fn(repository), query: catalogQuery };
     const dataSource = {
       manager,
       transaction: jest.fn((run) => run(manager)),
@@ -195,5 +202,76 @@ describe('CartService', () => {
 
   it('owner berilmasa savatni bo‘shatishni rad etadi', async () => {
     await expect(service.clear({})).rejects.toThrow('x-session-id');
+  });
+
+  describe('qatorda mahsulot nomi va rasmi', () => {
+    const variant = {
+      productId: '10',
+      variantId: '11',
+      shopId: '7',
+      unitPrice: 100,
+      productName: 'Smartfon X',
+    };
+
+    it('nom suratdan, rasm katalogdan (variant rasmi) keladi', async () => {
+      catalogRows = [
+        {
+          variantId: '11',
+          name: 'Smartfon X (yangi nom)',
+          imageUrl: 'https://cdn/variant-11.webp',
+        },
+      ];
+
+      const cart = await service.add(
+        { sessionId: 'anon-img' },
+        { productId: '10', variantId: '11', quantity: 1 },
+        variant,
+      );
+
+      // Nom — savatga qo'shilgan paytdagi surat: buyurtmaga ham shu o'tadi.
+      expect(cart.items[0]).toEqual(
+        expect.objectContaining({
+          productName: 'Smartfon X',
+          imageUrl: 'https://cdn/variant-11.webp',
+        }),
+      );
+      expect(catalogQuery).toHaveBeenLastCalledWith(
+        expect.stringContaining('catalog.product_variant'),
+        [['11']],
+      );
+    });
+
+    it('suratsiz eski qatorga katalog nomi, katalogda yo‘q bo‘lsa zaxira nom', async () => {
+      await service.add(
+        { sessionId: 'anon-legacy' },
+        { productId: '10', variantId: '11', quantity: 1 },
+        variant,
+      );
+      await service.add(
+        { sessionId: 'anon-legacy' },
+        { productId: '20', variantId: '21', quantity: 1 },
+        { ...variant, productId: '20', variantId: '21' },
+      );
+      // Ustun qo'shilishidan oldin savatga tushgan qatorlar.
+      for (const item of items) item.productNameSnapshot = null;
+      catalogRows = [{ variantId: '11', name: 'Smartfon X', imageUrl: null }];
+
+      const cart = await service.get({ sessionId: 'anon-legacy' });
+
+      expect(cart.items).toEqual([
+        expect.objectContaining({ productName: 'Smartfon X', imageUrl: null }),
+        expect.objectContaining({
+          productName: 'Mahsulot #20',
+          imageUrl: null,
+        }),
+      ]);
+    });
+
+    it('bo‘sh savat katalogga so‘rov yubormaydi', async () => {
+      const cart = await service.get({ sessionId: 'empty' });
+
+      expect(cart.items).toEqual([]);
+      expect(catalogQuery).not.toHaveBeenCalled();
+    });
   });
 });

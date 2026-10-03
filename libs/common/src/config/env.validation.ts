@@ -12,9 +12,9 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   API_GATEWAY_PORT: Joi.number().port().default(3000),
   CORS_ORIGINS: Joi.string().allow('').optional(),
-  // Reverse proxy (Caddy) qatlamlari soni — haqiqiy mijoz IP'sini aniqlash
-  // uchun. Bu bo'lmasa rate limit hamma foydalanuvchini bitta IP deb sanaydi.
-  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(1),
+  // `TRUST_PROXY_HOPS` endi o'qilmaydi: ishonchli proksilar tarmoq bo'yicha
+  // aniqlanadi (apps/api-gateway/src/trust-proxy.ts). Eski env faylida qolsa
+  // ham xato bermaydi — noma'lum kalitlarga ruxsat bor.
 
   // Rate limiting — umumiy chegara. Auth kabi nozik endpointlarda controller
   // darajasida @Throttle bilan qattiqroq limit qo'yiladi.

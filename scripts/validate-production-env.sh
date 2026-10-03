@@ -48,33 +48,23 @@ if [ -z "${domain:-}" ] || [ "${domain#:}" != "$domain" ]; then
   printf '  Production uchun .env.production ga DOMAIN va TLS_EMAIL qo‘shing.\n' >&2
 fi
 
-# TRUST_PROXY_HOPS haqiqiy proxy zanjiriga teng bo'lishi SHART (C4.8).
-# Kam bo'lsa audit jurnaliga proksining ichki IP'si tushadi va rate limit
-# hamma foydalanuvchini bitta IP deb sanaydi; ko'p bo'lsa mijoz
-# `X-Forwarded-For` ni o'zi to'qib, jurnalga soxta IP yozdira oladi.
-# Shuning uchun bu yerda ogohlantirish emas, QAT'IY tekshiruv turadi —
-# 2026-09-17 da aynan shu qiymat jimgina 1 bo'lib qolgani uchun butun audit
-# jurnali foydasiz bo'lgan edi. Batafsil: docs/C4.8-TRUST-PROXY.md
-# Skriptning qolgan qismi kabi: fayl bo'sh qolsa export qilingan qiymat olinadi
-# (CI deploy job'i bir qism kalitlarni env orqali uzatadi).
-trust_hops=$(sed -n 's/^TRUST_PROXY_HOPS=//p' "$env_file" | tail -n 1)
-trust_hops=${trust_hops:-${TRUST_PROXY_HOPS:-}}
-compose_profiles=$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file" | tail -n 1)
-compose_profiles=${compose_profiles:-${COMPOSE_PROFILES:-}}
-case ",${compose_profiles}," in
-  *,tunnel,*) expected_hops=2 ;;  # cloudflared -> caddy -> api-gateway
-  *) expected_hops=1 ;;           # caddy -> api-gateway
-esac
-if [ -z "${trust_hops:-}" ]; then
-  printf 'TRUST_PROXY_HOPS berilmagan — sukut qiymati 1, zanjir esa %s bosqichli.\n' "$expected_hops" >&2
-  printf '  %s ga qo‘shing: TRUST_PROXY_HOPS=%s\n' "$env_file" "$expected_hops" >&2
-  exit 1
+# TRUST_PROXY_HOPS endi o'qilmaydi (C4.8, 2026-10-03): api-gateway ishonchli
+# proksilarni bosqichlar soni bo'yicha emas, ichki tarmoq bo'yicha aniqlaydi —
+# storefront proksisi qo'shgan uzunroq zanjirga bitta raqam to'g'ri kelmasdi.
+# Qolgan qiymat zararsiz, faqat chalg'itmasligi uchun eslatamiz.
+if grep -q '^TRUST_PROXY_HOPS=' "$env_file"; then
+  printf 'OGOHLANTIRISH: TRUST_PROXY_HOPS endi ishlatilmaydi — %s dan olib tashlang.\n' "$env_file" >&2
+  printf '  Batafsil: docs/C4.8-TRUST-PROXY.md\n' >&2
 fi
-if [ "$trust_hops" != "$expected_hops" ]; then
-  printf 'TRUST_PROXY_HOPS=%s, lekin proxy zanjiri %s bosqichli (COMPOSE_PROFILES=%s).\n' \
-    "$trust_hops" "$expected_hops" "${compose_profiles:-<bo‘sh>}" >&2
-  printf '  Zanjir ataylab o‘zgargan bo‘lsa shu skriptdagi kutilgan qiymatni ham yangilang.\n' >&2
-  exit 1
+
+# Tokenlar body'da qaytsa XSS ularni `POST /auth/refresh` orqali o'qib olishi
+# mumkin (API_CONTRACT §2.2.1). Deploy'ni to'xtatmaymiz: frontendlar cookie
+# rejimiga tayyor bo'lmaguncha true qolishi to'g'ri, faqat unutilmasin.
+auth_in_body=$(sed -n 's/^AUTH_TOKENS_IN_BODY=//p' "$env_file" | tail -n 1)
+auth_in_body=${auth_in_body:-${AUTH_TOKENS_IN_BODY:-true}}
+if [ "$auth_in_body" != "false" ]; then
+  printf 'OGOHLANTIRISH: AUTH_TOKENS_IN_BODY=%s — tokenlar body‘da ham qaytadi.\n' "$auth_in_body" >&2
+  printf '  Frontendlar cookie rejimiga o‘tgach false qiling (docs/API_CONTRACT.md §2.2.1).\n' >&2
 fi
 
 printf 'Production env audit muvaffaqiyatli: %s\n' "$env_file"

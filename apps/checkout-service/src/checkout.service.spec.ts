@@ -1,11 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
+import { In } from 'typeorm';
 import {
   CheckoutDeliveryDestination,
   CheckoutPaymentMethod,
 } from '@app/common';
 import { CheckoutService } from './checkout.service';
 import { Cart } from './entities/cart.entity';
+import { CartItem } from './entities/cart-item.entity';
 
 describe('CheckoutService (C2.9)', () => {
   const dto = (paymentMethod = CheckoutPaymentMethod.COD) => ({
@@ -26,6 +28,7 @@ describe('CheckoutService (C2.9)', () => {
       status: 'active',
       items: [
         {
+          id: '101',
           productId: '10',
           variantId: '11',
           shopId: '7',
@@ -34,6 +37,7 @@ describe('CheckoutService (C2.9)', () => {
           productNameSnapshot: 'Smartfon X',
         },
         {
+          id: '102',
           productId: '20',
           variantId: '21',
           shopId: '8',
@@ -45,8 +49,10 @@ describe('CheckoutService (C2.9)', () => {
     let orderId = 0;
     let sellerId = 0;
     const queries: Array<{ sql: string; params: unknown[] }> = [];
+    const cartItems = { delete: jest.fn().mockResolvedValue({ affected: 1 }) };
     const manager = {
       getRepository: jest.fn((entity) => {
+        if (entity === CartItem) return cartItems;
         expect(entity).toBe(Cart);
         return {
           findOne: jest.fn().mockResolvedValue(cart),
@@ -104,6 +110,7 @@ describe('CheckoutService (C2.9)', () => {
       queries,
       inventory,
       cart,
+      cartItems,
       integration,
       identity,
     };
@@ -310,5 +317,85 @@ describe('CheckoutService (C2.9)', () => {
       .map((q) => q.params[2]);
     expect(names).toEqual(['Smartfon X', 'Mahsulot #20']);
     expect(names.every((n) => String(n).trim().length > 0)).toBe(true);
+  });
+
+  describe('tanlangan savat qatorlari (cartItemIds)', () => {
+    const sellerItemInserts = (queries: Array<{ sql: string }>) =>
+      queries.filter((q) =>
+        q.sql.includes('INSERT INTO checkout.sales_order_item'),
+      );
+
+    it('faqat tanlangan qator buyurtmaga o‘tadi va savatdan o‘chadi, qolgani savatda qoladi', async () => {
+      const { service, inventory, cart, cartItems, queries } = setup();
+
+      const result = await service.create('5', {
+        ...dto(),
+        cartItemIds: ['102'],
+      });
+
+      expect(result).toMatchObject({
+        subtotal: 300,
+        deliveryFee: 20,
+        totalAmount: 320,
+      });
+      expect(result.sellerOrders.map((order) => order.shopId)).toEqual(['8']);
+      expect(sellerItemInserts(queries)).toHaveLength(1);
+      expect(inventory.send).toHaveBeenCalledWith(
+        { cmd: 'inventory.reserve' },
+        expect.objectContaining({ items: [{ variantId: '21', quantity: 1 }] }),
+      );
+      expect(cartItems.delete).toHaveBeenCalledWith({
+        cartId: '9',
+        id: In(['102']),
+      });
+      // Savat `converted` bo'lmaydi — belgilanmagan qator xaridorda qoladi.
+      expect(cart.status).toBe('active');
+    });
+
+    it('hamma qator tanlansa savat avvalgidek converted bo‘ladi', async () => {
+      const { service, cart, cartItems } = setup();
+
+      await service.create('5', { ...dto(), cartItemIds: ['101', '102'] });
+
+      expect(cart.status).toBe('converted');
+      expect(cartItems.delete).not.toHaveBeenCalled();
+    });
+
+    it('savatda yo‘q qator → 404, buyurtma ham rezerv ham yaratilmaydi', async () => {
+      const { service, inventory, queries, cart, cartItems } = setup();
+
+      await expect(
+        service.create('5', { ...dto(), cartItemIds: ['101', '999'] }),
+      ).rejects.toThrow(
+        new NotFoundException('Savatda topilmagan qatorlar: 999'),
+      );
+      expect(queries).toHaveLength(0);
+      expect(inventory.send).not.toHaveBeenCalled();
+      expect(cartItems.delete).not.toHaveBeenCalled();
+      expect(cart.status).toBe('active');
+    });
+
+    it('minimal summa faqat tanlangan qatorlar bo‘yicha tekshiriladi', async () => {
+      const { service, inventory } = setup(false, 301);
+
+      await expect(
+        service.create('5', { ...dto(), cartItemIds: ['102'] }),
+      ).rejects.toThrow('Minimal buyurtma summasi 301');
+      expect(inventory.send).not.toHaveBeenCalled();
+    });
+
+    it('preview faqat tanlangan qatorlar posilkasini hisoblaydi', async () => {
+      const { service, integration } = setup();
+
+      await expect(
+        service.preview('5', undefined, dto().address, ['101']),
+      ).resolves.toMatchObject({
+        subtotal: 200,
+        deliveryFee: 20,
+        totalAmount: 220,
+        packages: [{ shopId: '7', subtotal: 200 }],
+      });
+      expect(integration.send).toHaveBeenCalledTimes(1);
+    });
   });
 });

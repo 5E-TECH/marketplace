@@ -19,8 +19,8 @@ export class CartService {
 
   async get(owner: CartOwnerDto): Promise<CartDto> {
     this.assertOwner(owner);
-    const cart = await this.findActive(this.dataSource.manager, owner);
-    return this.toDto(cart);
+    const manager = this.dataSource.manager;
+    return this.toDto(manager, await this.findActive(manager, owner));
   }
 
   async add(
@@ -61,7 +61,7 @@ export class CartService {
           }),
         );
       }
-      return this.toDto(await this.findById(manager, cart.id));
+      return this.toDto(manager, await this.findById(manager, cart.id));
     });
   }
 
@@ -79,7 +79,7 @@ export class CartService {
       if (!item) throw new NotFoundException('Savat elementi topilmadi');
       item.quantity = quantity;
       await manager.getRepository(CartItem).save(item);
-      return this.toDto(await this.findById(manager, cart.id));
+      return this.toDto(manager, await this.findById(manager, cart.id));
     });
   }
 
@@ -93,7 +93,7 @@ export class CartService {
       });
       if (!result.affected)
         throw new NotFoundException('Savat elementi topilmadi');
-      return this.toDto(await this.findById(manager, cart.id));
+      return this.toDto(manager, await this.findById(manager, cart.id));
     });
   }
 
@@ -107,9 +107,9 @@ export class CartService {
     this.assertOwner(owner);
     return this.dataSource.transaction(async (manager) => {
       const cart = await this.findActive(manager, owner);
-      if (!cart) return this.toDto(null);
+      if (!cart) return this.toDto(manager, null);
       await manager.getRepository(CartItem).delete({ cartId: cart.id });
-      return this.toDto(await this.findById(manager, cart.id));
+      return this.toDto(manager, await this.findById(manager, cart.id));
     });
   }
 
@@ -121,14 +121,17 @@ export class CartService {
       const carts = manager.getRepository(Cart);
       const sessionCart = await this.findActive(manager, { sessionId });
       let userCart = await this.findActive(manager, { customerId });
-      if (!sessionCart) return this.toDto(userCart);
+      if (!sessionCart) return this.toDto(manager, userCart);
       if (!userCart) {
         sessionCart.customerId = customerId;
         sessionCart.sessionId = null;
         await carts.save(sessionCart);
-        return this.toDto(await this.findById(manager, sessionCart.id));
+        return this.toDto(
+          manager,
+          await this.findById(manager, sessionCart.id),
+        );
       }
-      if (userCart.id === sessionCart.id) return this.toDto(userCart);
+      if (userCart.id === sessionCart.id) return this.toDto(manager, userCart);
 
       const items = manager.getRepository(CartItem);
       for (const source of sessionCart.items) {
@@ -138,6 +141,8 @@ export class CartService {
         if (target) {
           target.quantity += source.quantity;
           target.unitPriceSnapshot = source.unitPriceSnapshot;
+          target.productNameSnapshot =
+            source.productNameSnapshot ?? target.productNameSnapshot;
           await items.save(target);
           await items.delete(source.id);
         } else {
@@ -148,7 +153,7 @@ export class CartService {
       sessionCart.status = 'converted';
       await carts.save(sessionCart);
       userCart = (await this.findById(manager, userCart.id))!;
-      return this.toDto(userCart);
+      return this.toDto(manager, userCart);
     });
   }
 
@@ -191,16 +196,67 @@ export class CartService {
       .findOne({ where: { id }, relations: { items: true } });
   }
 
-  private toDto(cart: Cart | null): CartDto {
-    const items = (cart?.items ?? []).map((item) => ({
-      id: item.id,
-      productId: item.productId,
-      variantId: item.variantId,
-      shopId: item.shopId,
-      quantity: item.quantity,
-      unitPriceSnapshot: Number(item.unitPriceSnapshot),
-      lineTotal: Number(item.unitPriceSnapshot) * item.quantity,
-    }));
+  /**
+   * Savat qatori uchun katalogdagi nom va rasm — storefront har qatorga
+   * alohida katalog so'rovi yubormasligi uchun. Rasm jonli olinadi (sotuvchi
+   * almashtirsa savatda ham yangilanadi): variant rasmi, u bo'lmasa
+   * mahsulotniki. `seller-orders.service.ts` dagi `catalog.product` JOIN bilan
+   * bir xil yondashuv. O'chirilgan (soft-delete) mahsulot qatori ham qaytadi —
+   * xaridor savatdan nimani olib tashlayotganini ko'rsin.
+   */
+  private async catalogInfo(
+    manager: EntityManager,
+    variantIds: string[],
+  ): Promise<Map<string, { name: string | null; imageUrl: string | null }>> {
+    if (!variantIds.length) return new Map();
+    const rows = (await manager.query(
+      `SELECT v.id::text AS "variantId", p.name,
+              COALESCE(NULLIF(v.image_url, ''), NULLIF(p.image_url, ''),
+                       p.images->>0) AS "imageUrl"
+         FROM catalog.product_variant v
+         JOIN catalog.product p ON p.id = v.product_id
+        WHERE v.id = ANY($1::bigint[])`,
+      [variantIds],
+    )) as Array<{
+      variantId: string;
+      name: string | null;
+      imageUrl: string | null;
+    }>;
+    return new Map(
+      rows.map((row) => [
+        String(row.variantId),
+        { name: row.name ?? null, imageUrl: row.imageUrl || null },
+      ]),
+    );
+  }
+
+  private async toDto(
+    manager: EntityManager,
+    cart: Cart | null,
+  ): Promise<CartDto> {
+    const catalog = await this.catalogInfo(
+      manager,
+      (cart?.items ?? []).map((item) => String(item.variantId)),
+    );
+    const items = (cart?.items ?? []).map((item) => {
+      const info = catalog.get(String(item.variantId));
+      return {
+        id: item.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        shopId: item.shopId,
+        quantity: item.quantity,
+        unitPriceSnapshot: Number(item.unitPriceSnapshot),
+        lineTotal: Number(item.unitPriceSnapshot) * item.quantity,
+        // Nom — surat (buyurtmaga ham aynan shu nom o'tadi). Surat ustuni
+        // qo'shilishidan oldingi qatorlarda katalogdagi joriy nom olinadi.
+        productName:
+          item.productNameSnapshot?.trim() ||
+          info?.name?.trim() ||
+          `Mahsulot #${item.productId}`,
+        imageUrl: info?.imageUrl ?? null,
+      };
+    });
     return {
       id: cart?.id ?? null,
       customerId: cart?.customerId ?? null,

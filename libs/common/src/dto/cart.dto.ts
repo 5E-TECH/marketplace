@@ -1,6 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
@@ -40,6 +44,20 @@ export class CartItemDto {
   @ApiProperty({ example: 2 }) quantity: number;
   @ApiProperty({ example: 125000 }) unitPriceSnapshot: number;
   @ApiProperty({ example: 250000 }) lineTotal: number;
+  @ApiProperty({
+    example: 'Smartfon X 128GB',
+    description:
+      'Savatga qo‘shilgan paytdagi nom (narx kabi surat) — buyurtmaga ham shu nom o‘tadi',
+  })
+  productName: string;
+  @ApiProperty({
+    type: String,
+    example: 'https://api.elchimarket.uz/media/products/35/main.webp',
+    nullable: true,
+    description:
+      'Variant rasmi, u bo‘lmasa mahsulotning asosiy rasmi. Katalogdan jonli olinadi',
+  })
+  imageUrl: string | null;
 }
 
 export class CartDto {
@@ -117,22 +135,40 @@ export class CheckoutAddressDto {
     CheckoutDeliveryDestination.ADDRESS;
 }
 
-export class CreateCheckoutDto {
-  @ApiProperty({ enum: CheckoutPaymentMethod })
-  @IsEnum(CheckoutPaymentMethod)
-  paymentMethod: CheckoutPaymentMethod;
-
-  @ApiProperty({ type: CheckoutAddressDto })
-  @ValidateNested()
-  @Type(() => CheckoutAddressDto)
-  address: CheckoutAddressDto;
-}
+/** Bitta buyurtmada rasmiylashtiriladigan savat qatorlarining yuqori chegarasi. */
+export const MAX_CHECKOUT_CART_ITEMS = 100;
 
 export class DeliveryPreviewDto {
   @ApiProperty({ type: CheckoutAddressDto })
   @ValidateNested()
   @Type(() => CheckoutAddressDto)
   address: CheckoutAddressDto;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['10', '12'],
+    maxItems: MAX_CHECKOUT_CART_ITEMS,
+    description:
+      'Faqat shu savat qatorlari (`GET /cart` → `items[].id`). Berilmasa — ' +
+      'butun savat. Buyurtmadan keyin tanlangan qatorlar savatdan o‘chadi, ' +
+      'qolganlari savatda qoladi.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_CHECKOUT_CART_ITEMS)
+  @ArrayUnique()
+  @Matches(/^[1-9]\d{0,18}$/, {
+    each: true,
+    message: 'cartItemIds musbat son (savat qatori id) bo‘lishi kerak',
+  })
+  cartItemIds?: string[];
+}
+
+export class CreateCheckoutDto extends DeliveryPreviewDto {
+  @ApiProperty({ enum: CheckoutPaymentMethod })
+  @IsEnum(CheckoutPaymentMethod)
+  paymentMethod: CheckoutPaymentMethod;
 }
 
 export interface DeliveryPackageQuoteDto {
