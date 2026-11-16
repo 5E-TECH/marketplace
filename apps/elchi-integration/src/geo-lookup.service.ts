@@ -8,7 +8,7 @@ import { GeoCache } from './entities/geo-cache.entity';
 /**
  * Sotuvchi sahifasi formasi va operator uchun geo qidiruv (BE-38). Manba — Elchi geo keshi:
  * kalit SOATO (EQ-06), tuman o‘z viloyatiga `elchi_region_id` orqali bog‘langan.
- * Kesh bo‘sh bo‘lsagina Elchi bilan sinxronlanadi: noto‘g‘ri kod Elchi API siga so‘rov yubormaydi.
+ * Kesh bo‘sh bo‘lsagina Elchi bilan sinxronlanadi: noto‘g‘ri kod yoki ochiq ro‘yxat Elchi API siga so‘rov yubormaydi.
  */
 @Injectable()
 export class GeoLookupService {
@@ -20,10 +20,9 @@ export class GeoLookupService {
   /** GET /regions/tree: viloyatlar va ularning tumanlari, Elchi tartibida. */
   async regionTree(): Promise<LeadRegionGroupDto[]> {
     let rows = await this.activeRows();
-    if (
-      !rows.some((r) => r.kind === 'region') ||
-      rows.some((r) => !r.satoCode)
-    ) {
+    // Faqat kesh bo‘sh bo‘lsa: ochiq endpoint har so‘rovda Elchi API siga bormaydi.
+    // SOATO siz qator ro‘yxatga chiqmaydi (forma kodsiz tumanni yubora olmaydi).
+    if (!rows.some((r) => r.kind === 'region')) {
       await this.integration.syncGeoCache();
       rows = await this.activeRows();
     }

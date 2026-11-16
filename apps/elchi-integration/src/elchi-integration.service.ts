@@ -305,11 +305,22 @@ export class ElchiIntegrationService {
     };
   }
 
+  /** Bir vaqtda bitta sinxronlash (BE-38): toza bazada parallel so‘rovlar bir xil qatorni ikki marta yozmaydi. */
+  private geoSyncInFlight: Promise<GeoSyncResult> | null = null;
+
   /**
    * Elchi viloyat/tuman ma'lumotini geo_cache'ga sinxronlaydi (upsert).
    * Marketplace manzilini Elchi region/district'ga moslash uchun.
+   * Parallel chaqiruvlar bitta ishga qo‘shiladi (uq_geo_kind_elchi buzilmaydi).
    */
-  async syncGeoCache(): Promise<GeoSyncResult> {
+  syncGeoCache(): Promise<GeoSyncResult> {
+    this.geoSyncInFlight ??= this.runGeoSync().finally(() => {
+      this.geoSyncInFlight = null;
+    });
+    return this.geoSyncInFlight;
+  }
+
+  private async runGeoSync(): Promise<GeoSyncResult> {
     // Ikkala tashqi so‘rov ham muvaffaqiyatli bo‘lmaguncha bazani o‘zgartirmaymiz.
     const [regions, districts] = await Promise.all([
       this.elchi.getRegions(),

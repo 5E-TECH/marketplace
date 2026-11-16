@@ -145,7 +145,14 @@ describe('GeoLookupService (BE-38)', () => {
     expect(integration.syncGeoCache).not.toHaveBeenCalled();
   });
 
-  it('daraxt: kesh bo‘sh yoki SOATO yetishmasa sinxronlaydi', async () => {
+  it('daraxt: SOATO siz qator bor bo‘lsa ham Elchi bilan sinxronlamaydi (ochiq endpoint)', async () => {
+    const { service, integration } = makeService();
+    const tree = await service.regionTree();
+    expect(integration.syncGeoCache).not.toHaveBeenCalled();
+    expect(tree[1].districts.map((d) => d.name)).toEqual(['Asaka tumani']);
+  });
+
+  it('daraxt: kesh bo‘sh bo‘lsa sinxronlaydi', async () => {
     const { service, integration } = makeService([]);
     const tree = await service.regionTree();
     expect(integration.syncGeoCache).toHaveBeenCalledTimes(1);
