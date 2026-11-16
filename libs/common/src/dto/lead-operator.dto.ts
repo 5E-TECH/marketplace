@@ -54,6 +54,8 @@ export enum LeadErrorCode {
   LEAD_QUEUE_EMPTY = 'LEAD_QUEUE_EMPTY',
   /** Operator tanaffusda — 409 (TC4 FE-08). */
   OPERATOR_ON_BREAK = 'OPERATOR_ON_BREAK',
+  /** Operator «chiqdi» holatida — avval «ishda» holatini tanlaydi — 409 [taklif]. */
+  OPERATOR_OFFLINE = 'OPERATOR_OFFLINE',
   /** 5 ta bron to‘lgan — 409 (6-qoida, «5/5»). */
   BOOKING_LIMIT_REACHED = 'BOOKING_LIMIT_REACHED',
   /** Manzil tasdiqlanmagan lidga «Tasdiqlandi» — 400 (OPR-4, BE-38). */
