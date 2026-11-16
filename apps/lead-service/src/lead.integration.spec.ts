@@ -1,3 +1,5 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
   CheckoutDeliveryDestination,
@@ -6,6 +8,7 @@ import {
   LeadVariant,
 } from '@app/common';
 import { Click, LEAD_ENTITIES, Lead, LeadHistory, Stream } from './entities';
+import { LeadAddressService } from './lead-address.service';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -193,5 +196,141 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         .getRepository(Lead)
         .save(landingLead(stream.id, { status: LeadStatus.REJECTED })),
     ).rejects.toThrow(/chk_lead_lead_rejected_reason/);
+  });
+  describe('BE-38: operator manzilni tasdiqlaydi yoki tuzatadi', () => {
+    const resolution = {
+      ok: true,
+      regionSoato: '1726',
+      regionName: 'Toshkent shahri',
+      districtSoato: '1726266',
+      districtName: 'Yunusobod tumani',
+      elchiRegionId: '1',
+      elchiDistrictId: '10',
+    };
+    const makeService = (result: unknown = resolution) =>
+      new LeadAddressService(db, { send: jest.fn(() => of(result)) } as never);
+    const formAddress = {
+      regionSoato: '1726',
+      districtSoato: '1726266',
+      addressLine: 'Turkiston ko‘chasi, 27-uy',
+      whereDeliver: CheckoutDeliveryDestination.CENTER,
+    };
+    const addressHistory = (leadId: string) =>
+      db.getRepository(LeadHistory).find({
+        where: { leadId },
+        order: { id: 'ASC' },
+      });
+
+    it('o‘zgarishsiz saqlash — tasdiq: faqat tasdiq yozuvi, «tuzatdi» belgisi yo‘q', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      const result = await makeService().confirmByOperator(
+        lead.id,
+        '41',
+        formAddress,
+      );
+      expect(result).toMatchObject({
+        regionName: 'Toshkent shahri',
+        districtName: 'Yunusobod tumani',
+        editedByOperator: false,
+      });
+      const saved = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: lead.id });
+      expect(saved.addressConfirmedBy).toBe('41');
+      expect(saved.addressConfirmedAt).toBeInstanceOf(Date);
+      const rows = await addressHistory(lead.id);
+      expect(rows.map((r) => r.field)).toEqual(['address_confirmed_at']);
+    });
+
+    it('TC0: «Markazgacha» → «Eshikkacha»: where_deliver yangilandi, eski qiymat tarixda', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      await makeService().confirmByOperator(lead.id, '41', {
+        ...formAddress,
+        whereDeliver: CheckoutDeliveryDestination.ADDRESS,
+      });
+      const saved = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: lead.id });
+      expect(saved.whereDeliver).toBe('ADDRESS');
+      const change = (await addressHistory(lead.id)).find(
+        (r) => r.field === 'where_deliver',
+      );
+      expect(change).toMatchObject({
+        actorId: '41',
+        oldValue: { value: 'CENTER' },
+        newValue: { value: 'ADDRESS' },
+        fromStatus: LeadStatus.NEW,
+        toStatus: LeadStatus.NEW,
+      });
+    });
+
+    it('TC5: ko‘cha/uy tuzatildi — eski va yangi qiymat, tasdiqlovchi shu operator, keyingi tasdiqda ham «tuzatdi»', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      const first = await makeService().confirmByOperator(lead.id, '41', {
+        ...formAddress,
+        addressLine: 'Turkiston ko‘chasi, 29-uy',
+      });
+      expect(first.editedByOperator).toBe(true);
+      const change = (await addressHistory(lead.id)).find(
+        (r) => r.field === 'address_line',
+      );
+      expect(change).toMatchObject({
+        oldValue: { value: 'Turkiston ko‘chasi, 27-uy' },
+        newValue: { value: 'Turkiston ko‘chasi, 29-uy' },
+      });
+      const again = await makeService().confirmByOperator(lead.id, '42', {
+        ...formAddress,
+        addressLine: 'Turkiston ko‘chasi, 29-uy',
+      });
+      expect(again.editedByOperator).toBe(true);
+      const saved = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: lead.id });
+      expect(saved.addressConfirmedBy).toBe('42');
+    });
+
+    it('TC2: tuman boshqa viloyatniki → 400, lid o‘zgarmaydi', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      await expect(
+        makeService({
+          ok: false,
+          field: 'districtSoato',
+          error: 'districtSoato tanlangan viloyatga tegishli emas',
+        }).confirmByOperator(lead.id, '41', {
+          ...formAddress,
+          districtSoato: '1703206',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      const saved = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: lead.id });
+      expect(saved.districtSoato).toBe('1726266');
+      expect(saved.addressConfirmedAt).toBeNull();
+      expect(await addressHistory(lead.id)).toEqual([]);
+    });
+
+    it('TC4: tasdiqdan oldin assertConfirmable 400, tasdiqdan keyin o‘tadi', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      const service = makeService();
+      expect(() => service.assertConfirmable(lead)).toThrow(
+        BadRequestException,
+      );
+      await service.confirmByOperator(lead.id, '41', formAddress);
+      const saved = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: lead.id });
+      expect(() => service.assertConfirmable(saved)).not.toThrow();
+    });
+
+    it('lid yo‘q → 404', async () => {
+      await expect(
+        makeService().confirmByOperator('999999', '41', formAddress),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 });
