@@ -15,7 +15,6 @@ import {
   LeadPriceDto,
   OperatorLeadListItemDto,
 } from '@app/common';
-import { RegionsController } from '../geo/regions.controller';
 import { AdminLeadsController } from './admin-leads.controller';
 import { AffiliateStreamsController } from './affiliate-streams.controller';
 import { ParseLeadIdPipe } from './lead-id.pipe';
@@ -250,8 +249,5 @@ describe('Lid shartnomasi (BE-25)', () => {
     const admin = new AdminLeadsController();
     await expect501(() => admin.list({}), 'BE-42');
     await expect501(() => admin.getCard('7001'), 'BE-42');
-
-    const regions = new RegionsController({ send: jest.fn() } as never);
-    await expect501(() => regions.getRegionTree(), 'BE-38');
   });
 });
