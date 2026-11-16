@@ -9651,6 +9651,81 @@
         ]
       }
     },
+    "/api/v1/partner/leads": {
+      "post": {
+        "description": "X-Api-Key — sotuvchi kabinetidagi kalit. Idempotency-Key — takror so‘rov o‘sha lidni qaytaradi. Kalit bo‘yicha daqiqasiga 60 so‘rov (SOT-6). Lid kalit egasiga bog‘lanadi va operator navbatiga tushadi; variant yo‘q (BE-43).",
+        "operationId": "PublicLeadsController_createPartnerLead",
+        "parameters": [
+          {
+            "name": "user-agent",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Takror yuborishda bir xil qiymat — ikkinchi lid yaratilmaydi",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "description": "Sotuvchining lid API kaliti",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerLeadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCreatedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Telefon yoki manzil noto‘g‘ri; javobda maydon nomlari"
+          },
+          "401": {
+            "description": "Kalit yo‘q, noto‘g‘ri yoki bekor qilingan"
+          },
+          "403": {
+            "description": "Sahifa bu kalit egasiniki emas"
+          },
+          "409": {
+            "description": "errorCode LANDING_NOT_OPEN — sahifa hozir ariza qabul qilmaydi"
+          },
+          "429": {
+            "description": "Kalit bo‘yicha daqiqasiga 60 tadan ortiq so‘rov"
+          }
+        },
+        "summary": "Sotuvchi o‘z saytidan lid yuboradi (API kalit bilan)",
+        "tags": [
+          "leads"
+        ]
+      }
+    },
     "/api/v1/affiliate/offers": {
       "get": {
         "operationId": "AffiliateStreamsController_listOffers",
@@ -10114,6 +10189,101 @@
           }
         ],
         "summary": "Yuborilganlar jurnali: postback hodisalari va javob kodlari (BE-14)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/api-keys": {
+      "get": {
+        "operationId": "AffiliateStreamsController_listApiKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AffiliateApiKeyDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lid API kalitlarim (BE-43, SOT-6)",
+        "tags": [
+          "affiliate"
+        ]
+      },
+      "post": {
+        "description": "To‘liq kalit faqat shu javobda ko‘rsatiladi; bazada faqat xeshi saqlanadi.",
+        "operationId": "AffiliateStreamsController_createApiKey",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateApiKeyCreatedDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yangi lid API kaliti",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/api-keys/{id}": {
+      "delete": {
+        "operationId": "AffiliateStreamsController_revokeApiKey",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateApiKeyDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kalit topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kalitni bekor qilish — darhol ishlamaydi",
         "tags": [
           "affiliate"
         ]
@@ -17146,6 +17316,63 @@
           "duplicate"
         ]
       },
+      "PartnerLeadDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "k7Qm2x",
+            "description": "Kalit egasining sotuvchi sahifasi kodi"
+          },
+          "name": {
+            "type": "string",
+            "example": "Aziza"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567"
+          },
+          "regionSoato": {
+            "type": "string",
+            "example": "1726"
+          },
+          "districtSoato": {
+            "type": "string",
+            "example": "1726266"
+          },
+          "addressLine": {
+            "type": "string",
+            "example": "Turkiston ko‘chasi, 27-uy"
+          },
+          "whereDeliver": {
+            "type": "string",
+            "enum": [
+              "ADDRESS",
+              "CENTER"
+            ]
+          },
+          "sub1": {
+            "type": "string"
+          },
+          "sub2": {
+            "type": "string"
+          },
+          "sub3": {
+            "type": "string"
+          },
+          "sub4": {
+            "type": "string"
+          },
+          "sub5": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "phone"
+        ]
+      },
       "AffiliateCreativeDto": {
         "type": "object",
         "properties": {
@@ -17838,6 +18065,96 @@
           "page",
           "limit",
           "totalPages"
+        ]
+      },
+      "AffiliateApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "prefix": {
+            "type": "string",
+            "example": "elk_7Qm2",
+            "description": "Kalit boshi — tanish uchun"
+          },
+          "rateLimitPerMinute": {
+            "type": "number",
+            "example": 60,
+            "description": "Daqiqasiga so‘rovlar (SOT-6)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T09:00:00.000Z"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "prefix",
+          "rateLimitPerMinute",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt"
+        ]
+      },
+      "AffiliateApiKeyCreatedDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "prefix": {
+            "type": "string",
+            "example": "elk_7Qm2",
+            "description": "Kalit boshi — tanish uchun"
+          },
+          "rateLimitPerMinute": {
+            "type": "number",
+            "example": 60,
+            "description": "Daqiqasiga so‘rovlar (SOT-6)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T09:00:00.000Z"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "example": "elk_7Qm2xK9pL3vN8rT1wY6zB4cD0fG5hJ2s",
+            "description": "To‘liq kalit — faqat shu javobda; bazada faqat xeshi saqlanadi"
+          }
+        },
+        "required": [
+          "id",
+          "prefix",
+          "rateLimitPerMinute",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt",
+          "key"
         ]
       },
       "LeadProductRefDto": {
