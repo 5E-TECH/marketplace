@@ -10,6 +10,7 @@ import {
   LeadAddressDto,
   LeadAddressResolution,
   LeadErrorCode,
+  LeadStatus,
   RmqClient,
   sendRpc,
   UpdateLeadAddressDto,
@@ -60,6 +61,8 @@ export class LeadAddressService {
     leadId: string,
     operatorId: string,
     address: UpdateLeadAddressDto,
+    /** BE-13: lid shu operatorda (bron yoki rejalashtirilgan) bo‘lishi kerak — qulf ostida tekshiriladi. */
+    opts: { requireOwner?: boolean } = {},
   ): Promise<LeadAddressDto> {
     // Geo tekshiruv tranzaksiyadan oldin: RPC paytida lid qatori qulflanmaydi.
     const resolved = await this.resolve(address);
@@ -71,6 +74,12 @@ export class LeadAddressService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!lead) throw new NotFoundException('Lid topilmadi');
+      if (
+        opts.requireOwner &&
+        (lead.operatorId !== operatorId ||
+          ![LeadStatus.BOOKED, LeadStatus.CALLBACK].includes(lead.status))
+      )
+        throw new NotFoundException('Lid topilmadi yoki bu operatorda emas');
 
       const now = new Date();
       const base = {

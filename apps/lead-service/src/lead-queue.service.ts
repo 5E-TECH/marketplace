@@ -6,7 +6,15 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, In, IsNull, LessThan, Not } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  LessThan,
+  MoreThanOrEqual,
+  Not,
+} from 'typeorm';
 import {
   AffiliatePostbackEvent,
   LEAD_EVENTS,
@@ -25,26 +33,34 @@ import {
 import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
 import { PostbackService } from './postback.service';
+import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
   bookingUntil,
   callbackGraceStart,
+  clampToCallWindow,
   isContactExhausted,
+  nextDayAt,
   QUEUE_RULES,
   reminderHorizon,
   retryAt,
 } from './lead-schedule';
 
-/** 1-qoida zinapoyasi shu natijalar soniga qarab yuradi; «o‘ylab ko‘radi» (vaqtsiz) ham shu zinapoyada [taklif]. */
-const RETRY_OUTCOMES = [
+/** 1-qoida zinapoyasi faqat aloqa bo‘lmagan natijalar soniga qarab yuradi (TZ 5-bo‘lim jadvali). */
+const MISSED_OUTCOMES = [
   LeadOutcome.NO_ANSWER,
   LeadOutcome.BUSY,
   LeadOutcome.PHONE_OFF,
-  LeadOutcome.THINKING,
 ];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Operator navbati (BE-13; TZ 5-bo‘lim 1–8-qoidalar, OPR-1, OPR-3). Hech bir lid yo‘qolmaydi:
- * bron va qayta qo‘ng‘iroq muddati o‘tsa `sweep` navbatga qaytaradi.
+ * Operator navbati (BE-13; TZ 5-bo‘lim 1–8-qoidalar va natijalar jadvali, OPR-1, OPR-3). Hech bir lid yo‘qolmaydi.
+ *
+ * «Qayta qo‘ng‘iroq» (CALLBACK) ikki xil:
+ * - egasi bor (`operator_id`) — mijoz aytgan vaqt («Keyinroq», «O‘ylab ko‘radi» vaqt bilan): operatorda qoladi, 15 daqiqadan
+ *   keyin boshqasiga ham beriladi (4-qoida), 5 ta chegaraga kirmaydi (6-qoida), eslatma keladi (8-qoida);
+ * - egasiz — avtomatik qayta urinish («javob bermadi», «band», «o‘chiq», vaqtsiz «o‘ylab ko‘radi»): navbatdagi har
+ *   operatorga, 5 ta chegaraga kiradi.
  */
 @Injectable()
 export class LeadQueueService {
@@ -73,9 +89,9 @@ export class LeadQueueService {
   }
 
   /**
-   * «Keyingi lid» (5–7-qoidalar): avval vaqti kelgan qayta qo‘ng‘iroqlar (o‘ziniki; boshqa operatorniki
-   * 15 daqiqadan keyin) va qayta urinishlar, keyin eng yangi lidlar. Bron 10 daqiqa. Ikki operator bitta
-   * lidni ololmaydi (SKIP LOCKED); bir operator parallel bosganda ham 5 tadan oshmaydi (advisory lock).
+   * «Keyingi lid» (5–7-qoidalar): avval vaqti kelgan qayta qo‘ng‘iroqlar, keyin eng yangi lidlar. Bron 10 daqiqa.
+   * Ikki operator bitta lidni ololmaydi (SKIP LOCKED); 5 ta chegara oshmaydi (operator advisory lock): chegara to‘lsa
+   * faqat mijoz aytgan (egasi bor) qayta qo‘ng‘iroq beriladi.
    */
   async takeNext(operatorId: string): Promise<string> {
     return this.db.transaction(async (manager) => {
@@ -96,20 +112,18 @@ export class LeadQueueService {
         `operator:${operatorId}`,
       ]);
       const now = new Date();
+      const atLimit =
+        (await this.activeNewBookings(manager, operatorId)) >=
+        QUEUE_RULES.maxNewBookings;
 
-      const due = await this.pick(manager, 'due', operatorId, now);
-      let lead = due;
-      if (!lead) {
-        if (
-          (await this.activeNewBookings(manager, operatorId)) >=
-          QUEUE_RULES.maxNewBookings
-        )
-          throw new ConflictException({
-            message: `Bir vaqtda ${QUEUE_RULES.maxNewBookings} tadan ortiq yangi lid bron qilinmaydi`,
-            errorCode: LeadErrorCode.BOOKING_LIMIT_REACHED,
-          });
-        lead = await this.pick(manager, 'fresh', operatorId, now);
-      }
+      let lead = await this.pick(manager, 'due', operatorId, now, atLimit);
+      if (!lead && atLimit)
+        throw new ConflictException({
+          message: `Bir vaqtda ${QUEUE_RULES.maxNewBookings} tadan ortiq yangi lid bron qilinmaydi`,
+          errorCode: LeadErrorCode.BOOKING_LIMIT_REACHED,
+        });
+      if (!lead)
+        lead = await this.pick(manager, 'fresh', operatorId, now, atLimit);
       if (!lead)
         throw new NotFoundException({
           message: 'Navbat bo‘sh',
@@ -117,7 +131,9 @@ export class LeadQueueService {
         });
 
       const from = lead.status;
-      lead.bookedFromCallback = from === LeadStatus.CALLBACK;
+      // 6-qoida: faqat mijoz aytgan (egasi bor) qayta qo‘ng‘iroq chegaraga kirmaydi.
+      lead.bookedFromCallback =
+        from === LeadStatus.CALLBACK && lead.operatorId !== null;
       lead.status = LeadStatus.BOOKED;
       lead.operatorId = operatorId;
       lead.bookedUntil = bookingUntil(now);
@@ -133,7 +149,7 @@ export class LeadQueueService {
     });
   }
 
-  /** Natija (OPR-3; 1, 2-qoidalar). Lid shu operatorda bron bo‘lishi kerak. */
+  /** Natija (OPR-3; TZ 5-bo‘lim natijalar jadvali, 1–3-qoidalar). Lid shu operatorda bron bo‘lishi kerak. */
   async submitResult(
     operatorId: string,
     leadId: string,
@@ -178,7 +194,7 @@ export class LeadQueueService {
           lead.nextAttemptAt = null;
           lead.stockShortageAt = null;
           note = 'Tasdiqlandi';
-          await this.enqueueConfirmed(manager, lead, now);
+          await this.enqueueConfirmed(manager, lead, operatorId, now);
           await this.postback?.enqueue(
             manager,
             lead,
@@ -202,40 +218,50 @@ export class LeadQueueService {
           note = 'Yaroqsiz';
           break;
         case LeadOutcome.DUPLICATE: {
-          const root = await leads.findOne({
-            where: { id: dto.duplicateOfLeadId!, isDeleted: false },
-          });
-          if (!root || root.id === lead.id)
-            throw new BadRequestException({
-              message: ['duplicateOfLeadId bunday lid topilmadi'],
-            });
+          const root = await this.duplicateRoot(
+            manager,
+            lead,
+            dto.duplicateOfLeadId!,
+          );
           lead.status = LeadStatus.MERGED;
-          lead.mergedIntoId = root.mergedIntoId ?? root.id;
+          lead.mergedIntoId = root.id;
           lead.nextAttemptAt = null;
-          note = `Dublikat: ${lead.mergedIntoId} lidiga qo‘shildi`;
+          note = `Dublikat: ${root.id} lidiga qo‘shildi`;
           break;
         }
         case LeadOutcome.CALL_LATER:
         case LeadOutcome.THINKING:
           if (dto.callbackAt) {
+            // Mijoz aytgan vaqt: operatorda qoladi (4-qoida), 09:00–21:00 oynasiga suriladi (3-qoida).
+            // Aloqa bo‘ldi — 3 kunlik muddat shu vaqtdan qayta boshlanadi [taklif].
+            const at = clampToCallWindow(new Date(dto.callbackAt));
             lead.status = LeadStatus.CALLBACK;
-            lead.nextAttemptAt = new Date(dto.callbackAt);
+            lead.nextAttemptAt = at;
             lead.callbackRemindedAt = null;
+            lead.expiresAt = laterOf(lead.expiresAt, contactDeadline(at));
             note = 'Rejalashtirilgan qo‘ng‘iroq (4-qoida: operatorda qoladi)';
             break;
           }
-          note = this.scheduleRetry(
-            lead,
-            now,
-            await this.retries(manager, leadId),
-          );
+          // «O‘ylab ko‘radi», vaqt tanlanmadi — ertasi kuni (TZ 5-bo‘lim jadvali)
+          lead.status = LeadStatus.CALLBACK;
+          lead.operatorId = null;
+          lead.nextAttemptAt = nextDayAt(now);
+          note = 'O‘ylab ko‘radi: ertasi kuni qayta qo‘ng‘iroq';
           break;
-        default:
-          note = this.scheduleRetry(
-            lead,
-            now,
-            await this.retries(manager, leadId),
-          );
+        default: {
+          if (isContactExhausted(lead.attempts, lead.expiresAt, now)) {
+            lead.status = LeadStatus.NO_CONTACT;
+            lead.nextAttemptAt = null;
+            lead.operatorId = null;
+            note = 'Aloqa bo‘lmadi (2-qoida: 6 urinish yoki 3 kun)';
+            break;
+          }
+          const missed = await this.missedInWindow(manager, lead);
+          lead.status = LeadStatus.CALLBACK;
+          lead.operatorId = null;
+          lead.nextAttemptAt = retryAt(missed, now);
+          note = 'Qayta qo‘ng‘iroq rejalandi (1, 3-qoidalar)';
+        }
       }
       await leads.save(lead);
       await this.history(manager, lead, from, operatorId, note);
@@ -257,15 +283,14 @@ export class LeadQueueService {
       mergedIntoId: IsNull(),
     };
     const [newLeads, dueCallbacks, booked, states] = await Promise.all([
-      leads.count({ where: { ...base, status: LeadStatus.NEW, attempts: 0 } }),
-      leads
-        .createQueryBuilder('l')
-        .where('l.is_deleted = false AND l.review_reason IS NULL')
-        .andWhere(
-          `((l.status = 'CALLBACK') OR (l.status = 'NEW' AND l.attempts > 0)) AND l.next_attempt_at <= :now`,
-          { now },
-        )
-        .getCount(),
+      leads.count({ where: { ...base, status: LeadStatus.NEW } }),
+      leads.count({
+        where: {
+          ...base,
+          status: LeadStatus.CALLBACK,
+          nextAttemptAt: LessThan(now),
+        },
+      }),
       leads.count({ where: { ...base, status: LeadStatus.BOOKED } }),
       this.db
         .getRepository(OperatorState)
@@ -286,27 +311,36 @@ export class LeadQueueService {
   }
 
   /**
-   * Har daqiqada: muddati o‘tgan bron navbatga (5-qoida), eslatma (8-qoida), 3 kun o‘tgan urinilgan lid
-   * «Aloqa bo‘lmadi» (2-qoida). Hali umuman qo‘ng‘iroq qilinmagan lid avtomatik yopilmaydi [taklif].
+   * Har daqiqada: muddati o‘tgan bron navbatga (5-qoida), eslatma (8-qoida), 3 kun o‘tgan avtomatik qayta urinish
+   * «Aloqa bo‘lmadi» (2-qoida). Mijoz aytgan qayta qo‘ng‘iroq va hali qo‘ng‘iroq qilinmagan lid avtomatik yopilmaydi [taklif].
+   * Har qadam o‘z qatorlarini qulflaydi (SKIP LOCKED) — bir nechta nusxa bir qatorni ikki marta ishlamaydi.
    */
   async sweep(
     now = new Date(),
   ): Promise<{ released: number; reminded: number; closed: number }> {
     return this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
-      const expired = await leads
-        .createQueryBuilder('l')
-        .where('l.status = :booked AND l.booked_until < :now', {
-          booked: LeadStatus.BOOKED,
-          now,
-        })
-        .setLock('pessimistic_write')
-        .setOnLocked('skip_locked')
-        .getMany();
+      const locked = {
+        mode: 'pessimistic_write' as const,
+        onLocked: 'skip_locked' as const,
+      };
+
+      const expired = await leads.find({
+        where: {
+          status: LeadStatus.BOOKED,
+          bookedUntil: LessThan(now),
+          isDeleted: false,
+        },
+        lock: locked,
+      });
       for (const lead of expired) {
-        const toCallback = lead.bookedFromCallback;
-        lead.status = toCallback ? LeadStatus.CALLBACK : LeadStatus.NEW;
-        if (!toCallback) lead.operatorId = null;
+        if (lead.bookedFromCallback) {
+          lead.status = LeadStatus.CALLBACK; // egasi qoladi (4-qoida)
+        } else {
+          lead.status =
+            lead.attempts > 0 ? LeadStatus.CALLBACK : LeadStatus.NEW;
+          lead.operatorId = null;
+        }
         lead.bookedUntil = null;
         lead.bookedFromCallback = false;
         await leads.save(lead);
@@ -322,10 +356,12 @@ export class LeadQueueService {
       const remind = await leads.find({
         where: {
           status: LeadStatus.CALLBACK,
+          operatorId: Not(IsNull()),
           callbackRemindedAt: IsNull(),
           nextAttemptAt: LessThan(reminderHorizon(now)),
           isDeleted: false,
         },
+        lock: locked,
       });
       const outbox = manager.getRepository(OutboxEvent);
       for (const lead of remind) {
@@ -348,18 +384,19 @@ export class LeadQueueService {
 
       const exhausted = await leads.find({
         where: {
-          status: In([LeadStatus.NEW, LeadStatus.CALLBACK]),
+          status: LeadStatus.CALLBACK,
+          operatorId: IsNull(),
           attempts: Not(0),
           expiresAt: LessThan(now),
           mergedIntoId: IsNull(),
           isDeleted: false,
         },
+        lock: locked,
       });
       for (const lead of exhausted) {
         const from = lead.status;
         lead.status = LeadStatus.NO_CONTACT;
         lead.nextAttemptAt = null;
-        lead.operatorId = null;
         await leads.save(lead);
         await this.history(
           manager,
@@ -377,7 +414,10 @@ export class LeadQueueService {
     });
   }
 
-  /** `order.create-failed` (BE-18 → BE-13): tovar band qilinmadi — lid «qoldiq yo‘q» belgisi bilan navbatga (TC8). */
+  /**
+   * `order.create-failed` (BE-18 → BE-13): tovar band qilinmadi — lid «qoldiq yo‘q» belgisi bilan navbatning boshiga
+   * (vaqti kelgan qayta qo‘ng‘iroq), yangi 3 kunlik aloqa oynasi bilan (TC8; YOL-04 «lid yo‘qolmaydi»).
+   */
   async onOrderCreateFailed(event: OrderCreateFailedEvent): Promise<void> {
     await this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
@@ -387,10 +427,12 @@ export class LeadQueueService {
       });
       if (!lead || lead.status !== LeadStatus.CONFIRMED) return; // takroriy yoki eskirgan hodisa
       const now = new Date();
-      lead.status = LeadStatus.NEW;
+      lead.status = LeadStatus.CALLBACK;
       lead.stockShortageAt = now;
       lead.operatorId = null;
-      lead.nextAttemptAt = now;
+      lead.attempts = 0;
+      lead.nextAttemptAt = clampToCallWindow(now);
+      lead.expiresAt = contactDeadline(now);
       await leads.save(lead);
       await this.history(
         manager,
@@ -407,6 +449,7 @@ export class LeadQueueService {
     kind: 'due' | 'fresh',
     operatorId: string,
     now: Date,
+    atLimit: boolean,
   ): Promise<Lead | null> {
     const qb = manager
       .getRepository(Lead)
@@ -414,18 +457,18 @@ export class LeadQueueService {
       .where('l.is_deleted = false')
       .andWhere('l.review_reason IS NULL')
       .andWhere('l.merged_into_id IS NULL');
-    if (kind === 'due')
+    if (kind === 'due') {
       qb.andWhere(
-        `(
-          (l.status = 'CALLBACK' AND l.next_attempt_at <= :now
-            AND (l.operator_id = :op OR l.operator_id IS NULL OR l.next_attempt_at <= :grace))
-          OR (l.status = 'NEW' AND l.attempts > 0 AND l.next_attempt_at <= :now)
-        )`,
+        `l.status = 'CALLBACK' AND l.next_attempt_at <= :now
+          AND (l.operator_id = :op OR l.operator_id IS NULL OR l.next_attempt_at <= :grace)`,
         { now, op: operatorId, grace: callbackGraceStart(now) },
-      ).orderBy('l.next_attempt_at', 'ASC');
-    else
+      );
+      // Chegara to‘lgan: faqat mijoz aytgan (egasi bor) qayta qo‘ng‘iroq (6-qoida).
+      if (atLimit) qb.andWhere('l.operator_id IS NOT NULL');
+      qb.orderBy('l.next_attempt_at', 'ASC');
+    } else
       qb.andWhere(
-        `l.status = 'NEW' AND l.attempts = 0 AND (l.next_attempt_at IS NULL OR l.next_attempt_at <= :now)`,
+        `l.status = 'NEW' AND (l.next_attempt_at IS NULL OR l.next_attempt_at <= :now)`,
         { now },
       ).orderBy('l.created_at', 'DESC');
     return qb
@@ -450,23 +493,47 @@ export class LeadQueueService {
     });
   }
 
-  private retries(manager: EntityManager, leadId: string): Promise<number> {
-    return manager
-      .getRepository(LeadAttempt)
-      .count({ where: { leadId, outcome: In(RETRY_OUTCOMES) } });
+  /** Joriy aloqa oynasidagi aloqasiz natijalar (oyna — `expires_at` dan 3 kun oldin; qayta ochilganda yangilanadi). */
+  private missedInWindow(manager: EntityManager, lead: Lead): Promise<number> {
+    const where: Record<string, unknown> = {
+      leadId: lead.id,
+      outcome: In(MISSED_OUTCOMES),
+    };
+    if (lead.expiresAt)
+      where.createdAt = MoreThanOrEqual(
+        new Date(
+          lead.expiresAt.getTime() - LEAD_RULES.contactWindowDays * DAY_MS,
+        ),
+      );
+    return manager.getRepository(LeadAttempt).count({ where });
   }
 
-  private scheduleRetry(lead: Lead, now: Date, retries: number): string {
-    if (isContactExhausted(lead.attempts, lead.expiresAt, now)) {
-      lead.status = LeadStatus.NO_CONTACT;
-      lead.nextAttemptAt = null;
-      lead.operatorId = null;
-      return 'Aloqa bo‘lmadi (2-qoida: 6 urinish yoki 3 kun)';
-    }
-    lead.status = LeadStatus.NEW;
-    lead.operatorId = null;
-    lead.nextAttemptAt = retryAt(retries, now);
-    return 'Qayta qo‘ng‘iroq rejalandi (1, 3-qoidalar)';
+  /** Dublikat: avvalgi lid shu raqam va mahsulotda bo‘lishi kerak; zanjir oxiridagi asosiy lidga qo‘shiladi. */
+  private async duplicateRoot(
+    manager: EntityManager,
+    lead: Lead,
+    duplicateOfLeadId: string,
+  ): Promise<Lead> {
+    const leads = manager.getRepository(Lead);
+    let root = await leads.findOne({
+      where: { id: duplicateOfLeadId, isDeleted: false },
+    });
+    if (root?.mergedIntoId)
+      root = await leads.findOne({
+        where: { id: root.mergedIntoId, isDeleted: false },
+      });
+    if (
+      !root ||
+      root.id === lead.id ||
+      root.phoneE164 !== lead.phoneE164 ||
+      root.productId !== lead.productId
+    )
+      throw new BadRequestException({
+        message: [
+          'duplicateOfLeadId shu raqam va mahsulotdagi boshqa lid bo‘lishi kerak',
+        ],
+      });
+    return root;
   }
 
   private validate(dto: SubmitLeadResultDto, now: Date): void {
@@ -491,6 +558,7 @@ export class LeadQueueService {
   private async enqueueConfirmed(
     manager: EntityManager,
     lead: Lead,
+    operatorId: string,
     now: Date,
   ): Promise<void> {
     const payload: LeadConfirmedEvent = {
@@ -508,7 +576,8 @@ export class LeadQueueService {
       districtSoato: lead.districtSoato!,
       addressLine: lead.addressLine!,
       whereDeliver: lead.whereDeliver!,
-      confirmedBy: lead.addressConfirmedBy ?? lead.operatorId!,
+      confirmedBy: operatorId,
+      addressConfirmedBy: lead.addressConfirmedBy,
       confirmedAt: now.toISOString(),
     };
     const outbox = manager.getRepository(OutboxEvent);
@@ -541,3 +610,6 @@ export class LeadQueueService {
     );
   }
 }
+
+const laterOf = (a: Date | null, b: Date) =>
+  a && a.getTime() > b.getTime() ? a : b;
