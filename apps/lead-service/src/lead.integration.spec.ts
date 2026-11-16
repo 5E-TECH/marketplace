@@ -802,11 +802,11 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).toBe(1);
     });
 
-    it('30 kundan keyin xuddi shu raqam — yangi lid', async () => {
+    it('30 kundan keyin xuddi shu raqam (avvalgisi yopilgan) — yangi lid', async () => {
       await streamFor('77', 'aaaaaa');
       const first = await submit('aaaaaa');
       await db.query(
-        `UPDATE lead.lead SET created_at = now() - interval '31 days' WHERE id = $1`,
+        `UPDATE lead.lead SET created_at = now() - interval '31 days', status = 'CONFIRMED' WHERE id = $1`,
         [first.leadId],
       );
       await expect(submit('aaaaaa')).resolves.toMatchObject({
@@ -842,11 +842,16 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         fromStatus: LeadStatus.BOOKED,
         toStatus: LeadStatus.REJECTED,
       });
+      await db.query(
+        `UPDATE lead.lead_history SET created_at = now() - interval '2 days' WHERE lead_id = $1 AND to_status = 'REJECTED'`,
+        [first.leadId],
+      );
+      // 2-kuni yana ariza: qo‘shiladi, 3 kunlik oyna esa siljimasligi kerak
       await expect(submit('bbbbbb')).resolves.toMatchObject({
         duplicate: true,
       });
       await db.query(
-        `UPDATE lead.lead_history SET created_at = now() - interval '4 days' WHERE lead_id = $1 AND to_status = 'REJECTED'`,
+        `UPDATE lead.lead_history SET created_at = created_at - interval '2 days' WHERE lead_id = $1 AND to_status = 'REJECTED' AND from_status <> 'REJECTED' AND field IS NULL`,
         [first.leadId],
       );
       const fresh = await submit('bbbbbb');
@@ -864,6 +869,56 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       const rows = await Promise.all(ids.map(lead));
       expect(rows.slice(0, 5).every((r) => r.reviewReason === null)).toBe(true);
       expect(rows[5].reviewReason).toBe(LeadReviewReason.IP_RATE);
+    });
+
+    it('bir IP dan parallel 8 ta ariza → aniq 3 tasi tekshiruvga', async () => {
+      await streamFor('77', 'aaaaaa');
+      const results = await Promise.all(
+        Array.from({ length: 8 }, (_, i) =>
+          submit('aaaaaa', { phone: `+99890310000${i}` }),
+        ),
+      );
+      const rows = await Promise.all(results.map((r) => lead(r.leadId)));
+      expect(
+        rows.filter((r) => r.reviewReason === LeadReviewReason.IP_RATE),
+      ).toHaveLength(3);
+    });
+
+    it('tekshiruvga tushgan ariza «Aloqa bo‘lmadi» lidni navbatga ochiq qaytarmaydi', async () => {
+      await streamFor('77', 'aaaaaa');
+      const root = await submit(
+        'aaaaaa',
+        { phone: '+998903200000' },
+        '198.51.100.1',
+      );
+      await db.query(
+        `UPDATE lead.lead SET status = 'NO_CONTACT' WHERE id = $1`,
+        [root.leadId],
+      );
+      for (let i = 0; i < 5; i++)
+        await submit('aaaaaa', { phone: `+99890330000${i}` }, '198.51.100.2');
+      await submit('aaaaaa', { phone: '+998903200000' }, '198.51.100.2');
+      expect(await lead(root.leadId)).toMatchObject({
+        status: LeadStatus.NEW,
+        reviewReason: LeadReviewReason.IP_RATE,
+      });
+    });
+
+    it('LID-4: faol lid 30 kundan eski bo‘lsa ham ikkinchi faol lid ochilmaydi', async () => {
+      await streamFor('77', 'aaaaaa');
+      const first = await submit('aaaaaa');
+      await db.query(
+        `UPDATE lead.lead SET created_at = now() - interval '31 days' WHERE id = $1`,
+        [first.leadId],
+      );
+      await expect(submit('aaaaaa')).resolves.toMatchObject({
+        duplicate: true,
+      });
+      expect(
+        await db
+          .getRepository(Lead)
+          .count({ where: { status: LeadStatus.NEW } }),
+      ).toBe(1);
     });
 
     it('TC4: yashirin maydon to‘ldirilgan → lid yozilmaydi, javob baribir', async () => {

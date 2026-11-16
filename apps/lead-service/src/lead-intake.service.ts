@@ -9,8 +9,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   EntityManager,
+  In,
   IsNull,
   MoreThanOrEqual,
+  Not,
   Repository,
 } from 'typeorm';
 import {
@@ -38,6 +40,10 @@ import {
   LEAD_RULES,
   phoneOperatorAllowed,
 } from './lead-rules';
+
+/** Advisory lock kalit makonlari (ikki argumentli shakl: IP va raqam kalitlari to‘qnashmaydi). */
+const LOCK_SPACE_IP = 2101;
+const LOCK_SPACE_LEAD = 2102;
 
 /** Yashirin maydon to‘ldirilganda qaytadi: lid yozilmagan, sahifa piksel yubormaydi. */
 export const HONEYPOT_LEAD_ID = '0';
@@ -104,9 +110,17 @@ export class LeadIntakeService {
     const leads = manager.getRepository(Lead);
     const history = manager.getRepository(LeadHistory);
 
-    // Bir raqam + mahsulot bo‘yicha ketma-ket: ikki marta bosilgan forma ikkita yangi lid ochmaydi.
-    await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-      `lead:${dto.phone}:${stream.productId}`,
+    // Qulflar tartibi doim bir xil (IP, keyin raqam + mahsulot) — o‘zaro kutish yo‘q.
+    // IP: bir IP dan parallel arizalar ham hisobga tushadi (bot himoyasi).
+    if (ctx.ip)
+      await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        LOCK_SPACE_IP,
+        ctx.ip,
+      ]);
+    // Raqam + mahsulot: ikki marta bosilgan forma ikkita yangi lid ochmaydi.
+    await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+      LOCK_SPACE_LEAD,
+      `${dto.phone}:${stream.productId}`,
     ]);
 
     const click = dto.clickId
@@ -115,16 +129,12 @@ export class LeadIntakeService {
           .findOne({ where: { id: dto.clickId, streamId: stream.id } })
       : null;
 
-    const previous = await leads.findOne({
-      where: {
-        phoneE164: dto.phone,
-        productId: stream.productId,
-        mergedIntoId: IsNull(),
-        isDeleted: false,
-        createdAt: MoreThanOrEqual(duplicateWindowStart(now)),
-      },
-      order: { createdAt: 'DESC', id: 'DESC' },
-    });
+    const previous = await this.previousLead(
+      manager,
+      dto.phone,
+      stream.productId,
+      now,
+    );
     const decision = duplicateDecision(
       previous && {
         id: previous.id,
@@ -220,6 +230,8 @@ export class LeadIntakeService {
       if (decision.kind === 'REOPEN_AND_MERGE') {
         const from = root.status;
         root.status = LeadStatus.NEW;
+        // Tekshiruvga tushgan ariza qayta ochilgan lidni ham navbatdan ushlab turadi.
+        if (heldForReview) root.reviewReason = LeadReviewReason.IP_RATE;
         root.attempts = 0;
         root.nextAttemptAt = now;
         root.expiresAt = contactDeadline(now);
@@ -271,9 +283,47 @@ export class LeadIntakeService {
     );
   }
 
+  /**
+   * 9-qoida oynasi oxirgi arizadan o‘lchanadi (dublikat qatorlar ham hisob): shu raqam va mahsulotdagi
+   * 30 kun ichidagi eng so‘nggi ariza → uning asosiy lidi. Faol asosiy lid (yangi, bron, qayta qo‘ng‘iroq)
+   * yoshidan qat’i nazar topiladi — bitta raqam+mahsulotga ikkita faol lid ochilmaydi (LID-4).
+   */
+  private async previousLead(
+    manager: EntityManager,
+    phone: string,
+    productId: string,
+    now: Date,
+  ): Promise<Lead | null> {
+    const leads = manager.getRepository(Lead);
+    const base = { phoneE164: phone, productId, isDeleted: false };
+    const active = await leads.findOne({
+      where: {
+        ...base,
+        mergedIntoId: IsNull(),
+        status: In([LeadStatus.NEW, LeadStatus.BOOKED, LeadStatus.CALLBACK]),
+      },
+      order: { createdAt: 'DESC', id: 'DESC' },
+    });
+    if (active) return active;
+    const latest = await leads.findOne({
+      where: { ...base, createdAt: MoreThanOrEqual(duplicateWindowStart(now)) },
+      order: { createdAt: 'DESC', id: 'DESC' },
+    });
+    if (!latest) return null;
+    return latest.mergedIntoId
+      ? leads.findOne({ where: { id: latest.mergedIntoId } })
+      : latest;
+  }
+
+  /** Rad etilgan vaqt: faqat haqiqiy o‘tish (izoh va belgi qatorlari emas) — 10-qoidaning 3 kuni siljimaydi. */
   private async rejectedAt(manager: EntityManager, lead: Lead): Promise<Date> {
     const row = await manager.getRepository(LeadHistory).findOne({
-      where: { leadId: lead.id, toStatus: LeadStatus.REJECTED },
+      where: {
+        leadId: lead.id,
+        toStatus: LeadStatus.REJECTED,
+        fromStatus: Not(LeadStatus.REJECTED),
+        field: IsNull(),
+      },
       order: { createdAt: 'DESC', id: 'DESC' },
     });
     return row?.createdAt ?? lead.updatedAt;
