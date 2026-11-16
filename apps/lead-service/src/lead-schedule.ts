@@ -103,6 +103,11 @@ export function retryAt(missed: number, now: Date): Date {
   return clampToCallWindow(raw);
 }
 
+/** TZ 5-bo‘lim natijalar jadvali: «O‘ylab ko‘radi» — vaqt tanlanmasa ertasi kuni (soati 1-qoidadagi 10:00 [taklif]). */
+export function nextDayAt(now: Date): Date {
+  return clampToCallWindow(localDayAt(now, 1, QUEUE_RULES.nextDayHour));
+}
+
 /** 2-qoida: 6 urinish yoki muddat (yaratilgandan 3 kun, `expires_at`) tugagan. */
 export function isContactExhausted(
   attempts: number,

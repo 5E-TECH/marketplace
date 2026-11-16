@@ -70,6 +70,7 @@ export class LeadQueueController {
       input.leadId,
       input.operatorId,
       input.address,
+      { requireOwner: true },
     );
     return this.cards.forOperator(input.operatorId, input.leadId);
   }
