@@ -237,7 +237,10 @@ export class UpdateAffiliateStreamBodyDto {
   tiktokPixelId: string;
 
   @ApiPropertyOptional({
-    description: 'Postback URL (yuborish ishga tushgandan keyin, BE-14)',
+    description:
+      'Postback URL (BE-14). Makrolar: {status} (lead, confirmed, rejected, delivered), {lead_id}, {click_id}, ' +
+      '{product_id}, {sub1}…{sub5} [taklif]. Ichki tarmoq manzili rad etiladi (SSRF). Siri berilsa so‘rov ' +
+      'X-Elchi-Timestamp va X-Elchi-Signature (sha256 HMAC) bilan imzolanadi',
   })
   @IsUrl({ require_protocol: true })
   @MaxLength(2048)
@@ -523,4 +526,68 @@ export class UpdateOfferContentDto {
   @IsString({ each: true })
   @MaxLength(200, { each: true })
   boxContents: string[];
+}
+
+/** Postback hodisasi (SOT-5: lid, tasdiq, yetkazildi, rad). Nomlar [taklif]. */
+export enum AffiliatePostbackEvent {
+  LEAD = 'lead',
+  CONFIRMED = 'confirmed',
+  REJECTED = 'rejected',
+  DELIVERED = 'delivered',
+}
+
+export enum AffiliatePostbackStatus {
+  PENDING = 'PENDING',
+  SENT = 'SENT',
+  FAILED = 'FAILED',
+}
+
+export class AffiliatePostbacksQueryDto extends AffiliatePageQueryDto {
+  @ApiPropertyOptional({ example: '3301' })
+  @IsOptional()
+  @IsLeadBigintId('streamId')
+  streamId?: string;
+}
+
+/** Yuborilganlar jurnali (BE-14: «Yuborilganlar jurnali sotuvchiga ko‘rinadi»). */
+export class AffiliatePostbackDto {
+  @ApiProperty({ example: '501' }) id: string;
+  @ApiProperty({ example: '7001' }) leadId: string;
+  @ApiProperty({ example: 'k7Qm2x' }) streamCode: string;
+  @ApiProperty({
+    enum: AffiliatePostbackEvent,
+    example: AffiliatePostbackEvent.CONFIRMED,
+  })
+  event: AffiliatePostbackEvent;
+
+  @ApiProperty({
+    enum: AffiliatePostbackStatus,
+    example: AffiliatePostbackStatus.SENT,
+  })
+  status: AffiliatePostbackStatus;
+
+  @ApiProperty({ example: 1 }) attempts: number;
+
+  @ApiProperty({ example: 200, nullable: true, type: Number })
+  responseCode: number | null;
+
+  @ApiProperty({
+    example: '2027-01-14T09:40:00.000Z',
+    nullable: true,
+    type: String,
+  })
+  deliveredAt: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  nextAttemptAt: string | null;
+
+  @ApiProperty({ example: '2027-01-14T09:39:58.000Z' }) createdAt: Date;
+}
+
+export class AffiliatePostbacksPageDto {
+  @ApiProperty({ type: [AffiliatePostbackDto] }) items: AffiliatePostbackDto[];
+  @ApiProperty({ example: 12 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 1 }) totalPages: number;
 }
