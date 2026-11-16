@@ -89,6 +89,15 @@ export function IsLeadBigintId(field: string): PropertyDecorator {
 export const trimLeadText = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+/** Sotuvchi sahifasidagi kreativ (rasm yoki video). */
+export class LandingPageCreativeDto {
+  @ApiProperty({ example: '9001' }) id: string;
+  @ApiProperty({ enum: ['IMAGE', 'VIDEO'], example: 'VIDEO' }) type:
+    'IMAGE' | 'VIDEO';
+  @ApiProperty({ example: 'https://cdn.example.uz/creatives/9001.mp4' })
+  url: string;
+}
+
 /** Xususiyat qatori: «Aloqa — Bluetooth» (holat-matnlari.md standart-1 «Xususiyatlar»). */
 export class LandingPageSpecDto {
   @ApiProperty({ example: 'Og‘irlik' }) name: string;
@@ -112,8 +121,20 @@ export class LandingPageProductDto {
   })
   images: string[];
 
-  @ApiProperty({ example: null, nullable: true, type: String })
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'Mahsulot videosi; bo‘lmasa admin kreativlaridagi birinchi video (Video shabloni)',
+  })
   videoUrl: string | null;
+
+  @ApiProperty({
+    type: [LandingPageCreativeDto],
+    description: 'Admin yuklagan kreativlar: rasm va video (BE-08, SOT-9)',
+  })
+  creatives: LandingPageCreativeDto[];
 
   @ApiProperty({
     example: 'Telefonga Bluetooth orqali ulanadi. Ixcham g‘ilofda saqlanadi.',
@@ -435,7 +456,11 @@ export type LeadAddressResolution =
 export const LEAD_CATALOG_RPC = {
   /** { productId } → CatalogOfferSnapshot | null */
   OFFER_GET: 'catalog.offer.get',
-  /** CatalogOfferListQuery → CatalogOfferSnapshot[] (sotuvchilarga ochiq offerlar) */
+  /**
+   * CatalogOfferListQuery → CatalogOfferSnapshot[]. `productIds` berilsa — har mavjud mahsulot holatidan qat’i nazar
+   * (cpaAvailable/withdrawn/approvedPrice o‘z holicha; «Mening sahifalarim» nomlari uchun). `search`/`categoryId` bilan
+   * katalog faqat sotuvchilarga ochiqlarini qaytarishi mumkin; lead-service baribir qayta saralaydi.
+   */
   OFFER_LIST: 'catalog.offer.list',
 } as const;
 

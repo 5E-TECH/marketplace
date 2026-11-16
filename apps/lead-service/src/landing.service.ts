@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  AffiliateCreativeType,
   AffiliateStreamStatus,
   CatalogOfferSnapshot,
   CreateLandingClickDto,
@@ -11,6 +12,7 @@ import {
   LandingPageState,
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
+import { effectiveSalePrice } from './offer-math';
 import { Click, OfferContent, Stream } from './entities';
 
 /**
@@ -46,7 +48,18 @@ export class LandingService {
         name: offer.name,
         subtitle: offer.subtitle,
         images: offer.images,
-        videoUrl: offer.videoUrl,
+        videoUrl:
+          offer.videoUrl ??
+          offer.creatives.find((c) => c.type === 'VIDEO')?.url ??
+          null,
+        creatives: offer.creatives.map((c) => ({
+          id: c.id,
+          type:
+            c.type === 'VIDEO'
+              ? AffiliateCreativeType.VIDEO
+              : AffiliateCreativeType.IMAGE,
+          url: c.url,
+        })),
         description: offer.description,
         highlights: content?.highlights ?? [],
         boxContents: content?.boxContents ?? [],
@@ -54,7 +67,7 @@ export class LandingService {
         isBad: offer.isBad,
       },
       price: {
-        salePrice: Number(stream.salePrice),
+        salePrice: effectiveSalePrice(Number(stream.salePrice), offer),
         centerDeliveryFee: offer.centerDeliveryFee,
         addressDeliveryFee: offer.addressDeliveryFee,
       },

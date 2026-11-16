@@ -10,6 +10,8 @@ import {
   CurrentUser,
   OfferContentDto,
   RmqClient,
+  Role,
+  Roles,
   sendRpc,
   UpdateOfferContentDto,
 } from '@app/common';
@@ -18,10 +20,10 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 /**
  * Offer matnlari: suhbat skripti, afzalliklar, qutida (BE-11, FE-12; ega qarori 2026-11-17).
  * Narx, haq va kreativlar — katalog va fayl servisida (BE-07, BE-09, BE-08).
- * Rol cheklovi `@Roles(Role.ADMIN, Role.SUPERADMIN)` BE-05 dan keyin.
  */
 @ApiTags('admin-leads')
 @ApiBearerAuth()
+@Roles(Role.ADMIN, Role.SUPERADMIN)
 @Controller('admin/offer-content')
 export class AdminOfferContentController {
   constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}
