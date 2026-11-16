@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,7 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  AffiliatePostbackEvent,
   CreateLeadDto,
   LandingPageState,
   LeadCreatedDto,
@@ -28,6 +30,7 @@ import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, LeadHistory, Stream } from './entities';
 import { landingState } from './landing.service';
 import { effectiveSalePrice } from './offer-math';
+import { PostbackService } from './postback.service';
 import {
   LeadAddressService,
   ResolvedLeadAddress,
@@ -61,6 +64,7 @@ export class LeadIntakeService {
     private readonly catalog: CatalogOfferClient,
     private readonly address: LeadAddressService,
     private readonly config: ConfigService,
+    @Optional() private readonly postback?: PostbackService,
   ) {}
 
   async create(input: {
@@ -214,6 +218,13 @@ export class LeadIntakeService {
         }),
       );
       target = resultLead;
+      // SOT-5: «lid» hodisasi; tekshiruvga tushgan ariza ko‘rib chiqilmaguncha yuborilmaydi [taklif]
+      if (!heldForReview)
+        await this.postback?.enqueue(
+          manager,
+          resultLead,
+          AffiliatePostbackEvent.LEAD,
+        );
     } else {
       const root = await leads.findOneOrFail({
         where: { id: decision.rootId },

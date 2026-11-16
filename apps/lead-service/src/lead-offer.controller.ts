@@ -10,6 +10,7 @@ import {
 } from '@app/common';
 import { LandingService } from './landing.service';
 import { OfferService } from './offer.service';
+import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
 
 /** BE-11 RPC lari: offerlar, sotuvchi sahifalari, ochiq sahifa va kliklar, offer matnlari. */
@@ -20,6 +21,7 @@ export class LeadOfferController {
     private readonly offers: OfferService,
     private readonly streams: StreamService,
     private readonly landing: LandingService,
+    private readonly postbacks: PostbackService,
   ) {}
 
   @MessagePattern({ cmd: 'lead.offer.list' })
@@ -60,6 +62,17 @@ export class LeadOfferController {
       input.affiliateId,
       input.status,
     );
+  }
+
+  @MessagePattern({ cmd: 'lead.postback.journal' })
+  postbackJournal(
+    @Payload()
+    input: {
+      affiliateId: string;
+      query: { page?: number; limit?: number; streamId?: string };
+    },
+  ) {
+    return this.postbacks.journal(input.affiliateId, input.query ?? {});
   }
 
   @MessagePattern({ cmd: 'lead.landing.get' })
