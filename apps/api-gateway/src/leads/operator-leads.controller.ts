@@ -4,12 +4,14 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
   Put,
   Query,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -20,6 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  CurrentUser,
   LeadCardDto,
   LeadPriceDto,
   LeadPriceQuoteDto,
@@ -29,6 +32,8 @@ import {
   OperatorQueueSummaryDto,
   OperatorStateDto,
   OperatorStatsDto,
+  RmqClient,
+  sendRpc,
   SubmitLeadResultDto,
   UpdateLeadAddressDto,
   UpdateOperatorStateDto,
@@ -45,6 +50,8 @@ import { notImplementedYet } from './lead-stub';
 @ApiBearerAuth()
 @Controller('operator')
 export class OperatorLeadsController {
+  constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}
+
   @Post('leads/next')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -58,10 +65,10 @@ export class OperatorLeadsController {
   })
   @ApiConflictResponse({
     description:
-      'errorCode OPERATOR_ON_BREAK — operator tanaffusda; BOOKING_LIMIT_REACHED — 5 ta bron to‘lgan',
+      'errorCode OPERATOR_ON_BREAK — operator tanaffusda; OPERATOR_OFFLINE — «ishda» holati tanlanmagan; BOOKING_LIMIT_REACHED — 5 ta bron to‘lgan',
   })
-  takeNext(): Promise<LeadCardDto> {
-    return notImplementedYet('BE-13');
+  takeNext(@CurrentUser('sub') operatorId: string): Promise<LeadCardDto> {
+    return sendRpc(this.lead, { cmd: 'lead.queue.next' }, { operatorId });
   }
 
   @Get('leads')
@@ -69,8 +76,10 @@ export class OperatorLeadsController {
     summary: 'Mening bronlarim va rejalashtirilgan qo‘ng‘iroqlar',
   })
   @ApiOkResponse({ type: [OperatorLeadListItemDto] })
-  listMine(): Promise<OperatorLeadListItemDto[]> {
-    return notImplementedYet('BE-13');
+  listMine(
+    @CurrentUser('sub') operatorId: string,
+  ): Promise<OperatorLeadListItemDto[]> {
+    return sendRpc(this.lead, { cmd: 'lead.queue.mine' }, { operatorId });
   }
 
   @Get('leads/:id')
@@ -81,8 +90,11 @@ export class OperatorLeadsController {
   })
   @ApiOkResponse({ type: LeadCardDto })
   @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
-  getCard(@Param('id', ParseLeadIdPipe) _id: string): Promise<LeadCardDto> {
-    return notImplementedYet('BE-13');
+  getCard(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+  ): Promise<LeadCardDto> {
+    return sendRpc(this.lead, { cmd: 'lead.card.get' }, { operatorId, leadId });
   }
 
   @Post('leads/:id/result')
@@ -97,11 +109,19 @@ export class OperatorLeadsController {
     description:
       'errorCode ADDRESS_NOT_CONFIRMED — manzil tasdiqlanmagan; VALIDATION_ERROR — sabab yoki vaqt yo‘q',
   })
+  @ApiNotFoundResponse({
+    description: 'Lid topilmadi, bu operatorda emas yoki bron muddati tugagan',
+  })
   submitResult(
-    @Param('id', ParseLeadIdPipe) _id: string,
-    @Body() _dto: SubmitLeadResultDto,
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Body() result: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
-    return notImplementedYet('BE-13');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.queue.result' },
+      { operatorId, leadId, result },
+    );
   }
 
   @Patch('leads/:id/address')
@@ -115,11 +135,15 @@ export class OperatorLeadsController {
     description: 'Tuman tanlangan viloyatga tegishli emas yoki maydon bo‘sh',
   })
   updateAddress(
-    @Param('id', ParseLeadIdPipe) _id: string,
-    @Body() _dto: UpdateLeadAddressDto,
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Body() address: UpdateLeadAddressDto,
   ): Promise<LeadCardDto> {
-    // Qoida va RPC tayyor: lead-service `lead.address.update` (BE-38). Javob lid kartasi — BE-13 ulaydi.
-    return notImplementedYet('BE-13');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.queue.update-address' },
+      { operatorId, leadId, address },
+    );
   }
 
   @Post('leads/:id/quote')
@@ -132,17 +156,34 @@ export class OperatorLeadsController {
   @ApiOkResponse({ type: LeadPriceDto })
   @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
   quote(
-    @Param('id', ParseLeadIdPipe) _id: string,
-    @Body() _dto: LeadPriceQuoteDto,
-  ): Promise<LeadPriceDto> {
-    return notImplementedYet('BE-13');
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Body() dto: LeadPriceQuoteDto,
+  ): Promise<LeadPriceDto | null> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.card.quote' },
+      {
+        operatorId,
+        leadId,
+        quantity: dto.quantity,
+        whereDeliver: dto.whereDeliver,
+      },
+    );
   }
 
   @Put('state')
   @ApiOperation({ summary: 'Operator holati: ishda, tanaffus, chiqdi' })
   @ApiOkResponse({ type: OperatorStateDto })
-  setState(@Body() _dto: UpdateOperatorStateDto): Promise<OperatorStateDto> {
-    return notImplementedYet('BE-13');
+  setState(
+    @CurrentUser('sub') operatorId: string,
+    @Body() dto: UpdateOperatorStateDto,
+  ): Promise<OperatorStateDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.operator.state' },
+      { operatorId, state: dto.state },
+    );
   }
 
   @Get('queue-summary')
@@ -152,7 +193,7 @@ export class OperatorLeadsController {
   })
   @ApiOkResponse({ type: OperatorQueueSummaryDto })
   queueSummary(): Promise<OperatorQueueSummaryDto> {
-    return notImplementedYet('BE-13');
+    return sendRpc(this.lead, { cmd: 'lead.queue.summary' }, {});
   }
 
   @Get('stats')
