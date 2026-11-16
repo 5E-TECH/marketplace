@@ -2,6 +2,7 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AffiliateOffersQueryDto,
+  AffiliateStreamStatus,
   CreateLandingClickDto,
   RpcHttpExceptionFilter,
   UpdateAffiliateStreamDto,
@@ -48,6 +49,17 @@ export class LeadOfferController {
     },
   ) {
     return this.streams.update(input.affiliateId, input.streamId, input.patch);
+  }
+
+  /** Admin sotuvchini bloklasa / blokdan chiqarsa (BE-27): uning hamma sahifasi to‘xtaydi yoki ochiladi. */
+  @MessagePattern({ cmd: 'lead.affiliate.streams.set-status' })
+  setAffiliateStreamsStatus(
+    @Payload() input: { affiliateId: string; status: AffiliateStreamStatus },
+  ) {
+    return this.streams.setAffiliateStreamsStatus(
+      input.affiliateId,
+      input.status,
+    );
   }
 
   @MessagePattern({ cmd: 'lead.landing.get' })

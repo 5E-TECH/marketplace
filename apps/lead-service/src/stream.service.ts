@@ -19,7 +19,7 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, Stream } from './entities';
-import { canOpenStream, maxSalePrice } from './offer-math';
+import { canOpenStream, effectiveSalePrice, maxSalePrice } from './offer-math';
 
 const CODE_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -101,7 +101,7 @@ export class StreamService {
         });
       stream.salePrice = String(patch.salePrice);
     }
-    if (patch.template !== undefined) stream.template = patch.template;
+    if (patch.template != null) stream.template = patch.template;
     for (const key of ['sub1', 'sub2', 'sub3', 'sub4', 'sub5'] as const)
       if (patch[key] !== undefined) stream[key] = patch[key] || null;
     if (patch.metaPixelId !== undefined)
@@ -157,6 +157,21 @@ export class StreamService {
     };
   }
 
+  /**
+   * Sotuvchi bloklanganda uning hamma sahifasi to‘xtaydi (TC11: «bu havola orqali qabul qilinmaydi»);
+   * blok olinganda qayta ochiladi. Chaqiruvchi — admin sotuvchini bloklash (BE-27).
+   */
+  async setAffiliateStreamsStatus(
+    affiliateId: string,
+    status: AffiliateStreamStatus,
+  ): Promise<{ updated: number }> {
+    const res = await this.streams.update(
+      { affiliateId, isDeleted: false },
+      { status },
+    );
+    return { updated: res.affected ?? 0 };
+  }
+
   private async counts(
     streamIds: string[],
   ): Promise<Array<{ clicks: number; leads: number }>> {
@@ -197,7 +212,7 @@ export class StreamService {
       productId: stream.productId,
       productName: offer?.name ?? '',
       template: stream.template,
-      salePrice: Number(stream.salePrice),
+      salePrice: effectiveSalePrice(Number(stream.salePrice), offer),
       status: stream.status,
       sub1: stream.sub1,
       sub2: stream.sub2,

@@ -607,6 +607,73 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ]);
     });
 
+    it('narx katalog chegarasida: tasdiqlangan narx oshsa yoki chegara tushsa sahifa narxi moslashadi', async () => {
+      const s1 = await streams().create('77', '501');
+      await streams().update('77', s1.id, { salePrice: 276000 });
+      catalog['501'] = offer('501', {
+        approvedPrice: 262000,
+        maxSalePrice: 288000,
+      });
+      expect((await landing().getLanding(s1.code)).price.salePrice).toBe(
+        276000,
+      );
+      catalog['501'] = offer('501', {
+        approvedPrice: 251000,
+        maxSalePrice: 260000,
+      });
+      expect((await landing().getLanding(s1.code)).price.salePrice).toBe(
+        260000,
+      );
+      catalog['501'] = offer('501', {
+        approvedPrice: 280000,
+        maxSalePrice: 300000,
+      });
+      expect((await landing().getLanding(s1.code)).price.salePrice).toBe(
+        280000,
+      );
+      expect((await streams().list('77')).items[0].salePrice).toBe(280000);
+    });
+
+    it('template: null o‘zgartirmaydi (500 emas)', async () => {
+      const s1 = await streams().create('77', '501');
+      await expect(
+        streams().update('77', s1.id, { template: null } as never),
+      ).resolves.toMatchObject({ template: StreamTemplate.STANDART });
+    });
+
+    it('TC11: sotuvchi bloklandi → uning sahifalari «qabul qilinmaydi»; blokdan chiqsa ochiladi', async () => {
+      const s1 = await streams().create('77', '501');
+      const other = await streams().create('78', '501');
+      await expect(
+        streams().setAffiliateStreamsStatus(
+          '77',
+          AffiliateStreamStatus.STOPPED,
+        ),
+      ).resolves.toEqual({ updated: 1 });
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.NOT_ACCEPTED,
+      );
+      expect((await landing().getLanding(other.code)).state).toBe(
+        LandingPageState.OPEN,
+      );
+      await streams().setAffiliateStreamsStatus(
+        '77',
+        AffiliateStreamStatus.ACTIVE,
+      );
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.OPEN,
+      );
+    });
+
+    it('ochiq sahifada kreativlar; mahsulot videosi bo‘lmasa kreativdagi video', async () => {
+      const s1 = await streams().create('77', '501');
+      const page = await landing().getLanding(s1.code);
+      expect(page.product.videoUrl).toBe('https://cdn.example.uz/c/9001.mp4');
+      expect(page.product.creatives).toEqual([
+        { id: '9001', type: 'VIDEO', url: 'https://cdn.example.uz/c/9001.mp4' },
+      ]);
+    });
+
     it('offerlar: tasdiq foizi liddan, filtr «tasdiq ≥ 50%» va saralash (FE-05 TC5)', async () => {
       const s1 = await streams().create('77', '501');
       const statuses = [

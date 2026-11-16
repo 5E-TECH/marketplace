@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -165,7 +166,7 @@ export class AffiliateOfferDto {
     nullable: true,
     type: Number,
     description:
-      'Sotilish foizi: yetkazilgan / tasdiqlangan. Bo‘sh — statistika yo‘q (yetkazish BE-21, BE-28 dan keyin)',
+      'Sotilish foizi: mijoz olgan / jo‘natilgan buyurtmalar (TZ 1-bo‘lim «Sotilish foizi (jo‘natilgandan)»). Bo‘sh — statistika yo‘q (BE-21, BE-28 dan keyin)',
   })
   saleRate: number | null;
 
@@ -216,12 +217,24 @@ export class UpdateAffiliateStreamBodyDto {
   @ApiPropertyOptional() @IsString() @MaxLength(255) sub4: string;
   @ApiPropertyOptional() @IsString() @MaxLength(255) sub5: string;
 
-  @ApiPropertyOptional({ example: '1234567890' })
+  @ApiPropertyOptional({
+    example: '1234567890',
+    description: 'Faqat raqamlar; bo‘sh satr — o‘chirish',
+  })
   @IsString()
   @MaxLength(64)
+  @Matches(/^\d*$/, { message: 'metaPixelId faqat raqamlardan iborat bo‘ladi' })
   metaPixelId: string;
 
-  @ApiPropertyOptional() @IsString() @MaxLength(64) tiktokPixelId: string;
+  @ApiPropertyOptional({
+    description: 'Lotin harflari va raqamlar; bo‘sh satr — o‘chirish',
+  })
+  @IsString()
+  @MaxLength(64)
+  @Matches(/^[A-Za-z0-9]*$/, {
+    message: 'tiktokPixelId faqat lotin harflari va raqamlardan iborat bo‘ladi',
+  })
+  tiktokPixelId: string;
 
   @ApiPropertyOptional({
     description: 'Postback URL (yuborish ishga tushgandan keyin, BE-14)',

