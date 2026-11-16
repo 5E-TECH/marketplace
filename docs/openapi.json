@@ -17463,7 +17463,9 @@
               "REVERSED",
               "NONE"
             ],
-            "example": "HOLD"
+            "example": "HOLD",
+            "nullable": true,
+            "description": "Bo‘sh — lid hali ishlanmoqda, haq haqida gap yo‘q (CSV da bo‘sh katak); NONE — «Yozilmaydi»"
           }
         },
         "required": [
@@ -17856,7 +17858,9 @@
             ]
           },
           "price": {
-            "description": "Joriy miqdor va yetkazish turi bo‘yicha server hisobi (FE-09)",
+            "nullable": true,
+            "description": "Joriy miqdor va yetkazish turi bo‘yicha server hisobi (FE-09). Bo‘sh — yetkazish turi hali yo‘q (faqat manzilsiz API lidi): avval PATCH leads/:id/address yoki POST leads/:id/quote",
+            "type": "object",
             "allOf": [
               {
                 "$ref": "#/components/schemas/LeadPriceDto"
