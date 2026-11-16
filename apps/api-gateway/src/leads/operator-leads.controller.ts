@@ -33,6 +33,7 @@ import {
   UpdateLeadAddressDto,
   UpdateOperatorStateDto,
 } from '@app/common';
+import { ParseLeadIdPipe } from './lead-id.pipe';
 import { notImplementedYet } from './lead-stub';
 
 /**
@@ -80,7 +81,7 @@ export class OperatorLeadsController {
   })
   @ApiOkResponse({ type: LeadCardDto })
   @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
-  getCard(@Param('id') _id: string): Promise<LeadCardDto> {
+  getCard(@Param('id', ParseLeadIdPipe) _id: string): Promise<LeadCardDto> {
     return notImplementedYet('BE-13');
   }
 
@@ -97,7 +98,7 @@ export class OperatorLeadsController {
       'errorCode ADDRESS_NOT_CONFIRMED — manzil tasdiqlanmagan; VALIDATION_ERROR — sabab yoki vaqt yo‘q',
   })
   submitResult(
-    @Param('id') _id: string,
+    @Param('id', ParseLeadIdPipe) _id: string,
     @Body() _dto: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
     return notImplementedYet('BE-13');
@@ -114,7 +115,7 @@ export class OperatorLeadsController {
     description: 'Tuman tanlangan viloyatga tegishli emas yoki maydon bo‘sh',
   })
   updateAddress(
-    @Param('id') _id: string,
+    @Param('id', ParseLeadIdPipe) _id: string,
     @Body() _dto: UpdateLeadAddressDto,
   ): Promise<LeadCardDto> {
     return notImplementedYet('BE-38');
@@ -130,7 +131,7 @@ export class OperatorLeadsController {
   @ApiOkResponse({ type: LeadPriceDto })
   @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
   quote(
-    @Param('id') _id: string,
+    @Param('id', ParseLeadIdPipe) _id: string,
     @Body() _dto: LeadPriceQuoteDto,
   ): Promise<LeadPriceDto> {
     return notImplementedYet('BE-13');

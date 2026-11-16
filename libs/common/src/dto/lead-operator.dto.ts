@@ -7,14 +7,13 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
 import {
-  LEAD_BIGINT_ID,
+  IsLeadBigintId,
   LeadSource,
   LeadStatus,
   trimLeadText,
@@ -236,10 +235,12 @@ export class LeadCardDto {
 
   @ApiProperty({
     type: LeadPriceDto,
+    nullable: true,
     description:
-      'Joriy miqdor va yetkazish turi bo‘yicha server hisobi (FE-09)',
+      'Joriy miqdor va yetkazish turi bo‘yicha server hisobi (FE-09). Bo‘sh — yetkazish turi hali yo‘q ' +
+      '(faqat manzilsiz API lidi): avval PATCH leads/:id/address yoki POST leads/:id/quote',
   })
-  price: LeadPriceDto;
+  price: LeadPriceDto | null;
 
   @ApiProperty({
     enum: LeadRejectReason,
@@ -340,9 +341,7 @@ export class SubmitLeadResultDto {
     description: 'DUPLICATE: avvalgi lid ID si',
   })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, {
-    message: 'duplicateOfLeadId musbat son bo‘lishi kerak',
-  })
+  @IsLeadBigintId('duplicateOfLeadId')
   duplicateOfLeadId?: string;
 
   @ApiPropertyOptional({
@@ -482,17 +481,17 @@ export class AdminLeadsQueryDto {
 
   @ApiPropertyOptional({ example: '77', description: 'Sotuvchi ID si' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'affiliateId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('affiliateId')
   affiliateId?: string;
 
   @ApiPropertyOptional({ example: '501' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'productId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('productId')
   productId?: string;
 
   @ApiPropertyOptional({ example: '41' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'operatorId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('operatorId')
   operatorId?: string;
 
   @ApiPropertyOptional({ example: '2026-12-01' })

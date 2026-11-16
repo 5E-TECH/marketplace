@@ -11,6 +11,7 @@ import {
   AdminLeadsQueryDto,
   LeadCardDto,
 } from '@app/common';
+import { ParseLeadIdPipe } from './lead-id.pipe';
 import { notImplementedYet } from './lead-stub';
 
 /**
@@ -36,7 +37,7 @@ export class AdminLeadsController {
   @ApiOperation({ summary: 'Lid kartasi (admin va nazoratchi)' })
   @ApiOkResponse({ type: LeadCardDto })
   @ApiNotFoundResponse({ description: 'Lid topilmadi' })
-  getCard(@Param('id') _id: string): Promise<LeadCardDto> {
+  getCard(@Param('id', ParseLeadIdPipe) _id: string): Promise<LeadCardDto> {
     return notImplementedYet('BE-42');
   }
 }

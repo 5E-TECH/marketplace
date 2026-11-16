@@ -1,4 +1,4 @@
-import { NotImplementedException } from '@nestjs/common';
+import { BadRequestException, NotImplementedException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
@@ -18,6 +18,7 @@ import {
 import { RegionsController } from '../geo/regions.controller';
 import { AdminLeadsController } from './admin-leads.controller';
 import { AffiliateStreamsController } from './affiliate-streams.controller';
+import { ParseLeadIdPipe } from './lead-id.pipe';
 import { NOT_IMPLEMENTED } from './lead-stub';
 import { OperatorLeadsController } from './operator-leads.controller';
 import { PublicLeadsController } from './public-leads.controller';
@@ -115,6 +116,22 @@ describe('Lid shartnomasi (BE-25)', () => {
   it('yashirin maydonning har qanday qiymati 400 bermaydi — tuzoq oshkor bo‘lmaydi (BE-12)', async () => {
     for (const website of ['x'.repeat(300), 123, { a: 1 }])
       await expect(errorsOf({ ...validLead, website })).resolves.toEqual([]);
+  });
+
+  it('ID BIGINT chegarasidan oshsa ham 400 (9223372036854775807)', async () => {
+    await expect(
+      errorsOf({ ...validLead, clickId: '9223372036854775807' }),
+    ).resolves.toEqual([]);
+    await expect(
+      errorsOf({ ...validLead, clickId: '9223372036854775808' }),
+    ).resolves.toEqual(['clickId']);
+  });
+
+  it('yo‘ldagi :id ham tekshiriladi: abc, 0 va juda katta son — 400', () => {
+    const pipe = new ParseLeadIdPipe();
+    expect(pipe.transform('7001')).toBe('7001');
+    for (const bad of ['abc', '0', '-1', '9223372036854775808', ''])
+      expect(() => pipe.transform(bad)).toThrow(BadRequestException);
   });
 
   it('ID maydonlari faqat musbat son: noto‘g‘ri qiymat 500 emas, 400', async () => {

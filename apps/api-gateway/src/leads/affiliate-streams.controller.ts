@@ -29,6 +29,7 @@ import {
   CreateAffiliateStreamDto,
   UpdateAffiliateStreamDto,
 } from '@app/common';
+import { ParseLeadIdPipe } from './lead-id.pipe';
 import { notImplementedYet } from './lead-stub';
 
 /**
@@ -84,7 +85,7 @@ export class AffiliateStreamsController {
   @ApiBadRequestResponse({ description: 'Narx chegaradan tashqarida' })
   @ApiNotFoundResponse({ description: 'Sahifa bu sotuvchiniki emas' })
   updateStream(
-    @Param('id') _id: string,
+    @Param('id', ParseLeadIdPipe) _id: string,
     @Body() _dto: UpdateAffiliateStreamDto,
   ): Promise<AffiliateStreamDto> {
     return notImplementedYet('BE-11');

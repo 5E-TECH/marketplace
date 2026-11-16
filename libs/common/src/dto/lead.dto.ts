@@ -8,6 +8,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  ValidateBy,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
 
@@ -62,6 +63,28 @@ export enum LandingPageState {
 const PHONE_UZ = /^\+998\d{9}$/;
 /** BIGINT ID satr ko‘rinishida (repo namunasi: cart.dto.ts `cartItemIds`). */
 export const LEAD_BIGINT_ID = /^[1-9]\d{0,18}$/;
+/** PostgreSQL BIGINT eng kattasi: undan katta ID bazada 22003 (500) beradi. */
+const LEAD_BIGINT_MAX = BigInt('9223372036854775807');
+
+/** Musbat BIGINT ID: 1 … 9223372036854775807, satr ko‘rinishida. */
+export function isLeadBigintId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    LEAD_BIGINT_ID.test(value) &&
+    BigInt(value) <= LEAD_BIGINT_MAX
+  );
+}
+
+/** DTO maydoni uchun: noto‘g‘ri ID 400 bo‘ladi, bazaga yetib 500 bermaydi. */
+export function IsLeadBigintId(field: string): PropertyDecorator {
+  return ValidateBy({
+    name: 'isLeadBigintId',
+    validator: {
+      validate: (value) => isLeadBigintId(value),
+      defaultMessage: () => `${field} musbat son bo‘lishi kerak`,
+    },
+  });
+}
 /** Bo‘shliqdan iborat qiymat «bo‘sh» hisoblanadi (namuna: product.dto.ts HideProductDto). */
 export const trimLeadText = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -348,7 +371,7 @@ export class CreateLeadDto extends LeadTrackingDto {
 
   @ApiPropertyOptional({ example: '90311', description: 'POST /clicks javobi' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'clickId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('clickId')
   clickId?: string;
 
   @ApiPropertyOptional({

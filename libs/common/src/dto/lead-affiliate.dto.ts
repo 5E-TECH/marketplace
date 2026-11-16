@@ -7,12 +7,11 @@ import {
   IsOptional,
   IsString,
   IsUrl,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { LEAD_BIGINT_ID, LeadStatus, StreamTemplate } from './lead.dto';
+import { IsLeadBigintId, LeadStatus, StreamTemplate } from './lead.dto';
 
 // Lid-sotuv: sotuvchi (AFFILIATE) kabineti — offerlar, sotuvchi sahifalari, statistika (BE-25 shartnomasi).
 // Real kod: BE-11 (offer va sahifa), BE-28 (statistika). Rol AFFILIATE BE-05 da qo‘shiladi.
@@ -84,7 +83,7 @@ export class AffiliateOffersQueryDto extends AffiliatePageQueryDto {
 
   @ApiPropertyOptional({ example: '12' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'categoryId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('categoryId')
   categoryId?: string;
 
   @ApiPropertyOptional({
@@ -171,7 +170,7 @@ export class AffiliateOffersPageDto {
 /** POST /affiliate/streams — «Sahifa yaratish»: faqat offer ID (BE-11 TC1). */
 export class CreateAffiliateStreamDto {
   @ApiProperty({ example: '501' })
-  @Matches(LEAD_BIGINT_ID, { message: 'productId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('productId')
   productId: string;
 }
 
@@ -312,7 +311,7 @@ export class AffiliateStatsQueryDto {
 
   @ApiPropertyOptional({ example: '3301' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'streamId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('streamId')
   streamId?: string;
 }
 
@@ -355,7 +354,7 @@ export class AffiliateLeadsQueryDto extends AffiliatePageQueryDto {
 
   @ApiPropertyOptional({ example: '3301' })
   @IsOptional()
-  @Matches(LEAD_BIGINT_ID, { message: 'streamId musbat son bo‘lishi kerak' })
+  @IsLeadBigintId('streamId')
   streamId?: string;
 
   @ApiPropertyOptional({ enum: LeadStatus })
@@ -417,8 +416,11 @@ export class AffiliateLeadRowDto {
   @ApiProperty({
     enum: AffiliateCommissionState,
     example: AffiliateCommissionState.HOLD,
+    nullable: true,
+    description:
+      'Bo‘sh — lid hali ishlanmoqda, haq haqida gap yo‘q (CSV da bo‘sh katak); NONE — «Yozilmaydi»',
   })
-  commissionState: AffiliateCommissionState;
+  commissionState: AffiliateCommissionState | null;
 }
 
 export class AffiliateLeadsPageDto {
