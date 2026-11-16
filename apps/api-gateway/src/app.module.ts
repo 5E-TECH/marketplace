@@ -62,6 +62,7 @@ import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
+import { AdminOfferContentController } from './leads/admin-offer-content.controller';
 
 @Module({
   imports: [
@@ -210,6 +211,7 @@ import { AdminLeadsController } from './leads/admin-leads.controller';
     AffiliateStreamsController,
     OperatorLeadsController,
     AdminLeadsController,
+    AdminOfferContentController,
   ],
   providers: [
     AppService,
