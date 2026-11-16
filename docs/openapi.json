@@ -9603,7 +9603,17 @@
       "post": {
         "description": "Ism, telefon, viloyat, tuman, ko‘cha/uy va yetkazish turi majburiy. Javob bazaga yozilgandan keyin (LID-3). Yashirin maydon to‘ldirilsa lid yozilmaydi, javob baribir 201 (BE-12).",
         "operationId": "PublicLeadsController_createLead",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "user-agent",
+            "required": false,
+            "in": "header",
+            "description": "Mijoz brauzerining user agenti — sotuvchi sahifasi serveri uzatadi",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -9627,6 +9637,12 @@
           },
           "400": {
             "description": "Telefon yoki manzil noto‘g‘ri; javobda maydon nomlari"
+          },
+          "404": {
+            "description": "Bunday sotuvchi sahifasi yo‘q"
+          },
+          "409": {
+            "description": "errorCode LANDING_NOT_OPEN — sahifa hozir ariza qabul qilmaydi"
           }
         },
         "summary": "Sotuvchi sahifasi formasidan ariza (lid)",
