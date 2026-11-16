@@ -9557,7 +9557,17 @@
       "post": {
         "description": "Sotuvchi sahifasi serveri yuboradi; mijozning IP va user agenti so‘rov sarlavhasidan olinadi (BE-11).",
         "operationId": "PublicLeadsController_createClick",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "user-agent",
+            "required": false,
+            "in": "header",
+            "description": "Mijoz brauzerining user agenti — sotuvchi sahifasi serveri uzatadi",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -9745,7 +9755,10 @@
               }
             }
           },
-          "400": {
+          "404": {
+            "description": "Offer topilmadi"
+          },
+          "409": {
             "description": "Qoldiq yo‘q yoki offer yopiq"
           }
         },
@@ -9847,6 +9860,9 @@
           },
           "404": {
             "description": "Sahifa bu sotuvchiniki emas"
+          },
+          "409": {
+            "description": "Offer narxi tasdiqlanmagan"
           }
         },
         "security": [
@@ -10544,6 +10560,87 @@
           }
         ],
         "summary": "Lid kartasi (admin va nazoratchi)",
+        "tags": [
+          "admin-leads"
+        ]
+      }
+    },
+    "/api/v1/admin/offer-content/{productId}": {
+      "get": {
+        "operationId": "AdminOfferContentController_get",
+        "parameters": [
+          {
+            "name": "productId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferContentDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Offer matnlari (bo‘sh bo‘lsa bo‘sh ro‘yxatlar)",
+        "tags": [
+          "admin-leads"
+        ]
+      },
+      "put": {
+        "description": "Suhbat skripti operator lid kartasida, afzalliklar va «qutida» sotuvchi sahifasida ko‘rinadi. Bo‘sh qatorlar tashlanadi.",
+        "operationId": "AdminOfferContentController_update",
+        "parameters": [
+          {
+            "name": "productId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOfferContentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferContentDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Offer matnlarini saqlash",
         "tags": [
           "admin-leads"
         ]
@@ -16996,18 +17093,21 @@
           },
           "epc": {
             "type": "number",
-            "example": 1850,
-            "description": "EPC, so‘m"
+            "example": null,
+            "nullable": true,
+            "description": "EPC, so‘m: daromad / klik. Bo‘sh — statistika yo‘q (daromad BE-22, BE-28 dan keyin)"
           },
           "approveRate": {
             "type": "number",
             "example": 41,
-            "description": "Tasdiq foizi"
+            "nullable": true,
+            "description": "Tasdiq foizi: tasdiqlangan / yaroqli lidlar (hamma sotuvchilar). Bo‘sh — lid yo‘q"
           },
           "saleRate": {
             "type": "number",
-            "example": 78,
-            "description": "Sotilish foizi"
+            "example": null,
+            "nullable": true,
+            "description": "Sotilish foizi: yetkazilgan / tasdiqlangan. Bo‘sh — statistika yo‘q (yetkazish BE-21, BE-28 dan keyin)"
           },
           "stock": {
             "type": "number",
@@ -17190,7 +17290,9 @@
           },
           "sales": {
             "type": "number",
-            "example": 12
+            "example": null,
+            "nullable": true,
+            "description": "Yetkazilgan buyurtmalar; bo‘sh — statistika hali yo‘q (BE-28)"
           },
           "createdAt": {
             "format": "date-time",
@@ -18401,6 +18503,82 @@
           "page",
           "limit",
           "totalPages"
+        ]
+      },
+      "OfferContentDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "501"
+          },
+          "callScript": {
+            "type": "string",
+            "example": "Assalomu alaykum! Simsiz quloqchin buyurtmangiz bo‘yicha qo‘ng‘iroq qilyapman…",
+            "nullable": true,
+            "description": "Suhbat skripti — operator lid kartasida ko‘radi (OPR-2)"
+          },
+          "highlights": {
+            "example": [
+              "Telefonga Bluetooth orqali ulanadi"
+            ],
+            "description": "Afzalliklar — sotuvchi sahifasidagi «… haqida» bloki",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boxContents": {
+            "example": [
+              "Quloqchinlar (juft)",
+              "Quvvatlovchi g‘ilof",
+              "Quvvat kabeli"
+            ],
+            "description": "Qutida — sotuvchi sahifasidagi «Qutida» bloki",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "productId",
+          "callScript",
+          "highlights",
+          "boxContents",
+          "updatedAt"
+        ]
+      },
+      "UpdateOfferContentDto": {
+        "type": "object",
+        "properties": {
+          "callScript": {
+            "type": "string",
+            "nullable": true
+          },
+          "highlights": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boxContents": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "highlights",
+          "boxContents"
         ]
       }
     }
