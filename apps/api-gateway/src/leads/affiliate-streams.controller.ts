@@ -17,6 +17,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  AffiliateLeadsPageDto,
+  AffiliateLeadsQueryDto,
   AffiliateOffersPageDto,
   AffiliateOffersQueryDto,
   AffiliatePageQueryDto,
@@ -31,7 +33,7 @@ import { notImplementedYet } from './lead-stub';
 
 /**
  * Sotuvchi (AFFILIATE) kabineti API si (BE-25 shartnomasi).
- * Real kod: BE-11 (offer va sahifa), BE-28 (statistika).
+ * Real kod: BE-11 (offer va sahifa), BE-28 (statistika va lidlar ro‘yxati).
  * Rol cheklovi `@Roles(Role.AFFILIATE)` BE-05 dan keyin qo‘shiladi (rollar OpenAPI ga chiqmaydi).
  */
 @ApiTags('affiliate')
@@ -96,6 +98,20 @@ export class AffiliateStreamsController {
   })
   @ApiOkResponse({ type: AffiliateStatsDto })
   stats(@Query() _query: AffiliateStatsQueryDto): Promise<AffiliateStatsDto> {
+    return notImplementedYet('BE-28');
+  }
+
+  @Get('leads')
+  @ApiOperation({
+    summary: 'Sotuvchining lidlari: CSV manbasi',
+    description:
+      'Har lid: keldi, sahifa, sub, raqam ****4567, lid va buyurtma holati, haq. ' +
+      'Ism, manzil, to‘liq raqam va variant yo‘q. CSV ni frontend umumiy yuklab olish bilan yig‘adi (BE-28 TC2, FE-06 TC2).',
+  })
+  @ApiOkResponse({ type: AffiliateLeadsPageDto })
+  listLeads(
+    @Query() _query: AffiliateLeadsQueryDto,
+  ): Promise<AffiliateLeadsPageDto> {
     return notImplementedYet('BE-28');
   }
 }

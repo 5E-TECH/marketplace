@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
+  Allow,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -58,6 +60,17 @@ export enum LandingPageState {
 }
 
 const PHONE_UZ = /^\+998\d{9}$/;
+/** BIGINT ID satr ko‘rinishida (repo namunasi: cart.dto.ts `cartItemIds`). */
+export const LEAD_BIGINT_ID = /^[1-9]\d{0,18}$/;
+/** Bo‘shliqdan iborat qiymat «bo‘sh» hisoblanadi (namuna: product.dto.ts HideProductDto). */
+export const trimLeadText = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
+
+/** Xususiyat qatori: «Aloqa — Bluetooth» (holat-matnlari.md standart-1 «Xususiyatlar»). */
+export class LandingPageSpecDto {
+  @ApiProperty({ example: 'Og‘irlik' }) name: string;
+  @ApiProperty({ example: '0.3 kg' }) value: string;
+}
 
 export class LandingPageProductDto {
   @ApiProperty({ example: '501' }) id: string;
@@ -78,6 +91,46 @@ export class LandingPageProductDto {
 
   @ApiProperty({ example: null, nullable: true, type: String })
   videoUrl: string | null;
+
+  @ApiProperty({
+    example: 'Telefonga Bluetooth orqali ulanadi. Ixcham g‘ilofda saqlanadi.',
+    nullable: true,
+    type: String,
+    description: 'Mahsulot tavsifi (katalogdagi `description`; SF-02)',
+  })
+  description: string | null;
+
+  @ApiProperty({
+    type: [String],
+    example: [
+      'Telefonga Bluetooth orqali ulanadi',
+      'Ixcham g‘ilofda saqlanadi va quvvatlanadi',
+    ],
+    description:
+      'Afzalliklar — «… haqida» bloki (holat-matnlari.md standart-1, standart-8). ' +
+      'Qayerda kiritilishi [taklif]: offer sozlamasi (BE-11), ega tasdig‘i kerak',
+  })
+  highlights: string[];
+
+  @ApiProperty({
+    type: [String],
+    example: ['Quloqchinlar (juft)', 'Quvvatlovchi g‘ilof', 'Quvvat kabeli'],
+    description:
+      '«Qutida» bloki (holat-matnlari.md standart-1, standart-8). Qayerda kiritilishi [taklif]: offer sozlamasi (BE-11)',
+  })
+  boxContents: string[];
+
+  @ApiProperty({
+    type: [LandingPageSpecDto],
+    example: [
+      { name: 'Aloqa', value: 'Bluetooth' },
+      { name: 'Og‘irlik', value: '0.3 kg' },
+      { name: 'Kategoriya', value: 'Elektronika' },
+    ],
+    description:
+      '«Xususiyatlar»: mahsulot atributlari, og‘irlik va kategoriya [taklif] (holat-matnlari.md standart-1)',
+  })
+  specs: LandingPageSpecDto[];
 
   @ApiProperty({
     example: false,
@@ -233,6 +286,7 @@ export class CreateLeadDto extends LeadTrackingDto {
   code: string;
 
   @ApiProperty({ example: 'Aziza' })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
@@ -248,6 +302,7 @@ export class CreateLeadDto extends LeadTrackingDto {
   phone: string;
 
   @ApiProperty({ example: '1726', description: 'Viloyat SOATO kodi' })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
@@ -257,6 +312,7 @@ export class CreateLeadDto extends LeadTrackingDto {
     example: '1726266',
     description: 'Tuman yoki shahar SOATO kodi',
   })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
@@ -264,8 +320,9 @@ export class CreateLeadDto extends LeadTrackingDto {
 
   @ApiProperty({
     example: 'Turkiston ko‘chasi, 27-uy',
-    description: 'Ko‘cha, uy',
+    description: 'Ko‘cha, uy; faqat bo‘shliq — bo‘sh hisoblanadi',
   })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
@@ -291,18 +348,18 @@ export class CreateLeadDto extends LeadTrackingDto {
 
   @ApiPropertyOptional({ example: '90311', description: 'POST /clicks javobi' })
   @IsOptional()
-  @IsString()
-  @MaxLength(32)
+  @Matches(LEAD_BIGINT_ID, { message: 'clickId musbat son bo‘lishi kerak' })
   clickId?: string;
 
   @ApiPropertyOptional({
+    type: String,
     description:
-      'Yashirin maydon (bot himoyasi): bo‘sh bo‘lishi kerak; to‘ldirilsa lid yozilmaydi, javob baribir 201',
+      'Yashirin maydon (bot himoyasi): bo‘sh bo‘lishi kerak; to‘ldirilsa lid yozilmaydi, javob baribir 201. ' +
+      'Har qanday qiymat qabul qilinadi — tekshiruv 400 bilan maydonni oshkor qilmaydi (BE-12)',
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  website?: string;
+  @Allow()
+  website?: unknown;
 }
 
 export class LeadCreatedDto {

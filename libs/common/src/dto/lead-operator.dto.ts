@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -7,12 +7,18 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
-import { LeadSource, LeadStatus } from './lead.dto';
+import {
+  LEAD_BIGINT_ID,
+  LeadSource,
+  LeadStatus,
+  trimLeadText,
+} from './lead.dto';
 
 // Lid-sotuv: operator ish joyi, nazoratchi va admin lidlar ro‘yxati (BE-25 shartnomasi).
 // Real kod: BE-13 (navbat, natija), BE-38 (manzil), BE-42 (ro‘yxat, mijoz tarixi), BE-28 (statistika).
@@ -38,6 +44,21 @@ export enum LeadRejectReason {
   NOT_NEEDED = 'NOT_NEEDED',
   BOUGHT_ELSEWHERE = 'BOUGHT_ELSEWHERE',
   OTHER = 'OTHER',
+}
+
+/**
+ * Lid API sining o‘z xato kodlari (`errorCode`; AllExceptionsFilter saqlaydi). Nomlar [taklif].
+ * Frontend matnga emas, kodga qarab holat ko‘rsatadi (error-codes.ts qoidasi).
+ */
+export enum LeadErrorCode {
+  /** POST /operator/leads/next: navbatda lid yo‘q — 404 («navbat bo‘sh», operator-bosh). */
+  LEAD_QUEUE_EMPTY = 'LEAD_QUEUE_EMPTY',
+  /** Operator tanaffusda — 409 (TC4 FE-08). */
+  OPERATOR_ON_BREAK = 'OPERATOR_ON_BREAK',
+  /** 5 ta bron to‘lgan — 409 (6-qoida, «5/5»). */
+  BOOKING_LIMIT_REACHED = 'BOOKING_LIMIT_REACHED',
+  /** Manzil tasdiqlanmagan lidga «Tasdiqlandi» — 400 (OPR-4, BE-38). */
+  ADDRESS_NOT_CONFIRMED = 'ADDRESS_NOT_CONFIRMED',
 }
 
 /** Operator holati (T4 operator_state). BREAK — yangi lid berilmaydi. */
@@ -81,6 +102,52 @@ export class LeadProductRefDto {
   @ApiProperty({ example: 'Simsiz quloqchinlar' }) name: string;
   @ApiProperty({ example: 262000, description: 'Sahifadagi narx, so‘m' })
   salePrice: number;
+}
+
+/**
+ * Mijozga aytiladigan summa — serverdagi narx obyekti (FE-09, OPR-4; yetkazish ko‘rinishi BE-09).
+ * Nomlar mavjud `DeliveryPreviewResultDto` bilan bir xil: subtotal, deliveryFee, totalAmount.
+ */
+export class LeadPriceDto {
+  @ApiProperty({ example: 262000, description: 'Bitta tovar narxi, so‘m' })
+  unitPrice: number;
+
+  @ApiProperty({ example: 1 }) quantity: number;
+
+  @ApiProperty({ example: 262000, description: 'Tovarlar, so‘m' })
+  subtotal: number;
+
+  @ApiProperty({
+    enum: CheckoutDeliveryDestination,
+    example: CheckoutDeliveryDestination.CENTER,
+  })
+  whereDeliver: CheckoutDeliveryDestination;
+
+  @ApiProperty({
+    example: 30000,
+    description:
+      'Ko‘rinadigan yetkazish, so‘m; rejim va og‘irlikka qarab, 0 — bepul (BE-09)',
+  })
+  deliveryFee: number;
+
+  @ApiProperty({ example: 292000, description: 'Jami, so‘m' })
+  totalAmount: number;
+}
+
+/** POST /operator/leads/:id/quote — miqdor yoki yetkazish turi o‘zgarganda summani oldindan ko‘rish (FE-09 TC2, TC3). */
+export class LeadPriceQuoteDto {
+  @ApiProperty({ example: 2, minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({
+    enum: CheckoutDeliveryDestination,
+    example: CheckoutDeliveryDestination.ADDRESS,
+  })
+  @IsEnum(CheckoutDeliveryDestination)
+  whereDeliver: CheckoutDeliveryDestination;
 }
 
 export class LeadAttemptDto {
@@ -129,6 +196,14 @@ export class LeadPreviousDto {
 
   @ApiProperty({ example: null, nullable: true, type: String })
   orderStatus: string | null;
+
+  @ApiProperty({
+    enum: LeadRejectReason,
+    example: LeadRejectReason.TOO_EXPENSIVE,
+    nullable: true,
+    description: 'Rad sababi (OPR-2: «Rad etildi — «Qimmat»»)',
+  })
+  rejectReason: LeadRejectReason | null;
 }
 
 /** Lid kartasi: operator (BE-13) va admin/nazoratchi (BE-42) uchun bitta shakl. */
@@ -150,7 +225,29 @@ export class LeadCardDto {
 
   @ApiProperty({ type: LeadProductRefDto }) product: LeadProductRefDto;
   @ApiProperty({ example: 1, description: 'Miqdor (OPR-4)' }) quantity: number;
-  @ApiProperty({ type: LeadAddressDto }) address: LeadAddressDto;
+
+  @ApiProperty({
+    type: LeadAddressDto,
+    nullable: true,
+    description:
+      'Sotuvchi sahifasi va sayt lidida doim bor. Bo‘sh faqat API lidida bo‘lishi mumkin (BE-43, EQ-04)',
+  })
+  address: LeadAddressDto | null;
+
+  @ApiProperty({
+    type: LeadPriceDto,
+    description:
+      'Joriy miqdor va yetkazish turi bo‘yicha server hisobi (FE-09)',
+  })
+  price: LeadPriceDto;
+
+  @ApiProperty({
+    enum: LeadRejectReason,
+    example: null,
+    nullable: true,
+    description: 'Shu lid rad etilgan bo‘lsa sababi',
+  })
+  rejectReason: LeadRejectReason | null;
 
   @ApiProperty({
     example: null,
@@ -243,7 +340,9 @@ export class SubmitLeadResultDto {
     description: 'DUPLICATE: avvalgi lid ID si',
   })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, {
+    message: 'duplicateOfLeadId musbat son bo‘lishi kerak',
+  })
   duplicateOfLeadId?: string;
 
   @ApiPropertyOptional({
@@ -270,18 +369,21 @@ export class LeadResultAcceptedDto {
 /** PATCH /operator/leads/:id/address — manzilni tasdiqlash yoki tuzatish (OPR-4, BE-38). */
 export class UpdateLeadAddressDto {
   @ApiProperty({ example: '1726' })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
   regionSoato: string;
 
   @ApiProperty({ example: '1726266' })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
   districtSoato: string;
 
   @ApiProperty({ example: 'Turkiston ko‘chasi, 27-uy' })
+  @Transform(trimLeadText)
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
@@ -380,17 +482,17 @@ export class AdminLeadsQueryDto {
 
   @ApiPropertyOptional({ example: '77', description: 'Sotuvchi ID si' })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, { message: 'affiliateId musbat son bo‘lishi kerak' })
   affiliateId?: string;
 
   @ApiPropertyOptional({ example: '501' })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, { message: 'productId musbat son bo‘lishi kerak' })
   productId?: string;
 
   @ApiPropertyOptional({ example: '41' })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, { message: 'operatorId musbat son bo‘lishi kerak' })
   operatorId?: string;
 
   @ApiPropertyOptional({ example: '2026-12-01' })

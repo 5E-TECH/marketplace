@@ -7,11 +7,12 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { StreamTemplate } from './lead.dto';
+import { LEAD_BIGINT_ID, LeadStatus, StreamTemplate } from './lead.dto';
 
 // Lid-sotuv: sotuvchi (AFFILIATE) kabineti — offerlar, sotuvchi sahifalari, statistika (BE-25 shartnomasi).
 // Real kod: BE-11 (offer va sahifa), BE-28 (statistika). Rol AFFILIATE BE-05 da qo‘shiladi.
@@ -30,6 +31,24 @@ export enum AffiliateOfferSort {
   FEE = 'FEE',
   EPC = 'EPC',
   APPROVE_RATE = 'APPROVE_RATE',
+}
+
+/** Kreativ turi (SOT-9: har offer uchun video va foto; yuklash BE-08). */
+export enum AffiliateCreativeType {
+  IMAGE = 'IMAGE',
+  VIDEO = 'VIDEO',
+}
+
+/**
+ * Lid bo‘yicha sotuvchi haqining holati — CSV «Haq holati» ustuni (hujjat-statistika-csv, h-4.md):
+ * Kutilmoqda, Ushlab turilgan, Mavjud, Teskari yozildi, Yozilmaydi. Nomlar [taklif].
+ */
+export enum AffiliateCommissionState {
+  PENDING = 'PENDING',
+  HOLD = 'HOLD',
+  AVAILABLE = 'AVAILABLE',
+  REVERSED = 'REVERSED',
+  NONE = 'NONE',
 }
 
 /** Statistika guruhlash: kun, sotuvchi sahifasi, sub1 (SOT-4, BE-28). */
@@ -65,8 +84,21 @@ export class AffiliateOffersQueryDto extends AffiliatePageQueryDto {
 
   @ApiPropertyOptional({ example: '12' })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, { message: 'categoryId musbat son bo‘lishi kerak' })
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    example: 50,
+    minimum: 0,
+    maximum: 100,
+    description: 'Tasdiq foizi kamida shuncha (FE-05 TC5 «tasdiq ≥ 50%»)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minApproveRate?: number;
 
   @ApiPropertyOptional({
     enum: AffiliateOfferSort,
@@ -75,6 +107,18 @@ export class AffiliateOffersQueryDto extends AffiliatePageQueryDto {
   @IsOptional()
   @IsEnum(AffiliateOfferSort)
   sort?: AffiliateOfferSort;
+}
+
+export class AffiliateCreativeDto {
+  @ApiProperty({ example: '9001' }) id: string;
+  @ApiProperty({
+    enum: AffiliateCreativeType,
+    example: AffiliateCreativeType.VIDEO,
+  })
+  type: AffiliateCreativeType;
+
+  @ApiProperty({ example: 'https://cdn.example.uz/creatives/9001.mp4' })
+  url: string;
 }
 
 /** Offer — sotuvga chiqarilgan mahsulot (SOT-2). */
@@ -107,6 +151,13 @@ export class AffiliateOfferDto {
 
   @ApiProperty({ example: 120 }) stock: number;
   @ApiProperty({ example: true }) hasVideo: boolean;
+
+  @ApiProperty({
+    type: [AffiliateCreativeDto],
+    description:
+      'Admin yuklagan kreativlar: rasm va video (SOT-9, FE-12); sotuvchi yuklab oladi',
+  })
+  creatives: AffiliateCreativeDto[];
 }
 
 export class AffiliateOffersPageDto {
@@ -120,8 +171,7 @@ export class AffiliateOffersPageDto {
 /** POST /affiliate/streams — «Sahifa yaratish»: faqat offer ID (BE-11 TC1). */
 export class CreateAffiliateStreamDto {
   @ApiProperty({ example: '501' })
-  @IsString()
-  @MaxLength(32)
+  @Matches(LEAD_BIGINT_ID, { message: 'productId musbat son bo‘lishi kerak' })
   productId: string;
 }
 
@@ -262,7 +312,7 @@ export class AffiliateStatsQueryDto {
 
   @ApiPropertyOptional({ example: '3301' })
   @IsOptional()
-  @IsString()
+  @Matches(LEAD_BIGINT_ID, { message: 'streamId musbat son bo‘lishi kerak' })
   streamId?: string;
 }
 
@@ -291,4 +341,90 @@ export class AffiliateStatsRowDto {
 export class AffiliateStatsDto {
   @ApiProperty({ type: [AffiliateStatsRowDto] }) rows: AffiliateStatsRowDto[];
   @ApiProperty({ type: AffiliateStatsRowDto }) totals: AffiliateStatsRowDto;
+}
+
+/** GET /affiliate/leads — lidlar ro‘yxati va CSV manbasi (BE-28, FE-06 TC2; CSV ni FE-02 umumiy yuklab olishi yig‘adi). */
+export class AffiliateLeadsQueryDto extends AffiliatePageQueryDto {
+  @ApiProperty({ example: '2027-01-08', description: 'Toshkent sanasi' })
+  @IsDateString()
+  from: string;
+
+  @ApiProperty({ example: '2027-01-14', description: 'Toshkent sanasi' })
+  @IsDateString()
+  to: string;
+
+  @ApiPropertyOptional({ example: '3301' })
+  @IsOptional()
+  @Matches(LEAD_BIGINT_ID, { message: 'streamId musbat son bo‘lishi kerak' })
+  streamId?: string;
+
+  @ApiPropertyOptional({ enum: LeadStatus })
+  @IsOptional()
+  @IsEnum(LeadStatus)
+  status?: LeadStatus;
+}
+
+/**
+ * Bitta lid — sotuvchi ko‘rinishi (SOT-4; hujjat-statistika-csv ustunlari A–I).
+ * Ism, manzil, to‘liq raqam va S1/S3 varianti yo‘q (BE-28 accept).
+ */
+export class AffiliateLeadRowDto {
+  @ApiProperty({ example: '7001' }) id: string;
+  @ApiProperty({ example: '2027-01-14T09:32:00.000Z' }) createdAt: Date;
+  @ApiProperty({ example: 'k7Qm2x', description: 'Sotuvchi sahifasi kodi' })
+  streamCode: string;
+
+  @ApiProperty({ example: 'kampaniya-1', nullable: true, type: String })
+  sub1: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  sub2: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  sub3: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  sub4: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  sub5: string | null;
+
+  @ApiProperty({
+    example: '****4567',
+    description: 'Faqat oxirgi 4 raqam (SOT-4)',
+  })
+  phoneLast4: string;
+
+  @ApiProperty({ enum: LeadStatus, example: LeadStatus.CONFIRMED })
+  status: LeadStatus;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'Buyurtma holati; buyurtma bo‘lmasa bo‘sh',
+  })
+  orderStatus: string | null;
+
+  @ApiProperty({
+    example: 65000,
+    nullable: true,
+    type: Number,
+    description: 'Sotuvchi haqi, so‘m; haq yo‘q bo‘lsa bo‘sh',
+  })
+  commission: number | null;
+
+  @ApiProperty({
+    enum: AffiliateCommissionState,
+    example: AffiliateCommissionState.HOLD,
+  })
+  commissionState: AffiliateCommissionState;
+}
+
+export class AffiliateLeadsPageDto {
+  @ApiProperty({ type: [AffiliateLeadRowDto] }) items: AffiliateLeadRowDto[];
+  @ApiProperty({ example: 60 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 3 }) totalPages: number;
 }

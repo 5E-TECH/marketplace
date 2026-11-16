@@ -3,6 +3,8 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   AdminLeadListItemDto,
+  AdminLeadsQueryDto,
+  AffiliateLeadRowDto,
   AffiliateOfferDto,
   AffiliateStatsRowDto,
   AffiliateStreamDto,
@@ -10,6 +12,7 @@ import {
   LeadCardDto,
   LeadHistoryEntryDto,
   LeadPreviousDto,
+  LeadPriceDto,
   OperatorLeadListItemDto,
 } from '@app/common';
 import { RegionsController } from '../geo/regions.controller';
@@ -33,14 +36,20 @@ const validLead = {
 // @nestjs/swagger ichki metadata kaliti (DECORATORS.API_MODEL_PROPERTIES_ARRAY)
 const SWAGGER_PROPS = 'swagger/apiModelPropertiesArray';
 
-async function errorsOf(body: Record<string, unknown>): Promise<string[]> {
-  const dto = plainToInstance(CreateLeadDto, body);
-  const errors = await validate(dto, {
+async function errorsIn(
+  cls: new () => object,
+  body: Record<string, unknown>,
+): Promise<string[]> {
+  // Global ValidationPipe bilan bir xil: whitelist + forbidNonWhitelisted (main.ts)
+  const errors = await validate(plainToInstance(cls, body), {
     whitelist: true,
     forbidNonWhitelisted: true,
   });
   return errors.map((e) => e.property);
 }
+
+const errorsOf = (body: Record<string, unknown>) =>
+  errorsIn(CreateLeadDto, body);
 
 function swaggerProps(dto: abstract new (...args: never[]) => unknown) {
   const props: string[] =
@@ -97,6 +106,26 @@ describe('Lid shartnomasi (BE-25)', () => {
     ).resolves.toEqual(['addressLine']);
   });
 
+  it('faqat bo‘shliqdan iborat ism va ko‘cha/uy — bo‘sh hisoblanadi', async () => {
+    await expect(
+      errorsOf({ ...validLead, addressLine: '   ', name: ' ' }),
+    ).resolves.toEqual(expect.arrayContaining(['addressLine', 'name']));
+  });
+
+  it('yashirin maydonning har qanday qiymati 400 bermaydi — tuzoq oshkor bo‘lmaydi (BE-12)', async () => {
+    for (const website of ['x'.repeat(300), 123, { a: 1 }])
+      await expect(errorsOf({ ...validLead, website })).resolves.toEqual([]);
+  });
+
+  it('ID maydonlari faqat musbat son: noto‘g‘ri qiymat 500 emas, 400', async () => {
+    await expect(errorsOf({ ...validLead, clickId: 'abc' })).resolves.toEqual([
+      'clickId',
+    ]);
+    await expect(
+      errorsIn(AdminLeadsQueryDto, { productId: 'abc', operatorId: '0' }),
+    ).resolves.toEqual(['productId', 'operatorId']);
+  });
+
   it('telefon faqat +998 va 9 raqam', async () => {
     await expect(
       errorsOf({ ...validLead, phone: '+99890123' }),
@@ -126,9 +155,27 @@ describe('Lid shartnomasi (BE-25)', () => {
       LeadPreviousDto,
       OperatorLeadListItemDto,
       AdminLeadListItemDto,
+      AffiliateLeadRowDto,
+      LeadPriceDto,
     ]) {
       expect(swaggerProps(dto)).not.toContain('variant');
     }
+  });
+
+  it('sotuvchining lid qatorida ism, manzil va to‘liq raqam yo‘q (BE-28)', () => {
+    const props = swaggerProps(AffiliateLeadRowDto);
+    for (const hidden of [
+      'customerName',
+      'name',
+      'phone',
+      'phoneMasked',
+      'address',
+      'addressLine',
+      'regionSoato',
+      'districtSoato',
+    ])
+      expect(props).not.toContain(hidden);
+    expect(props).toContain('phoneLast4');
   });
 
   it('postback siri va CAPI tokeni javobda qaytmaydi (BE-11)', () => {
@@ -158,6 +205,10 @@ describe('Lid shartnomasi (BE-25)', () => {
       () => aff.stats({ from: '2026-12-01', to: '2026-12-31' }),
       'BE-28',
     );
+    await expect501(
+      () => aff.listLeads({ from: '2027-01-08', to: '2027-01-14' }),
+      'BE-28',
+    );
 
     const op = new OperatorLeadsController();
     await expect501(() => op.takeNext(), 'BE-13');
@@ -168,6 +219,10 @@ describe('Lid shartnomasi (BE-25)', () => {
       'BE-13',
     );
     await expect501(() => op.updateAddress('7001', {} as never), 'BE-38');
+    await expect501(
+      () => op.quote('7001', { quantity: 2, whereDeliver: 'ADDRESS' } as never),
+      'BE-13',
+    );
     await expect501(() => op.setState({ state: 'ONLINE' } as never), 'BE-13');
     await expect501(() => op.queueSummary(), 'BE-13');
     await expect501(

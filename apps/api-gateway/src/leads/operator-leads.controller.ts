@@ -21,6 +21,8 @@ import {
 } from '@nestjs/swagger';
 import {
   LeadCardDto,
+  LeadPriceDto,
+  LeadPriceQuoteDto,
   LeadResultAcceptedDto,
   LeadStatsPeriodQueryDto,
   OperatorLeadListItemDto,
@@ -50,8 +52,12 @@ export class OperatorLeadsController {
       'Vaqti kelgan qayta qo‘ng‘iroqlar, keyin eng yangi lidlar. 5 tadan ortiq bron yoki tanaffus holatida rad (OPR-1, BE-13).',
   })
   @ApiOkResponse({ type: LeadCardDto })
+  @ApiNotFoundResponse({
+    description: 'Navbat bo‘sh: errorCode LEAD_QUEUE_EMPTY',
+  })
   @ApiConflictResponse({
-    description: 'Bronlar chegarasi to‘lgan yoki operator tanaffusda',
+    description:
+      'errorCode OPERATOR_ON_BREAK — operator tanaffusda; BOOKING_LIMIT_REACHED — 5 ta bron to‘lgan',
   })
   takeNext(): Promise<LeadCardDto> {
     return notImplementedYet('BE-13');
@@ -87,7 +93,8 @@ export class OperatorLeadsController {
   })
   @ApiOkResponse({ type: LeadResultAcceptedDto })
   @ApiBadRequestResponse({
-    description: 'Manzil tasdiqlanmagan, sabab yoki vaqt yo‘q',
+    description:
+      'errorCode ADDRESS_NOT_CONFIRMED — manzil tasdiqlanmagan; VALIDATION_ERROR — sabab yoki vaqt yo‘q',
   })
   submitResult(
     @Param('id') _id: string,
@@ -111,6 +118,22 @@ export class OperatorLeadsController {
     @Body() _dto: UpdateLeadAddressDto,
   ): Promise<LeadCardDto> {
     return notImplementedYet('BE-38');
+  }
+
+  @Post('leads/:id/quote')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Summani oldindan hisoblash: miqdor va yetkazish turi bo‘yicha',
+    description:
+      'Lid o‘zgarmaydi. Tovar, ko‘rinadigan yetkazish va jami — operator mijozga aytadigan summa (FE-09, OPR-4; yetkazish BE-09).',
+  })
+  @ApiOkResponse({ type: LeadPriceDto })
+  @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
+  quote(
+    @Param('id') _id: string,
+    @Body() _dto: LeadPriceQuoteDto,
+  ): Promise<LeadPriceDto> {
+    return notImplementedYet('BE-13');
   }
 
   @Put('state')
