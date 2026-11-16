@@ -409,3 +409,21 @@ export class LeadRegionGroupDto {
   @ApiProperty({ type: [LeadDistrictOptionDto] })
   districts: LeadDistrictOptionDto[];
 }
+
+/**
+ * integration.geo.resolve-address javobi (BE-38). Elchi geo keshida qidiriladi:
+ * tuman shu viloyatga bog‘langan bo‘lishi kerak; Elchi bormaydigan tuman keshda yo‘q (EQ-06).
+ * `error` maydon nomi bilan boshlanadi — gateway uni `details[].field` ga chiqaradi.
+ */
+export type LeadAddressResolution =
+  | {
+      ok: true;
+      regionSoato: string;
+      regionName: string;
+      districtSoato: string;
+      districtName: string;
+      /** Elchi ID lari: posilka yaratishda kerak (BE-20). */
+      elchiRegionId: string;
+      elchiDistrictId: string;
+    }
+  | { ok: false; field: 'regionSoato' | 'districtSoato'; error: string };
