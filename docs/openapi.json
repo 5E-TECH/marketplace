@@ -16636,6 +16636,32 @@
           "frequency"
         ]
       },
+      "LandingPageCreativeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "9001"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ],
+            "example": "VIDEO"
+          },
+          "url": {
+            "type": "string",
+            "example": "https://cdn.example.uz/creatives/9001.mp4"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "url"
+        ]
+      },
       "LandingPageSpecDto": {
         "type": "object",
         "properties": {
@@ -16681,7 +16707,15 @@
           "videoUrl": {
             "type": "string",
             "example": null,
-            "nullable": true
+            "nullable": true,
+            "description": "Mahsulot videosi; bo‘lmasa admin kreativlaridagi birinchi video (Video shabloni)"
+          },
+          "creatives": {
+            "description": "Admin yuklagan kreativlar: rasm va video (BE-08, SOT-9)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LandingPageCreativeDto"
+            }
           },
           "description": {
             "type": "string",
@@ -16745,6 +16779,7 @@
           "subtitle",
           "images",
           "videoUrl",
+          "creatives",
           "description",
           "highlights",
           "boxContents",
@@ -17107,7 +17142,7 @@
             "type": "number",
             "example": null,
             "nullable": true,
-            "description": "Sotilish foizi: yetkazilgan / tasdiqlangan. Bo‘sh — statistika yo‘q (yetkazish BE-21, BE-28 dan keyin)"
+            "description": "Sotilish foizi: mijoz olgan / jo‘natilgan buyurtmalar (TZ 1-bo‘lim «Sotilish foizi (jo‘natilgandan)»). Bo‘sh — statistika yo‘q (BE-21, BE-28 dan keyin)"
           },
           "stock": {
             "type": "number",
@@ -17391,10 +17426,12 @@
           },
           "metaPixelId": {
             "type": "string",
-            "example": "1234567890"
+            "example": "1234567890",
+            "description": "Faqat raqamlar; bo‘sh satr — o‘chirish"
           },
           "tiktokPixelId": {
-            "type": "string"
+            "type": "string",
+            "description": "Lotin harflari va raqamlar; bo‘sh satr — o‘chirish"
           },
           "postbackUrl": {
             "type": "string",
