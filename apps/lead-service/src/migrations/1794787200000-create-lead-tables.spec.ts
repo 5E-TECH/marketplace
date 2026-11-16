@@ -38,9 +38,10 @@ describe('CreateLeadTables1794787200000 (BE-10)', () => {
   it('variant faqat s1, s3 yoki bo‘sh (LID-8)', async () => {
     await new CreateLeadTables1794787200000().up(queryRunner);
     const all = queries.join(' ');
-    expect(all).toContain(
-      'CHECK ("variant" IS NULL OR "variant" IN (\'s1\', \'s3\'))',
-    );
+    for (const table of ['click', 'lead'])
+      expect(all).toContain(
+        `CONSTRAINT "chk_lead_${table}_variant" CHECK ("variant" IS NULL OR "variant" IN ('s1', 's3'))`,
+      );
   });
 
   it('API dan boshqa lidda manzil va yetkazish turi majburiy (LID-2, P-1)', async () => {

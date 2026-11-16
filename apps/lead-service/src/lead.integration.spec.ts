@@ -1,4 +1,4 @@
-import { DataSource, QueryFailedError } from 'typeorm';
+import { DataSource } from 'typeorm';
 import {
   CheckoutDeliveryDestination,
   LeadSource,
@@ -138,17 +138,32 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
     );
   });
 
-  it('TC4: variant faqat s1, s3 yoki bo‘sh', async () => {
+  it('TC4: click va lid variant — s1, s3 yoki bo‘sh; boshqa qiymat rad', async () => {
     const stream = await newStream();
-    await expect(
-      db.getRepository(Lead).save(landingLead(stream.id, { variant: null })),
-    ).resolves.toBeDefined();
+    for (const variant of [LeadVariant.S1, LeadVariant.S3, null]) {
+      await expect(
+        db.getRepository(Click).save({ streamId: stream.id, variant }),
+      ).resolves.toBeDefined();
+      await expect(
+        db.getRepository(Lead).save(
+          landingLead(stream.id, {
+            variant,
+            phoneE164: `+99890${variant === null ? '0000000' : variant === LeadVariant.S1 ? '1111111' : '3333333'}`,
+          }),
+        ),
+      ).resolves.toBeDefined();
+    }
     await expect(
       db.query(
         `INSERT INTO lead.click (stream_id, variant) VALUES ($1, 's2')`,
         [stream.id],
       ),
-    ).rejects.toThrow(QueryFailedError);
+    ).rejects.toThrow(/chk_lead_click_variant/);
+    await expect(
+      db
+        .getRepository(Lead)
+        .save(landingLead(stream.id, { variant: 's2' as LeadVariant })),
+    ).rejects.toThrow(/chk_lead_lead_variant/);
   });
 
   it('sotuvchi sahifasi lidida manzil bo‘lmasa baza rad etadi; API lidida majburiy emas', async () => {
