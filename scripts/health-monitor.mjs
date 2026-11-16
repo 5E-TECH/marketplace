@@ -20,6 +20,7 @@ const requiredQueues = [
   'notification_queue',
   'search_queue',
   'file_queue',
+  'lead_queue',
 ];
 
 let failures = 0;

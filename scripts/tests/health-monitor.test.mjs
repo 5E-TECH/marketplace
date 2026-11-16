@@ -19,6 +19,7 @@ test('consumer outage retries failed alerts, deduplicates and retries recovery',
     'notification',
     'search',
     'file',
+    'lead',
   ];
   let down = true;
   let rejectAlert = true;
