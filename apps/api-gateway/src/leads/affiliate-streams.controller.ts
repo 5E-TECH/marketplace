@@ -21,6 +21,8 @@ import {
 } from '@nestjs/swagger';
 import {
   AffiliateLeadsPageDto,
+  AffiliatePostbacksPageDto,
+  AffiliatePostbacksQueryDto,
   AffiliateLeadsQueryDto,
   AffiliateOffersPageDto,
   AffiliateOffersQueryDto,
@@ -139,5 +141,29 @@ export class AffiliateStreamsController {
     @Query() _query: AffiliateLeadsQueryDto,
   ): Promise<AffiliateLeadsPageDto> {
     return notImplementedYet('BE-28');
+  }
+
+  @Get('postbacks')
+  @ApiOperation({
+    summary:
+      'Yuborilganlar jurnali: postback hodisalari va javob kodlari (BE-14)',
+  })
+  @ApiOkResponse({ type: AffiliatePostbacksPageDto })
+  postbacks(
+    @CurrentUser('sub') affiliateId: string,
+    @Query() query: AffiliatePostbacksQueryDto,
+  ): Promise<AffiliatePostbacksPageDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.postback.journal' },
+      {
+        affiliateId,
+        query: {
+          page: query.page,
+          limit: query.limit,
+          streamId: query.streamId,
+        },
+      },
+    );
   }
 }
