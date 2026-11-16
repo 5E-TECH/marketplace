@@ -12,6 +12,7 @@ import {
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
   LandingPageState,
+  LeadReviewReason,
   StreamTemplate,
   LeadSource,
   LeadStatus,
@@ -27,9 +28,11 @@ import {
 } from './entities';
 import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
+import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
 import { OfferService } from './offer.service';
 import { StreamService } from './stream.service';
 import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
+import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -79,6 +82,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       migrations: [
         CreateLeadTables1794787200000,
         CreateOfferContent1794873600000,
+        AddLeadReview1794960000000,
       ],
       synchronize: false,
       logging: false,
@@ -639,6 +643,307 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       await expect(
         offers().listForAffiliate({ minApproveRate: 30 }),
       ).resolves.toMatchObject({ total: 1 });
+    });
+  });
+
+  describe('BE-12: lid qabul qilish', () => {
+    const geo = {
+      ok: true,
+      regionSoato: '1726',
+      regionName: 'Toshkent shahri',
+      districtSoato: '1726266',
+      districtName: 'Yunusobod tumani',
+      elchiRegionId: '1',
+      elchiDistrictId: '10',
+    };
+    const snapshot = (extra: Partial<CatalogOfferSnapshot> = {}) =>
+      ({
+        productId: '501',
+        name: 'Simsiz quloqchinlar',
+        subtitle: null,
+        description: null,
+        images: [],
+        videoUrl: null,
+        categoryId: null,
+        categoryName: null,
+        attributes: [],
+        weightGrams: 300,
+        isBad: false,
+        cpaAvailable: true,
+        withdrawn: false,
+        approvedPrice: 251000,
+        maxSalePrice: 276000,
+        affiliateFee: 65000,
+        centerDeliveryFee: 30000,
+        addressDeliveryFee: 50000,
+        stock: 10,
+        creatives: [],
+        createdAt: '2026-11-10T09:00:00.000Z',
+        ...extra,
+      }) as CatalogOfferSnapshot;
+    let offerNow: CatalogOfferSnapshot;
+    let geoResult: unknown;
+    const intake = (codes = '90,91,93,94,95,97,98,99') =>
+      new LeadIntakeService(
+        db,
+        db.getRepository(Stream),
+        { get: jest.fn(async () => offerNow) } as never,
+        new LeadAddressService(db, {
+          send: jest.fn(() => of(geoResult)),
+        } as never),
+        new ConfigService({ LEAD_PHONE_OPERATOR_CODES: codes }),
+      );
+    const streamFor = (affiliateId: string, code: string) =>
+      db.getRepository(Stream).save({
+        code,
+        affiliateId,
+        productId: '501',
+        salePrice: '262000',
+      });
+    const form = (code: string, extra: Record<string, unknown> = {}) =>
+      ({
+        code,
+        name: 'Aziza',
+        phone: '+998901234567',
+        regionSoato: '1726',
+        districtSoato: '1726266',
+        addressLine: 'Turkiston ko‘chasi, 27-uy',
+        whereDeliver: CheckoutDeliveryDestination.ADDRESS,
+        consentVersion: '2026-11-16',
+        ...extra,
+      }) as never;
+    const submit = (
+      code: string,
+      extra: Record<string, unknown> = {},
+      ip: string | null = '203.0.113.7',
+    ) =>
+      intake().create({
+        lead: form(code, extra),
+        ip,
+        userAgent: 'Mozilla/5.0',
+      });
+    const lead = (id: string) => db.getRepository(Lead).findOneByOrFail({ id });
+
+    beforeEach(() => {
+      offerNow = snapshot();
+      geoResult = geo;
+    });
+
+    it('TC0, TC1, TC5, TC6: to‘liq forma → lid yoziladi: manzil, yetkazish turi, variant, rozilik, narx', async () => {
+      await streamFor('77', 'aaaaaa');
+      const res = await submit('aaaaaa', { variant: LeadVariant.S3 });
+      expect(res.duplicate).toBe(false);
+      const row = await lead(res.leadId);
+      expect(row).toMatchObject({
+        source: LeadSource.LANDING,
+        status: LeadStatus.NEW,
+        affiliateId: '77',
+        productId: '501',
+        whereDeliver: 'ADDRESS',
+        regionSoato: '1726',
+        districtSoato: '1726266',
+        variant: 's3',
+        consentVersion: '2026-11-16',
+        salePrice: '262000',
+        reviewReason: null,
+      });
+      expect(row.consentAt).toBeInstanceOf(Date);
+      expect(row.nextAttemptAt).toBeInstanceOf(Date);
+      expect(
+        row.expiresAt!.getTime() - row.createdAt.getTime(),
+      ).toBeGreaterThan(2.9 * 24 * 3600 * 1000);
+    });
+
+    it('TC0: A sotuvchi sahifasidan → lid A ga, B dan → B ga', async () => {
+      await streamFor('77', 'aaaaaa');
+      await streamFor('78', 'bbbbbb');
+      const a = await submit('aaaaaa', { phone: '+998901111111' });
+      const b = await submit('bbbbbb', { phone: '+998902222222' });
+      expect((await lead(a.leadId)).affiliateId).toBe('77');
+      expect((await lead(b.leadId)).affiliateId).toBe('78');
+    });
+
+    it('TC1: operator kodi ro‘yxatda bo‘lmasa 400', async () => {
+      await streamFor('77', 'aaaaaa');
+      await expect(
+        submit('aaaaaa', { phone: '+998121234567' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('TC2: shu raqam va mahsulot 10 kundan keyin → avvalgi lidga, birinchi sotuvchi va variant', async () => {
+      await streamFor('77', 'aaaaaa');
+      await streamFor('78', 'bbbbbb');
+      const first = await submit('aaaaaa', { variant: LeadVariant.S1 });
+      await db.query(
+        `UPDATE lead.lead SET created_at = now() - interval '10 days' WHERE id = $1`,
+        [first.leadId],
+      );
+      const second = await submit(
+        'bbbbbb',
+        { variant: LeadVariant.S3 },
+        '198.51.100.9',
+      );
+      expect(second.duplicate).toBe(true);
+      const merged = await lead(second.leadId);
+      expect(merged).toMatchObject({
+        status: LeadStatus.MERGED,
+        mergedIntoId: first.leadId,
+        affiliateId: '78',
+      });
+      expect(await lead(first.leadId)).toMatchObject({
+        status: LeadStatus.NEW,
+        affiliateId: '77',
+        variant: 's1',
+      });
+      expect(
+        await db
+          .getRepository(Lead)
+          .count({ where: { status: LeadStatus.NEW } }),
+      ).toBe(1);
+    });
+
+    it('30 kundan keyin xuddi shu raqam — yangi lid', async () => {
+      await streamFor('77', 'aaaaaa');
+      const first = await submit('aaaaaa');
+      await db.query(
+        `UPDATE lead.lead SET created_at = now() - interval '31 days' WHERE id = $1`,
+        [first.leadId],
+      );
+      await expect(submit('aaaaaa')).resolves.toMatchObject({
+        duplicate: false,
+      });
+    });
+
+    it('10-qoida: «Aloqa bo‘lmadi» lid qayta ochiladi', async () => {
+      await streamFor('77', 'aaaaaa');
+      const first = await submit('aaaaaa');
+      await db.query(
+        `UPDATE lead.lead SET status = 'NO_CONTACT', attempts = 6 WHERE id = $1`,
+        [first.leadId],
+      );
+      const again = await submit('aaaaaa');
+      expect(again.duplicate).toBe(true);
+      expect(await lead(first.leadId)).toMatchObject({
+        status: LeadStatus.NEW,
+        attempts: 0,
+      });
+    });
+
+    it('9/10-qoidalar: «Rad etildi» 3 kun ichida qo‘shiladi, keyin yangi lid yangi sotuvchiga', async () => {
+      await streamFor('77', 'aaaaaa');
+      await streamFor('78', 'bbbbbb');
+      const first = await submit('aaaaaa');
+      await db.query(
+        `UPDATE lead.lead SET status = 'REJECTED', reject_reason = 'TOO_EXPENSIVE' WHERE id = $1`,
+        [first.leadId],
+      );
+      await db.getRepository(LeadHistory).save({
+        leadId: first.leadId,
+        fromStatus: LeadStatus.BOOKED,
+        toStatus: LeadStatus.REJECTED,
+      });
+      await expect(submit('bbbbbb')).resolves.toMatchObject({
+        duplicate: true,
+      });
+      await db.query(
+        `UPDATE lead.lead_history SET created_at = now() - interval '4 days' WHERE lead_id = $1 AND to_status = 'REJECTED'`,
+        [first.leadId],
+      );
+      const fresh = await submit('bbbbbb');
+      expect(fresh.duplicate).toBe(false);
+      expect((await lead(fresh.leadId)).affiliateId).toBe('78');
+    });
+
+    it('TC3: bir IP dan 10 daqiqada 6-ariza → tekshiruvga', async () => {
+      await streamFor('77', 'aaaaaa');
+      const ids: string[] = [];
+      for (let i = 0; i < 6; i++)
+        ids.push(
+          (await submit('aaaaaa', { phone: `+99890300000${i}` })).leadId,
+        );
+      const rows = await Promise.all(ids.map(lead));
+      expect(rows.slice(0, 5).every((r) => r.reviewReason === null)).toBe(true);
+      expect(rows[5].reviewReason).toBe(LeadReviewReason.IP_RATE);
+    });
+
+    it('TC4: yashirin maydon to‘ldirilgan → lid yozilmaydi, javob baribir', async () => {
+      await streamFor('77', 'aaaaaa');
+      await expect(submit('aaaaaa', { website: 'bot' })).resolves.toEqual({
+        leadId: HONEYPOT_LEAD_ID,
+        duplicate: false,
+      });
+      expect(await db.getRepository(Lead).count()).toBe(0);
+    });
+
+    it('TC7: 2 marta rad etgan raqam — lid tarixida qora ro‘yxat belgisi (chora EQ-04 da)', async () => {
+      const stream = await streamFor('77', 'aaaaaa');
+      for (const [i, product] of ['601', '602'].entries())
+        await db.getRepository(Lead).save(
+          landingLead(stream.id, {
+            productId: product,
+            status: LeadStatus.REJECTED,
+            rejectReason: 'NOT_NEEDED' as never,
+            phoneE164: '+998901234567',
+            name: `R${i}`,
+          }),
+        );
+      const res = await submit('aaaaaa');
+      const notes = await db
+        .getRepository(LeadHistory)
+        .find({ where: { leadId: res.leadId } });
+      expect(notes.some((n) => n.field === 'blacklist')).toBe(true);
+    });
+
+    it('sahifa ochiq emas (qoldiq 0) → 409; noto‘g‘ri tuman → 400; kod yo‘q → 404', async () => {
+      await streamFor('77', 'aaaaaa');
+      offerNow = snapshot({ stock: 0 });
+      await expect(submit('aaaaaa')).rejects.toBeInstanceOf(ConflictException);
+      offerNow = snapshot();
+      geoResult = {
+        ok: false,
+        field: 'districtSoato',
+        error: 'districtSoato tanlangan viloyatga tegishli emas',
+      };
+      await expect(submit('aaaaaa')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(submit('yoq123')).rejects.toBeInstanceOf(NotFoundException);
+      expect(await db.getRepository(Lead).count()).toBe(0);
+    });
+
+    it('ikki marta bosilgan forma (parallel) — bitta yangi lid, ikkinchisi dublikat', async () => {
+      await streamFor('77', 'aaaaaa');
+      const [a, b] = await Promise.all([submit('aaaaaa'), submit('aaaaaa')]);
+      expect([a.duplicate, b.duplicate].sort()).toEqual([false, true]);
+      expect(
+        await db
+          .getRepository(Lead)
+          .count({ where: { status: LeadStatus.NEW } }),
+      ).toBe(1);
+    });
+
+    it('boshqa sahifaning click_id si e’tiborga olinmaydi, o‘ziniki — variant klikdan', async () => {
+      const own = await streamFor('77', 'aaaaaa');
+      const other = await streamFor('78', 'bbbbbb');
+      const foreign = await db
+        .getRepository(Click)
+        .save({ streamId: other.id, variant: LeadVariant.S1 });
+      const mine = await db
+        .getRepository(Click)
+        .save({ streamId: own.id, variant: LeadVariant.S3 });
+      const r1 = await submit('aaaaaa', {
+        clickId: foreign.id,
+        phone: '+998904000001',
+      });
+      expect((await lead(r1.leadId)).clickId).toBeNull();
+      const r2 = await submit('aaaaaa', {
+        clickId: mine.id,
+        phone: '+998904000002',
+      });
+      expect(await lead(r2.leadId)).toMatchObject({
+        clickId: mine.id,
+        variant: 's3',
+      });
     });
   });
 });
