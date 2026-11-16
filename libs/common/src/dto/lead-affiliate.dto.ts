@@ -591,3 +591,33 @@ export class AffiliatePostbacksPageDto {
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 1 }) totalPages: number;
 }
+
+/** Sotuvchining lid API kaliti (BE-43, SOT-6). Kalitning o‘zi faqat yaratilganda bir marta ko‘rsatiladi. */
+export class AffiliateApiKeyDto {
+  @ApiProperty({ example: '12' }) id: string;
+  @ApiProperty({
+    example: 'elk_7Qm2',
+    description: 'Kalit boshi — tanish uchun',
+  })
+  prefix: string;
+
+  @ApiProperty({ example: 60, description: 'Daqiqasiga so‘rovlar (SOT-6)' })
+  rateLimitPerMinute: number;
+
+  @ApiProperty({ example: '2027-01-14T09:00:00.000Z' }) createdAt: Date;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  lastUsedAt: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  revokedAt: string | null;
+}
+
+export class AffiliateApiKeyCreatedDto extends AffiliateApiKeyDto {
+  @ApiProperty({
+    example: 'elk_7Qm2xK9pL3vN8rT1wY6zB4cD0fG5hJ2s',
+    description:
+      'To‘liq kalit — faqat shu javobda; bazada faqat xeshi saqlanadi',
+  })
+  key: string;
+}
