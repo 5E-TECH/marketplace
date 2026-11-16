@@ -58,6 +58,10 @@ import { BuyerReturnsController } from './returns/buyer-returns.controller';
 import { SellerReturnsController } from './sellers/seller-returns.controller';
 import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
+import { PublicLeadsController } from './leads/public-leads.controller';
+import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
+import { OperatorLeadsController } from './leads/operator-leads.controller';
+import { AdminLeadsController } from './leads/admin-leads.controller';
 
 @Module({
   imports: [
@@ -196,6 +200,10 @@ import { AdminReturnsController } from './admin/admin-returns.controller';
     SellerReturnsController,
     AdminReturnsController,
     SellerFinanceController,
+    PublicLeadsController,
+    AffiliateStreamsController,
+    OperatorLeadsController,
+    AdminLeadsController,
   ],
   providers: [
     AppService,
