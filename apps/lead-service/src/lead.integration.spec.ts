@@ -821,6 +821,13 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).toBeGreaterThan(2.9 * 24 * 3600 * 1000);
     });
 
+    it('lid narxi — sahifadagi amaldagi narx (tasdiqlangan narx oshgan bo‘lsa shunga)', async () => {
+      await streamFor('77', 'aaaaaa');
+      offerNow = snapshot({ approvedPrice: 270000, maxSalePrice: 297000 });
+      const res = await submit('aaaaaa');
+      expect((await lead(res.leadId)).salePrice).toBe('270000');
+    });
+
     it('TC0: A sotuvchi sahifasidan → lid A ga, B dan → B ga', async () => {
       await streamFor('77', 'aaaaaa');
       await streamFor('78', 'bbbbbb');

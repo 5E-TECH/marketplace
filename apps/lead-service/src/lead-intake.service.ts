@@ -27,6 +27,7 @@ import {
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, LeadHistory, Stream } from './entities';
 import { landingState } from './landing.service';
+import { effectiveSalePrice } from './offer-math';
 import {
   LeadAddressService,
   ResolvedLeadAddress,
@@ -91,7 +92,15 @@ export class LeadIntakeService {
     const address = await this.address.resolve(dto);
     const now = new Date();
     return this.db.transaction((manager) =>
-      this.write(manager, { dto, stream, address, now, ...input }),
+      this.write(manager, {
+        dto,
+        stream,
+        address,
+        now,
+        // Mijoz sahifada ko‘rgan narx: katalogning joriy chegarasida (BE-11 effectiveSalePrice)
+        salePrice: effectiveSalePrice(Number(stream.salePrice), offer),
+        ...input,
+      }),
     );
   }
 
@@ -101,6 +110,7 @@ export class LeadIntakeService {
       dto: CreateLeadDto;
       stream: Stream;
       address: ResolvedLeadAddress;
+      salePrice: number;
       now: Date;
       ip: string | null;
       userAgent: string | null;
@@ -167,7 +177,7 @@ export class LeadIntakeService {
       whereDeliver: dto.whereDeliver,
       variant: dto.variant ?? click?.variant ?? null,
       quantity: 1,
-      salePrice: stream.salePrice,
+      salePrice: String(ctx.salePrice),
       sub1: dto.sub1 ?? click?.sub1 ?? null,
       sub2: dto.sub2 ?? click?.sub2 ?? null,
       sub3: dto.sub3 ?? click?.sub3 ?? null,
