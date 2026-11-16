@@ -2,14 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -27,6 +30,9 @@ import {
   AffiliateStreamDto,
   AffiliateStreamsPageDto,
   CreateAffiliateStreamDto,
+  CurrentUser,
+  RmqClient,
+  sendRpc,
   UpdateAffiliateStreamDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from './lead-id.pipe';
@@ -41,15 +47,17 @@ import { notImplementedYet } from './lead-stub';
 @ApiBearerAuth()
 @Controller('affiliate')
 export class AffiliateStreamsController {
+  constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}
+
   @Get('offers')
   @ApiOperation({
     summary: 'Offerlar: mahsulot, narx, haq, EPC, tasdiq va sotilish foizi',
   })
   @ApiOkResponse({ type: AffiliateOffersPageDto })
   listOffers(
-    @Query() _query: AffiliateOffersQueryDto,
+    @Query() query: AffiliateOffersQueryDto,
   ): Promise<AffiliateOffersPageDto> {
-    return notImplementedYet('BE-11');
+    return sendRpc(this.lead, { cmd: 'lead.offer.list' }, { query });
   }
 
   @Post('streams')
@@ -59,20 +67,31 @@ export class AffiliateStreamsController {
       'Faqat offer ID: standart shablon, tasdiqlangan narx va unikal kod bilan tayyor havola. Qoldiq 0 bo‘lsa rad (BE-11).',
   })
   @ApiCreatedResponse({ type: AffiliateStreamDto })
-  @ApiBadRequestResponse({ description: 'Qoldiq yo‘q yoki offer yopiq' })
+  @ApiNotFoundResponse({ description: 'Offer topilmadi' })
+  @ApiConflictResponse({ description: 'Qoldiq yo‘q yoki offer yopiq' })
   createStream(
-    @Body() _dto: CreateAffiliateStreamDto,
+    @CurrentUser('sub') affiliateId: string,
+    @Body() dto: CreateAffiliateStreamDto,
   ): Promise<AffiliateStreamDto> {
-    return notImplementedYet('BE-11');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stream.create' },
+      { affiliateId, productId: dto.productId },
+    );
   }
 
   @Get('streams')
   @ApiOperation({ summary: '«Mening sahifalarim»' })
   @ApiOkResponse({ type: AffiliateStreamsPageDto })
   listStreams(
-    @Query() _query: AffiliatePageQueryDto,
+    @CurrentUser('sub') affiliateId: string,
+    @Query() query: AffiliatePageQueryDto,
   ): Promise<AffiliateStreamsPageDto> {
-    return notImplementedYet('BE-11');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stream.list' },
+      { affiliateId, page: query.page, limit: query.limit },
+    );
   }
 
   @Patch('streams/:id')
@@ -83,12 +102,18 @@ export class AffiliateStreamsController {
   })
   @ApiOkResponse({ type: AffiliateStreamDto })
   @ApiBadRequestResponse({ description: 'Narx chegaradan tashqarida' })
+  @ApiConflictResponse({ description: 'Offer narxi tasdiqlanmagan' })
   @ApiNotFoundResponse({ description: 'Sahifa bu sotuvchiniki emas' })
   updateStream(
-    @Param('id', ParseLeadIdPipe) _id: string,
-    @Body() _dto: UpdateAffiliateStreamDto,
+    @CurrentUser('sub') affiliateId: string,
+    @Param('id', ParseLeadIdPipe) streamId: string,
+    @Body() patch: UpdateAffiliateStreamDto,
   ): Promise<AffiliateStreamDto> {
-    return notImplementedYet('BE-11');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stream.update' },
+      { affiliateId, streamId, patch },
+    );
   }
 
   @Get('stats')
