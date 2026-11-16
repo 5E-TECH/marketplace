@@ -35,7 +35,10 @@ export interface LeadConfirmedEvent {
   /** Buyurtmada `delivery_address` bo‘ladi (faqat ko‘cha/uy, telefonsiz). */
   addressLine: string;
   whereDeliver: CheckoutDeliveryDestination;
+  /** «Tasdiqlandi» ni yozgan operator. */
   confirmedBy: string;
+  /** Manzilni tasdiqlagan operator (BE-38); odatda shu operator. */
+  addressConfirmedBy: string | null;
   /** ISO 8601 */
   confirmedAt: string;
 }

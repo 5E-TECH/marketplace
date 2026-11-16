@@ -40,7 +40,7 @@ import { LeadAdminService } from './lead-admin.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
-import { retryAt } from './lead-schedule';
+import { clampToCallWindow, nextDayAt, retryAt } from './lead-schedule';
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { OfferService } from './offer.service';
 import { StreamService } from './stream.service';
@@ -1191,14 +1191,16 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         `UPDATE lead.lead SET created_at = now() - interval '1 hour' WHERE id = $1`,
         [older.id],
       );
-      const [retry] = await seed(1, { attempts: 1 });
+      const [retry] = await seed(1, {
+        status: LeadStatus.CALLBACK,
+        attempts: 1,
+      });
       await online('41');
       expect(await queue().takeNext('41')).toBe(retry.id);
       expect(await queue().takeNext('41')).toBe(newer.id);
       expect(await queue().takeNext('41')).toBe(older.id);
       expect((await reload(held.id)).status).toBe(LeadStatus.NEW);
     });
-
     it('4-qoida: rejalashtirilgan qo‘ng‘iroq egasida; 15 daqiqa o‘tsa boshqasiga ham', async () => {
       const [cb] = await seed(1, {
         status: LeadStatus.CALLBACK,
@@ -1233,7 +1235,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       });
     });
 
-    it('natijalar: band → qayta urinish 15 daqiqadan (1-qoida); 6-urinish → «Aloqa bo‘lmadi» (TC4)', async () => {
+    it('natijalar: band → «Qayta qo‘ng‘iroq» 15 daqiqadan (1-qoida, TZ 5-bo‘lim jadvali); 6-urinish → «Aloqa bo‘lmadi» (TC4)', async () => {
       const [l] = await seed(1);
       await online('41');
       await queue().takeNext('41');
@@ -1241,13 +1243,14 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       const r = await queue().submitResult('41', l.id, {
         outcome: LeadOutcome.BUSY,
       });
-      expect(r.status).toBe(LeadStatus.NEW);
+      expect(r.status).toBe(LeadStatus.CALLBACK);
+      expect((await reload(l.id)).operatorId).toBeNull();
       const expected = retryAt(1, before).getTime();
       expect(
         Math.abs(new Date(r.nextAttemptAt!).getTime() - expected),
       ).toBeLessThan(5_000);
+      // now() mikrosoniyali, JS vaqti millisekundli: bir millisekund ichida «hali kelmagan» bo‘lmasin
       await db.query(
-        // now() mikrosoniyali, JS vaqti millisekundli: bir millisekund ichida «hali kelmagan» bo‘lmasin
         `UPDATE lead.lead SET attempts = 5, next_attempt_at = now() - interval '1 second' WHERE id = $1`,
         [l.id],
       );
@@ -1257,6 +1260,63 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).resolves.toMatchObject({ status: LeadStatus.NO_CONTACT });
     });
 
+    it('«O‘ylab ko‘radi» vaqtsiz → ertasi kuni, egasiz; zinapoyaga kirmaydi', async () => {
+      const [l] = await seed(1);
+      await online('41');
+      await queue().takeNext('41');
+      const before = new Date();
+      const r = await queue().submitResult('41', l.id, {
+        outcome: LeadOutcome.THINKING,
+      });
+      expect(r.status).toBe(LeadStatus.CALLBACK);
+      expect(r.nextAttemptAt).toBe(nextDayAt(before).toISOString());
+      expect((await reload(l.id)).operatorId).toBeNull();
+    });
+
+    it('qayta ochilgan lidda zinapoya joriy oynadan: eski aloqasiz urinishlar hisobga olinmaydi', async () => {
+      const [l] = await seed(1);
+      for (let i = 0; i < 4; i++)
+        await db.getRepository(LeadAttempt).save({
+          leadId: l.id,
+          operatorId: '41',
+          outcome: LeadOutcome.NO_ANSWER,
+        });
+      await db.query(
+        `UPDATE lead.lead_attempt SET created_at = now() - interval '10 days' WHERE lead_id = $1`,
+        [l.id],
+      );
+      await online('41');
+      await queue().takeNext('41');
+      const before = new Date();
+      const r = await queue().submitResult('41', l.id, {
+        outcome: LeadOutcome.NO_ANSWER,
+      });
+      expect(
+        Math.abs(
+          new Date(r.nextAttemptAt!).getTime() - retryAt(1, before).getTime(),
+        ),
+      ).toBeLessThan(5_000);
+    });
+
+    it('6-qoida: 5 ta bron bo‘lsa avtomatik qayta urinish berilmaydi, mijoz aytgan qayta qo‘ng‘iroq beriladi', async () => {
+      await seed(5);
+      await online('41');
+      for (let i = 0; i < 5; i++) await queue().takeNext('41');
+      const [auto] = await seed(1, {
+        status: LeadStatus.CALLBACK,
+        attempts: 1,
+      });
+      await expect(queue().takeNext('41')).rejects.toMatchObject({
+        response: { errorCode: LeadErrorCode.BOOKING_LIMIT_REACHED },
+      });
+      const [own] = await seed(1, {
+        status: LeadStatus.CALLBACK,
+        operatorId: '41',
+        attempts: 1,
+      });
+      expect(await queue().takeNext('41')).toBe(own.id);
+      expect((await reload(auto.id)).status).toBe(LeadStatus.CALLBACK);
+    });
     it('TC5: rad sababsiz → 400; boshqa operator natija yozolmaydi → 404', async () => {
       const [l] = await seed(1);
       await online('41');
@@ -1311,15 +1371,24 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       });
     });
 
-    it('TC6: rejalashtirilgan qo‘ng‘iroqdan 5 daqiqa oldin bitta eslatma hodisasi', async () => {
+    it('TC6: rejalashtirilgan qo‘ng‘iroqdan 5 daqiqa oldin bitta eslatma hodisasi; vaqt 09:00–21:00 ga suriladi', async () => {
       const [l] = await seed(1);
       await online('41');
       await queue().takeNext('41');
-      await queue().submitResult('41', l.id, {
+      const asked = new Date(Date.now() + 3 * 60_000);
+      const r = await queue().submitResult('41', l.id, {
         outcome: LeadOutcome.CALL_LATER,
-        callbackAt: new Date(Date.now() + 3 * 60_000).toISOString(),
+        callbackAt: asked.toISOString(),
       });
-      expect((await reload(l.id)).status).toBe(LeadStatus.CALLBACK);
+      expect(r.nextAttemptAt).toBe(clampToCallWindow(asked).toISOString());
+      expect(await reload(l.id)).toMatchObject({
+        status: LeadStatus.CALLBACK,
+        operatorId: '41',
+      });
+      await db.query(
+        `UPDATE lead.lead SET next_attempt_at = now() + interval '3 minutes' WHERE id = $1`,
+        [l.id],
+      );
       await expect(queue().sweep()).resolves.toMatchObject({ reminded: 1 });
       await expect(queue().sweep()).resolves.toMatchObject({ reminded: 0 });
       const events = await db.getRepository(OutboxEvent).find();
@@ -1328,32 +1397,59 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ]);
     });
 
-    it('TC8: order.create-failed → lid navbatda «qoldiq yo‘q» belgisi bilan, kartada ko‘rinadi', async () => {
+    it('mijoz aytgan qayta qo‘ng‘iroq 3 kun o‘tsa ham yopilmaydi; avtomatik urinish yopiladi', async () => {
+      const [own] = await seed(1);
+      await online('41');
+      await queue().takeNext('41');
+      await queue().submitResult('41', own.id, {
+        outcome: LeadOutcome.CALL_LATER,
+        callbackAt: new Date(Date.now() + 4 * 24 * 3600 * 1000).toISOString(),
+      });
+      const [auto] = await seed(1, {
+        status: LeadStatus.CALLBACK,
+        attempts: 2,
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+      const later = new Date(Date.now() + 3.5 * 24 * 3600 * 1000);
+      await expect(queue().sweep(later)).resolves.toMatchObject({ closed: 1 });
+      expect((await reload(own.id)).status).toBe(LeadStatus.CALLBACK);
+      expect((await reload(auto.id)).status).toBe(LeadStatus.NO_CONTACT);
+    });
+    it('TC8: order.create-failed → lid navbatda «qoldiq yo‘q» belgisi bilan, yangi 3 kunlik oyna, kartada ko‘rinadi', async () => {
       const [l] = await seed(1, {
         status: LeadStatus.CONFIRMED,
         operatorId: '41',
+        attempts: 3,
+        expiresAt: new Date(Date.now() - 24 * 3600 * 1000),
       });
-      await queue().onOrderCreateFailed({
+      const ev = {
         eventId: 'e1',
         leadId: l.id,
         reason: 'OUT_OF_STOCK' as never,
         at: new Date().toISOString(),
-      });
-      await queue().onOrderCreateFailed({
-        eventId: 'e1',
-        leadId: l.id,
-        reason: 'OUT_OF_STOCK' as never,
-        at: new Date().toISOString(),
-      });
+      };
+      await queue().onOrderCreateFailed(ev);
+      await queue().onOrderCreateFailed(ev);
       const row = await reload(l.id);
-      expect(row.status).toBe(LeadStatus.NEW);
+      expect(row).toMatchObject({
+        status: LeadStatus.CALLBACK,
+        operatorId: null,
+        attempts: 0,
+      });
       expect(row.stockShortageAt).toBeInstanceOf(Date);
+      expect(row.expiresAt!.getTime()).toBeGreaterThan(
+        Date.now() + 2.9 * 24 * 3600 * 1000,
+      );
+      await expect(queue().sweep()).resolves.toMatchObject({ closed: 0 });
+      await db.query(
+        `UPDATE lead.lead SET next_attempt_at = now() - interval '1 second' WHERE id = $1`,
+        [l.id],
+      );
       await online('41');
       await queue().takeNext('41');
       const card = await cards().forOperator('41', l.id);
       expect(card.stockShortage).toBe(true);
     });
-
     it('karta: faqat o‘z operatoriga; raqam niqoblangan, variant yo‘q; narx bitta dona — sahifadagi yetkazish', async () => {
       const [l] = await seed(1, { variant: LeadVariant.S3 });
       await online('41');
@@ -1378,22 +1474,73 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).resolves.toBeNull();
     });
 
-    it('DUPLICATE: lid avvalgisiga qo‘shiladi', async () => {
-      const [root, dup] = await seed(2);
+    it('DUPLICATE: faqat shu raqam va mahsulotdagi lidga qo‘shiladi', async () => {
+      const [root] = await seed(1, { phoneE164: '+998907777777' });
+      await db.query(
+        `UPDATE lead.lead SET created_at = now() - interval '1 hour' WHERE id = $1`,
+        [root.id],
+      );
+      const [dup] = await seed(1, { phoneE164: '+998907777777' });
+      const [other] = await seed(1, { phoneE164: '+998908888888' });
+      await db.query(
+        `UPDATE lead.lead SET status = 'CONFIRMED' WHERE id IN ($1, $2)`,
+        [root.id, other.id],
+      );
       await online('41');
-      await queue().takeNext('41');
-      const booked =
-        (await reload(dup.id)).status === LeadStatus.BOOKED ? dup : root;
-      const other = booked.id === dup.id ? root : dup;
+      expect(await queue().takeNext('41')).toBe(dup.id);
       await expect(
-        queue().submitResult('41', booked.id, {
+        queue().submitResult('41', dup.id, {
           outcome: LeadOutcome.DUPLICATE,
           duplicateOfLeadId: other.id,
         }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        queue().submitResult('41', dup.id, {
+          outcome: LeadOutcome.DUPLICATE,
+          duplicateOfLeadId: root.id,
+        }),
       ).resolves.toMatchObject({ status: LeadStatus.MERGED });
-      expect((await reload(booked.id)).mergedIntoId).toBe(other.id);
+      expect((await reload(dup.id)).mergedIntoId).toBe(root.id);
     });
 
+    it('lead.confirmed: confirmedBy — tasdiqlagan operator, addressConfirmedBy — manzilni tasdiqlagan', async () => {
+      const [l] = await seed(1);
+      await addressService().confirmByOperator(l.id, '40', {
+        regionSoato: '1726',
+        districtSoato: '1726266',
+        addressLine: 'Turkiston 27',
+        whereDeliver: CheckoutDeliveryDestination.CENTER,
+      });
+      await online('41');
+      await queue().takeNext('41');
+      await queue().submitResult('41', l.id, {
+        outcome: LeadOutcome.CONFIRMED,
+      });
+      const [event] = await db.getRepository(OutboxEvent).find();
+      expect(event.payload).toMatchObject({
+        confirmedBy: '41',
+        addressConfirmedBy: '40',
+      });
+    });
+
+    it('manzilni faqat lid egasi o‘zgartiradi (qulf ostida tekshiriladi)', async () => {
+      const [l] = await seed(1);
+      await online('41');
+      await queue().takeNext('41');
+      await expect(
+        addressService().confirmByOperator(
+          l.id,
+          '42',
+          {
+            regionSoato: '1726',
+            districtSoato: '1726266',
+            addressLine: 'x',
+            whereDeliver: CheckoutDeliveryDestination.CENTER,
+          },
+          { requireOwner: true },
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
     it('outbox relay: sozlama o‘chiq — yubormaydi; yoqilsa checkout ga yuborib PROCESSED qiladi', async () => {
       const outbox = db.getRepository(OutboxEvent);
       await outbox.save(
