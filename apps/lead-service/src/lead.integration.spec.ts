@@ -1,14 +1,35 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
+  AffiliateOfferSort,
+  AffiliateStreamStatus,
+  CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
+  LandingPageState,
+  StreamTemplate,
   LeadSource,
   LeadStatus,
   LeadVariant,
 } from '@app/common';
-import { Click, LEAD_ENTITIES, Lead, LeadHistory, Stream } from './entities';
+import {
+  Click,
+  LEAD_ENTITIES,
+  Lead,
+  LeadHistory,
+  OfferContent,
+  Stream,
+} from './entities';
+import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
+import { OfferService } from './offer.service';
+import { StreamService } from './stream.service';
+import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -55,7 +76,10 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       url: testDatabaseUrl,
       schema: 'lead',
       entities: LEAD_ENTITIES,
-      migrations: [CreateLeadTables1794787200000],
+      migrations: [
+        CreateLeadTables1794787200000,
+        CreateOfferContent1794873600000,
+      ],
       synchronize: false,
       logging: false,
     });
@@ -331,6 +355,290 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       await expect(
         makeService().confirmByOperator('999999', '41', formAddress),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('BE-11: offerlar, sotuvchi sahifasi va kliklar', () => {
+    const offer = (
+      productId: string,
+      extra: Partial<CatalogOfferSnapshot> = {},
+    ): CatalogOfferSnapshot => ({
+      productId,
+      name: 'Simsiz quloqchinlar',
+      subtitle: 'Bluetooth, quvvatlovchi g‘ilof bilan',
+      description: 'Telefonga Bluetooth orqali ulanadi.',
+      images: ['https://cdn.example.uz/p/1.jpg'],
+      videoUrl: null,
+      categoryId: '12',
+      categoryName: 'Elektronika',
+      attributes: [{ name: 'Aloqa', value: 'Bluetooth' }],
+      weightGrams: 300,
+      isBad: false,
+      cpaAvailable: true,
+      withdrawn: false,
+      approvedPrice: 251000,
+      maxSalePrice: 276000,
+      affiliateFee: 65000,
+      centerDeliveryFee: 30000,
+      addressDeliveryFee: 50000,
+      stock: 120,
+      creatives: [
+        { id: '9001', type: 'VIDEO', url: 'https://cdn.example.uz/c/9001.mp4' },
+      ],
+      createdAt: '2026-11-10T09:00:00.000Z',
+      ...extra,
+    });
+    let catalog: Record<string, CatalogOfferSnapshot>;
+    const fakeCatalog = {
+      get: jest.fn(async (id: string) => catalog[id] ?? null),
+      list: jest.fn(async (q: { productIds?: string[] }) =>
+        Object.values(catalog).filter(
+          (o) => !q.productIds || q.productIds.includes(o.productId),
+        ),
+      ),
+    };
+    const config = new ConfigService({
+      INTEGRATION_CREDENTIAL_SECRET: 'isolated-test-encryption-key-0001',
+      LEAD_LANDING_BASE_URL: 'https://sahifa.test/',
+    });
+    const streams = () =>
+      new StreamService(
+        db.getRepository(Stream),
+        db.getRepository(Click),
+        db.getRepository(Lead),
+        fakeCatalog as never,
+        config,
+      );
+    const landing = () =>
+      new LandingService(
+        db.getRepository(Stream),
+        db.getRepository(Click),
+        db.getRepository(OfferContent),
+        fakeCatalog as never,
+      );
+    const offers = () =>
+      new OfferService(
+        db.getRepository(Lead),
+        db.getRepository(OfferContent),
+        fakeCatalog as never,
+      );
+
+    beforeEach(() => {
+      catalog = {
+        '501': offer('501'),
+        '502': offer('502', { name: 'Choynak' }),
+      };
+    });
+
+    it('TC1: faqat offer ID → standart shablon, tasdiqlangan narx va tayyor havola', async () => {
+      const s1 = await streams().create('77', '501');
+      expect(s1.code).toMatch(/^[A-Za-z0-9]{6}$/);
+      expect(s1).toMatchObject({
+        productId: '501',
+        productName: 'Simsiz quloqchinlar',
+        template: StreamTemplate.STANDART,
+        salePrice: 251000,
+        status: AffiliateStreamStatus.ACTIVE,
+        link: `https://sahifa.test/${s1.code}`,
+        clicks: 0,
+        leads: 0,
+      });
+    });
+
+    it('TC2/TC3: uch sotuvchi — uch havola; bitta sotuvchida ikkita sahifa', async () => {
+      const codes = await Promise.all(
+        ['77', '78', '79'].map(
+          async (a) => (await streams().create(a, '501')).code,
+        ),
+      );
+      expect(new Set(codes).size).toBe(3);
+      await streams().create('77', '501');
+      const mine = await streams().list('77');
+      expect(mine.total).toBe(2);
+      expect(mine.items.every((i) => i.productId === '501')).toBe(true);
+    });
+
+    it('TC4: narx 276 000 saqlanadi, 277 000 va tasdiqlangandan past rad', async () => {
+      const s1 = await streams().create('77', '501');
+      await expect(
+        streams().update('77', s1.id, { salePrice: 276000 }),
+      ).resolves.toMatchObject({ salePrice: 276000 });
+      for (const salePrice of [277000, 276100, 250000])
+        await expect(
+          streams().update('77', s1.id, { salePrice }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('katalog chegara bermasa narx faqat tasdiqlangan narx bo‘ladi', async () => {
+      catalog['501'] = offer('501', { maxSalePrice: null });
+      const s1 = await streams().create('77', '501');
+      await expect(
+        streams().update('77', s1.id, { salePrice: 251001 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        streams().update('77', s1.id, { salePrice: 251000 }),
+      ).resolves.toMatchObject({ salePrice: 251000 });
+    });
+
+    it('TC5: qoldiq 0 offerga sahifa ochilmaydi', async () => {
+      catalog['501'] = offer('501', { stock: 0 });
+      await expect(streams().create('77', '501')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('TC6: sir va token shifrlanadi, javobda faqat belgisi', async () => {
+      const s1 = await streams().create('77', '501');
+      const dto = await streams().update('77', s1.id, {
+        postbackSecret: 'maxfiy-sir-123',
+        capiToken: 'capi-token-xyz',
+        metaPixelId: '1234567890',
+      });
+      expect(dto).toMatchObject({
+        hasPostbackSecret: true,
+        hasCapiToken: true,
+        metaPixelId: '1234567890',
+      });
+      expect(JSON.stringify(dto)).not.toMatch(/maxfiy-sir-123|capi-token-xyz/);
+      const row = await db.getRepository(Stream).findOneByOrFail({ id: s1.id });
+      expect(row.postbackSecretEnc).not.toContain('maxfiy-sir-123');
+    });
+
+    it('boshqa sotuvchining sahifasi o‘zgartirilmaydi (SOT-3)', async () => {
+      const s1 = await streams().create('77', '501');
+      await expect(
+        streams().update('78', s1.id, { template: StreamTemplate.VIDEO }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('TC7: klik shu sahifaga sub, utm, variant, IP va user agent bilan yoziladi', async () => {
+      const s1 = await streams().create('77', '501');
+      const { clickId } = await landing().createClick(
+        {
+          code: s1.code,
+          variant: LeadVariant.S3,
+          sub1: 'kampaniya-1',
+          utmSource: 'facebook',
+          fbclid: 'fb.1',
+        },
+        { ip: '203.0.113.7', userAgent: 'Mozilla/5.0' },
+      );
+      expect(
+        await db.getRepository(Click).findOneByOrFail({ id: clickId }),
+      ).toMatchObject({
+        streamId: s1.id,
+        variant: 's3',
+        sub1: 'kampaniya-1',
+        utmSource: 'facebook',
+        ip: '203.0.113.7',
+        userAgent: 'Mozilla/5.0',
+      });
+      expect((await streams().list('77')).items[0].clicks).toBe(1);
+      await expect(
+        landing().createClick(
+          { code: 'yoq123' },
+          { ip: null, userAgent: null },
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('TC10–TC12: sahifa holati — ochiq, vaqtincha yo‘q, qabul qilinmaydi, sotuvdan olingan', async () => {
+      const s1 = await streams().create('77', '501');
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.OPEN,
+      );
+      catalog['501'] = offer('501', { stock: 0 });
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.OUT_OF_STOCK,
+      );
+      catalog['501'] = offer('501', { withdrawn: true });
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.WITHDRAWN,
+      );
+      catalog['501'] = offer('501');
+      await db
+        .getRepository(Stream)
+        .update({ id: s1.id }, { status: AffiliateStreamStatus.STOPPED });
+      expect((await landing().getLanding(s1.code)).state).toBe(
+        LandingPageState.NOT_ACCEPTED,
+      );
+      await expect(landing().getLanding('yoq123')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('TC13: ochiq javobda bazaviy narx, sotuvchi haqi va optovik yo‘q; matnlar va xususiyatlar bor', async () => {
+      const s1 = await streams().create('77', '501');
+      await offers().updateContent('501', '1', {
+        highlights: ['  Telefonga Bluetooth orqali ulanadi ', ''],
+        boxContents: ['Quloqchinlar (juft)', 'Quvvat kabeli'],
+      });
+      const page = await landing().getLanding(s1.code);
+      const json = JSON.stringify(page);
+      for (const hidden of [
+        'affiliateFee',
+        'approvedPrice',
+        'basePrice',
+        'wholesaler',
+        '65000',
+        'variant',
+      ])
+        expect(json).not.toContain(hidden);
+      expect(page.price).toEqual({
+        salePrice: 251000,
+        centerDeliveryFee: 30000,
+        addressDeliveryFee: 50000,
+      });
+      expect(page.product.highlights).toEqual([
+        'Telefonga Bluetooth orqali ulanadi',
+      ]);
+      expect(page.product.boxContents).toEqual([
+        'Quloqchinlar (juft)',
+        'Quvvat kabeli',
+      ]);
+      expect(page.product.specs).toEqual([
+        { name: 'Aloqa', value: 'Bluetooth' },
+        { name: 'Og‘irlik', value: '0.3 kg' },
+        { name: 'Kategoriya', value: 'Elektronika' },
+      ]);
+    });
+
+    it('offerlar: tasdiq foizi liddan, filtr «tasdiq ≥ 50%» va saralash (FE-05 TC5)', async () => {
+      const s1 = await streams().create('77', '501');
+      const statuses = [
+        LeadStatus.CONFIRMED,
+        LeadStatus.NEW,
+        LeadStatus.NO_CONTACT,
+        LeadStatus.INVALID,
+      ];
+      for (const [i, status] of statuses.entries())
+        await db.getRepository(Lead).save(
+          landingLead(s1.id, {
+            productId: '501',
+            status,
+            phoneE164: `+99891000000${i}`,
+          }),
+        );
+      const all = await offers().listForAffiliate({
+        sort: AffiliateOfferSort.APPROVE_RATE,
+      });
+      expect(all.items.map((o) => [o.productId, o.approveRate])).toEqual([
+        ['501', 33],
+        ['502', null],
+      ]);
+      expect(all.items[0]).toMatchObject({
+        maxSalePrice: 276000,
+        affiliateFee: 65000,
+        epc: null,
+        saleRate: null,
+        hasVideo: true,
+      });
+      await expect(
+        offers().listForAffiliate({ minApproveRate: 50 }),
+      ).resolves.toMatchObject({ total: 0, items: [] });
+      await expect(
+        offers().listForAffiliate({ minApproveRate: 30 }),
+      ).resolves.toMatchObject({ total: 1 });
     });
   });
 });

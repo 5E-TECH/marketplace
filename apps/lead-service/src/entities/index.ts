@@ -5,6 +5,7 @@ import { CapiDelivery, PostbackDelivery } from './delivery.entity';
 import { LeadAttempt } from './lead-attempt.entity';
 import { LeadHistory } from './lead-history.entity';
 import { Lead } from './lead.entity';
+import { OfferContent } from './offer-content.entity';
 import { OperatorState } from './operator-state.entity';
 import { Stream } from './stream.entity';
 
@@ -15,6 +16,7 @@ export {
   Lead,
   LeadAttempt,
   LeadHistory,
+  OfferContent,
   OperatorState,
   PostbackDelivery,
   Stream,
@@ -31,5 +33,6 @@ export const LEAD_ENTITIES = [
   PostbackDelivery,
   CapiDelivery,
   AffiliateApiKey,
+  OfferContent,
   OutboxEvent,
 ];
