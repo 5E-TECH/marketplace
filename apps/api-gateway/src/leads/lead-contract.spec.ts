@@ -207,12 +207,6 @@ describe('Lid shartnomasi (BE-25)', () => {
 
   it('stublar 501 va NOT_IMPLEMENTED qaytaradi, kartasini aytadi', async () => {
     const lead = { send: jest.fn() } as never;
-    const pub = new PublicLeadsController(lead);
-    await expect501(
-      () => pub.createLead(validLead as unknown as CreateLeadDto),
-      'BE-12',
-    );
-
     const aff = new AffiliateStreamsController(lead);
     await expect501(
       () => aff.stats({ from: '2026-12-01', to: '2026-12-31' }),
@@ -254,13 +248,22 @@ describe('Lid shartnomasi (BE-25)', () => {
       return { send, client: { send } as never };
     };
 
-    it('ochiq sahifa va klik: kod, IP va user agent bilan', async () => {
+    it('ochiq sahifa, lid va klik: kod, IP va user agent bilan (BE-11, BE-12)', async () => {
       const { send, client } = make();
       const pub = new PublicLeadsController(client);
       await pub.getLandingPage('k7Qm2x');
       expect(send).toHaveBeenLastCalledWith(
         { cmd: 'lead.landing.get' },
         { code: 'k7Qm2x' },
+      );
+      await pub.createLead(
+        validLead as unknown as CreateLeadDto,
+        '203.0.113.7',
+        undefined,
+      );
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.create' },
+        { lead: validLead, ip: '203.0.113.7', userAgent: null },
       );
       await pub.createClick(
         { code: 'k7Qm2x', variant: 's3', sub1: 'a' } as never,
