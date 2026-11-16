@@ -36,6 +36,7 @@ import {
 import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
 import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
+import { LeadAdminService } from './lead-admin.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -1418,6 +1419,103 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         leadId: '1',
       });
       expect((await outbox.find())[0].status).toBe(OutboxStatus.PROCESSED);
+    });
+  });
+
+  describe('BE-42: admin va nazoratchi lidlari', () => {
+    const catalogFake = {
+      get: jest.fn(async () => null),
+      list: jest.fn(async () => [
+        { productId: '501', name: 'Simsiz quloqchinlar' },
+      ]),
+    };
+    const cardService = () =>
+      new LeadCardService(
+        db.getRepository(Lead),
+        db.getRepository(LeadAttempt),
+        db.getRepository(LeadHistory),
+        db.getRepository(OfferContent),
+        catalogFake as never,
+        {
+          send: jest.fn(() => throwError(() => new Error('no handler'))),
+        } as never,
+        {
+          send: jest.fn(() => throwError(() => new Error('no handler'))),
+        } as never,
+      );
+    const admin = () =>
+      new LeadAdminService(
+        db.getRepository(Lead),
+        catalogFake as never,
+        cardService(),
+      );
+
+    it('TC1: holat, sotuvchi, mahsulot, operator va sana filtrlari; TC2: telefon niqoblangan', async () => {
+      const stream = await newStream();
+      const save = (extra: Partial<Lead>) =>
+        db.getRepository(Lead).save(landingLead(stream.id, extra));
+      const a = await save({ phoneE164: '+998901110001' });
+      await save({
+        phoneE164: '+998901110002',
+        status: LeadStatus.REJECTED,
+        rejectReason: 'OTHER' as never,
+      });
+      await save({ phoneE164: '+998901110003', operatorId: '41' });
+      await save({ phoneE164: '+998901110004', productId: '777' });
+      await db.query(
+        `UPDATE lead.lead SET created_at = '2026-12-05T10:00:00+05:00' WHERE id = $1`,
+        [a.id],
+      );
+      const all = await admin().list({});
+      expect(all.total).toBe(4);
+      expect(
+        all.items.every((i) =>
+          /^\+998 90 \*\*\* \*\* \d{2}$/.test(i.phoneMasked),
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(all)).not.toContain('+998901110001');
+      expect((await admin().list({ status: LeadStatus.REJECTED })).total).toBe(
+        1,
+      );
+      expect((await admin().list({ operatorId: '41' })).total).toBe(1);
+      expect((await admin().list({ productId: '777' })).total).toBe(1);
+      expect((await admin().list({ affiliateId: '42' })).total).toBe(4);
+      const day = await admin().list({ from: '2026-12-05', to: '2026-12-05' });
+      expect(day.items.map((i) => i.id)).toEqual([a.id]);
+      expect(day.items[0]).toMatchObject({
+        productName: 'Simsiz quloqchinlar',
+        affiliateName: '#42',
+      });
+      expect((await admin().list({ page: 2, limit: 3 })).items).toHaveLength(1);
+    });
+
+    it('TC4: karta shu telefondagi oldingi lidni holati bilan ko‘rsatadi; lid yo‘q → 404', async () => {
+      const stream = await newStream();
+      const prev = await db.getRepository(Lead).save(
+        landingLead(stream.id, {
+          phoneE164: '+998902220000',
+          status: LeadStatus.REJECTED,
+          rejectReason: 'TOO_EXPENSIVE' as never,
+          productId: '501',
+        }),
+      );
+      const cur = await db.getRepository(Lead).save(
+        landingLead(stream.id, {
+          phoneE164: '+998902220000',
+          productId: '502',
+        }),
+      );
+      const card = await admin().card(cur.id);
+      expect(card.previousLeads).toEqual([
+        expect.objectContaining({
+          id: prev.id,
+          status: LeadStatus.REJECTED,
+          rejectReason: 'TOO_EXPENSIVE',
+        }),
+      ]);
+      await expect(admin().card('999999')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });
