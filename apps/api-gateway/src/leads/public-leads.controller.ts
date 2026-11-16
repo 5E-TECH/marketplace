@@ -13,7 +13,10 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiHeader,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -25,6 +28,7 @@ import {
   LandingClickCreatedDto,
   LandingPageDto,
   LeadCreatedDto,
+  PartnerLeadDto,
   Public,
   RmqClient,
   sendRpc,
@@ -111,6 +115,58 @@ export class PublicLeadsController {
       this.lead,
       { cmd: 'lead.create' },
       { lead, ip: ip || null, userAgent: userAgent?.slice(0, 1000) || null },
+    );
+  }
+
+  @Post('partner/leads')
+  @ApiOperation({
+    summary: 'Sotuvchi o‘z saytidan lid yuboradi (API kalit bilan)',
+    description:
+      'X-Api-Key — sotuvchi kabinetidagi kalit. Idempotency-Key — takror so‘rov o‘sha lidni qaytaradi. ' +
+      'Kalit bo‘yicha daqiqasiga 60 so‘rov (SOT-6). Lid kalit egasiga bog‘lanadi va operator navbatiga tushadi; variant yo‘q (BE-43).',
+  })
+  @ApiHeader({
+    name: 'x-api-key',
+    required: true,
+    description: 'Sotuvchining lid API kaliti',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: false,
+    description: 'Takror yuborishda bir xil qiymat — ikkinchi lid yaratilmaydi',
+  })
+  @ApiCreatedResponse({ type: LeadCreatedDto })
+  @ApiBadRequestResponse({
+    description: 'Telefon yoki manzil noto‘g‘ri; javobda maydon nomlari',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Kalit yo‘q, noto‘g‘ri yoki bekor qilingan',
+  })
+  @ApiForbiddenResponse({ description: 'Sahifa bu kalit egasiniki emas' })
+  @ApiConflictResponse({
+    description:
+      'errorCode LANDING_NOT_OPEN — sahifa hozir ariza qabul qilmaydi',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Kalit bo‘yicha daqiqasiga 60 tadan ortiq so‘rov',
+  })
+  createPartnerLead(
+    @Body() lead: PartnerLeadDto,
+    @Headers('x-api-key') apiKey: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ): Promise<LeadCreatedDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.partner.create' },
+      {
+        lead,
+        apiKey: apiKey ?? null,
+        idempotencyKey: idempotencyKey ?? null,
+        ip: ip || null,
+        userAgent: userAgent?.slice(0, 1000) || null,
+      },
     );
   }
 }
