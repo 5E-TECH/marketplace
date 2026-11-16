@@ -234,7 +234,7 @@ describe('Lid shartnomasi (BE-25)', () => {
       () => op.submitResult('7001', { outcome: 'BUSY' } as never),
       'BE-13',
     );
-    await expect501(() => op.updateAddress('7001', {} as never), 'BE-38');
+    await expect501(() => op.updateAddress('7001', {} as never), 'BE-13');
     await expect501(
       () => op.quote('7001', { quantity: 2, whereDeliver: 'ADDRESS' } as never),
       'BE-13',

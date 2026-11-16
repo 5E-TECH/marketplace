@@ -118,7 +118,8 @@ export class OperatorLeadsController {
     @Param('id', ParseLeadIdPipe) _id: string,
     @Body() _dto: UpdateLeadAddressDto,
   ): Promise<LeadCardDto> {
-    return notImplementedYet('BE-38');
+    // Qoida va RPC tayyor: lead-service `lead.address.update` (BE-38). Javob lid kartasi — BE-13 ulaydi.
+    return notImplementedYet('BE-13');
   }
 
   @Post('leads/:id/quote')
