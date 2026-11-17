@@ -13,8 +13,10 @@ import { CheckoutDeliveryDestination } from './cart.dto';
  * faqat qo'shiladi (orqaga mos).
  */
 export const ORDER_EVENTS = {
-  /** checkout → lead, notification, elchi-integration. */
+  /** checkout → lead, notification, elchi-integration, finance (BE-22). */
   STATUS_CHANGED: 'order.status.changed',
+  /** checkout → finance: yetkazilgandan keyin qaytarish tasdiqlandi (BE-44 → BE-22) [taklif]. */
+  RETURNED: 'order.returned',
   /** elchi-integration → checkout: posilka yaratildi. */
   PARCEL_CREATED: 'elchi.parcel.created',
   /** elchi-integration → checkout: posilka yaratilmadi, qo'lda ko'rish kerak. */
@@ -97,9 +99,25 @@ export interface OrderStatusChangedEvent {
     approvedPrice: number;
     basePrice: number;
     salePrice: number;
+    /**
+     * Narx qatorlari nusxasi — shu tovar qatori uchun JAMI (soniga ko'paytirilgan),
+     * butun so'm; buyurtma tasdiqlanganda muhrlanadi (TZ T4 sales_order «narx
+     * qatorlari nusxasi», NRX-10) [taklif BE-22]: sotuvchi haqi, qo'ng'iroq markazi,
+     * yashirilgan yetkazish. Platforma xizmati — qoldiq (finance hisoblaydi).
+     */
+    split: {
+      affiliateFee: number;
+      callCenterFee: number;
+      hiddenDelivery: number;
+      /** Ixtiyoriy tekshiruv: berilsa finance hisoblagan qoldiq bilan teng bo'lishi kerak. */
+      platformService?: number;
+    };
   }>;
-  /** Yetkazish rejimi va summasi (TZ T3 sales_order: delivery_mode, delivery_cost). */
-  delivery: { mode: string; cost: number };
+  /**
+   * Yetkazish rejimi (TZ T4: alohida / qisman / bepul) va mijozga ko'rsatilgan
+   * yetkazish summasi (Elchi ga to'liq ketadi, ledgerga yozilmaydi — 5-qaror).
+   */
+  delivery: { mode: 'SEPARATE' | 'PARTIAL' | 'FREE'; cost: number };
   /** Kuryer mijozdan oladigan summa, butun so'm (BE-01). */
   codAmount: number;
   /**
@@ -107,6 +125,39 @@ export interface OrderStatusChangedEvent {
    * yaratilguncha null. BE-24 kuzatuv SMS i uchun.
    */
   parcel: { shipmentId: string; trackingUrl: string | null } | null;
+  /** ISO 8601 */
+  occurredAt: string;
+}
+
+/**
+ * finance.cod.settled 2-versiya — Elchi buyurtma puli bo'yicha (BE-21 → BE-22)
+ * [taklif]. Elchi webhook pul maydonlari (`elchi-webhook.normalize.ts`):
+ * mijozdan yig'ilgan, Elchi haqi, marketga to'langan. Eski (1-versiya)
+ * hodisalar eski moliya kodiga boradi.
+ */
+export interface FinanceRemittanceEvent {
+  schemaVersion: 2;
+  eventId: string;
+  orderId: string;
+  shipmentId: string | null;
+  /** paid — to'liq o'tkazildi; partly_paid — qisman; closed — yopildi. */
+  elchiStatus: 'paid' | 'partly_paid' | 'closed';
+  collectedFromCustomer: number;
+  elchiFee: number;
+  marketPaidAmount: number;
+  /** Rad etilgan posilka uchun Elchi ushlagan summa (bo'lsa). */
+  refusalFee?: number | null;
+  /** ISO 8601 */
+  occurredAt: string;
+}
+
+/** order.returned — yetkazilgandan keyin qaytarish (BE-44 → BE-22) [taklif]. */
+export interface OrderReturnedEvent {
+  eventId: string;
+  orderId: string;
+  returnRequestId: string;
+  /** To'liq qaytgan tovar qatorlari (productId bo'yicha). */
+  items: Array<{ productId: string; quantity: number }>;
   /** ISO 8601 */
   occurredAt: string;
 }
