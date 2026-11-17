@@ -611,6 +611,39 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
   });
+  it('olingan, lekin hali yuborilmagan qator shu orada bekor qilinsa Elchi ga so‘rov ketmaydi', async () => {
+    await ds.query('TRUNCATE integration.geo_cache');
+    await service.onOrderStatusChanged(confirmed());
+    // tuman topilmagach geo kesh yangilanadi — shu payt «Bekor qilindi» keladi
+    geo.syncGeoCache.mockImplementationOnce(async () => {
+      await service.onOrderStatusChanged(cancelledEvent('evt-cancel-race'));
+      await ds.query(`
+        INSERT INTO integration.geo_cache (kind, elchi_id, name, elchi_region_id, sato_code) VALUES
+          ('region', 14, 'Toshkent shahri', NULL, '1726'),
+          ('district', 1401, 'Yunusobod', 14, '1726264')`);
+    });
+    await service.processDue();
+
+    expect(elchi.createShipment).not.toHaveBeenCalled();
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(await outboxTypes()).toEqual([]);
+  });
+
+  it('yaratish paytida bekor qilingan qator uchun Elchi rad etsa elchi.parcel.failed yozilmaydi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockImplementationOnce(async () => {
+      await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+      throw new ElchiApiError(422, 'xato');
+    });
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    elchi.createShipment.mockRejectedValueOnce(new ElchiApiError(422, 'xato'));
+    await service.processDue();
+
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(await outboxTypes()).toEqual([]);
+  });
 });
 
 describe('elchiItemName (BE-20)', () => {

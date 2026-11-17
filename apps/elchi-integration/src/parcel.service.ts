@@ -14,6 +14,7 @@ import {
   OutboxService,
   elchiOrderRef,
   processOnce,
+  returningRows,
   runAsLeader,
 } from '@app/common';
 import {
@@ -292,12 +293,14 @@ export class ParcelService {
     }
     // «Yuborildi» belgisi Elchi chaqiruvidan OLDIN commit qilinadi. Qator shu
     // orada bekor qilingan bo'lsa (PENDING emas) — so'rov yuborilmaydi.
-    const marked = (await this.dataSource.query(
-      `UPDATE integration.parcel_request SET last_create_at = clock_timestamp()
+    const marked = queryRows(
+      await this.dataSource.query(
+        `UPDATE integration.parcel_request SET last_create_at = clock_timestamp()
         WHERE id = $1 AND status = 'PENDING'
         RETURNING id`,
-      [row.id],
-    )) as unknown[];
+        [row.id],
+      ),
+    ) as unknown[];
     if (!marked.length) return;
 
     let result: ElchiShipmentResult;
@@ -594,13 +597,15 @@ export class ParcelService {
     message: string | null,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
-      const updated = (await manager.query(
-        `UPDATE integration.parcel_request
+      const updated = queryRows(
+        await manager.query(
+          `UPDATE integration.parcel_request
             SET status=$2, last_error=$3, attempts=attempts+1, updated_at=now()
           WHERE id=$1 AND status='CANCEL_PENDING'
           RETURNING id`,
-        [row.id, status, message],
-      )) as unknown[];
+          [row.id, status, message],
+        ),
+      ) as unknown[];
       if (updated.length && eventType) {
         await this.recordCancelResult(manager, row, eventType, message);
       }
@@ -757,13 +762,15 @@ export class ParcelService {
     message: string,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
-      const updated = (await manager.query(
-        `UPDATE integration.parcel_request
+      const updated = queryRows(
+        await manager.query(
+          `UPDATE integration.parcel_request
             SET status='FAILED', last_error=$2, attempts=attempts+1, updated_at=now()
           WHERE id=$1 AND status='PENDING'
           RETURNING id`,
-        [row.id, message],
-      )) as unknown[];
+          [row.id, message],
+        ),
+      ) as unknown[];
       if (!updated.length) return;
       await this.recordFailed(
         manager,
