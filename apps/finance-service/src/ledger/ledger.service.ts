@@ -7,6 +7,7 @@ import {
   OrderStatusChangedEvent,
   moneyFromDb,
   processOnce,
+  returningRows,
 } from '@app/common';
 import {
   AccountType,
@@ -462,12 +463,15 @@ export class LedgerService {
       manager,
       entries.map((e) => e.accountId),
     );
-    const moved = (await manager.query(
-      `UPDATE finance.ledger_entry SET state = 'AVAILABLE', available_at = now()
+    // UPDATE … RETURNING → [qatorlar, soni] (TypeORM): returningRows.
+    const moved = returningRows<{ accountId: string; amount: string }>(
+      await manager.query(
+        `UPDATE finance.ledger_entry SET state = 'AVAILABLE', available_at = now()
         WHERE journal_id = $1 AND state = 'HOLD'
         RETURNING account_id::text AS "accountId", amount`,
-      [journalId],
-    )) as Array<{ accountId: string; amount: string }>;
+        [journalId],
+      ),
+    );
     for (const [accountId, delta] of this.byAccount(moved)) {
       await manager.query(
         `UPDATE finance.account
@@ -540,16 +544,7 @@ export class LedgerService {
       manager,
       entries.map((e) => e.accountId),
     );
-    const flipped = (await manager.query(
-      `UPDATE finance.ledger_entry e SET state = 'REVERSED', reversed_at = now()
-         FROM (SELECT id, state AS old_state FROM finance.ledger_entry
-                WHERE journal_id = $1 AND state IN ('HOLD','AVAILABLE') FOR UPDATE) o
-        WHERE e.id = o.id
-        RETURNING e.id::text, e.account_id::text AS "accountId", e.amount,
-                  e.line_kind AS "lineKind", e.item_seq AS "itemSeq",
-                  e.product_id AS "productId", o.old_state AS "oldState"`,
-      [delivered.id],
-    )) as Array<{
+    const flipped = returningRows<{
       id: string;
       accountId: string;
       amount: string;
@@ -557,7 +552,18 @@ export class LedgerService {
       itemSeq: number;
       productId: string | null;
       oldState: 'HOLD' | 'AVAILABLE';
-    }>;
+    }>(
+      await manager.query(
+        `UPDATE finance.ledger_entry e SET state = 'REVERSED', reversed_at = now()
+         FROM (SELECT id, state AS old_state FROM finance.ledger_entry
+                WHERE journal_id = $1 AND state IN ('HOLD','AVAILABLE') FOR UPDATE) o
+        WHERE e.id = o.id
+        RETURNING e.id::text, e.account_id::text AS "accountId", e.amount,
+                  e.line_kind AS "lineKind", e.item_seq AS "itemSeq",
+                  e.product_id AS "productId", o.old_state AS "oldState"`,
+        [delivered.id],
+      ),
+    );
     for (const e of flipped) {
       const amount = moneyFromDb(e.amount);
       await manager.query(
