@@ -254,10 +254,6 @@ describe('Lid shartnomasi (BE-25)', () => {
       () => op.stats({ from: '2026-12-01', to: '2026-12-31' }),
       'BE-28',
     );
-
-    const admin = new AdminLeadsController();
-    await expect501(() => admin.list({}), 'BE-42');
-    await expect501(() => admin.getCard('7001'), 'BE-42');
   });
 
   describe('BE-11: endpointlar lead-service ga boradi', () => {
@@ -385,6 +381,27 @@ describe('Lid shartnomasi (BE-25)', () => {
         await call();
         expect(send).toHaveBeenLastCalledWith({ cmd }, payload);
       }
+    });
+  });
+
+  describe('BE-42: admin lidlari', () => {
+    it('ro‘yxat va karta lead-service ga; faqat ADMIN va SUPERADMIN (TC3: operator → 403)', async () => {
+      const send = jest.fn(() => of({}));
+      const admin = new AdminLeadsController({ send } as never);
+      await admin.list({ status: 'NEW' as never, page: 2 });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.admin.list' },
+        { query: { status: 'NEW', page: 2 } },
+      );
+      await admin.getCard('7001');
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.admin.card' },
+        { leadId: '7001' },
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, AdminLeadsController)).toEqual([
+        Role.ADMIN,
+        Role.SUPERADMIN,
+      ]);
     });
   });
 });

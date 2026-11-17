@@ -17,6 +17,8 @@ import { LEAD_ENTITIES } from './entities';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { LandingService } from './landing.service';
 import { LeadAddressController } from './lead-address.controller';
+import { LeadAdminController } from './lead-admin.controller';
+import { LeadAdminService } from './lead-admin.service';
 import { LeadAddressService } from './lead-address.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
@@ -33,7 +35,7 @@ import { CreateOfferContent1794873600000 } from './migrations/1794873600000-crea
 import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 
-/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; keyin BE-42. */
+/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42. */
 @Module({
   imports: [
     CommonConfigModule,
@@ -101,6 +103,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
     LeadOfferController,
     LeadIntakeController,
     LeadQueueController,
+    LeadAdminController,
   ],
   providers: [
     LeadAddressService,
@@ -113,6 +116,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
     LeadCardService,
     LeadQueueScheduler,
     LeadOutboxRelayService,
+    LeadAdminService,
   ],
 })
 export class LeadModule {}
