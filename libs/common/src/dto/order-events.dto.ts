@@ -90,6 +90,8 @@ export interface OrderStatusChangedEvent {
   };
   items: Array<{
     productId: string;
+    /** Shu tovar optovigi; bo'lmasa buyurtmadagi `wholesalerId` (bitta optovik) [taklif BE-22]. */
+    wholesalerId?: string | null;
     sku: string | null;
     name: string;
     quantity: number;

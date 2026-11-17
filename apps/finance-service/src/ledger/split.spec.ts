@@ -164,4 +164,31 @@ describe('splitDelivered (BE-22)', () => {
       false,
     );
   });
+
+  it('asosiy sayt sotuvida affiliateId bo‘lsa ham sotuvchi haqi platformaga', () => {
+    const lines = view(
+      splitDelivered(orderEvent({ source: 'SITE', affiliateId: 'A' })),
+    );
+    expect(lines['PLATFORM_SERVICE/AFFILIATE_FEE']).toBe(65000);
+    expect(Object.keys(lines).some((k) => k.startsWith('AFFILIATE:'))).toBe(
+      false,
+    );
+  });
+
+  it('har tovar qatori o‘z optovigiga (items[].wholesalerId)', () => {
+    const e = orderEvent();
+    e.items.push({
+      ...e.items[0],
+      productId: '90',
+      wholesalerId: 'W2',
+      basePrice: 100000,
+      approvedPrice: 211000,
+      salePrice: 211000,
+    });
+    const lines = splitDelivered(e).filter((l) => l.account === 'WHOLESALER');
+    expect(lines.map((l) => [l.ownerId, l.amount])).toEqual([
+      ['W', 140000],
+      ['W2', 100000],
+    ]);
+  });
 });

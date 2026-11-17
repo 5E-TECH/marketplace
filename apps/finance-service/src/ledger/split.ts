@@ -28,6 +28,8 @@ export interface SplitLine {
   lineKind: LineKind;
   itemSeq: number;
   productId: string | null;
+  /** Tovar qatori soni (qaytarishda solishtirish uchun); COD qatorida null. */
+  quantity: number | null;
   amount: number;
 }
 
@@ -69,13 +71,20 @@ export function splitDelivered(event: OrderStatusChangedEvent): SplitLine[] {
   if (!Array.isArray(event.items) || !event.items.length) {
     throw new SplitError('tovarlar ro‘yxati bo‘sh');
   }
-  const affiliateId = event.affiliateId ? String(event.affiliateId) : null;
-  const wholesalerId = event.wholesalerId ? String(event.wholesalerId) : null;
-  if (!wholesalerId) throw new SplitError('wholesalerId yo‘q');
+  // Asosiy sayt sotuvida sotuvchi haqi platformada qoladi (2.5-6, 01:119),
+  // hodisada affiliateId bo'lsa ham.
+  const affiliateId =
+    event.source !== 'SITE' && event.affiliateId
+      ? String(event.affiliateId)
+      : null;
+  const orderWholesaler = event.wholesalerId
+    ? String(event.wholesalerId)
+    : null;
   if (!affiliateId && event.source !== 'SITE') {
     throw new SplitError(`${event.source} buyurtmasida affiliateId yo‘q`);
   }
   const lines: SplitLine[] = [];
+  let quantity: number | null = null;
   const push = (
     account: AccountType,
     ownerId: string,
@@ -85,7 +94,15 @@ export function splitDelivered(event: OrderStatusChangedEvent): SplitLine[] {
     amount: number,
   ) => {
     if (amount !== 0) {
-      lines.push({ account, ownerId, lineKind, itemSeq, productId, amount });
+      lines.push({
+        account,
+        ownerId,
+        lineKind,
+        itemSeq,
+        productId,
+        quantity,
+        amount,
+      });
     }
   };
   let gross = 0;
@@ -125,6 +142,11 @@ export function splitDelivered(event: OrderStatusChangedEvent): SplitLine[] {
       );
     }
     const productId = item.productId ? String(item.productId) : null;
+    const wholesalerId = item.wholesalerId
+      ? String(item.wholesalerId)
+      : orderWholesaler;
+    if (!wholesalerId) throw new SplitError('wholesalerId yo‘q');
+    quantity = q;
     push('WHOLESALER', wholesalerId, 'WHOLESALER_BASE', seq, productId, base);
     if (affiliateId) {
       push(
@@ -183,6 +205,7 @@ export function splitDelivered(event: OrderStatusChangedEvent): SplitLine[] {
     lineKind: 'COD_RECEIVABLE',
     itemSeq: 0,
     productId: null,
+    quantity: null,
     amount: -gross,
   });
   return lines;

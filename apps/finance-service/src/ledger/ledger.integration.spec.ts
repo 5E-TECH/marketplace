@@ -144,12 +144,12 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     await expectBalanced();
   });
 
-  it('hisob-kitobdan keyin boshqa summali o‘tkazma → MISMATCH, balans o‘zgarmaydi', async () => {
+  it('hisob-kitobdan keyin ko‘proq to‘langan snapshot → MISMATCH (ortiqcha), balans o‘zgarmaydi', async () => {
     await ledger.onOrderStatusChanged(orderEvent());
     await ledger.onRemittance(remittance());
     const after = await balances();
     await ledger.onRemittance(
-      remittance({ eventId: 'rem-501-extra', marketPaidAmount: 10000 }),
+      remittance({ eventId: 'rem-501-extra', marketPaidAmount: 260000 }),
     );
     expect(await balances()).toEqual(after);
     const rows = await ds.query(
@@ -157,7 +157,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     );
     expect(rows).toEqual([
       { m: 'MATCHED', diff: 0 },
-      { m: 'MISMATCH', diff: 10000 },
+      { m: 'MISMATCH', diff: 9000 }, // ortiqcha 9 000
     ]);
     await expectBalanced();
   });
@@ -359,5 +359,136 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     const result = await check.run();
     expect(result.ok).toBe(false);
     expect(result.diffAbsTotal).toBe(7);
+  });
+
+  it('qisman qaytarish (3 donadan 1) yozilmaydi — event_failure, yozuvlar o‘zgarmaydi', async () => {
+    await ledger.onOrderStatusChanged(
+      orderEvent(
+        {},
+        {
+          quantity: 3,
+          salePrice: 251000,
+          split: {
+            affiliateFee: 195000,
+            callCenterFee: 12000,
+            hiddenDelivery: 0,
+          },
+        },
+      ),
+    );
+    const before = await balances();
+    await ledger.onOrderReturned({
+      eventId: 'evt-ret-part',
+      orderId: '501',
+      returnRequestId: 'RR-9',
+      items: [{ productId: '88', quantity: 1 }],
+      occurredAt: '2026-12-22T10:00:00.000Z',
+    });
+    expect(await balances()).toEqual(before);
+    expect(
+      await count(
+        `SELECT count(*) AS n FROM finance.ledger_entry WHERE state = 'REVERSED'`,
+      ),
+    ).toBe(0);
+    expect(await count(`SELECT count(*) AS n FROM finance.event_failure`)).toBe(
+      1,
+    );
+    await expectBalanced();
+  });
+
+  it('ikkinchi qaytarish so‘rovi allaqachon qaytarilgan buyurtmada yozilmaydi', async () => {
+    await ledger.onOrderStatusChanged(orderEvent());
+    const ret = (id: string) => ({
+      eventId: `evt-${id}`,
+      orderId: '501',
+      returnRequestId: id,
+      items: [{ productId: '88', quantity: 1 }],
+      occurredAt: '2026-12-22T10:00:00.000Z',
+    });
+    await ledger.onOrderReturned(ret('RR-1'));
+    await ledger.onOrderReturned(ret('RR-2'));
+    expect(
+      await count(
+        `SELECT count(*) AS n FROM finance.journal WHERE kind = 'ORDER_REVERSAL'`,
+      ),
+    ).toBe(1);
+    await expectBalanced();
+  });
+
+  it('kam to‘langan o‘tkazma yangi eventId bilan qayta kelsa ham MISMATCH qoladi; partly_paid → kam paid ham', async () => {
+    await ledger.onOrderStatusChanged(orderEvent());
+    await ledger.onRemittance(
+      remittance({ eventId: 'r1', marketPaidAmount: 246000 }),
+    );
+    await ledger.onRemittance(
+      remittance({ eventId: 'r2', marketPaidAmount: 246000 }),
+    );
+    expect((await balances())['AFFILIATE:A']).toEqual({
+      hold: 65000,
+      available: 0,
+    });
+
+    await ledger.onOrderStatusChanged(
+      orderEvent({ eventId: 'e7', orderId: '507' }),
+    );
+    await ledger.onRemittance(
+      remittance({
+        eventId: 'r3',
+        orderId: '507',
+        elchiStatus: 'partly_paid',
+        marketPaidAmount: 100000,
+      }),
+    );
+    await ledger.onRemittance(
+      remittance({ eventId: 'r4', orderId: '507', marketPaidAmount: 240000 }),
+    );
+    const rows = await ds.query(
+      `SELECT DISTINCT match_state AS m FROM finance.remittance_item WHERE order_id = '507'`,
+    );
+    expect(rows).toEqual([{ m: 'MISMATCH' }]);
+    expect((await balances())['AFFILIATE:A']).toEqual({
+      hold: 130000,
+      available: 0,
+    });
+    await expectBalanced();
+  });
+
+  it('«yetkazildi» va o‘tkazma ikki ulanishda bir vaqtda — buyurtma oxirida AVAILABLE', async () => {
+    const other = new LedgerService(ds);
+    await Promise.all([
+      ledger.onOrderStatusChanged(orderEvent()),
+      other.onRemittance(remittance()),
+    ]);
+    expect((await balances())['AFFILIATE:A']).toEqual({
+      hold: 0,
+      available: 65000,
+    });
+    expect(
+      (
+        await ds.query(`SELECT match_state AS m FROM finance.remittance_item`)
+      )[0].m,
+    ).toBe('MATCHED');
+    await expectBalanced();
+  });
+
+  it('rad to‘lovi sozlamasi 0 bo‘lsa rad yozuvi yo‘q', async () => {
+    await ds.query(
+      `INSERT INTO finance.setting (key, value, effective_from, changed_by) VALUES ('refusal_fee', 0, '2026-12-25T00:00:00Z', 'test')`,
+    );
+    try {
+      await ledger.onOrderStatusChanged(
+        orderEvent({
+          status: LeadOrderStatus.REFUSED,
+          eventId: 'evt-ref0',
+          occurredAt: '2026-12-26T10:00:00.000Z',
+        }),
+      );
+      expect(await count(`SELECT count(*) AS n FROM finance.journal`)).toBe(0);
+      expect(
+        await count(`SELECT count(*) AS n FROM finance.event_failure`),
+      ).toBe(0);
+    } finally {
+      await ds.query(`DELETE FROM finance.setting WHERE changed_by = 'test'`);
+    }
   });
 });

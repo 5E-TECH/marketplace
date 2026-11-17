@@ -19,6 +19,8 @@ import {
 
 /** Hisob qulfi kalit sinfi [taklif]: 2101/2102 (lead), 2201 (cron), 6303 (payment) band. */
 const ACCOUNT_LOCK_CLASS = 2301;
+/** Buyurtma qulfi kalit sinfi [taklif]: bir buyurtma hodisalari ketma-ket. */
+const ORDER_LOCK_CLASS = 2302;
 
 type JournalKind =
   'ORDER_DELIVERED' | 'ORDER_REFUSED' | 'ORDER_REVERSAL' | 'ELCHI_SETTLEMENT';
@@ -29,6 +31,7 @@ interface Line {
   lineKind: LineKind;
   itemSeq: number;
   productId: string | null;
+  quantity?: number | null;
   amount: number;
 }
 
@@ -105,7 +108,7 @@ export class LedgerService {
    */
   private async guard(
     consumer: string,
-    event: { eventId?: string },
+    event: { eventId?: string; orderId?: string },
     handle: (manager: EntityManager) => Promise<void>,
   ): Promise<void> {
     if (!event?.eventId) {
@@ -117,30 +120,31 @@ export class LedgerService {
         this.dataSource,
         { table: 'finance.processed_event', consumer, eventId: event.eventId },
         async (manager) => {
-          try {
-            await handle(manager);
-          } catch (error) {
-            if (!(error instanceof SplitError)) throw error;
-            await this.failure(
-              consumer,
-              event.eventId!,
-              error.message,
-              event,
-              manager,
+          // Bir buyurtma hodisalari (yetkazildi, o'tkazma, qaytarish) ketma-ket:
+          // ikki ulanishda bir vaqtda kelsa bir-birini o'tkazib yubormaydi.
+          if (event.orderId) {
+            await manager.query(
+              'SELECT pg_advisory_xact_lock($1, hashtext($2))',
+              [ORDER_LOCK_CLASS, `finance-order:${String(event.orderId)}`],
             );
           }
+          await handle(manager);
         },
       );
     } catch (error) {
+      // Xato bo'lsa belgi ham qaytadi: tuzatilgan hodisa o'sha eventId bilan
+      // qayta yuborilsa ishlanadi; takror yozuvdan jurnal unikalligi saqlaydi.
       await this.failure(
         consumer,
         event.eventId,
         (error as Error).message,
         event,
       );
-      this.logger.error(
-        `${consumer} ${event.eventId}: ${(error as Error).message}`,
-      );
+      if (!(error instanceof SplitError)) {
+        this.logger.error(
+          `${consumer} ${event.eventId}: ${(error as Error).message}`,
+        );
+      }
     }
   }
 
@@ -193,6 +197,7 @@ export class LedgerService {
     event: OrderStatusChangedEvent,
   ): Promise<void> {
     const fee = await this.refusalFee(manager, event.occurredAt);
+    if (fee === 0) return; // sozlama 0 — rad uchun yozuv yo'q
     const journalId = await this.writeJournal(
       manager,
       {
@@ -325,13 +330,13 @@ export class LedgerService {
       // eventId bilan qayta yuborishi mumkin: o'sha ma'lumotli takror —
       // MATCHED (o'zgarish yo'q); boshqacha summa — MISMATCH (ortiqcha to'lov).
       const matched = items.filter((i) => i.match === 'MATCHED');
+      const topPaid = Math.max(...matched.map((m) => moneyFromDb(m.paid)));
       for (const item of items.filter((i) => i.match !== 'MATCHED')) {
-        const duplicate = matched.some(
-          (m) =>
-            m.status === item.status &&
-            m.paid === item.paid &&
-            m.refusalFee === item.refusalFee,
-        );
+        // Takror yoki eskirgan snapshot (to'langan jami hisob-kitobdagidan oshmaydi).
+        const duplicate =
+          item.refusalFee !== null
+            ? matched.some((m) => m.refusalFee === item.refusalFee)
+            : moneyFromDb(item.paid) <= topPaid;
         if (!duplicate) {
           this.logger.warn(
             `Buyurtma ${orderId}: hisob-kitobdan keyin yana o‘tkazma keldi (${item.status}, ${item.paid ?? item.refusalFee})`,
@@ -344,7 +349,11 @@ export class LedgerService {
           [
             item.id,
             duplicate ? 'MATCHED' : 'MISMATCH',
-            duplicate ? 0 : moneyFromDb(item.paid ?? item.refusalFee),
+            duplicate
+              ? 0
+              : item.refusalFee !== null
+                ? moneyFromDb(item.refusalFee)
+                : moneyFromDb(item.paid) - topPaid,
           ],
         );
       }
@@ -362,18 +371,21 @@ export class LedgerService {
         'HIDDEN_DELIVERY',
       );
       expected = moneyFromDb(delivered.gross) - hidden;
-      received = items
-        .filter((i) => i.status === 'paid' || i.status === 'partly_paid')
-        .reduce((sum, i) => sum + moneyFromDb(i.paid), 0);
-      const fullyPaid = items.some((i) => i.status === 'paid');
-      match =
-        fullyPaid && received >= expected
-          ? 'MATCHED'
-          : fullyPaid
-            ? 'MISMATCH'
-            : items.some((i) => i.status === 'partly_paid')
-              ? 'PARTIAL'
-              : 'PENDING';
+      // Elchi `market_paid_amount` — shu paytgacha to'langan JAMI (snapshot):
+      // qo'shilmaydi, oxirgi holat olinadi (takror yuborish yoki partly_paid →
+      // paid kam to'lovni yashirmasin).
+      const payments = items.filter(
+        (i) => i.status === 'paid' || i.status === 'partly_paid',
+      );
+      const latest = payments[payments.length - 1];
+      received = latest ? moneyFromDb(latest.paid) : 0;
+      match = !latest
+        ? 'PENDING'
+        : latest.status === 'paid'
+          ? received >= expected
+            ? 'MATCHED'
+            : 'MISMATCH'
+          : 'PARTIAL';
       if (hidden) {
         // Elchi yashirilgan yetkazishni o'z haqi ichida oldi: qarzimiz yopildi.
         settle.push(
@@ -403,7 +415,7 @@ export class LedgerService {
         'REFUSAL_FEE',
         'ELCHI',
       );
-      const charged = items.find((i) => i.refusalFee !== null);
+      const charged = [...items].reverse().find((i) => i.refusalFee !== null);
       expected = fee;
       received = charged ? moneyFromDb(charged.refusalFee) : 0;
       match = !charged ? 'PENDING' : received === fee ? 'MATCHED' : 'MISMATCH';
@@ -535,15 +547,40 @@ export class LedgerService {
     )) as Array<{ id: string; gross: string }>;
     if (!delivered)
       throw new SplitError('yetkazildi yozuvi yo‘q — qaytarib bo‘lmaydi');
-    const original = (await manager.query(
-      `SELECT DISTINCT product_id AS "productId", item_seq AS "seq"
-         FROM finance.ledger_entry WHERE journal_id = $1 AND product_id IS NOT NULL`,
+    const [open] = (await manager.query(
+      `SELECT count(*)::int AS n FROM finance.ledger_entry
+        WHERE journal_id = $1 AND state IN ('HOLD','AVAILABLE')`,
       [delivered.id],
-    )) as Array<{ productId: string }>;
-    const returned = new Set(
-      (event.items ?? []).map((i) => String(i.productId)),
-    );
-    if (original.some((o) => !returned.has(String(o.productId)))) {
+    )) as Array<{ n: number }>;
+    if (!open.n) throw new SplitError('buyurtma allaqachon qaytarilgan');
+    // To'liq qaytarishmi: har tovar bo'yicha qaytgan soni yetkazilgan soniga teng.
+    const lines = (await manager.query(
+      `SELECT DISTINCT item_seq AS "seq", product_id AS "productId", quantity
+         FROM finance.ledger_entry
+        WHERE journal_id = $1 AND product_id IS NOT NULL AND reverses_entry_id IS NULL`,
+      [delivered.id],
+    )) as Array<{ seq: number; productId: string; quantity: number | null }>;
+    const deliveredQty = new Map<string, number>();
+    for (const l of lines) {
+      deliveredQty.set(
+        l.productId,
+        (deliveredQty.get(l.productId) ?? 0) + Number(l.quantity ?? 0),
+      );
+    }
+    const returnedQty = new Map<string, number>();
+    for (const i of event.items ?? []) {
+      const q = Number(i.quantity);
+      if (!Number.isSafeInteger(q) || q < 1)
+        throw new SplitError(`qaytgan soni noto‘g‘ri: ${String(i.quantity)}`);
+      returnedQty.set(
+        String(i.productId),
+        (returnedQty.get(String(i.productId)) ?? 0) + q,
+      );
+    }
+    const full =
+      returnedQty.size === deliveredQty.size &&
+      [...deliveredQty].every(([p, q]) => returnedQty.get(p) === q);
+    if (!full) {
       throw new SplitError(
         'qisman qaytarish hozircha yozilmaydi (egaga savol)',
       );
@@ -673,14 +710,15 @@ export class LedgerService {
       const accountId = accountIds.get(`${line.account}|${line.ownerId}`)!;
       await manager.query(
         `INSERT INTO finance.ledger_entry
-           (journal_id, account_id, line_kind, item_seq, product_id, amount, state, available_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, ${state === 'AVAILABLE' ? 'now()' : 'NULL'})`,
+           (journal_id, account_id, line_kind, item_seq, product_id, quantity, amount, state, available_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${state === 'AVAILABLE' ? 'now()' : 'NULL'})`,
         [
           journal.id,
           accountId,
           line.lineKind,
           line.itemSeq,
           line.productId,
+          line.quantity ?? null,
           line.amount,
           state,
         ],

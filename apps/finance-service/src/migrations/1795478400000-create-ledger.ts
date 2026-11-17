@@ -71,6 +71,7 @@ export class CreateLedger1795478400000 implements MigrationInterface {
         "line_kind" VARCHAR(20) NOT NULL,
         "item_seq" SMALLINT NOT NULL DEFAULT 0,
         "product_id" VARCHAR(64),
+        "quantity" INTEGER,
         "amount" BIGINT NOT NULL,
         "state" VARCHAR(10) NOT NULL,
         "reverses_entry_id" BIGINT REFERENCES "finance"."ledger_entry"("id"),
