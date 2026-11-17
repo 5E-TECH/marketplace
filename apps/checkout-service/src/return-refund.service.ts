@@ -18,6 +18,7 @@ import {
   ReturnRequestDetailsDto,
   ReturnRequestStatus,
   RmqClient,
+  moneyFromDb,
   sendRpc,
 } from '@app/common';
 import {
@@ -89,7 +90,7 @@ export class ReturnRefundService {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
       const [target] = (await manager.query(
         `SELECT r.id::text,r.status,r.reason,
-                r.requested_amount::float8 AS "requestedAmount",
+                r.requested_amount AS "requestedAmount",
                 r.sales_order_id::text AS "orderId",
                 r.sales_order_seller_id::text AS "sellerOrderId",
                 r.shop_id::text AS "shopId",r.customer_id::text AS "customerId",
@@ -102,6 +103,8 @@ export class ReturnRefundService {
       )) as RefundTarget[];
       if (!target) throw new NotFoundException('Qaytarish so‘rovi topilmadi');
       if (target.status === ReturnRequestStatus.REFUNDED) return null;
+      // BIGINT pg dan matn bo'lib keladi.
+      target.requestedAmount = moneyFromDb(target.requestedAmount);
       this.assertRefundable(target, input.amount, comment);
 
       const cod = target.paymentMethod === CheckoutPaymentMethod.COD;
@@ -124,8 +127,10 @@ export class ReturnRefundService {
           } satisfies RefundPaymentDto,
         );
         // Takroriy chaqiruvda provayder avval yozilgan summani qaytaradi —
-        // ledger va so'rov shu haqiqiy summa bilan yoziladi.
-        amount = this.money(paid.amount ?? amount);
+        // ledger va so'rov shu haqiqiy summa bilan yoziladi. To'lov xizmati
+        // hali NUMERIC(14,2) da: pul allaqachon qaytgan, shuning uchun bu yerda
+        // xato emas, butun so'mga yaxlitlanadi (BIGINT ustun kasr olmaydi).
+        amount = Math.round(Number(paid.amount ?? amount));
       }
       if (restock) {
         const items = (await manager.query(
@@ -224,7 +229,12 @@ export class ReturnRefundService {
     }
   }
 
-  private money(value: number): number {
-    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  /** Pul butun so'mda; kasr summa tashqi chaqiruvlardan oldin rad etiladi. */
+  private money(value: number | string): number {
+    const amount = Number(value);
+    if (!Number.isSafeInteger(amount)) {
+      throw new BadRequestException('Summa butun so‘mda bo‘lishi kerak');
+    }
+    return amount;
   }
 }

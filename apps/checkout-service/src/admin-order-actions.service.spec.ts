@@ -23,7 +23,7 @@ describe('C6.4 admin order actions', () => {
               status: options.status ?? 'CONFIRMED',
               payment_method: options.paymentMethod ?? 'online',
               payment_id: '90',
-              total_amount: 120000,
+              total_amount: '120000',
               customer_id: '5',
             },
           ];
@@ -225,7 +225,7 @@ describe('xaridor buyurtmani qaytaradi', () => {
               status,
               payment_method: paymentMethod,
               payment_id: '90',
-              total_amount: 120000,
+              total_amount: '120000',
               customer_id: '5',
             },
           ];

@@ -12,6 +12,7 @@ import {
   CheckoutResultDto,
   CreateCheckoutDto,
   DeliveryPreviewResultDto,
+  MAX_MONEY,
   RmqClient,
   sendRpc,
 } from '@app/common';
@@ -90,6 +91,11 @@ export class CheckoutService {
       const selected = this.selectItems(cart.items, dto.cartItemIds);
 
       const quote = await this.quote(selected, dto.address);
+      // BE-01: BIGINT dan keyin bazaning o'zi katta summani to'xtatmaydi;
+      // payment/finance NUMERIC(14,2) chegarasi shu yerda saqlanadi.
+      if (quote.totalAmount > MAX_MONEY) {
+        throw new BadRequestException('Buyurtma summasi juda katta');
+      }
       if (quote.subtotal < Number(settings.minimumOrderAmount)) {
         throw new BadRequestException(
           `Minimal buyurtma summasi ${settings.minimumOrderAmount}`,
@@ -277,7 +283,8 @@ export class CheckoutService {
           },
         );
         const deliveryFee = Number(tariff.amount);
-        if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+        // Pul butun so'mda (BE-01): kasr tarif BIGINT ustunga sig'maydi.
+        if (!Number.isSafeInteger(deliveryFee) || deliveryFee < 0) {
           throw new BadRequestException('Yaroqsiz dostavka tarifi');
         }
         return {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -9,7 +10,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
-import { AdminShopsQueryDto, RmqClient, ShopStatus } from '@app/common';
+import {
+  AdminShopsQueryDto,
+  MAX_MONEY,
+  RmqClient,
+  ShopStatus,
+} from '@app/common';
 import { Shop } from './entities/shop.entity';
 import { Product } from './entities/product.entity';
 
@@ -147,6 +153,14 @@ export class AdminShopService {
     tariffHome: number,
     tariffCenter: number,
   ): Promise<Shop> {
+    // BE-01: pul butun so'm; noto'g'ri qiymat 500 emas, 400 bo'lsin.
+    for (const tariff of [tariffHome, tariffCenter]) {
+      if (!Number.isSafeInteger(tariff) || tariff < 1 || tariff > MAX_MONEY) {
+        throw new BadRequestException(
+          'Tarif butun so‘mda va 0 dan katta bo‘lishi kerak',
+        );
+      }
+    }
     const shop = await this.getById(shopId);
     shop.tariffHome = tariffHome;
     shop.tariffCenter = tariffCenter;

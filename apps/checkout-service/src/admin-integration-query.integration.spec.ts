@@ -9,6 +9,9 @@ import { AddDeliveryFee1725192000000 } from './migrations/1725192000000-add-deli
 import { AddSalesOrderSessionId1726329600000 } from './migrations/1726329600000-add-sales-order-session-id';
 import { AddCartItemProductName1726416000000 } from './migrations/1726416000000-add-cart-item-product-name';
 import { AddSellerOrderQrToken1726502400000 } from './migrations/1726502400000-add-seller-order-qr-token';
+import { AddSellerOrderToBePaid1726588800000 } from './migrations/1726588800000-add-seller-order-to-be-paid';
+import { CreateReturnRequests1727481600000 } from './migrations/1727481600000-create-return-requests';
+import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -50,6 +53,9 @@ describeWithPostgres('AdminIntegrationQueryService PostgreSQL (C6.7)', () => {
         AddSalesOrderSessionId1726329600000,
         AddCartItemProductName1726416000000,
         AddSellerOrderQrToken1726502400000,
+        AddSellerOrderToBePaid1726588800000,
+        CreateReturnRequests1727481600000,
+        MoneyToBigint1795219200000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -80,6 +86,20 @@ describeWithPostgres('AdminIntegrationQueryService PostgreSQL (C6.7)', () => {
     const page = await service.shipments({ page: 1, limit: 20 });
     expect(page.total).toBe(5);
     expect(page.items).toHaveLength(5);
+  });
+
+  it('BE-01: pul ustunlari BIGINT, javobda son', async () => {
+    const [column] = await dataSource.query(
+      `SELECT data_type FROM information_schema.columns
+        WHERE table_schema='checkout' AND table_name='sales_order_seller'
+          AND column_name='subtotal'`,
+    );
+    expect(column.data_type).toBe('bigint');
+    const page = await service.shipments({ page: 1, limit: 20 });
+    const row = (page.items as Array<Record<string, unknown>>).find(
+      (item) => item.id === '11',
+    );
+    expect(row).toMatchObject({ subtotal: 100, deliveryFee: 0, codAmount: 0 });
   });
 
   it('created — faqat Elchi posilkasi borlari', async () => {

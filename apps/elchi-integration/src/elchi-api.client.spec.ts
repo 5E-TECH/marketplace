@@ -90,7 +90,8 @@ describe('ElchiApiClient config (C2.20)', () => {
       ok: true,
       text: async () =>
         JSON.stringify({
-          data: { market_tariff: 25000 },
+          // BE-01: "25000.40" → 25000 (butun so'm).
+          data: { market_tariff: '25000.40' },
         }),
     } as Response);
     const client = new ElchiApiClient(
@@ -254,6 +255,8 @@ describe('ElchiApiClient config (C2.20)', () => {
   it('C1.45: javobdagi qr_code_token va to_be_paid (0 ham) qaytariladi', async () => {
     for (const [toBePaid, expected] of [
       ['45000.00', 45000],
+      // BE-01: checkout ustuni BIGINT — kasr butun so'mga yaxlitlanadi.
+      ['45000.60', 45001],
       [0, 0],
     ] as const) {
       const { fetchMock, client } = shipmentClient({

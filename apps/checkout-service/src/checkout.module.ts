@@ -38,6 +38,7 @@ import { AddSellerOrderToBePaid1726588800000 } from './migrations/1726588800000-
 import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
 import { CreateReturnRequests1727481600000 } from './migrations/1727481600000-create-return-requests';
+import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { CreateCheckoutOutbox1795305600000 } from './migrations/1795305600000-create-checkout-outbox';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { ReturnRequestsController } from './return-requests.controller';
@@ -119,6 +120,7 @@ import { ReturnNotifierService } from './return-notifier.service';
             AddSellerOrderQrToken1726502400000,
             AddSellerOrderToBePaid1726588800000,
             CreateReturnRequests1727481600000,
+            MoneyToBigint1795219200000,
             CreateCheckoutOutbox1795305600000,
           ],
           migrationsRun: shouldRunMigrations(config),

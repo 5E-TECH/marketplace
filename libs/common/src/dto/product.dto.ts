@@ -3,17 +3,17 @@ import {
   IsArray,
   IsEnum,
   IsInt,
-  IsNumber,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
-  Matches,
   Min,
   MinLength,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { ProductStatus } from '../enums';
 
@@ -35,13 +35,15 @@ export class CreateProductDto {
   description?: string | null;
 
   @ApiProperty({ example: 14999000, minimum: 0 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   price: number;
 
   @ApiPropertyOptional({ example: 15999000, minimum: 0, nullable: true })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   oldPrice?: number | null;
 

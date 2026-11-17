@@ -20,6 +20,7 @@ import { GeoCache } from './entities/geo-cache.entity';
 import { CreateIntegrationTables1722900000000 } from './migrations/1722900000000-create-integration-tables';
 import { AddGeoSatoCode1725285600000 } from './migrations/1725285600000-add-geo-sato-code';
 import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add-provision-tariffs';
+import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { ElchiApiClient } from './elchi-api.client';
 import { ElchiIntegrationController } from './elchi-integration.controller';
 import { ElchiIntegrationService } from './elchi-integration.service';
@@ -61,6 +62,7 @@ const entities = [ElchiMarketProvision, GeoCache, OutboxEvent];
             CreateIntegrationTables1722900000000,
             AddGeoSatoCode1725285600000,
             AddProvisionTariffs1725375600000,
+            MoneyToBigint1795219200000,
             CreateParcelQueue1795392000000,
           ],
           migrationsRun: shouldRunMigrations(config),

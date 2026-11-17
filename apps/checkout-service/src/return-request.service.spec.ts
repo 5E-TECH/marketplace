@@ -15,7 +15,7 @@ interface ItemRow {
   shopId: string;
   sellerOrderStatus: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: string;
   deliveredAt: Date | null;
   sellerOrderUpdatedAt: Date;
   reservedQuantity: number;
@@ -28,7 +28,7 @@ function item(overrides: Partial<ItemRow> = {}): ItemRow {
     shopId: '7',
     sellerOrderStatus: 'DELIVERED',
     quantity: 2,
-    unitPrice: 100000,
+    unitPrice: '100000',
     deliveredAt: new Date(Date.now() - 2 * DAY),
     sellerOrderUpdatedAt: new Date(),
     reservedQuantity: 0,
@@ -138,7 +138,7 @@ describe('ReturnRequestService (C4.2)', () => {
             sellerOrderId: '52',
             shopId: '8',
             quantity: 1,
-            unitPrice: 50000,
+            unitPrice: '50000',
           }),
         ],
       });

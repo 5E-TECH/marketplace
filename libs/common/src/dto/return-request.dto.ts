@@ -9,7 +9,6 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -18,6 +17,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { ReturnReason, ReturnRequestStatus } from '../enums';
 
 // ─── So'rovlar ──────────────────────────────────────────────────────────────
@@ -140,8 +140,9 @@ export class AdminReturnRefundDto {
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
+  @Min(1)
   amount?: number;
 
   @ApiPropertyOptional({

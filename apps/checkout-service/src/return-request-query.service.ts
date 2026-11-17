@@ -7,6 +7,8 @@ import {
   ReturnRequestHistoryDto,
   ReturnRequestItemDto,
   ReturnRequestsPageDto,
+  moneyFromDb,
+  moneyOrNull,
 } from '@app/common';
 
 /** Kim ko'ryapti: xaridor faqat o'zinikini, sotuvchi faqat o'z do'koninikini. */
@@ -33,8 +35,8 @@ const SELECT_RETURN = `
          r.shop_id::text AS "shopId", sh.name AS "shopName",
          o.buyer_name AS "buyerName", r.status, r.reason, r.comment,
          o.payment_method AS "paymentMethod",
-         r.requested_amount::float8 AS "requestedAmount",
-         r.refunded_amount::float8 AS "refundedAmount", r.restocked,
+         r.requested_amount AS "requestedAmount",
+         r.refunded_amount AS "refundedAmount", r.restocked,
          r.decision_comment AS "decisionComment", r.decided_at AS "decidedAt",
          r.refunded_at AS "refundedAt", r.created_at AS "createdAt",
          r.updated_at AS "updatedAt"
@@ -142,8 +144,8 @@ export class ReturnRequestQueryService {
               ri.sales_order_item_id::text AS "orderItemId",
               i.product_id::text AS "productId", i.variant_id::text AS "variantId",
               i.product_name AS "productName", p.image_url AS "imageUrl",
-              ri.quantity, ri.unit_price::float8 AS "unitPrice",
-              ri.line_total::float8 AS "lineTotal"
+              ri.quantity, ri.unit_price AS "unitPrice",
+              ri.line_total AS "lineTotal"
          FROM checkout.return_request_item ri
          JOIN checkout.sales_order_item i ON i.id = ri.sales_order_item_id
          LEFT JOIN catalog.product p ON p.id = i.product_id
@@ -163,8 +165,8 @@ export class ReturnRequestQueryService {
         productName: String(item.productName ?? ''),
         imageUrl: item.imageUrl ? String(item.imageUrl) : null,
         quantity: Number(item.quantity),
-        unitPrice: Number(item.unitPrice),
-        lineTotal: Number(item.lineTotal),
+        unitPrice: moneyFromDb(item.unitPrice as string),
+        lineTotal: moneyFromDb(item.lineTotal as string),
       });
       byRequest.set(key, list);
     }
@@ -175,8 +177,6 @@ export class ReturnRequestQueryService {
     row: Record<string, unknown>,
     items: ReturnRequestItemDto[] = [],
   ): ReturnRequestDto {
-    const nullableNumber = (value: unknown) =>
-      value === null || value === undefined ? null : Number(value);
     return {
       id: String(row.id),
       orderId: String(row.orderId),
@@ -188,8 +188,8 @@ export class ReturnRequestQueryService {
       reason: row.reason as ReturnRequestDto['reason'],
       comment: (row.comment as string) ?? null,
       paymentMethod: String(row.paymentMethod ?? ''),
-      requestedAmount: Number(row.requestedAmount),
-      refundedAmount: nullableNumber(row.refundedAmount),
+      requestedAmount: moneyFromDb(row.requestedAmount as string),
+      refundedAmount: moneyOrNull(row.refundedAmount as string | null),
       restocked:
         row.restocked === null || row.restocked === undefined
           ? null

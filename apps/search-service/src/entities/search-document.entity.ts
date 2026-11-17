@@ -5,7 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { numericTransformer } from '@app/common';
+import { moneyTransformer } from '@app/common';
 
 @Entity('search_document')
 @Index('uq_search_document_product_id', ['productId'], { unique: true })
@@ -24,10 +24,8 @@ export class SearchDocument {
   imageUrl: string | null;
   @Column({ name: 'shop_name', type: 'varchar', length: 255 }) shopName: string;
   @Column({
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
-    transformer: numericTransformer,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
   price: number;
   @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })

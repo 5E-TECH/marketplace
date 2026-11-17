@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsString, Matches, Max, Min } from 'class-validator';
+import { IsInt, IsNumber, IsString, Matches, Max, Min } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 
 /** C6.2 — panel orqali boshqariladigan platforma sozlamalari. */
 export class UpdateAdminSettingsDto {
@@ -13,9 +14,9 @@ export class UpdateAdminSettingsDto {
 
   @ApiProperty({ example: 50000, minimum: 0 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
-  @Max(999999999999.99)
+  @Max(MAX_MONEY)
   minimumOrderAmount: number;
 
   @ApiProperty({

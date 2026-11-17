@@ -6,7 +6,12 @@ import {
   ManyToOne,
   OneToMany,
 } from 'typeorm';
-import { BaseEntity, numericTransformer, ProductStatus } from '@app/common';
+import {
+  BaseEntity,
+  moneyTransformer,
+  numericTransformer,
+  ProductStatus,
+} from '@app/common';
 import { Category } from './category.entity';
 import { ProductVariant } from './product-variant.entity';
 import { Shop } from './shop.entity';
@@ -45,20 +50,16 @@ export class Product extends BaseEntity {
   description: string | null;
 
   @Column({
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
-    transformer: numericTransformer,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
   price: number;
 
   @Column({
     name: 'old_price',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   oldPrice: number | null;
 

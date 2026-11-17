@@ -14,6 +14,7 @@ import {
   ReturnRequestDetailsDto,
   ReturnRequestStatus,
   SalesOrderSellerStatus,
+  moneyFromDb,
 } from '@app/common';
 import {
   assertReturnId,
@@ -157,7 +158,7 @@ export class ReturnRequestService {
             S.SUBMITTED,
             dto.reason,
             comment,
-            Math.round(requested * 100) / 100,
+            requested,
           ],
         )) as Array<{ id: string }>;
         for (const line of lines) {
@@ -170,7 +171,7 @@ export class ReturnRequestService {
               line.row.orderItemId,
               line.qty,
               line.row.unitPrice,
-              Math.round(line.row.unitPrice * line.qty * 100) / 100,
+              line.row.unitPrice * line.qty,
             ],
           );
         }
@@ -324,7 +325,7 @@ export class ReturnRequestService {
       `SELECT i.id::text AS "orderItemId",
               s.id::text AS "sellerOrderId", s.shop_id::text AS "shopId",
               s.status AS "sellerOrderStatus", i.quantity,
-              i.unit_price::float8 AS "unitPrice",
+              i.unit_price AS "unitPrice",
               (SELECT MIN(h.created_at)
                  FROM checkout.sales_order_seller_history h
                 WHERE h.sales_order_seller_id=s.id AND h.status='DELIVERED'
@@ -341,7 +342,12 @@ export class ReturnRequestService {
         WHERE s.sales_order_id=$1 AND i.id=ANY($2::bigint[])`,
       [orderId, itemIds],
     )) as OrderItemRow[];
-    return new Map(rows.map((row) => [String(row.orderItemId), row]));
+    return new Map(
+      rows.map((row) => [
+        String(row.orderItemId),
+        { ...row, unitPrice: moneyFromDb(row.unitPrice) },
+      ]),
+    );
   }
 
   private assertItemReturnable(row: OrderItemRow, quantity: number): void {

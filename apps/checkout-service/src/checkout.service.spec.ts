@@ -64,8 +64,8 @@ describe('CheckoutService (C2.9)', () => {
         if (sql.includes('INSERT INTO checkout.sales_order\n'))
           return [{ id: String(++orderId) }];
         if (sql.includes('INSERT INTO checkout.sales_order_seller'))
-          // `.toFixed(2)` ATAYLAB — SATR qaytaramiz. node-postgres `numeric`
-          // ustunini aniqlikni yo'qotmaslik uchun aynan shunday beradi. Avval
+          // `String()` ATAYLAB — SATR qaytaramiz. node-postgres `bigint`
+          // ustunini (BE-01 dan keyin pul shunda) aynan shunday beradi. Avval
           // bu mock `Number()` qaytarardi va shu sabab jonli tizimdagi satr
           // birikmasi nuqsonini (10000 + "0.00" = "100000.00") butun to'plam
           // yashil turib o'tkazib yuborgandi. Mock haqiqatdan soddaroq bo'lsa,
@@ -73,7 +73,7 @@ describe('CheckoutService (C2.9)', () => {
           return [
             {
               id: String(++sellerId),
-              deliveryFee: Number(params[3]).toFixed(2),
+              deliveryFee: String(params[3]),
             },
           ];
         return [];
@@ -259,6 +259,24 @@ describe('CheckoutService (C2.9)', () => {
       { cmd: 'integration.tariff.get' },
       expect.objectContaining({ districtId: '3' }),
     );
+  });
+
+  it('BE-01: MAX_MONEY dan katta buyurtma rad etiladi', async () => {
+    const { service, integration } = setup();
+    integration.send.mockImplementation(() => of({ amount: 999_999_999_999 }));
+
+    await expect(service.create('5', dto())).rejects.toThrow(
+      'Buyurtma summasi juda katta',
+    );
+  });
+
+  it('BE-01: kasr tarif rad etiladi — pul butun so‘mda', async () => {
+    const { service, integration } = setup();
+    integration.send.mockImplementation(() => of({ amount: 20.5 }));
+
+    await expect(
+      service.preview('5', undefined, dto().address),
+    ).rejects.toThrow('Yaroqsiz dostavka tarifi');
   });
 
   it('C1.46 TC4: CENTER preview Elchidan markaz tarifini so‘raydi', async () => {

@@ -13,8 +13,8 @@ describe('SellerOrdersService', () => {
             id: '31',
             salesOrderId: '12',
             buyerName: 'Ali',
-            subtotal: '450000.00',
-            codAmount: '450000.00',
+            subtotal: '450000',
+            codAmount: '450000',
             status: SalesOrderSellerStatus.ON_THE_ROAD,
             elchiShipmentId: '987',
             trackingUrl: 'https://elchi.uz/track/987',
@@ -61,7 +61,7 @@ describe('SellerOrdersService', () => {
         .mockResolvedValueOnce([
           {
             ordersTotal: '5',
-            revenue: '1250000.50',
+            revenue: '1250000',
             pendingShipments: '2',
             delivered: '3',
           },
@@ -71,15 +71,15 @@ describe('SellerOrdersService', () => {
           { productId: '91', name: 'G‘ilof', sold: '4' },
         ])
         .mockResolvedValueOnce([
-          { date: '2026-08-01', amount: '450000.25' },
-          { date: '2026-08-02', amount: '800000.25' },
+          { date: '2026-08-01', amount: '450000' },
+          { date: '2026-08-02', amount: '800000' },
         ]),
     };
     const service = new SellerOrdersService(dataSource as never);
 
     await expect(service.dashboard('15', 4)).resolves.toEqual({
       ordersTotal: 5,
-      revenue: 1250000.5,
+      revenue: 1250000,
       pendingShipments: 2,
       delivered: 3,
       lowStockCount: 4,
@@ -88,8 +88,8 @@ describe('SellerOrdersService', () => {
         { productId: '91', name: 'G‘ilof', sold: 4 },
       ],
       salesByDay: [
-        { date: '2026-08-01', amount: 450000.25 },
-        { date: '2026-08-02', amount: 800000.25 },
+        { date: '2026-08-01', amount: 450000 },
+        { date: '2026-08-02', amount: 800000 },
       ],
     });
     for (const call of dataSource.query.mock.calls) {
@@ -162,7 +162,7 @@ describe('SellerOrdersService.adminStats (C1.28)', () => {
       query: jest
         .fn()
         .mockResolvedValueOnce([
-          { ordersTotal: '5', ordersToday: '2', gmv: '54000000.00' },
+          { ordersTotal: '5', ordersToday: '2', gmv: '54000000' },
         ]),
     };
     const service = new SellerOrdersService(dataSource as never);
@@ -261,7 +261,7 @@ describe('SellerOrdersService admin orders (C1.30)', () => {
             buyerName: 'Ali',
             status: 'CONFIRMED',
             paymentMethod: 'cod',
-            totalAmount: '450000.00',
+            totalAmount: '450000',
             createdAt: new Date('2026-08-01T00:00:00.000Z'),
             sellersCount: '2',
           },

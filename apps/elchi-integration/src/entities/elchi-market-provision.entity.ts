@@ -1,5 +1,5 @@
 import { Column, Entity, Index } from 'typeorm';
-import { BaseEntity, numericTransformer } from '@app/common';
+import { BaseEntity, moneyTransformer } from '@app/common';
 
 /**
  * Sotuvchi (shop) uchun Elchi market provisioning holati. Marketplace tomonidagi
@@ -35,21 +35,17 @@ export class ElchiMarketProvision extends BaseEntity {
 
   @Column({
     name: 'tariff_home',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     default: 0,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   tariffHome: number;
 
   @Column({
     name: 'tariff_center',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     default: 0,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   tariffCenter: number;
 

@@ -385,7 +385,7 @@ describe('SellerOrdersService.syncShipmentTokens (C1.45 backfill)', () => {
       id: '11',
       shipmentId: '1251134',
       qrCodeToken: 'bbbbbbbbbbbbbbbbbbbbbbbb',
-      toBePaid: '30000.00',
+      toBePaid: '30000',
     },
     // Elchi javob bermadi
     { id: '14', shipmentId: '1251146', qrCodeToken: null, toBePaid: null },
