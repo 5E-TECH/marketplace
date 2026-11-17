@@ -14,6 +14,9 @@ import { orderEvent } from './order-events.samples';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
 const describePostgres = url ? describe : describe.skip;
+/** Session advisory lock: finance sxemasi testlari ketma-ket (BE-23 tekshiruvi). */
+const FINANCE_SCHEMA_TEST_LOCK = 2_304_001;
+let schemaLock: Client | undefined;
 
 /**
  * BE-22 TC0–TC8 haqiqiy Postgres da. Har test oxirida kechki balans
@@ -62,6 +65,12 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
         'FINANCE_TEST_DATABASE_URL nomi _finance_test bilan tugashi kerak',
       );
     }
+    // finance sxemasini DROP/CREATE qiladigan integratsiya testlari (ledger, withdrawal) parallel workerda bir-birini buzmasin
+    schemaLock = new Client({ connectionString: url });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      FINANCE_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: url });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS finance CASCADE');
@@ -85,7 +94,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     }).initialize();
     ledger = new LedgerService(ds);
     check = new BalanceCheckService(ds);
-  });
+  }, 300_000);
 
   beforeEach(async () => {
     await ds.query(`TRUNCATE finance.ledger_entry, finance.journal, finance.remittance_item,
@@ -102,6 +111,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
       await ds.query('DROP SCHEMA IF EXISTS finance CASCADE');
       await ds.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   it('TC1: 251 000 yetkazildi → optovik 140 000, sotuvchi 65 000, markaz 12 000, platforma 34 000 — HOLD', async () => {

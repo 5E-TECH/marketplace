@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Param,
   Post,
@@ -58,6 +60,7 @@ export class AdminWithdrawalsController {
   }
 
   @Post('withdrawals/:id/approve')
+  @HttpCode(HttpStatus.OK)
   @Roles(Role.SUPERADMIN)
   @ApiOperation({
     summary: 'Tasdiqlash',
@@ -81,6 +84,7 @@ export class AdminWithdrawalsController {
   }
 
   @Post('withdrawals/:id/reject')
+  @HttpCode(HttpStatus.OK)
   @Roles(Role.SUPERADMIN)
   @ApiOperation({ summary: 'Rad etish (sabab bilan); band summa bo‘shaydi' })
   @ApiOkResponse({ type: WithdrawalDto })
@@ -101,6 +105,7 @@ export class AdminWithdrawalsController {
   }
 
   @Post('withdrawals/:id/paid')
+  @HttpCode(HttpStatus.OK)
   @Roles(Role.SUPERADMIN)
   @ApiOperation({
     summary: '«To‘landi»: moliya kartaga qo‘lda o‘tkazdi',

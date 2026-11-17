@@ -15,6 +15,9 @@ import { withdrawalTax, WithdrawalService } from './withdrawal.service';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
 const describePostgres = url ? describe : describe.skip;
+/** Session advisory lock: finance sxemasi testlari ketma-ket (BE-23 tekshiruvi). */
+const FINANCE_SCHEMA_TEST_LOCK = 2_304_001;
+let schemaLock: Client | undefined;
 
 describe('withdrawalTax (1%)', () => {
   it('TC1: 1 000 000 → 10 000; kasr yuqoriga (soliq kam ushlanmaydi)', () => {
@@ -92,6 +95,12 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
       throw new Error(
         'FINANCE_TEST_DATABASE_URL nomi _finance_test bilan tugashi kerak',
       );
+    // finance sxemasini DROP/CREATE qiladigan integratsiya testlari (ledger, withdrawal) parallel workerda bir-birini buzmasin
+    schemaLock = new Client({ connectionString: url });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      FINANCE_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: url });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS finance CASCADE');
@@ -116,7 +125,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     ledger = new LedgerService(ds);
     svc = new WithdrawalService(ds, ledger);
     check = new BalanceCheckService(ds);
-  });
+  }, 300_000);
 
   beforeEach(async () => {
     await ds.query(`TRUNCATE finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
@@ -133,6 +142,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
       await ds.query('DROP SCHEMA IF EXISTS finance CASCADE');
       await ds.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   it('TC1: 1 000 000 → 10 000 soliq (alohida qator), 990 000 kartaga; balans 0, soliq hisobida 10 000', async () => {
