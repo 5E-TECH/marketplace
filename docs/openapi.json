@@ -10136,6 +10136,64 @@
         ]
       }
     },
+    "/api/v1/affiliate/capi-deliveries": {
+      "get": {
+        "operationId": "AffiliateStreamsController_capiDeliveries",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "streamId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "3301",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateCapiDeliveriesPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Meta CAPI yuborish jurnali: Lead va Purchase, holat va xato sababi (BE-31)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
     "/api/v1/affiliate/postbacks": {
       "get": {
         "operationId": "AffiliateStreamsController_postbacks",
@@ -17951,6 +18009,125 @@
           "totalPages": {
             "type": "number",
             "example": 3
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "AffiliateCapiDeliveryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "601"
+          },
+          "leadId": {
+            "type": "string",
+            "example": "7001",
+            "description": "Lid ID — Meta event_id"
+          },
+          "streamCode": {
+            "type": "string",
+            "example": "k7Qm2x"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "LEAD",
+              "PURCHASE"
+            ],
+            "example": "LEAD"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SENT",
+              "FAILED"
+            ],
+            "example": "SENT"
+          },
+          "attempts": {
+            "type": "number",
+            "example": 1
+          },
+          "responseCode": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Meta xatosi yoki sabab (masalan, «190: token yaroqsiz»)"
+          },
+          "value": {
+            "type": "number",
+            "example": 292000,
+            "nullable": true,
+            "description": "Purchase summasi, so‘m (UZS)"
+          },
+          "deliveredAt": {
+            "type": "string",
+            "example": "2027-01-14T09:33:00.000Z",
+            "nullable": true
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T09:32:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "leadId",
+          "streamCode",
+          "event",
+          "status",
+          "attempts",
+          "responseCode",
+          "lastError",
+          "value",
+          "deliveredAt",
+          "nextAttemptAt",
+          "createdAt"
+        ]
+      },
+      "AffiliateCapiDeliveriesPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliateCapiDeliveryDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 12
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
           }
         },
         "required": [

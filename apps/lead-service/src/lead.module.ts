@@ -29,6 +29,7 @@ import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
+import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadStatsController } from './lead-stats.controller';
 import { LeadStatsService } from './lead-stats.service';
@@ -41,6 +42,7 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 
 /** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28. */
 @Module({
@@ -109,6 +111,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
             AddLeadQueue1795046400000,
             AddApiLeads1795132800000,
             AddLeadStats1795564800000,
+            AddCapiFields1795651200000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -140,6 +143,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
     ApiKeyService,
     LeadStatsService,
     LeadOrderService,
+    CapiService,
   ],
 })
 export class LeadModule {}
