@@ -15,7 +15,6 @@ export * from './interfaces/elchi-shipment.interface';
 // Database
 export * from './database/base.entity';
 export * from './database/numeric.transformer';
-export * from './database/query-rows';
 export * from './database/returning-rows';
 export * from './database/typeorm.util';
 

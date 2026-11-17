@@ -14,7 +14,7 @@ import {
   OutboxService,
   elchiOrderRef,
   processOnce,
-  queryRows,
+  returningRows,
   runAsLeader,
 } from '@app/common';
 import {
