@@ -8,6 +8,7 @@ import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
   AffiliateOfferSort,
+  AffiliatePostbackEvent,
   AffiliateStreamStatus,
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
@@ -20,6 +21,8 @@ import {
   OutboxStatus,
   LeadReviewReason,
   StreamTemplate,
+  verifyHmacSha256,
+  encryptSecret,
   LeadSource,
   LeadStatus,
   LeadVariant,
@@ -37,6 +40,7 @@ import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
 import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
 import { LeadAdminService } from './lead-admin.service';
+import { PostbackService } from './postback.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -1663,6 +1667,173 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       await expect(admin().card('999999')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('BE-14: postback', () => {
+    const SECRET_KEY = 'isolated-test-encryption-key-0001';
+    const config = new ConfigService({
+      INTEGRATION_CREDENTIAL_SECRET: SECRET_KEY,
+    });
+    const service = (codes: number[]) => {
+      const svc = new PostbackService(db, config);
+      const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+      svc.sender = async (url, headers) => {
+        calls.push({ url, headers });
+        return codes.shift() ?? 500;
+      };
+      return { svc, calls };
+    };
+    const setup = async (secret = true) => {
+      const stream = await db.getRepository(Stream).save({
+        code: 'pbpbpb',
+        affiliateId: '77',
+        productId: '501',
+        salePrice: '262000',
+        postbackUrl:
+          'https://tracker.example.com/pb?status={status}&sub1={sub1}&lead={lead_id}',
+        postbackSecretEnc: secret ? encryptSecret('sir-123', SECRET_KEY) : null,
+      });
+      const lead = await db.getRepository(Lead).save(
+        landingLead(stream.id, {
+          sub1: 'kampaniya-1',
+          variant: LeadVariant.S3,
+        }),
+      );
+      return { stream, lead };
+    };
+
+    it('TC1: tasdiq → sotuvchi URL iga imzolangan so‘rov, sub bilan; takror hodisa bitta', async () => {
+      const { lead } = await setup();
+      const { svc, calls } = service([200]);
+      await db.transaction(async (m) => {
+        await svc.enqueue(m, lead, AffiliatePostbackEvent.CONFIRMED);
+        await svc.enqueue(m, lead, AffiliatePostbackEvent.CONFIRMED);
+      });
+      await expect(svc.sendDue()).resolves.toBe(1);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe(
+        `https://tracker.example.com/pb?status=confirmed&sub1=kampaniya-1&lead=${lead.id}`,
+      );
+      expect(calls[0].url).not.toContain('s3');
+      const sig = calls[0].headers['x-elchi-signature'].replace('sha256=', '');
+      expect(
+        verifyHmacSha256(
+          `${calls[0].headers['x-elchi-timestamp']}.${calls[0].url}`,
+          sig,
+          'sir-123',
+        ),
+      ).toBe(true);
+      const journal = await svc.journal('77', {});
+      expect(journal.items[0]).toMatchObject({
+        status: 'SENT',
+        responseCode: 200,
+        attempts: 1,
+      });
+      expect((await svc.journal('78', {})).total).toBe(0);
+    });
+
+    it('TC2: treker 500 → 5 urinish, keyin FAILED', async () => {
+      const { lead } = await setup(false);
+      const { svc, calls } = service([500, 500, 500, 500, 500, 500]);
+      await db.transaction((m) =>
+        svc.enqueue(m, lead, AffiliatePostbackEvent.LEAD),
+      );
+      for (let i = 0; i < 6; i++) {
+        await db.query(
+          `UPDATE lead.postback_delivery SET next_attempt_at = now() - interval '1 second' WHERE next_attempt_at IS NOT NULL`,
+        );
+        await svc.sendDue();
+      }
+      expect(calls).toHaveLength(5);
+      expect(calls[0].headers['x-elchi-signature']).toBeUndefined();
+      const [row] = (await svc.journal('77', {})).items;
+      expect(row).toMatchObject({
+        status: 'FAILED',
+        attempts: 5,
+        responseCode: 500,
+        nextAttemptAt: null,
+      });
+    });
+
+    it('postback URL i yo‘q sahifa — navbatga hech narsa yozilmaydi', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      const { svc } = service([]);
+      await db.transaction((m) =>
+        svc.enqueue(m, lead, AffiliatePostbackEvent.LEAD),
+      );
+      expect(
+        await db.query('SELECT count(*)::int AS n FROM lead.postback_delivery'),
+      ).toEqual([{ n: 0 }]);
+    });
+
+    it('TC3, TC4: ichki manzil yoki ichki IP ga ochiladigan domen saqlanmaydi', async () => {
+      const svc = new StreamService(
+        db.getRepository(Stream),
+        db.getRepository(Click),
+        db.getRepository(Lead),
+        {
+          get: jest.fn(async () => null),
+          list: jest.fn(async () => []),
+        } as never,
+        config,
+      );
+      const stream = await db.getRepository(Stream).save({
+        code: 'ssrfss',
+        affiliateId: '77',
+        productId: '501',
+        salePrice: '262000',
+      });
+      for (const postbackUrl of [
+        'http://127.0.0.1/pb',
+        'http://10.0.0.5/pb',
+        'http://[::1]/pb',
+      ])
+        await expect(
+          svc.update('77', stream.id, { postbackUrl }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      svc.resolveHost = async () => [{ address: '10.0.0.5' }];
+      await expect(
+        svc.update('77', stream.id, {
+          postbackUrl: 'https://evil.example.com/pb',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      svc.resolveHost = async () => [{ address: '93.184.216.34' }];
+      await expect(
+        svc.update('77', stream.id, {
+          postbackUrl: 'https://tracker.example.com/pb',
+        }),
+      ).resolves.toMatchObject({
+        postbackUrl: 'https://tracker.example.com/pb',
+      });
+    });
+
+    it('navbat: «Tasdiqlandi» va «Rad etildi» postback navbatiga tushadi', async () => {
+      const { lead } = await setup();
+      const pb = new PostbackService(db, config);
+      const geo = {
+        ok: true,
+        regionSoato: '1726',
+        regionName: 'T',
+        districtSoato: '1726266',
+        districtName: 'Y',
+        elchiRegionId: '1',
+        elchiDistrictId: '10',
+      };
+      const address = new LeadAddressService(db, {
+        send: jest.fn(() => of(geo)),
+      } as never);
+      const queue = new LeadQueueService(db, address, pb);
+      await queue.setState('41', OperatorWorkState.ONLINE);
+      await queue.takeNext('41');
+      await queue.submitResult('41', lead.id, {
+        outcome: LeadOutcome.REJECTED,
+        rejectReason: 'NOT_NEEDED' as never,
+      });
+      expect(
+        await db.query('SELECT event FROM lead.postback_delivery'),
+      ).toEqual([{ event: 'rejected' }]);
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   AffiliateStreamDto,
   AffiliateStreamsPageDto,
   AffiliateStreamStatus,
+  assertSafeUrlResolved,
   CatalogOfferSnapshot,
   encryptSecret,
   StreamTemplate,
@@ -108,8 +109,10 @@ export class StreamService {
       stream.metaPixelId = patch.metaPixelId || null;
     if (patch.tiktokPixelId !== undefined)
       stream.tiktokPixelId = patch.tiktokPixelId || null;
-    if (patch.postbackUrl !== undefined)
+    if (patch.postbackUrl !== undefined) {
+      if (patch.postbackUrl) await this.assertPostbackUrl(patch.postbackUrl);
       stream.postbackUrl = patch.postbackUrl || null;
+    }
     if (patch.postbackSecret !== undefined)
       stream.postbackSecretEnc = patch.postbackSecret
         ? encryptSecret(patch.postbackSecret, this.secretKey())
@@ -238,6 +241,20 @@ export class StreamService {
     ).replace(/\/+$/, '');
     return `${base}/${code}`;
   }
+
+  /** BE-14 TC3, TC4: ichki manzil yoki ichki IP ga ochiladigan domen saqlanmaydi. */
+  private async assertPostbackUrl(url: string): Promise<void> {
+    try {
+      await assertSafeUrlResolved(url, this.resolveHost);
+    } catch (err) {
+      throw new BadRequestException({
+        message: [`postbackUrl ${(err as Error).message}`],
+      });
+    }
+  }
+
+  /** Testlar DNS ni almashtira olishi uchun. */
+  resolveHost?: (host: string) => Promise<Array<{ address: string }>>;
 
   private newCode(): string {
     const bytes = randomBytes(CODE_LENGTH);

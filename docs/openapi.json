@@ -10061,6 +10061,64 @@
         ]
       }
     },
+    "/api/v1/affiliate/postbacks": {
+      "get": {
+        "operationId": "AffiliateStreamsController_postbacks",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "streamId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "3301",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliatePostbacksPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuborilganlar jurnali: postback hodisalari va javob kodlari (BE-14)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
     "/api/v1/operator/leads/next": {
       "post": {
         "description": "Vaqti kelgan qayta qo‘ng‘iroqlar, keyin eng yangi lidlar. 5 tadan ortiq bron yoki tanaffus holatida rad (OPR-1, BE-13).",
@@ -17454,7 +17512,7 @@
           },
           "postbackUrl": {
             "type": "string",
-            "description": "Postback URL (yuborish ishga tushgandan keyin, BE-14)"
+            "description": "Postback URL (BE-14). Makrolar: {status} (lead, confirmed, rejected, delivered), {lead_id}, {click_id}, {product_id}, {sub1}…{sub5} [taklif]. Ichki tarmoq manzili rad etiladi (SSRF). Siri berilsa so‘rov X-Elchi-Timestamp va X-Elchi-Signature (sha256 HMAC) bilan imzolanadi"
           },
           "postbackSecret": {
             "type": "string",
@@ -17666,6 +17724,112 @@
           "totalPages": {
             "type": "number",
             "example": 3
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "AffiliatePostbackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "501"
+          },
+          "leadId": {
+            "type": "string",
+            "example": "7001"
+          },
+          "streamCode": {
+            "type": "string",
+            "example": "k7Qm2x"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "confirmed",
+              "rejected",
+              "delivered"
+            ],
+            "example": "confirmed"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SENT",
+              "FAILED"
+            ],
+            "example": "SENT"
+          },
+          "attempts": {
+            "type": "number",
+            "example": 1
+          },
+          "responseCode": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "deliveredAt": {
+            "type": "string",
+            "example": "2027-01-14T09:40:00.000Z",
+            "nullable": true
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T09:39:58.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "leadId",
+          "streamCode",
+          "event",
+          "status",
+          "attempts",
+          "responseCode",
+          "deliveredAt",
+          "nextAttemptAt",
+          "createdAt"
+        ]
+      },
+      "AffiliatePostbacksPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliatePostbackDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 12
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
           }
         },
         "required": [

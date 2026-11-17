@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
@@ -15,6 +16,7 @@ import {
   Not,
 } from 'typeorm';
 import {
+  AffiliatePostbackEvent,
   LEAD_EVENTS,
   LeadConfirmedEvent,
   LeadErrorCode,
@@ -30,6 +32,7 @@ import {
 } from '@app/common';
 import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
+import { PostbackService } from './postback.service';
 import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
   bookingUntil,
@@ -64,6 +67,7 @@ export class LeadQueueService {
   constructor(
     private readonly db: DataSource,
     private readonly address: LeadAddressService,
+    @Optional() private readonly postback?: PostbackService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -191,12 +195,22 @@ export class LeadQueueService {
           lead.stockShortageAt = null;
           note = 'Tasdiqlandi';
           await this.enqueueConfirmed(manager, lead, operatorId, now);
+          await this.postback?.enqueue(
+            manager,
+            lead,
+            AffiliatePostbackEvent.CONFIRMED,
+          );
           break;
         case LeadOutcome.REJECTED:
           lead.status = LeadStatus.REJECTED;
           lead.rejectReason = dto.rejectReason!;
           lead.nextAttemptAt = null;
           note = 'Rad etildi';
+          await this.postback?.enqueue(
+            manager,
+            lead,
+            AffiliatePostbackEvent.REJECTED,
+          );
           break;
         case LeadOutcome.INVALID:
           lead.status = LeadStatus.INVALID;

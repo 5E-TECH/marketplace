@@ -29,6 +29,7 @@ import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
 import { OfferService } from './offer.service';
+import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
@@ -117,6 +118,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
     LeadQueueScheduler,
     LeadOutboxRelayService,
     LeadAdminService,
+    PostbackService,
   ],
 })
 export class LeadModule {}
