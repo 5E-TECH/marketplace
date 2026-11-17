@@ -58,17 +58,28 @@ describe('ElchiWebhookService (C2.4)', () => {
     };
     const inventory = { send: jest.fn(() => of({ operation: 'INBOUND' })) };
     const payment = { send: jest.fn(() => of({ status: 'REFUNDED' })) };
-    const finance = { emit: jest.fn(() => of(undefined)) };
+    // BE-03: moliya hodisalari outbox ga yoziladi; `finance.emit` — yozilgan
+    // hodisalarning qulay ko'rinishi (relay ularni xuddi shunday yuboradi).
+    const finance = { emit: jest.fn() };
+    const outbox = {
+      record: jest.fn(
+        async (input: { eventType: string; payload: unknown }) => {
+          finance.emit(input.eventType, input.payload);
+        },
+      ),
+    };
     return {
       service: new ElchiWebhookService(
         dataSource as never,
         inventory as never,
         payment as never,
-        finance as never,
+        outbox as never,
       ),
       inventory,
       payment,
       finance,
+      outbox,
+      manager,
       queries,
     };
   }
@@ -173,6 +184,21 @@ describe('ElchiWebhookService (C2.4)', () => {
         shopId: '7',
         amount: 499000,
       }),
+    );
+  });
+
+  it('BE-03 TC1: moliya hodisasi webhook tranzaksiyasi ichida outbox ga yoziladi', async () => {
+    const { service, outbox, manager } = setup({
+      paymentMethod: CheckoutPaymentMethod.ONLINE,
+    });
+    await service.process(event('sold'));
+    expect(outbox.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregateType: 'sales_order_seller',
+        aggregateId: '55',
+        eventType: 'finance.payout.requested',
+      }),
+      manager,
     );
   });
 

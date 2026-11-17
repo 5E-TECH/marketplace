@@ -19,6 +19,7 @@ import {
   BroadcastsQueryDto,
   RmqClient,
   sendRpc,
+  runAsLeader,
 } from '@app/common';
 import { In, LessThan, QueryFailedError, Repository } from 'typeorm';
 import { Broadcast } from './entities/broadcast.entity';
@@ -146,8 +147,20 @@ export class BroadcastService {
     };
   }
 
+  /** BE-03: bir nechta nusxada faqat qulfni olgan nusxa davom ettiradi. */
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'broadcast-resume-stale',
+    waitForCompletion: true,
+  })
+  async resumeStaleTick(): Promise<void> {
+    await runAsLeader(
+      this.broadcasts.manager.connection,
+      'broadcast-resume-stale',
+      () => this.resumeStale(),
+    );
+  }
+
   /** To'xtab qolgan (servis qayta ishga tushgan / identity xatosi) xabarlarni davom ettiradi. */
-  @Cron(CronExpression.EVERY_MINUTE)
   async resumeStale(): Promise<void> {
     const stale = await this.broadcasts.find({
       select: { id: true },

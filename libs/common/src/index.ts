@@ -94,5 +94,7 @@ export * from './idempotency/idempotency-record.entity';
 export * from './idempotency/idempotency.service';
 export * from './outbox/outbox-event.entity';
 export * from './outbox/outbox.service';
+export * from './outbox/processed-event';
+export * from './scheduling/leader-lock';
 export * from './activity-log/activity-log.entity';
 export * from './activity-log/activity-log.service';
