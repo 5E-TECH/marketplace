@@ -5,11 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   ElchiWebhookDto,
   CheckoutPaymentMethod,
+  OutboxService,
   ReturnOrderItemsDto,
   RefundPaymentDto,
   RmqClient,
@@ -45,7 +45,9 @@ export class ElchiWebhookService {
     private readonly dataSource: DataSource,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
     @Inject(RmqClient.PAYMENT) private readonly payment: ClientProxy,
-    @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    // BE-03: moliya hodisalari outbox orqali — webhook tranzaksiyasi rollback
+    // bo'lsa (masalan, keyingi qadam xato bersa) hodisa ketmaydi.
+    private readonly outbox: OutboxService,
   ) {}
 
   process(
@@ -73,13 +75,13 @@ export class ElchiWebhookService {
       if (status === SalesOrderSellerStatus.RETURNED) {
         await this.restoreInventory(manager, sellerOrder, event);
         if (sellerOrder.payment_method !== CheckoutPaymentMethod.COD) {
-          await this.refundOnlinePayment(sellerOrder, event, true);
+          await this.refundOnlinePayment(manager, sellerOrder, event, true);
         }
       } else if (
         status === SalesOrderSellerStatus.CANCELLED &&
         sellerOrder.payment_method !== CheckoutPaymentMethod.COD
       ) {
-        await this.refundOnlinePayment(sellerOrder, event, false);
+        await this.refundOnlinePayment(manager, sellerOrder, event, false);
       }
 
       await manager.query(
@@ -112,8 +114,11 @@ export class ElchiWebhookService {
         status === SalesOrderSellerStatus.DELIVERED &&
         sellerOrder.payment_method !== CheckoutPaymentMethod.COD
       ) {
-        await firstValueFrom(
-          this.finance.emit('finance.payout.requested', {
+        await this.financeEvent(
+          manager,
+          sellerOrder,
+          'finance.payout.requested',
+          {
             eventId: event.eventId,
             sellerOrderId: sellerOrder.id,
             salesOrderId: sellerOrder.sales_order_id,
@@ -121,24 +126,22 @@ export class ElchiWebhookService {
             amount: Number(sellerOrder.subtotal),
             paymentMethod: sellerOrder.payment_method,
             occurredAt: event.occurredAt,
-          }),
+          },
         );
       }
       if (
         event.status === 'settled' &&
         sellerOrder.payment_method === CheckoutPaymentMethod.COD
       ) {
-        await firstValueFrom(
-          this.finance.emit('finance.cod.settled', {
-            eventId: event.eventId,
-            sellerOrderId: sellerOrder.id,
-            salesOrderId: sellerOrder.sales_order_id,
-            shopId: sellerOrder.shop_id,
-            expectedAmount: Number(sellerOrder.subtotal),
-            collectedAmount: Number(event.codCollected),
-            occurredAt: event.occurredAt,
-          }),
-        );
+        await this.financeEvent(manager, sellerOrder, 'finance.cod.settled', {
+          eventId: event.eventId,
+          sellerOrderId: sellerOrder.id,
+          salesOrderId: sellerOrder.sales_order_id,
+          shopId: sellerOrder.shop_id,
+          expectedAmount: Number(sellerOrder.subtotal),
+          collectedAmount: Number(event.codCollected),
+          occurredAt: event.occurredAt,
+        });
       }
 
       return { received: true };
@@ -185,7 +188,26 @@ export class ElchiWebhookService {
     } satisfies ReturnOrderItemsDto);
   }
 
+  /** Moliya hodisasini webhook tranzaksiyasi ichida outbox ga yozadi. */
+  private async financeEvent(
+    manager: EntityManager,
+    sellerOrder: SellerOrderWebhookRow,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.outbox.record(
+      {
+        aggregateType: 'sales_order_seller',
+        aggregateId: sellerOrder.id,
+        eventType,
+        payload,
+      },
+      manager,
+    );
+  }
+
   private async refundOnlinePayment(
+    manager: EntityManager,
     sellerOrder: SellerOrderWebhookRow,
     event: ElchiWebhookDto,
     reverseLedger: boolean,
@@ -198,13 +220,16 @@ export class ElchiWebhookService {
       idempotencyKey: `elchi-refund:${event.eventId}`,
     } satisfies RefundPaymentDto);
     if (reverseLedger) {
-      await firstValueFrom(
-        this.finance.emit('finance.refund.requested', {
+      await this.financeEvent(
+        manager,
+        sellerOrder,
+        'finance.refund.requested',
+        {
           eventId: event.eventId,
           sellerOrderId: sellerOrder.id,
           shopId: sellerOrder.shop_id,
           occurredAt: event.occurredAt,
-        }),
+        },
       );
     }
   }

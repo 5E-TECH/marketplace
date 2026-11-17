@@ -1,5 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
+import { ORDER_EVENTS, OrderStatusChangedEvent } from '@app/common';
+import { ParcelService } from './parcel.service';
 import {
   ElchiIntegrationService,
   ShopApprovedEvent,
@@ -8,7 +10,18 @@ import {
 
 @Controller()
 export class ElchiIntegrationController {
-  constructor(private readonly service: ElchiIntegrationService) {}
+  constructor(
+    private readonly service: ElchiIntegrationService,
+    private readonly parcels: ParcelService,
+  ) {}
+
+  /** BE-20: «Tasdiqlandi» → posilka navbati; «Bekor qilindi» → bekor qilish. */
+  @EventPattern(ORDER_EVENTS.STATUS_CHANGED)
+  async onOrderStatusChanged(
+    @Payload() event: OrderStatusChangedEvent,
+  ): Promise<void> {
+    await this.parcels.onOrderStatusChanged(event);
+  }
 
   /** Sotuvchi approve bo'lganda Elchi market provisioning (event-driven). */
   @EventPattern('shop.approved')
