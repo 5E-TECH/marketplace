@@ -1,10 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsEnum,
   IsBoolean,
+  IsEnum,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -63,13 +62,13 @@ export class FeatureShopDto {
 export class UpdateShopTariffsDto {
   @ApiProperty({ example: 25000, minimum: 1 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(1)
   tariffHome: number;
 
   @ApiProperty({ example: 15000, minimum: 1 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(1)
   tariffCenter: number;
 }

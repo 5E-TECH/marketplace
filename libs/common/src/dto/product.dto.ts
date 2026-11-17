@@ -3,14 +3,13 @@ import {
   IsArray,
   IsEnum,
   IsInt,
-  IsNumber,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
-  Matches,
   Min,
   MinLength,
 } from 'class-validator';
@@ -35,13 +34,13 @@ export class CreateProductDto {
   description?: string | null;
 
   @ApiProperty({ example: 14999000, minimum: 0 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   price: number;
 
   @ApiPropertyOptional({ example: 15999000, minimum: 0, nullable: true })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   oldPrice?: number | null;
 

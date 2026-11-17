@@ -9,7 +9,6 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -140,8 +139,8 @@ export class AdminReturnRefundDto {
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @IsInt() // BE-01: pul — butun so‘m
+  @Min(1)
   amount?: number;
 
   @ApiPropertyOptional({

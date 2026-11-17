@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   IsBoolean,
-  IsNumber,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
@@ -30,13 +30,13 @@ export class CreateProductVariantDto {
 
   @ApiPropertyOptional({ example: 16000000, minimum: 0, nullable: true })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   price?: number | null;
 
   @ApiPropertyOptional({ example: 17000000, minimum: 0, nullable: true })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   oldPrice?: number | null;
 

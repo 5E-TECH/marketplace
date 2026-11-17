@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -51,14 +50,14 @@ export class StorefrontProductsQueryDto {
   @ApiPropertyOptional({ example: 100000, minimum: 0 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   minPrice?: number;
 
   @ApiPropertyOptional({ example: 15000000, minimum: 0 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   maxPrice?: number;
 

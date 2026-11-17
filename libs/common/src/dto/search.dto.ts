@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -26,14 +25,14 @@ export class SearchProductsQueryDto {
   @ApiPropertyOptional({ minimum: 0, example: 100000 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   minPrice?: number;
 
   @ApiPropertyOptional({ minimum: 0, example: 5000000 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsInt() // BE-01: pul — butun so‘m
   @Min(0)
   maxPrice?: number;
 
