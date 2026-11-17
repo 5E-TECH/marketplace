@@ -53,7 +53,9 @@ const SELECT = `SELECT s.id::text, s.wholesaler_id AS "wholesalerId",
   FROM finance.wholesaler_settlement s`;
 
 const actNumber = (id: string) => `AS-${id.padStart(6, '0')}`;
-const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/ /g, ' ');
+/** Mingliklar bo‘sh joy bilan (12 345 678); ru-RU ning maxsus bo‘sh joylari oddiy probelga almashtiriladi. */
+const fmt = (n: number) =>
+  n.toLocaleString('ru-RU').replace(/[\u00a0\u202f]/g, ' ');
 
 /**
  * Bank to‘lov topshiriqnomasi fayli — format almashtiriladigan (bank tanlanmagan, TZ T7 «to‘lov topshiriqnomasi
