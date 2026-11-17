@@ -22,8 +22,25 @@ export interface CreateElchiShipmentInput {
   region_id?: string | null;
   district_id?: string | null;
   where_deliver?: string;
-  items: Array<{ name: string; quantity: number }>;
+  items: Array<{
+    name: string;
+    quantity: number;
+    /** Mahsulot ID si — Elchi nom bo'yicha emas, shu bo'yicha bog'laydi (BE-20). */
+    external_product_id?: string;
+    /** Bir dona og'irligi, kg (Elchi `items[].weight_kg`, ixtiyoriy) — BE-20 TC3. */
+    weight_kg?: number;
+  }>;
   cod_amount: number;
+}
+
+/** Elchi HTTP xatosi: `status` bo'yicha qayta urinish yoki rad qaror qilinadi. */
+export class ElchiApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 export interface ElchiTariffInput {
@@ -228,11 +245,24 @@ export class ElchiApiClient {
 
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(
+      throw new ElchiApiError(
+        response.status,
         `Elchi API ${method} ${path} → ${response.status}: ${text}`,
       );
     }
     return text ? (JSON.parse(text) as unknown) : null;
+  }
+
+  /**
+   * POST /partner/shipments/:id/cancel — posilkani bekor qilish (BE-20 TC5).
+   * Elchi takroriy bekor qilishga 200 qaytaradi; yetkazilganini bekor qilishga
+   * 409 (Elchi-Backend `partner-gateway.controller.ts`, `cancelShipment`).
+   */
+  async cancelShipment(shipmentId: string): Promise<void> {
+    await this.request(
+      'POST',
+      `/partner/shipments/${encodeURIComponent(shipmentId)}/cancel`,
+    );
   }
 
   /** Javob envelopeidan (turli chuqurlik) qiymatni topadi. */
