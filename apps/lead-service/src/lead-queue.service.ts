@@ -193,6 +193,8 @@ export class LeadQueueService {
           lead.status = LeadStatus.CONFIRMED;
           lead.nextAttemptAt = null;
           lead.stockShortageAt = null;
+          lead.confirmedAt = now; // BE-28: tasdiq kuni va operatori (statistika)
+          lead.confirmedBy = operatorId;
           note = 'Tasdiqlandi';
           await this.enqueueConfirmed(manager, lead, operatorId, now);
           await this.postback?.enqueue(
@@ -430,6 +432,8 @@ export class LeadQueueService {
       lead.status = LeadStatus.CALLBACK;
       lead.stockShortageAt = now;
       lead.operatorId = null;
+      lead.confirmedAt = null; // BE-28: buyurtma yaratilmadi — «Tasdiqlangan» ga kirmaydi
+      lead.confirmedBy = null;
       lead.attempts = 0;
       lead.nextAttemptAt = clampToCallWindow(now);
       lead.expiresAt = contactDeadline(now);

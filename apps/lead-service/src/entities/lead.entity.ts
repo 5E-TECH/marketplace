@@ -6,6 +6,7 @@ import {
   LeadReviewReason,
   LeadSource,
   LeadStatus,
+  LeadOrderStatus,
   LeadVariant,
 } from '@app/common';
 
@@ -21,6 +22,18 @@ import {
 @Index('idx_lead_lead_ip_created', ['ip', 'createdAt'])
 @Index('idx_lead_lead_operator_status', ['operatorId', 'status'], {
   where: '"operator_id" IS NOT NULL',
+})
+@Index('idx_lead_lead_affiliate_confirmed', ['affiliateId', 'confirmedAt'], {
+  where: '"confirmed_at" IS NOT NULL',
+})
+@Index('idx_lead_lead_affiliate_delivered', ['affiliateId', 'deliveredAt'], {
+  where: '"delivered_at" IS NOT NULL',
+})
+@Index('idx_lead_lead_affiliate_refused', ['affiliateId', 'refusedAt'], {
+  where: '"refused_at" IS NOT NULL',
+})
+@Index('idx_lead_lead_confirmed_by', ['confirmedBy', 'confirmedAt'], {
+  where: '"confirmed_by" IS NOT NULL',
 })
 export class Lead extends BaseEntity {
   @Column({ type: 'varchar', length: 10 })
@@ -213,4 +226,31 @@ export class Lead extends BaseEntity {
     nullable: true,
   })
   idempotencyKey: string | null;
+
+  /** Tasdiq vaqti va operatori (BE-28). `order.create-failed` da tozalanadi — «Tasdiqlangan» = buyurtmasi bor lid. */
+  @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
+  confirmedAt: Date | null;
+
+  @Column({ name: 'confirmed_by', type: 'bigint', nullable: true })
+  confirmedBy: string | null;
+
+  /** Buyurtmaning oxirgi holati `order.status.changed` dan (BE-28; BE-18 yuboradi). */
+  @Column({ name: 'order_status', type: 'varchar', length: 20, nullable: true })
+  orderStatus: LeadOrderStatus | null;
+
+  /** `order_status` hodisasining vaqti: eskirgan hodisa yangisini bosib ketmaydi. */
+  @Column({ name: 'order_status_at', type: 'timestamptz', nullable: true })
+  orderStatusAt: Date | null;
+
+  /** Birinchi marta yetkazilgan vaqt (statistikada «Yetkazildi» kuni). */
+  @Column({ name: 'delivered_at', type: 'timestamptz', nullable: true })
+  deliveredAt: Date | null;
+
+  /** Mijoz posilkani olmagan vaqt (statistikada «Rad» kuni). */
+  @Column({ name: 'refused_at', type: 'timestamptz', nullable: true })
+  refusedAt: Date | null;
+
+  /** «Kutilmoqda» haqi, so‘m: buyurtma narx nusxasidan sotuvchi haqi + ustamaning 85% i (yetkazilguncha). */
+  @Column({ name: 'expected_commission', type: 'bigint', nullable: true })
+  expectedCommission: string | null;
 }

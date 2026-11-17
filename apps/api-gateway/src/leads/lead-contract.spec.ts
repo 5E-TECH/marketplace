@@ -23,7 +23,7 @@ import { AdminLeadsController } from './admin-leads.controller';
 import { AdminOfferContentController } from './admin-offer-content.controller';
 import { AffiliateStreamsController } from './affiliate-streams.controller';
 import { ParseLeadIdPipe } from './lead-id.pipe';
-import { NOT_IMPLEMENTED } from './lead-stub';
+import { NOT_IMPLEMENTED, notImplementedYet } from './lead-stub';
 import { OperatorLeadsController } from './operator-leads.controller';
 import { PublicLeadsController } from './public-leads.controller';
 
@@ -237,22 +237,30 @@ describe('Lid shartnomasi (BE-25)', () => {
     );
   });
 
-  it('stublar 501 va NOT_IMPLEMENTED qaytaradi, kartasini aytadi', async () => {
-    const lead = { send: jest.fn() } as never;
-    const aff = new AffiliateStreamsController(lead);
-    await expect501(
-      () => aff.stats({ from: '2026-12-01', to: '2026-12-31' }),
-      'BE-28',
-    );
-    await expect501(
-      () => aff.listLeads({ from: '2027-01-08', to: '2027-01-14' }),
-      'BE-28',
-    );
+  it('stub yordamchisi 501 va NOT_IMPLEMENTED qaytaradi, kartasini aytadi (BE-28 dan keyin stub qolmadi)', async () => {
+    await expect501(() => notImplementedYet('BE-99'), 'BE-99');
+  });
 
-    const op = new OperatorLeadsController(lead);
-    await expect501(
-      () => op.stats({ from: '2026-12-01', to: '2026-12-31' }),
-      'BE-28',
+  it('BE-28: statistika endpointlari lead-service ga, sotuvchi va operator ID si tokendan', async () => {
+    const send = jest.fn(() => of({ ok: true }));
+    const client = { send } as never;
+    const aff = new AffiliateStreamsController(client);
+    const query = { from: '2026-12-01', to: '2026-12-31' };
+    await aff.stats('77', query);
+    expect(send).toHaveBeenLastCalledWith(
+      { cmd: 'lead.stats.affiliate' },
+      { affiliateId: '77', query },
+    );
+    await aff.listLeads('77', { ...query, page: 2 });
+    expect(send).toHaveBeenLastCalledWith(
+      { cmd: 'lead.stats.affiliate-leads' },
+      { affiliateId: '77', query: { ...query, page: 2 } },
+    );
+    const op = new OperatorLeadsController(client);
+    await op.stats('9', query);
+    expect(send).toHaveBeenLastCalledWith(
+      { cmd: 'lead.stats.operator' },
+      { operatorId: '9', query },
     );
   });
 

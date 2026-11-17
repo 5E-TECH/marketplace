@@ -29,6 +29,9 @@ import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
+import { LeadOrderService } from './lead-order.service';
+import { LeadStatsController } from './lead-stats.controller';
+import { LeadStatsService } from './lead-stats.service';
 import { OfferService } from './offer.service';
 import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
@@ -37,8 +40,9 @@ import { CreateOfferContent1794873600000 } from './migrations/1794873600000-crea
 import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
+import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
 
-/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42. */
+/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28. */
 @Module({
   imports: [
     CommonConfigModule,
@@ -73,6 +77,15 @@ import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-lea
           ),
       },
       {
+        name: RmqClient.FINANCE,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.getOrThrow<string>('RABBITMQ_URL')],
+            RmqQueue.FINANCE,
+          ),
+      },
+      {
         name: RmqClient.INTEGRATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
@@ -95,6 +108,7 @@ import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-lea
             AddLeadReview1794960000000,
             AddLeadQueue1795046400000,
             AddApiLeads1795132800000,
+            AddLeadStats1795564800000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -108,6 +122,7 @@ import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-lea
     LeadIntakeController,
     LeadQueueController,
     LeadAdminController,
+    LeadStatsController,
   ],
   providers: [
     LeadAddressService,
@@ -123,6 +138,8 @@ import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-lea
     LeadAdminService,
     PostbackService,
     ApiKeyService,
+    LeadStatsService,
+    LeadOrderService,
   ],
 })
 export class LeadModule {}

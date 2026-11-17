@@ -41,7 +41,6 @@ import {
   UpdateAffiliateStreamDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from './lead-id.pipe';
-import { notImplementedYet } from './lead-stub';
 
 /**
  * Sotuvchi (AFFILIATE) kabineti API si (BE-25 shartnomasi).
@@ -128,8 +127,15 @@ export class AffiliateStreamsController {
       'Kliklar, lidlar, yaroqli, tasdiq, yetkazildi, rad, daromad. Variant, manzil va telefon yo‘q (BE-28).',
   })
   @ApiOkResponse({ type: AffiliateStatsDto })
-  stats(@Query() _query: AffiliateStatsQueryDto): Promise<AffiliateStatsDto> {
-    return notImplementedYet('BE-28');
+  stats(
+    @CurrentUser('sub') affiliateId: string,
+    @Query() query: AffiliateStatsQueryDto,
+  ): Promise<AffiliateStatsDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stats.affiliate' },
+      { affiliateId, query },
+    );
   }
 
   @Get('leads')
@@ -141,9 +147,14 @@ export class AffiliateStreamsController {
   })
   @ApiOkResponse({ type: AffiliateLeadsPageDto })
   listLeads(
-    @Query() _query: AffiliateLeadsQueryDto,
+    @CurrentUser('sub') affiliateId: string,
+    @Query() query: AffiliateLeadsQueryDto,
   ): Promise<AffiliateLeadsPageDto> {
-    return notImplementedYet('BE-28');
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stats.affiliate-leads' },
+      { affiliateId, query },
+    );
   }
 
   @Get('postbacks')

@@ -10,22 +10,10 @@ import {
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Lead } from './entities';
 import { LeadCardService, maskPhone } from './lead-card.service';
-import { fromTashkent } from './lead-schedule';
+import { tashkentDayStart as dayStart } from './lead-schedule';
 
 const DEFAULT_LIMIT = 20;
 const nameOf = (id: string | null) => (id ? `#${id}` : null);
-
-/** «YYYY-MM-DD» Toshkent sanasining boshlanishi (UTC lahza). */
-function dayStart(date: string, addDays = 0): Date {
-  const [y, m, d] = date.split('-').map(Number);
-  const base = new Date(Date.UTC(y, m - 1, d + addDays));
-  return fromTashkent(
-    base.getUTCFullYear(),
-    base.getUTCMonth() + 1,
-    base.getUTCDate(),
-    0,
-  );
-}
 
 /**
  * Admin va nazoratchi uchun lidlar (BE-42; FE-26). Filtrlar FE-26 dagi bilan bir xil: holat, sotuvchi,

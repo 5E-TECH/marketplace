@@ -18910,12 +18910,14 @@
           "approveRate": {
             "type": "number",
             "example": 41,
-            "description": "Tasdiq foizi"
+            "nullable": true,
+            "description": "Tasdiq foizi: tasdiqlagan lidlar / shu davrda ishlagan yaroqli lidlar; maxraj 0 bo‘lsa bo‘sh"
           },
           "saleRate": {
             "type": "number",
             "example": 78,
-            "description": "Sotilish foizi"
+            "nullable": true,
+            "description": "Sotilish foizi: shu davrda tasdiqlaganlaridan yetkazilgan / (yetkazilgan + rad); maxraj 0 bo‘lsa bo‘sh"
           },
           "firstCallMedianMinutes": {
             "type": "number",
