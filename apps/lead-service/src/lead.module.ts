@@ -17,13 +17,16 @@ import { CatalogOfferClient } from './catalog-offer.client';
 import { LandingService } from './landing.service';
 import { LeadAddressController } from './lead-address.controller';
 import { LeadAddressService } from './lead-address.service';
+import { LeadIntakeController } from './lead-intake.controller';
+import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
 import { OfferService } from './offer.service';
 import { StreamService } from './stream.service';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
+import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
 
-/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; keyin BE-12, BE-13, BE-42. */
+/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; keyin BE-13, BE-42. */
 @Module({
   imports: [
     CommonConfigModule,
@@ -58,6 +61,7 @@ import { CreateOfferContent1794873600000 } from './migrations/1794873600000-crea
           migrations: [
             CreateLeadTables1794787200000,
             CreateOfferContent1794873600000,
+            AddLeadReview1794960000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -65,13 +69,18 @@ import { CreateOfferContent1794873600000 } from './migrations/1794873600000-crea
     }),
     TypeOrmModule.forFeature(LEAD_ENTITIES),
   ],
-  controllers: [LeadAddressController, LeadOfferController],
+  controllers: [
+    LeadAddressController,
+    LeadOfferController,
+    LeadIntakeController,
+  ],
   providers: [
     LeadAddressService,
     CatalogOfferClient,
     OfferService,
     StreamService,
     LandingService,
+    LeadIntakeService,
   ],
 })
 export class LeadModule {}

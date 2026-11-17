@@ -58,6 +58,8 @@ export enum LeadErrorCode {
   BOOKING_LIMIT_REACHED = 'BOOKING_LIMIT_REACHED',
   /** Manzil tasdiqlanmagan lidga «Tasdiqlandi» — 400 (OPR-4, BE-38). */
   ADDRESS_NOT_CONFIRMED = 'ADDRESS_NOT_CONFIRMED',
+  /** POST /leads: sotuvchi sahifasi hozir ariza qabul qilmaydi (holat OPEN emas) — 409 (BE-12, SF-02 TC8). */
+  LANDING_NOT_OPEN = 'LANDING_NOT_OPEN',
 }
 
 /** Operator holati (T4 operator_state). BREAK — yangi lid berilmaydi. */

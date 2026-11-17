@@ -11,6 +11,7 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiHeader,
   ApiNotFoundResponse,
@@ -28,7 +29,6 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
-import { notImplementedYet } from './lead-stub';
 
 /**
  * Sotuvchi sahifasi uchun ochiq API (BE-25 shartnomasi). Login yo‘q.
@@ -87,11 +87,30 @@ export class PublicLeadsController {
       'Ism, telefon, viloyat, tuman, ko‘cha/uy va yetkazish turi majburiy. Javob bazaga yozilgandan keyin (LID-3). ' +
       'Yashirin maydon to‘ldirilsa lid yozilmaydi, javob baribir 201 (BE-12).',
   })
+  @ApiHeader({
+    name: 'user-agent',
+    required: false,
+    description:
+      'Mijoz brauzerining user agenti — sotuvchi sahifasi serveri uzatadi',
+  })
   @ApiCreatedResponse({ type: LeadCreatedDto })
   @ApiBadRequestResponse({
     description: 'Telefon yoki manzil noto‘g‘ri; javobda maydon nomlari',
   })
-  createLead(@Body() _dto: CreateLeadDto): Promise<LeadCreatedDto> {
-    return notImplementedYet('BE-12');
+  @ApiNotFoundResponse({ description: 'Bunday sotuvchi sahifasi yo‘q' })
+  @ApiConflictResponse({
+    description:
+      'errorCode LANDING_NOT_OPEN — sahifa hozir ariza qabul qilmaydi',
+  })
+  createLead(
+    @Body() lead: CreateLeadDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ): Promise<LeadCreatedDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.create' },
+      { lead, ip: ip || null, userAgent: userAgent?.slice(0, 1000) || null },
+    );
   }
 }

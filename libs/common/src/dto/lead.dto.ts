@@ -18,6 +18,11 @@ import { CheckoutDeliveryDestination } from './cart.dto';
 // `/regions` javobidagi `satoCode` qiymatlari, Elchi ID emas.
 // Yetkazish turi — mavjud CheckoutDeliveryDestination (CENTER = markazgacha, ADDRESS = eshikkacha).
 
+/** Tekshiruvga tushish sababi (BE-12 bot himoyasi). IP_RATE — bir IP dan 10 daqiqada 5 tadan ortiq. */
+export enum LeadReviewReason {
+  IP_RATE = 'IP_RATE',
+}
+
 /** S1/S3 sinovi varianti (LID-8). Operator, sotuvchi va admin javoblarida ko‘rsatilmaydi. */
 export enum LeadVariant {
   S1 = 's1',

@@ -3,6 +3,7 @@ import {
   BaseEntity,
   CheckoutDeliveryDestination,
   LeadRejectReason,
+  LeadReviewReason,
   LeadSource,
   LeadStatus,
   LeadVariant,
@@ -17,6 +18,7 @@ import {
 @Index('idx_lead_lead_phone_product', ['phoneE164', 'productId'])
 @Index('idx_lead_lead_stream_created', ['streamId', 'createdAt'])
 @Index('idx_lead_lead_affiliate_created', ['affiliateId', 'createdAt'])
+@Index('idx_lead_lead_ip_created', ['ip', 'createdAt'])
 export class Lead extends BaseEntity {
   @Column({ type: 'varchar', length: 10 })
   source: LeadSource;
@@ -174,4 +176,13 @@ export class Lead extends BaseEntity {
     nullable: true,
   })
   rejectReason: LeadRejectReason | null;
+
+  /** Tekshiruvga tushgan ariza sababi (BE-12 bot himoyasi); bo‘sh — oddiy lid. */
+  @Column({
+    name: 'review_reason',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
+  reviewReason: LeadReviewReason | null;
 }
