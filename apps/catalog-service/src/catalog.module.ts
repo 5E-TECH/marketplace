@@ -42,6 +42,7 @@ import { AddProductModeration1725105600000 } from './migrations/1725105600000-ad
 import { AddShopFeatured1725192000000 } from './migrations/1725192000000-add-shop-featured';
 import { AddShopTariffs1725372000000 } from './migrations/1725372000000-add-shop-tariffs';
 import { CreateBanners1726588800000 } from './migrations/1726588800000-create-banners';
+import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { BannerController } from './banner.controller';
 import { BannerService } from './banner.service';
 import { ReviewController } from './review.controller';
@@ -111,6 +112,7 @@ const entities = [
             AddShopFeatured1725192000000,
             AddShopTariffs1725372000000,
             CreateBanners1726588800000,
+            MoneyToBigint1795219200000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

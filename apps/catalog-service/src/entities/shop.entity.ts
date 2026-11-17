@@ -1,5 +1,10 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
-import { BaseEntity, numericTransformer, ShopStatus } from '@app/common';
+import {
+  BaseEntity,
+  moneyTransformer,
+  numericTransformer,
+  ShopStatus,
+} from '@app/common';
 import { Product } from './product.entity';
 
 @Entity('shop')
@@ -38,21 +43,17 @@ export class Shop extends BaseEntity {
 
   @Column({
     name: 'tariff_home',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     default: 25000,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   tariffHome: number;
 
   @Column({
     name: 'tariff_center',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     default: 15000,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   tariffCenter: number;
 

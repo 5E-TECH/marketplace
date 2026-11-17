@@ -1,5 +1,5 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
-import { BaseEntity, numericTransformer } from '@app/common';
+import { BaseEntity, moneyTransformer } from '@app/common';
 import { Product } from './product.entity';
 
 @Entity('product_variant')
@@ -25,21 +25,17 @@ export class ProductVariant extends BaseEntity {
   attributes: Record<string, unknown>;
 
   @Column({
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   price: number | null;
 
   @Column({
     name: 'old_price',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   oldPrice: number | null;
 
