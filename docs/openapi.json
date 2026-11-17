@@ -10709,7 +10709,10 @@
               "type": "string",
               "enum": [
                 "READY",
-                "PAID"
+                "EXPORTED",
+                "PAID",
+                "NETTED",
+                "VOID"
               ]
             }
           },
@@ -10758,7 +10761,7 @@
     },
     "/api/v1/admin/finance/settlements/bank-file": {
       "get": {
-        "description": "Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).",
+        "description": "Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).",
         "operationId": "AdminSettlementsController_bankFile",
         "parameters": [
           {
@@ -10774,7 +10777,7 @@
         ],
         "responses": {
           "404": {
-            "description": "Bu davrda to‘lovga tayyor akt yo‘q"
+            "description": "Bu davrda to‘lanadigan akt yo‘q"
           }
         },
         "security": [
@@ -10896,7 +10899,7 @@
     },
     "/api/v1/admin/finance/settlements/{id}/paid": {
       "post": {
-        "description": "Qaytarilgan tovarlar aktdan chiqariladi, summa qayta hisoblanadi; ledgerga WHOLESALER_PAID jurnali. Takror — o‘sha natija.",
+        "description": "Faqat bank faylidan keyin (EXPORTED); ledgerga aynan fayldagi summa (WHOLESALER_PAID). Keyin qaytgan tovar qarzi keyingi aktdan ushlanadi. Takror — o‘sha natija.",
         "operationId": "AdminSettlementsController_paid",
         "parameters": [
           {
@@ -10923,7 +10926,7 @@
             "description": "Akt topilmadi"
           },
           "409": {
-            "description": "INVALID_STATE: summa 0 yoki optovik balansi yetmaydi"
+            "description": "INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)"
           }
         },
         "security": [
@@ -19146,7 +19149,10 @@
             "type": "string",
             "enum": [
               "READY",
-              "PAID"
+              "EXPORTED",
+              "PAID",
+              "NETTED",
+              "VOID"
             ],
             "example": "READY"
           },
@@ -19154,6 +19160,23 @@
             "type": "number",
             "example": 280000,
             "description": "O‘tkaziladigan summa, so‘m"
+          },
+          "exportedTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Bank fayliga kirgan (muzlatilgan) summa — «To‘landi» aynan shuni yozadi"
+          },
+          "debtDeducted": {
+            "type": "number",
+            "example": 0,
+            "description": "Oldingi qaytarishlardan qolgan qarzga ushlangan summa"
+          },
+          "exportedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
           },
           "itemsCount": {
             "type": "number",
@@ -19191,6 +19214,9 @@
           "returnWindowDays",
           "status",
           "totalAmount",
+          "exportedTotal",
+          "debtDeducted",
+          "exportedAt",
           "itemsCount",
           "items",
           "createdAt",

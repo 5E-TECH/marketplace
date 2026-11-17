@@ -70,10 +70,10 @@ export class AdminSettlementsController {
     summary:
       'Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)',
     description:
-      'Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).',
+      'Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).',
   })
   @ApiProduces('text/csv')
-  @ApiNotFoundResponse({ description: 'Bu davrda to‘lovga tayyor akt yo‘q' })
+  @ApiNotFoundResponse({ description: 'Bu davrda to‘lanadigan akt yo‘q' })
   async bankFile(
     @Query() query: BankFileQueryDto,
     @Res({ passthrough: true }) res: Response,
@@ -137,12 +137,13 @@ export class AdminSettlementsController {
   @ApiOperation({
     summary: '«To‘landi»: moliya bankda o‘tkazdi',
     description:
-      'Qaytarilgan tovarlar aktdan chiqariladi, summa qayta hisoblanadi; ledgerga WHOLESALER_PAID jurnali. Takror — o‘sha natija.',
+      'Faqat bank faylidan keyin (EXPORTED); ledgerga aynan fayldagi summa (WHOLESALER_PAID). Keyin qaytgan tovar qarzi keyingi aktdan ushlanadi. Takror — o‘sha natija.',
   })
   @ApiOkResponse({ type: WholesalerSettlementDto })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
   @ApiConflictResponse({
-    description: 'INVALID_STATE: summa 0 yoki optovik balansi yetmaydi',
+    description:
+      'INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)',
   })
   paid(
     @Param('id', ParseLeadIdPipe) id: string,

@@ -110,6 +110,10 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       synchronize: false,
       logging: false,
     }).initialize();
+    // «Hozir» — test sanalari (2027-yil) kelajakda qolmasligi uchun
+    jest
+      .spyOn(SettlementService.prototype as never, 'nowMs' as never)
+      .mockReturnValue(Date.parse('2027-03-01T00:00:00Z') as never);
     ledger = new LedgerService(ds);
     svc = new SettlementService(ds, ledger);
     check = new BalanceCheckService(ds);
@@ -193,27 +197,41 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     expect(csv).toContain(';280000;');
   });
 
-  it('hal qilinmagan xatoli buyurtma (event_failure, masalan qisman qaytarish) aktga kirmaydi', async () => {
+  it('xatoli buyurtma (ochiq event_failure) aktga kirmaydi; hodisa keyin muvaffaqiyatli ishlansa — kiradi', async () => {
     await window(10);
     const orderId = await deliver('501', '2026-12-28T10:00:00.000Z');
     await ds.query(
-      `INSERT INTO finance.event_failure (consumer, event_id, reason, payload) VALUES ('order.returned', 'x', 'qisman', $1)`,
+      `INSERT INTO finance.event_failure (consumer, event_id, reason, payload) VALUES ('order.returned', 'ev-x', 'qisman', $1)`,
       [JSON.stringify({ orderId })],
     );
     expect((await svc.run({ asOf: MONDAY })).items).toBe(0);
+    await ds.query(
+      `INSERT INTO finance.processed_event (consumer, event_id) VALUES ('order.returned', 'ev-x')`,
+    );
+    expect((await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).items).toBe(1);
   });
 
-  it('«To‘landi»: ledgerga WHOLESALER_PAID (optovik −, naqd +), balans 0; takror — o‘sha natija; kechki tekshiruv farqsiz', async () => {
+  it('«To‘landi» faqat bank faylidan keyin; aynan fayldagi summa ledgerga; takror — o‘sha natija; kechki tekshiruv farqsiz', async () => {
     await window(10);
     await deliver('501', '2026-12-28T10:00:00.000Z');
     await svc.run({ asOf: MONDAY });
     const [s] = (await svc.list({ query: {} })).items;
-    expect(await balance('WHOLESALER', '501')).toBe(140000);
+    await expect(svc.markPaid({ id: s.id, paidBy: '7' })).rejects.toMatchObject(
+      {
+        status: 409,
+        response: { errorCode: 'INVALID_STATE' },
+      },
+    );
+    await svc.bankFile({ periodEnd: '2027-01-10' });
+    expect(await svc.get({ id: s.id })).toMatchObject({
+      status: WholesalerSettlementStatus.EXPORTED,
+      exportedTotal: 140000,
+      debtDeducted: 0,
+    });
     const paid = await svc.markPaid({ id: s.id, paidBy: '7' });
     expect(paid).toMatchObject({
       status: WholesalerSettlementStatus.PAID,
       paidBy: '7',
-      totalAmount: 140000,
     });
     expect(await balance('WHOLESALER', '501')).toBe(0);
     expect(
@@ -246,20 +264,68 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         )[0].n,
       ),
     ).toBe(1);
-    // To‘langan davrning bank faylida akt yo‘q
     await expect(
       svc.bankFile({ periodEnd: '2027-01-10' }),
     ).rejects.toMatchObject({ status: 404 });
     await expectBalanced();
   });
 
-  it('akt tuzilgach, to‘lovdan oldin qaytarildi — tovar aktdan chiqadi; summa 0 bo‘lsa «To‘landi» rad', async () => {
+  it('bank faylida summa muzlaydi: aktdan keyin qaytgan tovar chiqadi; keyin qaytsa — qarz, keyingi aktdan ushlanadi', async () => {
     await window(10);
     const a = await deliver('501', '2026-12-28T10:00:00.000Z');
     await deliver('501', '2026-12-29T10:00:00.000Z');
     await svc.run({ asOf: MONDAY });
     const [s] = (await svc.list({ query: {} })).items;
     expect(s.totalAmount).toBe(280000);
+    const ret = (orderId: string, at: string) =>
+      ledger.onOrderReturned({
+        eventId: `ret-${orderId}`,
+        orderId,
+        returnRequestId: `RR-${orderId}`,
+        items: [{ productId: '88', quantity: 1 }],
+        occurredAt: at,
+      });
+    await ret(a, '2027-01-12T10:00:00.000Z'); // fayldan oldin
+    const csv = Buffer.from(
+      (await svc.bankFile({ periodEnd: '2027-01-10' })).base64,
+      'base64',
+    ).toString('utf8');
+    expect(csv).toContain(';140000;');
+    expect(await svc.get({ id: s.id })).toMatchObject({
+      exportedTotal: 140000,
+      itemsCount: 1,
+    });
+    // Fayl chiqqach yana qaytsa — «To‘landi» fayldagi 140 000 ni yozadi, optovikda qarz qoladi
+    const b = (await svc.get({ id: s.id })).items[0].orderId;
+    await ret(b, '2027-01-13T10:00:00.000Z');
+    await svc.markPaid({ id: s.id, paidBy: '7' });
+    expect(await balance('WHOLESALER', '501')).toBe(-140000);
+    await expectBalanced();
+    // Keyingi hafta: ikki yangi tovar (280 000) — qarz 140 000 ushlanadi, 140 000 o‘tkaziladi
+    await deliver('501', '2027-01-04T10:00:00.000Z');
+    await deliver('501', '2027-01-05T10:00:00.000Z');
+    await svc.run({ asOf: '2027-01-18T04:00:00.000Z' });
+    await svc.bankFile({ periodEnd: '2027-01-17' });
+    const [next] = (await svc.list({ query: { periodEnd: '2027-01-17' } }))
+      .items;
+    expect(next).toMatchObject({
+      status: WholesalerSettlementStatus.EXPORTED,
+      totalAmount: 280000,
+      debtDeducted: 140000,
+      exportedTotal: 140000,
+    });
+    await svc.markPaid({ id: next.id, paidBy: '7' });
+    expect(await balance('WHOLESALER', '501')).toBe(0);
+    await expectBalanced();
+  });
+
+  it('qarz akt summasidan katta — NETTED (o‘tkazma yo‘q); hamma tovari qaytgan akt — VOID', async () => {
+    await window(10);
+    const a = await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    await svc.bankFile({ periodEnd: '2027-01-10' });
+    const [s] = (await svc.list({ query: {} })).items;
+    await svc.markPaid({ id: s.id, paidBy: '7' });
     await ledger.onOrderReturned({
       eventId: 'ret-a',
       orderId: a,
@@ -267,37 +333,81 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       items: [{ productId: '88', quantity: 1 }],
       occurredAt: '2027-01-12T10:00:00.000Z',
     });
-    const paid = await svc.markPaid({ id: s.id, paidBy: '7' });
-    expect(paid).toMatchObject({ totalAmount: 140000, itemsCount: 1 });
-    await expectBalanced();
-
-    // Hammasi qaytarilgan akt
-    const b = await deliver('503', '2026-12-28T10:00:00.000Z');
-    await svc.run({ asOf: MONDAY });
-    const only = (await svc.list({ query: { wholesalerId: '503' } })).items[0];
+    await deliver('501', '2027-01-04T10:00:00.000Z');
+    const v = await deliver('503', '2027-01-04T10:00:00.000Z');
+    await svc.run({ asOf: '2027-01-18T04:00:00.000Z' });
     await ledger.onOrderReturned({
-      eventId: 'ret-b',
-      orderId: b,
-      returnRequestId: 'RR-b',
+      eventId: 'ret-v',
+      orderId: v,
+      returnRequestId: 'RR-v',
       items: [{ productId: '88', quantity: 1 }],
-      occurredAt: '2027-01-12T10:00:00.000Z',
+      occurredAt: '2027-01-15T10:00:00.000Z',
     });
     await expect(
-      svc.markPaid({ id: only.id, paidBy: '7' }),
-    ).rejects.toMatchObject({
-      status: 409,
-      response: { errorCode: 'INVALID_STATE' },
+      svc.bankFile({ periodEnd: '2027-01-17' }),
+    ).rejects.toMatchObject({ status: 404 });
+    const byW = Object.fromEntries(
+      (await svc.list({ query: { periodEnd: '2027-01-17' } })).items.map(
+        (x) => [x.wholesalerId, x],
+      ),
+    );
+    expect(byW['501']).toMatchObject({
+      status: WholesalerSettlementStatus.NETTED,
+      debtDeducted: 140000,
+      exportedTotal: null,
     });
+    expect(byW['503']).toMatchObject({
+      status: WholesalerSettlementStatus.VOID,
+      totalAmount: 0,
+    });
+    expect(await balance('WHOLESALER', '501')).toBe(0);
+    await expect(
+      svc.markPaid({ id: byW['501'].id, paidBy: '7' }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expectBalanced();
   });
 
-  it('noto‘g‘ri kiritma — 400; yo‘q akt — 404', async () => {
+  it('bank faylidan keyin qayta ishga tushirish aktga qator qo‘shmaydi — keyingi haftaga qoladi', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    const late = await deliver('501', '2026-12-29T10:00:00.000Z', false); // Elchi puli hali kelmagan
+    await svc.run({ asOf: MONDAY });
+    await svc.bankFile({ periodEnd: '2027-01-10' });
+    await ledger.onRemittance({
+      schemaVersion: 2,
+      eventId: `rem-${late}`,
+      orderId: late,
+      shipmentId: `s-${late}`,
+      elchiStatus: 'paid',
+      collectedFromCustomer: 291000,
+      elchiFee: 40000,
+      marketPaidAmount: 251000,
+      occurredAt: '2027-01-12T10:00:00.000Z',
+    });
+    expect((await svc.run({ asOf: MONDAY })).items).toBe(0);
+    expect(
+      (await svc.list({ query: { periodEnd: '2027-01-10' } })).items[0],
+    ).toMatchObject({
+      itemsCount: 1,
+      exportedTotal: 140000,
+    });
+    expect((await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).items).toBe(1);
+  });
+
+  it('noto‘g‘ri kiritma — 400 (kelajak lahza, mavjud bo‘lmagan sana); yo‘q akt — 404', async () => {
     await expect(svc.run({ asOf: 'ertaga' })).rejects.toMatchObject({
       status: 400,
     });
+    await expect(
+      svc.run({ asOf: '2027-03-05T00:00:00.000Z' }),
+    ).rejects.toMatchObject({ status: 400 });
     await expect(svc.get({ id: 'x' })).rejects.toMatchObject({ status: 400 });
     await expect(svc.get({ id: '999' })).rejects.toMatchObject({ status: 404 });
     await expect(
       svc.bankFile({ periodEnd: '2027-1-10' }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      svc.bankFile({ periodEnd: '2027-02-30' }),
     ).rejects.toMatchObject({ status: 400 });
     await expect(
       svc.list({ query: { wholesalerId: 'W' } }),

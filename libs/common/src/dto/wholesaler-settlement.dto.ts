@@ -8,8 +8,15 @@ import { IsEnum, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
  * aktga yig‘iladi; moliya bankda o‘tkazib «To‘landi» belgilaydi.
  */
 export enum WholesalerSettlementStatus {
+  /** Tuzildi, bank fayli hali olinmagan. */
   READY = 'READY',
+  /** Bank faylida — summa muzlatilgan (exportedTotal), «To‘landi» kutilmoqda. */
+  EXPORTED = 'EXPORTED',
   PAID = 'PAID',
+  /** Hammasi oldingi qaytarishlar qarziga ushlandi — o‘tkazma yo‘q. */
+  NETTED = 'NETTED',
+  /** Fayl olinguncha hamma tovar qaytdi — o‘tkazma yo‘q. */
+  VOID = 'VOID',
 }
 
 export const FINANCE_SETTLEMENT_RPC = {
@@ -76,6 +83,24 @@ export class WholesalerSettlementDto {
 
   @ApiProperty({ example: 280000, description: 'O‘tkaziladigan summa, so‘m' })
   totalAmount: number;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'Bank fayliga kirgan (muzlatilgan) summa — «To‘landi» aynan shuni yozadi',
+  })
+  exportedTotal: number | null;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Oldingi qaytarishlardan qolgan qarzga ushlangan summa',
+  })
+  debtDeducted: number;
+
+  @ApiProperty({ example: null, nullable: true, type: Date })
+  exportedAt: Date | null;
 
   @ApiProperty({ example: 2 }) itemsCount: number;
 
