@@ -264,7 +264,7 @@ export class ShippingLabelService {
 
   private money(amount: number): string {
     return `${new Intl.NumberFormat('uz-UZ', {
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 0,
     }).format(amount)} UZS`;
   }
 }

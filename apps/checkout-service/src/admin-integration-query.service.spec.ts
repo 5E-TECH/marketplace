@@ -22,6 +22,28 @@ describe('AdminIntegrationQueryService (C6.7)', () => {
     expect(query.mock.calls[0][1]).toEqual(['4', 'RECEIVED', 20, 0]);
   });
 
+  it('BE-01: BIGINT pul ustunlari (pg satri) songa aylanadi', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: '9',
+          subtotal: '450000',
+          deliveryFee: '25000',
+          codAmount: '475000',
+        },
+      ])
+      .mockResolvedValueOnce([{ total: 1 }]);
+    const service = new AdminIntegrationQueryService({ query } as never);
+    const result = await service.shipments({ page: 1, limit: 20 });
+    expect(result.items[0]).toMatchObject({
+      subtotal: 450000,
+      deliveryFee: 25000,
+      codAmount: 475000,
+    });
+    expect(query.mock.calls[0][0]).not.toContain('::float8');
+  });
+
   it('shipmentState=created faqat Elchi posilkasi borlarini beradi', async () => {
     const query = jest
       .fn()

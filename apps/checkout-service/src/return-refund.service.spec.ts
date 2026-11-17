@@ -18,7 +18,8 @@ describe('ReturnRefundService (C4.2)', () => {
               id: '3',
               status: ReturnRequestStatus.APPROVED,
               reason: ReturnReason.CHANGED_MIND,
-              requestedAmount: 200000,
+              // BIGINT pg dan matn bo'lib keladi (BE-01).
+              requestedAmount: '200000',
               orderId: '10',
               sellerOrderId: '51',
               shopId: '7',
@@ -183,5 +184,34 @@ describe('ReturnRefundService (C4.2)', () => {
         actor: admin,
       }),
     ).rejects.toThrow('to‘liq qaytarilgan');
+  });
+
+  it('BE-01: kasr summa tashqi chaqiruvlardan oldin rad etiladi', async () => {
+    const { service, payment, inventory, finance } = setup();
+    await expect(
+      service.refund({ returnId: '3', actor: admin, amount: 1500.5 }),
+    ).rejects.toThrow('butun so‘m');
+    expect(payment.send).not.toHaveBeenCalled();
+    expect(inventory.send).not.toHaveBeenCalled();
+    expect(finance.send).not.toHaveBeenCalled();
+  });
+
+  it('BE-01: provayder qaytargan kasr summa butun so‘mga yaxlitlanadi', async () => {
+    const { service, finance, sqls } = setup({}, { amount: '150000.40' });
+    await service.refund({ returnId: '3', actor: admin, amount: 150000 });
+    expect(finance.send).toHaveBeenCalledWith(
+      { cmd: 'finance.refund' },
+      expect.objectContaining({ amount: 150000 }),
+    );
+    expect(sqls('SET status=$2,refunded_amount=$3')[0].params[2]).toBe(150000);
+  });
+
+  it('BE-01: summa berilmasa so‘rovdagi BIGINT matn songa aylanadi', async () => {
+    const { service, payment } = setup();
+    await service.refund({ returnId: '3', actor: admin });
+    expect(payment.send).toHaveBeenCalledWith(
+      { cmd: 'payment.refund' },
+      expect.objectContaining({ amount: 200000 }),
+    );
   });
 });

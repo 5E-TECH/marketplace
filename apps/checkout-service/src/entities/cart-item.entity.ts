@@ -1,5 +1,5 @@
 import { Column, Entity, JoinColumn, ManyToOne, Unique } from 'typeorm';
-import { BaseEntity, numericTransformer } from '@app/common';
+import { BaseEntity, moneyTransformer } from '@app/common';
 import { Cart } from './cart.entity';
 
 @Entity('cart_item')
@@ -15,10 +15,8 @@ export class CartItem extends BaseEntity {
   @Column({ type: 'integer' }) quantity: number;
   @Column({
     name: 'unit_price_snapshot',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
-    transformer: numericTransformer,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
   unitPriceSnapshot: number;
   // Narx kabi suratga olinadi: sotuvchi keyin mahsulot nomini o'zgartirsa ham

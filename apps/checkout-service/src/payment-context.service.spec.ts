@@ -11,7 +11,7 @@ describe('Checkout payment ownership/amount', () => {
   it('uses customer scope and returns database amount', async () => {
     query.mockResolvedValue([
       {
-        total_amount: '125000.00',
+        total_amount: '125000',
         payment_method: 'online',
         status: 'PENDING_PAYMENT',
       },

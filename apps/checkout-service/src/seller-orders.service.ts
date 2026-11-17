@@ -259,8 +259,8 @@ export class SellerOrdersService {
     const orders = (await this.dataSource.query(
       `SELECT id::text AS "orderId",created_at AS "createdAt",
               status AS "orderStatus",payment_method AS "paymentMethod",
-              total_amount::float8 AS "totalAmount",
-              delivery_fee::float8 AS "deliveryFee"
+              total_amount AS "totalAmount",
+              delivery_fee AS "deliveryFee"
          FROM checkout.sales_order
         WHERE customer_id=$1
         ORDER BY created_at DESC,id DESC
@@ -272,7 +272,7 @@ export class SellerOrdersService {
       ? ((await this.dataSource.query(
           `SELECT s.sales_order_id::text AS "orderId",i.id::text AS id,
                   i.product_id::text AS "productId",
-                  i.product_name AS name,i.quantity,i.unit_price::float8 AS "unitPrice",
+                  i.product_name AS name,i.quantity,i.unit_price AS "unitPrice",
                   p.image_url AS "imageUrl",s.status AS "sellerOrderStatus"
              FROM checkout.sales_order_item i
              JOIN checkout.sales_order_seller s ON s.id=i.sales_order_seller_id
@@ -839,7 +839,7 @@ export class SellerOrdersService {
         `admin-refund:${input.orderId}`,
       ]);
       const [order] = await manager.query(
-        `SELECT id::text,status,payment_method,payment_id::text,total_amount::float8,customer_id::text FROM checkout.sales_order WHERE id=$1 FOR UPDATE`,
+        `SELECT id::text,status,payment_method,payment_id::text,total_amount,customer_id::text FROM checkout.sales_order WHERE id=$1 FOR UPDATE`,
         [input.orderId],
       );
       if (!order)
@@ -1034,8 +1034,8 @@ export class SellerOrdersService {
       id: String(r.id),
       salesOrderId: String(r.salesOrderId),
       subtotal: Number(r.subtotal),
-      // `deliveryFee` ATAYLAB qo'shildi: u ham `numeric` ustun, ya'ni
-      // node-postgres uni SATR qilib qaytaradi ("0.00") va javobga shundayligicha
+      // `deliveryFee` ATAYLAB qo'shildi: u ham `bigint` ustun, ya'ni
+      // node-postgres uni SATR qilib qaytaradi ("0") va javobga shundayligicha
       // chiqib ketardi — qolgan summalar son bo'lgani holda.
       deliveryFee: Number(r.deliveryFee),
       codAmount: Number(r.codAmount),

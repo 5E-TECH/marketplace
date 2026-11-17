@@ -277,7 +277,8 @@ export class CheckoutService {
           },
         );
         const deliveryFee = Number(tariff.amount);
-        if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+        // Pul butun so'mda (BE-01): kasr tarif BIGINT ustunga sig'maydi.
+        if (!Number.isSafeInteger(deliveryFee) || deliveryFee < 0) {
           throw new BadRequestException('Yaroqsiz dostavka tarifi');
         }
         return {

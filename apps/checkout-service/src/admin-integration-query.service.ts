@@ -3,6 +3,7 @@ import {
   AdminShipmentState,
   AdminShipmentsQueryDto,
   AdminWebhooksQueryDto,
+  moneyFromDb,
 } from '@app/common';
 import { DataSource } from 'typeorm';
 
@@ -55,9 +56,9 @@ export class AdminIntegrationQueryService {
               s.elchi_shipment_id::text AS "shipmentId",
               s.tracking_url AS "trackingUrl",
               s.status,
-              s.subtotal::float8,
-              s.delivery_fee::float8 AS "deliveryFee",
-              s.cod_amount::float8 AS "codAmount",
+              s.subtotal,
+              s.delivery_fee AS "deliveryFee",
+              s.cod_amount AS "codAmount",
               o.status AS "orderStatus",
               o.payment_method AS "paymentMethod",
               o.buyer_name AS "buyerName",
@@ -79,7 +80,13 @@ export class AdminIntegrationQueryService {
          ${condition}`,
       params,
     );
-    return this.page(rows, Number(count?.total ?? 0), page, limit);
+    const items = (rows as Array<Record<string, unknown>>).map((row) => ({
+      ...row,
+      subtotal: moneyFromDb(row.subtotal as string),
+      deliveryFee: moneyFromDb(row.deliveryFee as string),
+      codAmount: moneyFromDb(row.codAmount as string),
+    }));
+    return this.page(items, Number(count?.total ?? 0), page, limit);
   }
 
   async webhooks(query: AdminWebhooksQueryDto) {
