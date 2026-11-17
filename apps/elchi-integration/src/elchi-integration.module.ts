@@ -5,6 +5,8 @@ import { ClientsModule } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
+  OutboxEvent,
+  OutboxService,
   ensureSchema,
   shouldRunMigrations,
   RmqClient,
@@ -23,8 +25,11 @@ import { ElchiIntegrationController } from './elchi-integration.controller';
 import { ElchiIntegrationService } from './elchi-integration.service';
 import { GeoLookupController } from './geo-lookup.controller';
 import { GeoLookupService } from './geo-lookup.service';
+import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
+import { ParcelService } from './parcel.service';
+import { ElchiOutboxRelayService } from './elchi-outbox-relay.service';
 
-const entities = [ElchiMarketProvision, GeoCache];
+const entities = [ElchiMarketProvision, GeoCache, OutboxEvent];
 
 @Module({
   imports: [
@@ -38,6 +43,12 @@ const entities = [ElchiMarketProvision, GeoCache];
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
       },
+      {
+        name: RmqClient.CHECKOUT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -50,6 +61,7 @@ const entities = [ElchiMarketProvision, GeoCache];
             CreateIntegrationTables1722900000000,
             AddGeoSatoCode1725285600000,
             AddProvisionTariffs1725375600000,
+            CreateParcelQueue1795392000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -58,6 +70,13 @@ const entities = [ElchiMarketProvision, GeoCache];
     TypeOrmModule.forFeature(entities),
   ],
   controllers: [ElchiIntegrationController, GeoLookupController],
-  providers: [ElchiIntegrationService, ElchiApiClient, GeoLookupService],
+  providers: [
+    ElchiIntegrationService,
+    ElchiApiClient,
+    GeoLookupService,
+    OutboxService,
+    ParcelService,
+    ElchiOutboxRelayService,
+  ],
 })
 export class ElchiIntegrationModule {}
