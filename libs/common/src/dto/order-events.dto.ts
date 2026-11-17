@@ -1,14 +1,16 @@
 import { CheckoutDeliveryDestination } from './cart.dto';
 
 /**
- * Buyurtma hodisalari (BE-20) [taklif]: `order.status.changed` ni checkout
- * yuboradi (BE-18, Dilshod), `elchi.parcel.created` ni elchi-integration
- * (BE-20) checkout ga qaytaradi (BE-19 yozadi). TZ T5 «Hodisalar» jadvali
- * (02-texnik-qism.md:112). Qoidalar: outbox orqali; qabul qiluvchi `eventId`
- * bo'yicha takrorni tashlab yuboradi (`processOnce`).
+ * Buyurtma hodisalari (BE-20) [taklif]. `order.status.changed` ni checkout
+ * yuboradi (BE-18, Dilshod); `elchi.parcel.*` ni elchi-integration (BE-20)
+ * checkout ga qaytaradi (BE-19 yozadi). TZ T5 «Hodisalar» jadvali
+ * (02-texnik-qism.md:112); maydonlar ro'yxati — BE-25 kartasi
+ * («order.status.changed ning to‘liq maydonlari — iste’molchilar checkout
+ * bazasiga murojaat qilmaydi»; iste'molchilar BE-20, BE-22, BE-24).
  *
- * BE-18 merge qilinguncha bu shakl — BE-20 dagi namuna. Maydon faqat
- * qo'shiladi (orqaga mos).
+ * Qoidalar: outbox orqali; qabul qiluvchi `eventId` bo'yicha takrorni tashlab
+ * yuboradi (`processOnce`). BE-18 merge qilinguncha bu shakl — namuna; maydon
+ * faqat qo'shiladi (orqaga mos).
  */
 export const ORDER_EVENTS = {
   /** checkout → lead, notification, elchi-integration. */
@@ -17,7 +19,23 @@ export const ORDER_EVENTS = {
   PARCEL_CREATED: 'elchi.parcel.created',
   /** elchi-integration → checkout: posilka yaratilmadi, qo'lda ko'rish kerak. */
   PARCEL_FAILED: 'elchi.parcel.failed',
+  /** elchi-integration → checkout: Elchi posilkani bekor qildi. */
+  PARCEL_CANCELLED: 'elchi.parcel.cancelled',
+  /** elchi-integration → checkout: Elchi bekor qilmadi (masalan, yetkazilgan). */
+  PARCEL_CANCEL_FAILED: 'elchi.parcel.cancel-failed',
 } as const;
+
+/**
+ * Elchi `external_order_id` prefiksi [taklif]. Eski yo'l (har do'kon marketi)
+ * `sales_order_seller.id` ni raqam ko'rinishida yuboradi; Elchi takrorni
+ * hamkor + `external_order_id` bo'yicha tekshiradi (market bo'yicha emas),
+ * shuning uchun yangi buyurtma raqami eski id bilan to'qnashmasligi kerak.
+ */
+export const ELCHI_ORDER_REF_PREFIX = 'mp-order:';
+
+export function elchiOrderRef(orderId: string): string {
+  return `${ELCHI_ORDER_REF_PREFIX}${orderId}`;
+}
 
 /** Buyurtma holatlari — TZ T5 holatlar mashinasi (02-texnik-qism.md:92-103). */
 export enum LeadOrderStatus {
@@ -39,9 +57,17 @@ export enum LeadOrderStatus {
 /** order.status.changed — buyurtma holati o'zgardi (TZ T5). */
 export interface OrderStatusChangedEvent {
   eventId: string;
+  /** checkout dagi lid buyurtmasi ID si (BE-18). */
   orderId: string;
+  /** Odamga ko'rinadigan buyurtma raqami (masalan, L-1183). */
+  orderNumber: string;
   /** Liddan yaratilgan buyurtmada; boshqa buyurtmada null. */
   leadId: string | null;
+  /** Manba: lid manbasi (BE-25 `LeadSource`: operator, sotuvchi sahifasi, API). */
+  source: string;
+  streamId: string | null;
+  affiliateId: string | null;
+  wholesalerId: string | null;
   status: LeadOrderStatus;
   previousStatus: LeadOrderStatus | null;
   /** Qabul qiluvchi — operator tasdiqlagan ma'lumot (BE-38). */
@@ -58,11 +84,18 @@ export interface OrderStatusChangedEvent {
   };
   items: Array<{
     productId: string;
+    sku: string | null;
     name: string;
     quantity: number;
-    /** Bir dona og'irligi, gramm; noma'lum bo'lsa null. */
+    /** Bir dona og'irligi, gramm (butun); noma'lum bo'lsa null. */
     weightGrams: number | null;
+    /** Narxlar nusxasi, bir dona, butun so'm (BE-01): ustama = sotuv − tasdiqlangan. */
+    approvedPrice: number;
+    basePrice: number;
+    salePrice: number;
   }>;
+  /** Yetkazish rejimi va summasi (TZ T3 sales_order: delivery_mode, delivery_cost). */
+  delivery: { mode: string; cost: number };
   /** Kuryer mijozdan oladigan summa, butun so'm (BE-01). */
   codAmount: number;
   /** ISO 8601 */
@@ -86,8 +119,19 @@ export interface ElchiParcelCreatedEvent {
 export interface ElchiParcelFailedEvent {
   eventId: string;
   orderId: string;
-  reason: 'DISTRICT_NOT_FOUND' | 'ELCHI_REJECTED';
+  reason: 'DISTRICT_NOT_FOUND' | 'ELCHI_REJECTED' | 'INVALID_EVENT';
   message: string;
+  /** ISO 8601 */
+  at: string;
+}
+
+/** elchi.parcel.cancelled / elchi.parcel.cancel-failed — bekor qilish natijasi. */
+export interface ElchiParcelCancelResultEvent {
+  eventId: string;
+  orderId: string;
+  shipmentId: string | null;
+  /** cancel-failed da Elchi javobi. */
+  message: string | null;
   /** ISO 8601 */
   at: string;
 }

@@ -17,14 +17,19 @@ import { ParcelService } from './parcel.service';
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 
-/** BE-25 lid namunasidagi qabul qiluvchi (SOATO, EQ-06). */
+/** BE-25 lid namunasidagi buyurtma (SOATO, EQ-06; 2.5-1 narx misoli). */
 function confirmed(
   overrides: Partial<OrderStatusChangedEvent> = {},
 ): OrderStatusChangedEvent {
   return {
     eventId: 'evt-confirm-1',
     orderId: '501',
+    orderNumber: 'L-1183',
     leadId: '9001',
+    source: 'SELLER_PAGE',
+    streamId: '31',
+    affiliateId: '12',
+    wholesalerId: '4',
     status: LeadOrderStatus.CONFIRMED,
     previousStatus: null,
     recipient: {
@@ -38,20 +43,34 @@ function confirmed(
     items: [
       {
         productId: '88',
+        sku: 'EAR-01',
         name: 'Simsiz quloqchin',
-        quantity: 2,
+        quantity: 1,
         weightGrams: 350,
+        approvedPrice: 251000,
+        basePrice: 140000,
+        salePrice: 276000,
       },
     ],
+    delivery: { mode: 'SHOWN', cost: 25000 },
     codAmount: 276000,
     occurredAt: '2026-11-17T10:00:00.000Z',
     ...overrides,
   };
 }
 
+const cancelledEvent = (eventId: string) =>
+  confirmed({
+    eventId,
+    status: LeadOrderStatus.CANCELLED,
+    previousStatus: LeadOrderStatus.CONFIRMED,
+  });
+
 describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
   let ds: DataSource;
   let elchi: { createShipment: jest.Mock; cancelShipment: jest.Mock };
+  let geo: { syncGeoCache: jest.Mock };
+  let outbox: OutboxService;
   let service: ParcelService;
   let marketId: string | undefined;
 
@@ -64,12 +83,13 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
         [orderId],
       )
     )[0];
-  const outboxTypes = async () =>
-    (
-      (await ds.query(
-        `SELECT event_type FROM integration.outbox_event ORDER BY id`,
-      )) as Array<{ event_type: string }>
-    ).map((row) => row.event_type);
+  const outboxRows = async () =>
+    (await ds.query(
+      `SELECT event_type AS "type", payload FROM integration.outbox_event ORDER BY id`,
+    )) as Array<{ type: string; payload: Record<string, unknown> }>;
+  const outboxTypes = async () => (await outboxRows()).map((row) => row.type);
+  const makeDue = () =>
+    ds.query(`UPDATE integration.parcel_request SET next_attempt_at = now()`);
 
   beforeAll(async () => {
     const url = new URL(testDatabaseUrl!);
@@ -96,18 +116,18 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       synchronize: false,
       logging: false,
     }).initialize();
+  });
+
+  beforeEach(async () => {
+    await ds.query(
+      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event, integration.geo_cache',
+    );
     await ds.query(`
       INSERT INTO integration.geo_cache (kind, elchi_id, name, elchi_region_id, sato_code) VALUES
         ('region', 14, 'Toshkent shahri', NULL, '1726'),
         ('district', 1401, 'Yunusobod', 14, '1726264'),
         ('region', 3, 'Samarqand', NULL, '1718'),
         ('district', 301, 'Urgut', 3, '1718236')`);
-  });
-
-  beforeEach(async () => {
-    await ds.query(
-      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event',
-    );
     marketId = '7001';
     elchi = {
       createShipment: jest.fn(async () => ({
@@ -117,11 +137,14 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       })),
       cancelShipment: jest.fn(async () => undefined),
     };
+    geo = { syncGeoCache: jest.fn(async () => ({})) };
+    outbox = new OutboxService(ds.getRepository(OutboxEvent));
     service = new ParcelService(
       ds,
       elchi as never,
-      new OutboxService(ds.getRepository(OutboxEvent)),
+      outbox,
       { get: () => marketId } as never,
+      geo as never,
     );
   });
 
@@ -150,11 +173,9 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       status: 'CREATED',
       shipmentId: '1251131',
     });
-    expect(await outboxTypes()).toEqual(['elchi.parcel.created']);
-    const [event] = await ds.query(
-      `SELECT payload FROM integration.outbox_event`,
-    );
-    expect(event.payload).toMatchObject({
+    const rows = await outboxRows();
+    expect(rows.map((row) => row.type)).toEqual(['elchi.parcel.created']);
+    expect(rows[0].payload).toMatchObject({
       eventId: 'elchi.parcel.created:501',
       orderId: '501',
       shipmentId: '1251131',
@@ -180,15 +201,11 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     await service.processDue();
     expect(elchi.createShipment).toHaveBeenCalledTimes(1);
 
-    await ds.query(
-      `UPDATE integration.parcel_request SET next_attempt_at = now()`,
-    );
+    await makeDue();
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'PENDING', attempts: 2 });
 
-    await ds.query(
-      `UPDATE integration.parcel_request SET next_attempt_at = now()`,
-    );
+    await makeDue();
     await service.processDue();
     expect(await parcel()).toMatchObject({
       status: 'CREATED',
@@ -203,7 +220,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     await service.processDue();
 
     expect(elchi.createShipment).toHaveBeenCalledWith({
-      external_order_id: '501',
+      external_order_id: 'mp-order:501',
       elchi_market_id: '7001',
       customer: { name: 'Dilnoza Karimova', phone: '+998901234567' },
       address: 'Navoiy ko‘chasi 12-uy',
@@ -213,7 +230,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       items: [
         {
           name: 'Simsiz quloqchin',
-          quantity: 2,
+          quantity: 1,
           external_product_id: '88',
           weight_kg: 0.35,
         },
@@ -222,7 +239,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     });
   });
 
-  it('tuman topilmasa posilka yaratilmaydi: FAILED va elchi.parcel.failed', async () => {
+  it('tuman topilmasa geo kesh bir marta yangilanadi; baribir yo‘q bo‘lsa FAILED va elchi.parcel.failed', async () => {
     await service.onOrderStatusChanged(
       confirmed({
         recipient: { ...confirmed().recipient, districtSoato: '1726999' },
@@ -230,9 +247,23 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     );
     await service.processDue();
 
+    expect(geo.syncGeoCache).toHaveBeenCalledTimes(1);
     expect(elchi.createShipment).not.toHaveBeenCalled();
     expect(await parcel()).toMatchObject({ status: 'FAILED' });
     expect(await outboxTypes()).toEqual(['elchi.parcel.failed']);
+  });
+
+  it('bo‘sh geo kesh yangilangach posilka yaratiladi', async () => {
+    await ds.query('TRUNCATE integration.geo_cache');
+    geo.syncGeoCache.mockImplementationOnce(async () => {
+      await ds.query(`
+        INSERT INTO integration.geo_cache (kind, elchi_id, name, elchi_region_id, sato_code) VALUES
+          ('region', 14, 'Toshkent shahri', NULL, '1726'),
+          ('district', 1401, 'Yunusobod', 14, '1726264')`);
+    });
+    await service.onOrderStatusChanged(confirmed());
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CREATED' });
   });
 
   it('tuman boshqa viloyatniki bo‘lsa — FAILED', async () => {
@@ -246,14 +277,35 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     expect(await parcel()).toMatchObject({ status: 'FAILED' });
   });
 
-  it('Elchi so‘rovni rad etsa (400) qayta urinilmaydi', async () => {
+  it('Elchi so‘rovni rad etsa (400) FAILED; sozlama xatosi (403) esa qayta uriniladi', async () => {
     await service.onOrderStatusChanged(confirmed());
-    elchi.createShipment.mockRejectedValueOnce(
-      new ElchiApiError(400, 'district_id noto‘g‘ri'),
+    await service.onOrderStatusChanged(
+      confirmed({ eventId: 'evt-502', orderId: '502' }),
     );
+    elchi.createShipment
+      .mockRejectedValueOnce(new ElchiApiError(400, 'district_id noto‘g‘ri'))
+      .mockRejectedValueOnce(
+        new ElchiApiError(403, 'market partnerga tegishli emas'),
+      );
+    await service.processDue();
+
+    expect(await parcel('501')).toMatchObject({ status: 'FAILED' });
+    expect(await parcel('502')).toMatchObject({
+      status: 'PENDING',
+      waiting: true,
+    });
+    expect(await outboxTypes()).toEqual(['elchi.parcel.failed']);
+  });
+
+  it('FAILED buyurtma yangi «Tasdiqlandi» bilan qayta navbatga tushadi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockRejectedValueOnce(new ElchiApiError(422, 'xato'));
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'FAILED' });
-    expect(await outboxTypes()).toEqual(['elchi.parcel.failed']);
+
+    await service.onOrderStatusChanged(confirmed({ eventId: 'evt-confirm-2' }));
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CREATED' });
   });
 
   it('platforma marketi sozlanmagan bo‘lsa navbatda kutadi', async () => {
@@ -264,33 +316,46 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     expect(await parcel()).toMatchObject({ status: 'PENDING', waiting: true });
   });
 
+  it('kutilmagan xato navbatni to‘smaydi: qator keyinga suriladi, keyingisi ishlanadi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    await service.onOrderStatusChanged(
+      confirmed({ eventId: 'evt-502', orderId: '502' }),
+    );
+    const record = jest.spyOn(outbox, 'record');
+    record.mockRejectedValueOnce(new Error('outbox yozilmadi'));
+
+    await service.processDue();
+
+    expect(await parcel('501')).toMatchObject({
+      status: 'PENDING',
+      attempts: 1,
+      waiting: true,
+      lastError: 'outbox yozilmadi',
+    });
+    expect(await parcel('502')).toMatchObject({ status: 'CREATED' });
+  });
+
   it('TC5: «Bekor qilindi» → Elchi posilkasi bekor; takroriy hodisa → ikkinchi so‘rov yo‘q', async () => {
     await service.onOrderStatusChanged(confirmed());
     await service.processDue();
-    const cancelled = confirmed({
-      eventId: 'evt-cancel-1',
-      status: LeadOrderStatus.CANCELLED,
-      previousStatus: LeadOrderStatus.CONFIRMED,
-    });
 
-    await service.onOrderStatusChanged(cancelled);
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
     await service.processDue();
-    await service.onOrderStatusChanged(cancelled);
-    await service.onOrderStatusChanged({
-      ...cancelled,
-      eventId: 'evt-cancel-2',
-    });
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-2'));
     await service.processDue();
 
     expect(elchi.cancelShipment).toHaveBeenCalledTimes(1);
     expect(elchi.cancelShipment).toHaveBeenCalledWith('1251131');
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(await outboxTypes()).toEqual([
+      'elchi.parcel.created',
+      'elchi.parcel.cancelled',
+    ]);
   });
 
-  it('yaratilmagan posilka bekor qilinsa Elchi ga murojaat yo‘q; kechikkan «Tasdiqlandi» yaratmaydi', async () => {
-    await service.onOrderStatusChanged(
-      confirmed({ eventId: 'evt-cancel-0', status: LeadOrderStatus.CANCELLED }),
-    );
+  it('Elchi ga yuborilmagan posilka bekor qilinsa murojaat yo‘q; kechikkan «Tasdiqlandi» yaratmaydi', async () => {
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-0'));
     await service.onOrderStatusChanged(confirmed());
     await service.processDue();
 
@@ -299,31 +364,87 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
   });
 
-  it('Elchi yetkazilgan posilkani bekor qilmasa (409) posilka CREATED qoladi', async () => {
+  it('javobi kelmagan yaratishdan keyin bekor qilish Elchi ga tashqi id bilan boradi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockRejectedValueOnce(
+      new Error('The operation was aborted due to timeout'),
+    );
+    await service.processDue();
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    expect(await parcel()).toMatchObject({ status: 'CANCEL_PENDING' });
+
+    // Elchi hali yaratayotgan bo'lishi mumkin: yaqinda yuborilgan bo'lsa 404 ga ishonilmaydi
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    await service.processDue();
+    expect(elchi.cancelShipment).toHaveBeenCalledWith('mp-order:501');
+    expect(await parcel()).toMatchObject({
+      status: 'CANCEL_PENDING',
+      waiting: true,
+    });
+
+    // Elchi oxir-oqibat yaratgan edi — endi bekor qilinadi
+    await makeDue();
+    await service.processDue();
+    expect(elchi.cancelShipment).toHaveBeenCalledTimes(2);
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(elchi.createShipment).toHaveBeenCalledTimes(1);
+  });
+
+  it('eski yaratishdan keyin 404 — posilka yaratilmagan, CANCELLED', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockRejectedValueOnce(new Error('timeout'));
+    await service.processDue();
+    await ds.query(
+      `UPDATE integration.parcel_request SET last_create_at = now() - interval '10 minutes'`,
+    );
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+  });
+
+  it('Elchi yetkazilgan posilkani bekor qilmasa (409) posilka CREATED qoladi va cancel-failed ketadi', async () => {
     await service.onOrderStatusChanged(confirmed());
     await service.processDue();
     elchi.cancelShipment.mockRejectedValueOnce(new ElchiApiError(409, 'sold'));
 
-    await service.onOrderStatusChanged(
-      confirmed({ eventId: 'evt-cancel-1', status: LeadOrderStatus.CANCELLED }),
-    );
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
     await service.processDue();
 
     expect(await parcel()).toMatchObject({
       status: 'CREATED',
       lastError: 'sold',
     });
+    expect(await outboxTypes()).toEqual([
+      'elchi.parcel.created',
+      'elchi.parcel.cancel-failed',
+    ]);
   });
 
-  it('to‘liq bo‘lmagan hodisa rad etiladi va belgi yozilmaydi', async () => {
-    await expect(
-      service.onOrderStatusChanged(
-        confirmed({ recipient: { ...confirmed().recipient, phone: '' } }),
-      ),
-    ).rejects.toThrow('to‘liq emas');
-    const [{ count }] = await ds.query(
-      `SELECT count(*)::int AS count FROM integration.processed_event`,
+  it('to‘liq bo‘lmagan «Tasdiqlandi» → FAILED va elchi.parcel.failed (INVALID_EVENT), yo‘qolmaydi', async () => {
+    await service.onOrderStatusChanged(
+      confirmed({ recipient: { ...confirmed().recipient, phone: '' } }),
     );
-    expect(count).toBe(0);
+    await service.onOrderStatusChanged(
+      confirmed({
+        eventId: 'evt-503',
+        orderId: '503',
+        items: [{ ...confirmed().items[0], weightGrams: 1.5 }],
+      }),
+    );
+    await service.processDue();
+
+    expect(elchi.createShipment).not.toHaveBeenCalled();
+    expect(await parcel('501')).toMatchObject({ status: 'FAILED' });
+    expect(await parcel('503')).toMatchObject({ status: 'FAILED' });
+    const rows = await outboxRows();
+    expect(rows.map((row) => row.payload.reason)).toEqual([
+      'INVALID_EVENT',
+      'INVALID_EVENT',
+    ]);
   });
 });

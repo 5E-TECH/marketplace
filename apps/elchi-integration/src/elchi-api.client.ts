@@ -33,6 +33,9 @@ export interface CreateElchiShipmentInput {
   cod_amount: number;
 }
 
+/** Posilka yaratish kutishi: Elchi gateway ning 65 s chegarasidan uzunroq. */
+const SHIPMENT_CREATE_TIMEOUT_MS = 70_000;
+
 /** Elchi HTTP xatosi: `status` bo'yicha qayta urinish yoki rad qaror qilinadi. */
 export class ElchiApiError extends Error {
   constructor(
@@ -128,10 +131,19 @@ export class ElchiApiClient {
     // Normalizatsiya ataylab shu yerda — Elchi'ga chiqadigan yagona nuqta,
     // demak kelajakdagi chaqiruvchilar ham avtomatik himoyalanadi.
     // `getTariff` allaqachon shu qoidaga amal qiladi.
-    const res = await this.request('POST', '/partner/shipments', {
-      ...body,
-      where_deliver: normalizeWhereDeliver(body.where_deliver),
-    });
+    // Elchi gateway posilka yaratishni 65 s gacha kutadi
+    // (Elchi-Backend `partner-gateway.controller.ts`, PARTNER_SHIPMENT_TIMEOUT_MS):
+    // undan oldin uzib qayta yuborsak, Elchi takror kalitni saqlashga ulgurmay
+    // ikkinchi posilka yaratishi mumkin. Shuning uchun kutish undan uzunroq.
+    const res = await this.request(
+      'POST',
+      '/partner/shipments',
+      {
+        ...body,
+        where_deliver: normalizeWhereDeliver(body.where_deliver),
+      },
+      SHIPMENT_CREATE_TIMEOUT_MS,
+    );
     const id = this.pluck(res, 'shipment_id');
     if (!id) throw new Error('Elchi javobida shipment_id yo‘q');
     const trackingUrl = this.pluck(res, 'tracking_url');
@@ -231,6 +243,7 @@ export class ElchiApiClient {
     method: string,
     path: string,
     body?: unknown,
+    timeoutMs = 15_000,
   ): Promise<unknown> {
     const url = `${this.baseUrl()}${path}`;
     const response = await fetch(url, {
@@ -240,7 +253,7 @@ export class ElchiApiClient {
         'x-api-key': this.apiKey(),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     const text = await response.text();

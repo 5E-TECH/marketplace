@@ -23,11 +23,32 @@ describe('ElchiOutboxRelayService (BE-20)', () => {
     };
     const checkout = { emit: jest.fn(() => of(undefined)) };
     return {
-      relay: new ElchiOutboxRelayService(outbox as never, checkout as never),
+      relay: new ElchiOutboxRelayService(
+        outbox as never,
+        checkout as never,
+        {
+          get: () => relayFlag,
+        } as never,
+      ),
       checkout,
+      outbox,
       errors,
     };
   }
+  let relayFlag: string | undefined = 'on';
+  beforeEach(() => {
+    relayFlag = 'on';
+  });
+
+  it('ELCHI_OUTBOX_RELAY yoqilmagan bo‘lsa hodisalar PENDING qoladi', async () => {
+    relayFlag = undefined;
+    const { relay, outbox, checkout } = setup([
+      { eventType: 'elchi.parcel.created', payload: {} },
+    ]);
+    await expect(relay.relayPending()).resolves.toBe(0);
+    expect(outbox.relayPending).not.toHaveBeenCalled();
+    expect(checkout.emit).not.toHaveBeenCalled();
+  });
 
   it('elchi.parcel.* hodisasini checkout ga o‘z nomi bilan yuboradi', async () => {
     const payload = { eventId: 'elchi.parcel.created:501', orderId: '501' };
