@@ -68,6 +68,18 @@ const GEO_SYNC_INTERVAL_MS = 60_000;
 
 const CONSUMER = 'elchi-parcel';
 
+/**
+ * Elchi `order_items.product_name` VARCHAR(255): undan uzun nom Elchi da
+ * buyurtmani yaratmaydi va takror kaliti abadiy «xato» bo'lib qoladi
+ * (Elchi-Backend order-service). Nom ID qo'shimchasi bilan 255 ga sig'adi.
+ */
+const ELCHI_ITEM_NAME_MAX = 255;
+
+export function elchiItemName(name: string, productId: string): string {
+  const suffix = ` #${productId}`;
+  return `${name.trim().slice(0, ELCHI_ITEM_NAME_MAX - suffix.length)}${suffix}`;
+}
+
 type BuildResult =
   | { body: CreateElchiShipmentInput }
   | { retry: string }
@@ -308,6 +320,15 @@ export class ParcelService {
       // keyin o'sha external_order_id ishlaydi (Elchi-Backend
       // integration-service `requestPartnerOrderCreate`).
       await this.retryLater(row, error.message, error.reopensAt);
+      if (!row.sent) {
+        // Birinchi so'rov edi va Elchi hech narsa yaratmadi — «yuborildi»
+        // belgisi olib tashlanadi: tunda bekor qilinsa Elchi ga murojaat yo'q.
+        await this.dataSource.query(
+          `UPDATE integration.parcel_request SET last_create_at = NULL
+            WHERE id = $1 AND status = 'PENDING'`,
+          [row.id],
+        );
+      }
       return;
     }
     if (
@@ -454,7 +475,7 @@ export class ParcelService {
           // `resolveCatalogProductId`). Hamma posilka bitta platforma
           // marketida — ikki sotuvchining bir xil nomli tovari bitta katalog
           // tovariga bog'lanib, og'irlik adashardi. ID bilan nom noyob [taklif].
-          name: `${item.name} #${item.productId}`,
+          name: elchiItemName(item.name, String(item.productId)),
           quantity: item.quantity,
           external_product_id: String(item.productId),
           ...(item.weightGrams ? { weight_kg: item.weightGrams / 1000 } : {}),
@@ -524,18 +545,35 @@ export class ParcelService {
    */
   private async recoverShipment(row: ParcelRow): Promise<void> {
     const built = await this.buildShipment(row);
-    if (!('body' in built)) {
-      await this.retryLater(
-        row,
-        'retry' in built ? built.retry : built.fail.message,
-      );
+    if ('retry' in built) {
+      await this.retryLater(row, built.retry);
+      return;
+    }
+    if ('fail' in built) {
+      // So'rovni hozir tuzib bo'lmaydi va Elchi da bog'lovchi yozuv yo'q
+      // (404) — bekor qilinadigan narsa yo'q.
+      await this.finishCancel(row, 'CANCELLED', null, built.fail.message);
       return;
     }
     let result: ElchiShipmentResult;
     try {
       result = await this.elchi.createShipment(built.body);
     } catch (error) {
-      if (error instanceof ElchiApiError && REJECT_STATUSES.has(error.status)) {
+      if (
+        error instanceof ElchiApiError &&
+        error.status === 409 &&
+        error.code === 'ORDER_INTAKE_CLOSED'
+      ) {
+        // Elchi qabul yopiq bo'lsa ham bog'lovchisiz buyurtma bo'lishi
+        // mumkin — ochilgach qayta (5 daqiqada emas, reopens_at da).
+        await this.retryLater(row, error.message, error.reopensAt);
+        return;
+      }
+      if (
+        error instanceof ElchiApiError &&
+        (REJECT_STATUSES.has(error.status) || error.status === 409)
+      ) {
+        // Elchi so'rovni rad etdi: buyurtma umuman yaratilmagan.
         await this.finishCancel(row, 'CANCELLED', null, error.message);
         return;
       }

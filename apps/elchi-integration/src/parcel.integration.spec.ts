@@ -12,7 +12,7 @@ import { CreateIntegrationTables1722900000000 } from './migrations/1722900000000
 import { AddGeoSatoCode1725285600000 } from './migrations/1725285600000-add-geo-sato-code';
 import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add-provision-tariffs';
 import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
-import { ParcelService } from './parcel.service';
+import { ParcelService, elchiItemName } from './parcel.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -578,5 +578,45 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       lastError: 'Geo kesh yangilanmadi',
     });
     expect(await outboxTypes()).toEqual([]);
+  });
+
+  it('qabul yopiq birinchi so‘rovdan keyin tunda bekor qilish — Elchi ga murojaat yo‘q', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockRejectedValueOnce(
+      new ElchiApiError(409, 'intake closed', {
+        code: 'ORDER_INTAKE_CLOSED',
+        reopens_at: new Date(Date.now() + 8 * 3600_000).toISOString(),
+      }),
+    );
+    await service.processDue();
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    await service.processDue();
+
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(elchi.cancelShipment).not.toHaveBeenCalled();
+    expect(elchi.createShipment).toHaveBeenCalledTimes(1);
+  });
+
+  it('tiklashda Elchi 409 (qabul yopiq emas) bilan rad etsa — CANCELLED, cheksiz takror yo‘q', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new ElchiApiError(409, 'customer conflict', {}));
+    await service.processDue();
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+  });
+});
+
+describe('elchiItemName (BE-20)', () => {
+  it('ID qo‘shimchasi bilan nom 255 belgidan oshmaydi', () => {
+    const name = elchiItemName('x'.repeat(300), '12345');
+    expect(name).toHaveLength(255);
+    expect(name.endsWith(' #12345')).toBe(true);
+    expect(elchiItemName(' Quloqchin ', '88')).toBe('Quloqchin #88');
   });
 });
