@@ -19,6 +19,9 @@ import {
 @Index('idx_lead_lead_stream_created', ['streamId', 'createdAt'])
 @Index('idx_lead_lead_affiliate_created', ['affiliateId', 'createdAt'])
 @Index('idx_lead_lead_ip_created', ['ip', 'createdAt'])
+@Index('idx_lead_lead_operator_status', ['operatorId', 'status'], {
+  where: '"operator_id" IS NOT NULL',
+})
 export class Lead extends BaseEntity {
   @Column({ type: 'varchar', length: 10 })
   source: LeadSource;
@@ -185,4 +188,16 @@ export class Lead extends BaseEntity {
     nullable: true,
   })
   reviewReason: LeadReviewReason | null;
+
+  /** Bron rejalashtirilgan qo‘ng‘iroqdanmi (6-qoida: 5 ta chegaraga kirmaydi). */
+  @Column({ name: 'booked_from_callback', type: 'boolean', default: false })
+  bookedFromCallback: boolean;
+
+  /** 8-qoida eslatmasi yuborilgan vaqt. */
+  @Column({ name: 'callback_reminded_at', type: 'timestamptz', nullable: true })
+  callbackRemindedAt: Date | null;
+
+  /** `order.create-failed` (qoldiq yo‘q) bilan navbatga qaytgan vaqt (BE-13 TC8). */
+  @Column({ name: 'stock_shortage_at', type: 'timestamptz', nullable: true })
+  stockShortageAt: Date | null;
 }

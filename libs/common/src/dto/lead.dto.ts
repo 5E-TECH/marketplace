@@ -467,6 +467,8 @@ export const LEAD_CATALOG_RPC = {
    * katalog faqat sotuvchilarga ochiqlarini qaytarishi mumkin; lead-service baribir qayta saralaydi.
    */
   OFFER_LIST: 'catalog.offer.list',
+  /** { productId, quantity, whereDeliver } → { deliveryFee } — og‘irlikka qarab ko‘rinadigan yetkazish (BE-09; FE-09 TC3) */
+  OFFER_QUOTE: 'catalog.offer.quote',
 } as const;
 
 export interface CatalogOfferSnapshot {

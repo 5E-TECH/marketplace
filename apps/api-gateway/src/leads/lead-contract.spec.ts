@@ -249,21 +249,7 @@ describe('Lid shartnomasi (BE-25)', () => {
       'BE-28',
     );
 
-    const op = new OperatorLeadsController();
-    await expect501(() => op.takeNext(), 'BE-13');
-    await expect501(() => op.listMine(), 'BE-13');
-    await expect501(() => op.getCard('7001'), 'BE-13');
-    await expect501(
-      () => op.submitResult('7001', { outcome: 'BUSY' } as never),
-      'BE-13',
-    );
-    await expect501(() => op.updateAddress('7001', {} as never), 'BE-13');
-    await expect501(
-      () => op.quote('7001', { quantity: 2, whereDeliver: 'ADDRESS' } as never),
-      'BE-13',
-    );
-    await expect501(() => op.setState({ state: 'ONLINE' } as never), 'BE-13');
-    await expect501(() => op.queueSummary(), 'BE-13');
+    const op = new OperatorLeadsController(lead);
     await expect501(
       () => op.stats({ from: '2026-12-01', to: '2026-12-31' }),
       'BE-28',
@@ -349,6 +335,56 @@ describe('Lid shartnomasi (BE-25)', () => {
           content: { highlights: ['a'], boxContents: [] },
         },
       );
+    });
+  });
+
+  describe('BE-13: operator endpointlari lead-service ga, operator ID tokendan', () => {
+    it('keyingi lid, ro‘yxat, karta, natija, manzil, summa, holat, xulosa', async () => {
+      const send = jest.fn(() => of({}));
+      const op = new OperatorLeadsController({ send } as never);
+      const calls: Array<[() => unknown, string, unknown]> = [
+        [() => op.takeNext('41'), 'lead.queue.next', { operatorId: '41' }],
+        [() => op.listMine('41'), 'lead.queue.mine', { operatorId: '41' }],
+        [
+          () => op.getCard('41', '7001'),
+          'lead.card.get',
+          { operatorId: '41', leadId: '7001' },
+        ],
+        [
+          () => op.submitResult('41', '7001', { outcome: 'BUSY' } as never),
+          'lead.queue.result',
+          { operatorId: '41', leadId: '7001', result: { outcome: 'BUSY' } },
+        ],
+        [
+          () => op.updateAddress('41', '7001', { addressLine: 'x' } as never),
+          'lead.queue.update-address',
+          { operatorId: '41', leadId: '7001', address: { addressLine: 'x' } },
+        ],
+        [
+          () =>
+            op.quote('41', '7001', {
+              quantity: 2,
+              whereDeliver: 'ADDRESS',
+            } as never),
+          'lead.card.quote',
+          {
+            operatorId: '41',
+            leadId: '7001',
+            quantity: 2,
+            whereDeliver: 'ADDRESS',
+          },
+        ],
+        [
+          () => op.setState('41', { state: 'ONLINE' } as never),
+          'lead.operator.state',
+          { operatorId: '41', state: 'ONLINE' },
+        ],
+        [() => op.queueSummary(), 'lead.queue.summary', {}],
+      ];
+      for (const [call, cmd, payload] of calls) {
+        await call();
+        expect(send).toHaveBeenLastCalledWith({ cmd }, payload);
+      }
     });
   });
 });

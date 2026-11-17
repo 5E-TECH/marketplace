@@ -10081,7 +10081,7 @@
             "description": "Navbat bo‘sh: errorCode LEAD_QUEUE_EMPTY"
           },
           "409": {
-            "description": "errorCode OPERATOR_ON_BREAK — operator tanaffusda; BOOKING_LIMIT_REACHED — 5 ta bron to‘lgan"
+            "description": "errorCode OPERATOR_ON_BREAK — operator tanaffusda; OPERATOR_OFFLINE — «ishda» holati tanlanmagan; BOOKING_LIMIT_REACHED — 5 ta bron to‘lgan"
           }
         },
         "security": [
@@ -10202,6 +10202,9 @@
           },
           "400": {
             "description": "errorCode ADDRESS_NOT_CONFIRMED — manzil tasdiqlanmagan; VALIDATION_ERROR — sabab yoki vaqt yo‘q"
+          },
+          "404": {
+            "description": "Lid topilmadi, bu operatorda emas yoki bron muddati tugagan"
           }
         },
         "security": [
