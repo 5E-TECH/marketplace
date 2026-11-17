@@ -26,7 +26,7 @@ function confirmed(
     orderId: '501',
     orderNumber: 'L-1183',
     leadId: '9001',
-    source: 'SELLER_PAGE',
+    source: 'LANDING',
     streamId: '31',
     affiliateId: '12',
     wholesalerId: '4',
@@ -54,6 +54,7 @@ function confirmed(
     ],
     delivery: { mode: 'SHOWN', cost: 25000 },
     codAmount: 276000,
+    parcel: null,
     occurredAt: '2026-11-17T10:00:00.000Z',
     ...overrides,
   };
@@ -446,5 +447,101 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       'INVALID_EVENT',
       'INVALID_EVENT',
     ]);
+  });
+
+  it('yuborilmagan PENDING ham Elchi orqali bekor qilinadi (rollback dan keyin belgi yo‘qolgan bo‘lishi mumkin)', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    expect(await parcel()).toMatchObject({ status: 'CANCEL_PENDING' });
+
+    // 120 s ichida 404 ga ishonilmaydi
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    await service.processDue();
+    expect(elchi.cancelShipment).toHaveBeenCalledWith('mp-order:501');
+    expect(await parcel()).toMatchObject({
+      status: 'CANCEL_PENDING',
+      waiting: true,
+    });
+
+    await ds.query(
+      `UPDATE integration.parcel_request
+          SET last_create_at = now() - interval '10 minutes', next_attempt_at = now()`,
+    );
+    elchi.cancelShipment.mockRejectedValueOnce(
+      new ElchiApiError(404, 'topilmadi'),
+    );
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(elchi.createShipment).not.toHaveBeenCalled();
+  });
+
+  it('har xato yangi «Tasdiqlandi» dan keyin yangi elchi.parcel.failed eventId oladi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockRejectedValue(new ElchiApiError(422, 'xato'));
+    await service.processDue();
+    await service.onOrderStatusChanged(confirmed({ eventId: 'evt-confirm-2' }));
+    await service.processDue();
+
+    const ids = (await outboxRows()).map((row) => row.payload.eventId);
+    expect(ids).toEqual([
+      'elchi.parcel.failed:501:evt-confirm-1',
+      'elchi.parcel.failed:501:evt-confirm-2',
+    ]);
+  });
+
+  it('FAILED buyurtmaga yangi noto‘g‘ri tasdiq ham xabar beradi', async () => {
+    const bad = (eventId: string) =>
+      confirmed({
+        eventId,
+        recipient: { ...confirmed().recipient, phone: '' },
+      });
+    await service.onOrderStatusChanged(bad('evt-bad-1'));
+    await service.onOrderStatusChanged(bad('evt-bad-2'));
+    const ids = (await outboxRows()).map((row) => row.payload.eventId);
+    expect(ids).toEqual([
+      'elchi.parcel.failed:501:evt-bad-1',
+      'elchi.parcel.failed:501:evt-bad-2',
+    ]);
+  });
+
+  it('409 ORDER_INTAKE_CLOSED → reopens_at gacha kutadi; boshqa 409 → FAILED', async () => {
+    const reopens = new Date(Date.now() + 6 * 3600_000).toISOString();
+    await service.onOrderStatusChanged(confirmed());
+    await service.onOrderStatusChanged(
+      confirmed({ eventId: 'evt-502', orderId: '502' }),
+    );
+    elchi.createShipment
+      .mockRejectedValueOnce(
+        new ElchiApiError(409, 'intake closed', {
+          statusCode: 409,
+          code: 'ORDER_INTAKE_CLOSED',
+          reopens_at: reopens,
+        }),
+      )
+      .mockRejectedValueOnce(new ElchiApiError(409, 'label_token band', {}));
+    await service.processDue();
+
+    const [row] = await ds.query(
+      `SELECT status, next_attempt_at >= $1::timestamptz AS "untilReopen"
+         FROM integration.parcel_request WHERE order_id='501'`,
+      [reopens],
+    );
+    expect(row).toEqual({ status: 'PENDING', untilReopen: true });
+    expect(await parcel('502')).toMatchObject({ status: 'FAILED' });
+  });
+
+  it('geo kesh yangilanmasa tuman yo‘qligiga ishonilmaydi — navbatda kutadi', async () => {
+    await ds.query('TRUNCATE integration.geo_cache');
+    geo.syncGeoCache.mockRejectedValueOnce(new Error('Elchi geo ishlamayapti'));
+    await service.onOrderStatusChanged(confirmed());
+    await service.processDue();
+    expect(await parcel()).toMatchObject({
+      status: 'PENDING',
+      waiting: true,
+      lastError: 'Geo kesh yangilanmadi',
+    });
+    expect(await outboxTypes()).toEqual([]);
   });
 });

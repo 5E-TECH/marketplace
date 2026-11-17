@@ -63,8 +63,12 @@ export interface OrderStatusChangedEvent {
   orderNumber: string;
   /** Liddan yaratilgan buyurtmada; boshqa buyurtmada null. */
   leadId: string | null;
-  /** Manba: lid manbasi (BE-25 `LeadSource`: operator, sotuvchi sahifasi, API). */
-  source: string;
+  /**
+   * Manba — BE-25 `LeadSource` qiymatlari (`lead.dto.ts`): LANDING (sotuvchi
+   * sahifasi), SITE (asosiy sayt), API (sotuvchi lid API si). BE-25 merge
+   * qilingach `LeadSource` turiga o'tadi.
+   */
+  source: 'LANDING' | 'SITE' | 'API';
   streamId: string | null;
   affiliateId: string | null;
   wholesalerId: string | null;
@@ -98,6 +102,11 @@ export interface OrderStatusChangedEvent {
   delivery: { mode: string; cost: number };
   /** Kuryer mijozdan oladigan summa, butun so'm (BE-01). */
   codAmount: number;
+  /**
+   * Elchi posilkasi (BE-19 `elchi.parcel.created` dan yozadi); posilka
+   * yaratilguncha null. BE-24 kuzatuv SMS i uchun.
+   */
+  parcel: { shipmentId: string; trackingUrl: string | null } | null;
   /** ISO 8601 */
   occurredAt: string;
 }

@@ -38,11 +38,30 @@ const SHIPMENT_CREATE_TIMEOUT_MS = 70_000;
 
 /** Elchi HTTP xatosi: `status` bo'yicha qayta urinish yoki rad qaror qilinadi. */
 export class ElchiApiError extends Error {
+  /** Elchi xato kodi, masalan `ORDER_INTAKE_CLOSED` (bugungi qabul yopiq). */
+  readonly code: string | null;
+  /** `ORDER_INTAKE_CLOSED` da: qachon qayta urinish mumkin (ISO). */
+  readonly reopensAt: string | null;
+
   constructor(
     readonly status: number,
     message: string,
+    body?: unknown,
   ) {
     super(message);
+    const b = (body ?? {}) as Record<string, any>;
+    const code = b.code ?? b.data?.code ?? b.error?.code;
+    const reopensAt = b.reopens_at ?? b.data?.reopens_at;
+    this.code = typeof code === 'string' ? code : null;
+    this.reopensAt = typeof reopensAt === 'string' ? reopensAt : null;
+  }
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 
@@ -261,6 +280,7 @@ export class ElchiApiClient {
       throw new ElchiApiError(
         response.status,
         `Elchi API ${method} ${path} → ${response.status}: ${text}`,
+        parseJson(text),
       );
     }
     return text ? (JSON.parse(text) as unknown) : null;

@@ -193,7 +193,18 @@ describe('ElchiApiClient config (C2.20)', () => {
     const error = await client.cancelShipment('1').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ElchiApiError);
     expect((error as ElchiApiError).status).toBe(409);
+    expect((error as ElchiApiError).code).toBeNull();
     fetchMock.mockRestore();
+  });
+
+  it('BE-20: ORDER_INTAKE_CLOSED kodi va reopens_at xato tanasidan o‘qiladi', () => {
+    const error = new ElchiApiError(409, 'closed', {
+      statusCode: 409,
+      code: 'ORDER_INTAKE_CLOSED',
+      reopens_at: '2026-11-18T04:00:00.000Z',
+    });
+    expect(error.code).toBe('ORDER_INTAKE_CLOSED');
+    expect(error.reopensAt).toBe('2026-11-18T04:00:00.000Z');
   });
 
   it('notanish yoki bo‘sh qiymatda xavfsiz "address" yuboriladi', async () => {

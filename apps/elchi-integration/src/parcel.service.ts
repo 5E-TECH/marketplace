@@ -83,7 +83,8 @@ const CONSUMER = 'elchi-parcel';
 @Injectable()
 export class ParcelService {
   private readonly logger = new Logger(ParcelService.name);
-  private lastGeoSyncAt = 0;
+  private lastGeoSyncAttemptAt = 0;
+  private lastGeoSyncOkAt = 0;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -197,13 +198,17 @@ export class ParcelService {
     const [row] = (await manager.query(
       `INSERT INTO integration.parcel_request (order_id, status, payload, last_error)
        VALUES ($1, 'FAILED', $2::jsonb, $3)
-       ON CONFLICT (order_id) DO NOTHING
+       ON CONFLICT (order_id) DO UPDATE
+         SET payload = EXCLUDED.payload, last_error = EXCLUDED.last_error,
+             updated_at = now()
+       WHERE parcel_request.status = 'FAILED'
        RETURNING id::text`,
       [String(event.orderId), JSON.stringify(event), message],
     )) as Array<{ id: string }>;
-    // Qator bor bo'lsa (avvalgi to'g'ri hodisa) — o'zgartirilmaydi.
+    // Ishlanayotgan yoki yaratilgan qator (avvalgi to'g'ri hodisa) o'zgarmaydi;
+    // FAILED qatorga yangi noto'g'ri tasdiq ham xabar beradi.
     if (!row) return;
-    await this.recordFailed(manager, String(event.orderId), 1, {
+    await this.recordFailed(manager, String(event.orderId), event.eventId, {
       reason: 'INVALID_EVENT',
       message,
     });
@@ -211,14 +216,17 @@ export class ParcelService {
 
   /**
    * «Bekor qilindi»:
-   *  - Elchi ga yuborilmagan (PENDING, yaratish so'rovi bo'lmagan) yoki
-   *    FAILED → CANCELLED;
-   *  - yaratilgan yoki javobi kelmagan (PENDING, so'rov yuborilgan — Elchi
-   *    timeout dan keyin ham yaratishi mumkin) → CANCEL_PENDING;
-   *  - qator bo'lmasa CANCELLED belgisi qoladi: kechikkan «Tasdiqlandi»
-   *    posilka yaratmaydi.
-   * Ishchi qatorni qulflab Elchi bilan gaplashayotgan bo'lsa, upsert kutadi va
-   * CASE yangi (commit qilingan) holat bo'yicha hisoblanadi.
+   *  - qator bo'lmasa CANCELLED belgisi qoladi: biz «Tasdiqlandi» ni
+   *    ko'rmaganmiz, Elchi ga hech narsa ketmagan; kechikkan «Tasdiqlandi»
+   *    posilka yaratmaydi;
+   *  - FAILED va yaratish so'rovi hech yuborilmagan → CANCELLED;
+   *  - qolgan hammasi (PENDING, CREATED, so'rov yuborilgan FAILED) →
+   *    CANCEL_PENDING: Elchi da bekor qilinadi.
+   * PENDING ni ham Elchi orqali bekor qilamiz: ishchining tranzaksiyasi Elchi
+   * posilkani yaratgandan keyin rollback bo'lsa (jarayon o'ldi, ulanish
+   * uzildi), `last_create_at` belgisi ham qaytadi — u «yuborilmagan»
+   * degani emas. `last_create_at` shu yerda qo'yiladi, shunda 120 s ichidagi
+   * 404 ga ishonilmaydi.
    */
   private async requestCancel(
     manager: EntityManager,
@@ -229,12 +237,16 @@ export class ParcelService {
        VALUES ($1, 'CANCELLED', $2::jsonb)
        ON CONFLICT (order_id) DO UPDATE
          SET status = CASE
-               WHEN parcel_request.status = 'FAILED' THEN 'CANCELLED'
-               WHEN parcel_request.status = 'PENDING'
+               WHEN parcel_request.status = 'FAILED'
                     AND parcel_request.last_create_at IS NULL THEN 'CANCELLED'
-               WHEN parcel_request.status IN ('PENDING','CREATED')
+               WHEN parcel_request.status IN ('PENDING','CREATED','FAILED')
                     THEN 'CANCEL_PENDING'
                ELSE parcel_request.status
+             END,
+             last_create_at = CASE
+               WHEN parcel_request.status = 'PENDING'
+                 THEN COALESCE(parcel_request.last_create_at, clock_timestamp())
+               ELSE parcel_request.last_create_at
              END,
              next_attempt_at = now(),
              updated_at = now()`,
@@ -245,8 +257,14 @@ export class ParcelService {
   private async create(manager: EntityManager, row: ParcelRow): Promise<void> {
     const event = row.payload;
     let geo = await this.resolveGeo(manager, event);
-    if (!geo && (await this.refreshGeoCache())) {
-      geo = await this.resolveGeo(manager, event);
+    if (!geo) {
+      const sync = await this.refreshGeoCache();
+      if (sync === 'fresh') geo = await this.resolveGeo(manager, event);
+      if (!geo && sync === 'unavailable') {
+        // Kesh yangilanmadi — tuman yo'qligiga ishonib bo'lmaydi.
+        await this.retryLater(manager, row, 'Geo kesh yangilanmadi');
+        return;
+      }
     }
     if (!geo) {
       const message = `Tuman topilmadi: SOATO ${event.recipient.districtSoato} (viloyat ${event.recipient.regionSoato})`;
@@ -265,7 +283,7 @@ export class ParcelService {
       return;
     }
     await manager.query(
-      `UPDATE integration.parcel_request SET last_create_at = now() WHERE id = $1`,
+      `UPDATE integration.parcel_request SET last_create_at = clock_timestamp() WHERE id = $1`,
       [row.id],
     );
     // try faqat Elchi chaqiruvini o'raydi: bazaga yozishdagi xato tranzaksiyani
@@ -297,7 +315,21 @@ export class ParcelService {
         cod_amount: event.codAmount,
       });
     } catch (error) {
-      if (error instanceof ElchiApiError && REJECT_STATUSES.has(error.status)) {
+      if (
+        error instanceof ElchiApiError &&
+        error.status === 409 &&
+        error.code === 'ORDER_INTAKE_CLOSED'
+      ) {
+        // Bugungi qabul yopiq: Elchi kalitni band qilmaydi, `reopens_at` dan
+        // keyin o'sha external_order_id ishlaydi (Elchi-Backend
+        // integration-service `requestPartnerOrderCreate`).
+        await this.retryLater(manager, row, error.message, error.reopensAt);
+        return;
+      }
+      if (
+        error instanceof ElchiApiError &&
+        (REJECT_STATUSES.has(error.status) || error.status === 409)
+      ) {
         this.logger.warn(`Buyurtma ${row.orderId}: ${error.message}`);
         await this.fail(manager, row, 'ELCHI_REJECTED', error.message);
         return;
@@ -433,19 +465,28 @@ export class ParcelService {
   }
 
   /**
-   * Tuman topilmasa geo kesh bir marta yangilanadi (kesh bo'sh yoki eski
-   * bo'lishi mumkin — masalan, yangi o'rnatishdan keyin). Muvaffaqiyatli
-   * yangilansa true.
+   * Tuman topilmasa geo kesh yangilanadi (kesh bo'sh yoki eski bo'lishi
+   * mumkin — masalan, yangi o'rnatishdan keyin); bir daqiqada ko'pi bilan bir
+   * marta. Natija:
+   *  - 'fresh' — hozir yangilandi, qayta qidirish kerak;
+   *  - 'recent' — yaqinda muvaffaqiyatli yangilangan, kesh ishonchli;
+   *  - 'unavailable' — yangilab bo'lmadi, tuman yo'qligiga ishonib bo'lmaydi.
    */
-  private async refreshGeoCache(): Promise<boolean> {
-    if (Date.now() - this.lastGeoSyncAt < GEO_SYNC_INTERVAL_MS) return false;
-    this.lastGeoSyncAt = Date.now();
+  private async refreshGeoCache(): Promise<'fresh' | 'recent' | 'unavailable'> {
+    const now = Date.now();
+    if (now - this.lastGeoSyncAttemptAt < GEO_SYNC_INTERVAL_MS) {
+      return this.lastGeoSyncOkAt >= this.lastGeoSyncAttemptAt
+        ? 'recent'
+        : 'unavailable';
+    }
+    this.lastGeoSyncAttemptAt = now;
     try {
       await this.geo.syncGeoCache();
-      return true;
+      this.lastGeoSyncOkAt = Date.now();
+      return 'fresh';
     } catch (error) {
       this.logger.warn(`Geo kesh yangilanmadi: ${(error as Error).message}`);
-      return false;
+      return 'unavailable';
     }
   }
 
@@ -485,23 +526,32 @@ export class ParcelService {
     return null;
   }
 
+  /**
+   * Keyinroq qayta urinish. `now()` emas, `clock_timestamp()`: `now()`
+   * tranzaksiya boshlangan vaqt — 70 s lik Elchi chaqiruvidan keyin
+   * `now() + 30 s` allaqachon o'tib ketgan bo'lardi.
+   */
   private async retryLater(
     manager: EntityManager,
     row: ParcelRow,
     message: string,
+    retryAt?: string | null,
   ): Promise<void> {
     const delay =
       RETRY_DELAYS_S[Math.min(row.attempts, RETRY_DELAYS_S.length - 1)];
+    const at = retryAt && !Number.isNaN(Date.parse(retryAt)) ? retryAt : null;
     this.logger.warn(
-      `Buyurtma ${row.orderId}: Elchi so‘rovi o‘tmadi (${row.attempts + 1}-urinish), ${delay} s dan keyin qayta: ${message}`,
+      `Buyurtma ${row.orderId}: Elchi so‘rovi o‘tmadi (${row.attempts + 1}-urinish), ${at ?? `${delay} s dan keyin`} qayta: ${message}`,
     );
     await manager.query(
       `UPDATE integration.parcel_request
           SET attempts=attempts+1,
-              next_attempt_at=now() + make_interval(secs => $2),
+              next_attempt_at=GREATEST(
+                clock_timestamp() + make_interval(secs => $2),
+                COALESCE($4::timestamptz, '-infinity'::timestamptz)),
               last_error=$3, updated_at=now()
         WHERE id=$1`,
-      [row.id, delay, message],
+      [row.id, delay, message, at],
     );
   }
 
@@ -513,9 +563,9 @@ export class ParcelService {
     await this.dataSource.query(
       `UPDATE integration.parcel_request
           SET attempts = attempts + 1,
-              next_attempt_at = now() + make_interval(
+              next_attempt_at = clock_timestamp() + make_interval(
                 secs => (ARRAY[30,60,120,240,300])[LEAST(attempts, 4) + 1]),
-              last_create_at = CASE WHEN status = 'PENDING' THEN now()
+              last_create_at = CASE WHEN status = 'PENDING' THEN clock_timestamp()
                                     ELSE last_create_at END,
               last_error = $2, updated_at = now()
         WHERE id = $1`,
@@ -530,7 +580,7 @@ export class ParcelService {
     message: string,
   ): Promise<void> {
     await this.setStatus(manager, row.id, 'FAILED', message);
-    await this.recordFailed(manager, String(row.orderId), row.attempts + 1, {
+    await this.recordFailed(manager, String(row.orderId), row.payload.eventId, {
       reason,
       message,
     });
@@ -539,7 +589,12 @@ export class ParcelService {
   private async recordFailed(
     manager: EntityManager,
     orderId: string,
-    attempt: number,
+    /**
+     * Qatorni shu holatga olib kelgan «Tasdiqlandi» hodisasi: FAILED qator
+     * faqat yangi tasdiq bilan qayta navbatga tushadi, shuning uchun id har
+     * xatoda yangi (urinish soni esa qayta navbatda 0 ga qaytadi).
+     */
+    sourceEventId: string,
     failure: Pick<ElchiParcelFailedEvent, 'reason' | 'message'>,
   ): Promise<void> {
     await this.outbox.record(
@@ -548,7 +603,7 @@ export class ParcelService {
         aggregateId: orderId,
         eventType: ORDER_EVENTS.PARCEL_FAILED,
         payload: {
-          eventId: `${ORDER_EVENTS.PARCEL_FAILED}:${orderId}:${attempt}`,
+          eventId: `${ORDER_EVENTS.PARCEL_FAILED}:${orderId}:${sourceEventId}`,
           orderId,
           ...failure,
           at: new Date().toISOString(),
