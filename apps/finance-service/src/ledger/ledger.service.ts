@@ -27,7 +27,8 @@ export type JournalKind =
   | 'ORDER_REFUSED'
   | 'ORDER_REVERSAL'
   | 'ELCHI_SETTLEMENT'
-  | 'WITHDRAWAL_PAID';
+  | 'WITHDRAWAL_PAID'
+  | 'WHOLESALER_PAID';
 
 export interface Line {
   account: AccountType;

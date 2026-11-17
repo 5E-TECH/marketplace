@@ -24,7 +24,9 @@ export type LineKind =
   // BE-23 pul yechish: sotuvchidan −summa, soliq +1%, to‘lov chiqimi +qolgani
   | 'WITHDRAWAL'
   | 'WITHDRAWAL_TAX'
-  | 'WITHDRAWAL_NET';
+  | 'WITHDRAWAL_NET'
+  // BE-33 optovikka haftalik o‘tkazma: WHOLESALER −summa, COD_CLEARING +summa
+  | 'WHOLESALER_PAYOUT';
 
 export interface SplitLine {
   account: AccountType;

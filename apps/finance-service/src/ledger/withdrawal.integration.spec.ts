@@ -7,6 +7,7 @@ import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-c
 import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
 import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
+import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
@@ -117,6 +118,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
         CreateLedger1795478400000,
         AddJournalLeadIndex1795564800000,
         CreateWithdrawal1795651200000,
+        CreateWholesalerSettlement1795737600000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -128,7 +130,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
   }, 300_000);
 
   beforeEach(async () => {
-    await ds.query(`TRUNCATE finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
+    await ds.query(`TRUNCATE finance.wholesaler_settlement_item, finance.wholesaler_settlement, finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
       finance.ledger_entry, finance.journal, finance.remittance_item, finance.elchi_remittance,
       finance.balance_check, finance.processed_event, finance.event_failure`);
     await ds.query(`DELETE FROM finance.account WHERE owner_id <> ''`);
