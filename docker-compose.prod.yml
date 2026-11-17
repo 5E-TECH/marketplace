@@ -136,6 +136,10 @@ services:
     <<: *app
     command: node dist/apps/elchi-integration/apps/elchi-integration/src/main.js
 
+  lead-service:
+    <<: *app
+    command: node dist/apps/lead-service/apps/lead-service/src/main.js
+
   monitor:
     <<: *app
     command: node scripts/health-monitor.mjs

@@ -126,6 +126,15 @@
       "compilerOptions": {
         "tsConfigPath": "apps/elchi-integration/tsconfig.app.json"
       }
+    },
+    "lead-service": {
+      "type": "application",
+      "root": "apps/lead-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/lead-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lead-service/tsconfig.app.json"
+      }
     }
   }
 }

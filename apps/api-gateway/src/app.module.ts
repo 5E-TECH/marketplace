@@ -155,6 +155,12 @@ import { AdminLeadsController } from './leads/admin-leads.controller';
             RmqQueue.INTEGRATION,
           ),
       },
+      {
+        name: RmqClient.LEAD,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.LEAD),
+      },
     ]),
   ],
   controllers: [

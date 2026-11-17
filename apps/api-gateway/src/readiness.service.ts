@@ -20,6 +20,7 @@ export class ReadinessService {
     @Inject(RmqClient.NOTIFICATION) private readonly notification: ClientProxy,
     @Inject(RmqClient.SEARCH) private readonly search: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
+    @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
   ) {}
 
   async check() {
@@ -35,6 +36,7 @@ export class ReadinessService {
       ['notification-service', this.notification],
       ['search-service', this.search],
       ['elchi-integration', this.integration],
+      ['lead-service', this.lead],
     ];
     const checks = await Promise.allSettled(
       clients.map(([, client]) =>
