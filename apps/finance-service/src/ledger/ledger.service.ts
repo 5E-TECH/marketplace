@@ -319,8 +319,37 @@ export class LedgerService {
     )) as Array<{ id: string; kind: JournalKind; gross: string }>;
     const delivered = journals.find((j) => j.kind === 'ORDER_DELIVERED');
     const refused = journals.find((j) => j.kind === 'ORDER_REFUSED');
-    if (journals.some((j) => j.kind === 'ELCHI_SETTLEMENT')) return 'MATCHED';
     if (!delivered && !refused) return 'PENDING'; // hodisa keyin keladi
+    if (items.some((i) => i.match === 'MATCHED')) {
+      // Buyurtma allaqachon hisob-kitob qilingan. Elchi holatni yangi
+      // eventId bilan qayta yuborishi mumkin: o'sha ma'lumotli takror —
+      // MATCHED (o'zgarish yo'q); boshqacha summa — MISMATCH (ortiqcha to'lov).
+      const matched = items.filter((i) => i.match === 'MATCHED');
+      for (const item of items.filter((i) => i.match !== 'MATCHED')) {
+        const duplicate = matched.some(
+          (m) =>
+            m.status === item.status &&
+            m.paid === item.paid &&
+            m.refusalFee === item.refusalFee,
+        );
+        if (!duplicate) {
+          this.logger.warn(
+            `Buyurtma ${orderId}: hisob-kitobdan keyin yana o‘tkazma keldi (${item.status}, ${item.paid ?? item.refusalFee})`,
+          );
+        }
+        await manager.query(
+          `UPDATE finance.remittance_item
+              SET match_state = $2, diff = $3, updated_at = now()
+            WHERE id = $1`,
+          [
+            item.id,
+            duplicate ? 'MATCHED' : 'MISMATCH',
+            duplicate ? 0 : moneyFromDb(item.paid ?? item.refusalFee),
+          ],
+        );
+      }
+      return 'MATCHED';
+    }
 
     let match: RemittanceMatch;
     let expected: number;

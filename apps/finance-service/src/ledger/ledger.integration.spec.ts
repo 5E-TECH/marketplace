@@ -134,10 +134,31 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     expect(after['WHOLESALER:W']).toEqual({ hold: 0, available: 140000 });
     await ledger.onRemittance(remittance({ eventId: 'rem-501-b' }));
     expect(await balances()).toEqual(after);
-    const [item] = await ds.query(
-      `SELECT match_state AS m, diff::int AS diff FROM finance.remittance_item LIMIT 1`,
+    const items = await ds.query(
+      `SELECT match_state AS m, diff::int AS diff FROM finance.remittance_item ORDER BY id`,
     );
-    expect(item).toEqual({ m: 'MATCHED', diff: 0 });
+    expect(items).toEqual([
+      { m: 'MATCHED', diff: 0 },
+      { m: 'MATCHED', diff: 0 },
+    ]);
+    await expectBalanced();
+  });
+
+  it('hisob-kitobdan keyin boshqa summali o‘tkazma → MISMATCH, balans o‘zgarmaydi', async () => {
+    await ledger.onOrderStatusChanged(orderEvent());
+    await ledger.onRemittance(remittance());
+    const after = await balances();
+    await ledger.onRemittance(
+      remittance({ eventId: 'rem-501-extra', marketPaidAmount: 10000 }),
+    );
+    expect(await balances()).toEqual(after);
+    const rows = await ds.query(
+      `SELECT match_state AS m, diff::int AS diff FROM finance.remittance_item ORDER BY id`,
+    );
+    expect(rows).toEqual([
+      { m: 'MATCHED', diff: 0 },
+      { m: 'MISMATCH', diff: 10000 },
+    ]);
     await expectBalanced();
   });
 
@@ -189,7 +210,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     await expectBalanced();
   });
 
-  it('TC4: o‘tkazmadan keyin qaytarish → sotuvchi balansi manfiy, keyingi daromad qoplaydi (MOL-4)', async () => {
+  it('TC4: o‘tkazmadan keyin qaytarish → sotuvchi mavjud balansi 0 ga qaytadi, keyingi daromad qo‘shiladi', async () => {
     await ledger.onOrderStatusChanged(orderEvent());
     await ledger.onRemittance(remittance());
     await ledger.onOrderReturned({
@@ -199,17 +220,18 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
       items: [{ productId: '88', quantity: 1 }],
       occurredAt: '2026-12-22T10:00:00.000Z',
     });
-    expect((await balances())['AFFILIATE:A']).toEqual({
-      hold: 0,
-      available: -65000,
-    });
+    // o'tkazilgan pul qaytarildi: mavjud balans 0 (manfiy faqat pul yechilgandan keyin — BE-23)
+    expect((await balances())['AFFILIATE:A']).toBeUndefined();
     await ledger.onOrderStatusChanged(
       orderEvent({ eventId: 'evt-502', orderId: '502' }),
     );
     await ledger.onRemittance(
       remittance({ eventId: 'rem-502', orderId: '502' }),
     );
-    expect((await balances())['AFFILIATE:A']).toBeUndefined(); // 0 ga qaytdi
+    expect((await balances())['AFFILIATE:A']).toEqual({
+      hold: 0,
+      available: 65000,
+    });
     await expectBalanced();
   });
 
