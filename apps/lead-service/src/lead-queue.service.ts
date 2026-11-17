@@ -428,6 +428,15 @@ export class LeadQueueService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!lead || lead.status !== LeadStatus.CONFIRMED) return; // takroriy yoki eskirgan hodisa
+      // BE-28: buyurtmasi bor yoki hodisadan keyin qayta tasdiqlangan lid — eskirgan (takror yuborilgan) hodisa
+      const failedAt = new Date(event.at);
+      if (
+        lead.orderId ||
+        (lead.confirmedAt &&
+          !Number.isNaN(failedAt.getTime()) &&
+          failedAt < lead.confirmedAt)
+      )
+        return;
       const now = new Date();
       lead.status = LeadStatus.CALLBACK;
       lead.stockShortageAt = now;

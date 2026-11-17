@@ -9,7 +9,7 @@ import { Lead } from './entities';
 import { expectedAffiliateCommission } from './order-commission';
 
 /** Yetkazilgan buyurtmaning keyingi holatlari: DELIVERED hodisasi kelmay qolsa ham yetkazilgan kun yoziladi. */
-const DELIVERED_LIKE = new Set<LeadOrderStatus>([
+export const DELIVERED_LIKE = new Set<LeadOrderStatus>([
   LeadOrderStatus.DELIVERED,
   LeadOrderStatus.REMITTED,
   LeadOrderStatus.RETURN_REQUESTED,
@@ -81,9 +81,16 @@ export class LeadOrderService {
           lead.orderStatus = event.status;
           lead.orderStatusAt = at;
         }
-        if (DELIVERED_LIKE.has(event.status) && !lead.deliveredAt)
+        // Eng erta hodisa vaqti: tartibsiz kelsa ham (REMITTED DELIVERED dan oldin) kun ledger yozuvi kuni bilan bir xil
+        if (
+          DELIVERED_LIKE.has(event.status) &&
+          (!lead.deliveredAt || at < lead.deliveredAt)
+        )
           lead.deliveredAt = at;
-        if (REFUSED_LIKE.has(event.status) && !lead.refusedAt)
+        if (
+          REFUSED_LIKE.has(event.status) &&
+          (!lead.refusedAt || at < lead.refusedAt)
+        )
           lead.refusedAt = at;
         const expected = expectedAffiliateCommission(event.items);
         if (expected !== null) lead.expectedCommission = String(expected);

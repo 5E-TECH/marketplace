@@ -83,6 +83,27 @@ describe('haq holati (hujjat-statistika-csv I)', () => {
         commissionState: S.NONE,
       });
   });
+  it('yetkazilgan, ledger qatori yo‘q: haq 0 yoki noma’lum — Yozilmaydi; musbat — Kutilmoqda (ledger hali yozmagan)', () => {
+    for (const o of [LeadOrderStatus.DELIVERED, LeadOrderStatus.SETTLED]) {
+      expect(commissionOf(LeadStatus.CONFIRMED, o, '0', undefined)).toEqual({
+        commission: null,
+        commissionState: S.NONE,
+      });
+      expect(commissionOf(LeadStatus.CONFIRMED, o, null, undefined)).toEqual({
+        commission: null,
+        commissionState: S.NONE,
+      });
+    }
+    expect(
+      commissionOf(
+        LeadStatus.CONFIRMED,
+        LeadOrderStatus.DELIVERED,
+        '65000',
+        undefined,
+      ),
+    ).toEqual({ commission: 65000, commissionState: S.PENDING });
+  });
+
   it('tasdiqlangan: yo‘lda — Kutilmoqda (narx nusxasidan); rad yoki bekor — Yozilmaydi', () => {
     expect(
       commissionOf(

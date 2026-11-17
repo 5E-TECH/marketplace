@@ -52,13 +52,19 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
   const orders = () => new LeadOrderService(db);
   let phone = 0;
 
-  const mkStream = (code: string, affiliateId = '42') =>
-    db.getRepository(Stream).save({
+  const mkStream = async (code: string, affiliateId = '42') => {
+    const stream = await db.getRepository(Stream).save({
       code,
       affiliateId,
       productId: '501',
       salePrice: '189000',
     });
+    await db.query(
+      `UPDATE lead.stream SET created_at = '2026-01-01T00:00:00Z' WHERE id = $1`,
+      [stream.id],
+    );
+    return stream;
+  };
   const mkLead = async (
     stream: Stream,
     createdAt: string,
@@ -156,6 +162,10 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
       synchronize: false,
       logging: false,
     });
+    // «Bugun» — test sanalari kelajakda qolmasligi uchun (bo‘sh kunlar bugungacha to‘ldiriladi)
+    jest
+      .spyOn(LeadStatsService.prototype as never, 'todayTashkent' as never)
+      .mockReturnValue('2026-12-31' as never);
     await db.initialize();
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
@@ -363,6 +373,28 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
       });
     });
 
+    it('juda keng davr: bo‘sh kunlar faqat birinchi sahifa ochilgan kundan bugungacha (javob hajmi cheklangan)', async () => {
+      const st = await mkStream('k7Qm2x');
+      await mkLead(st, D1);
+      const { rows, totals } = await stats().affiliateStats({
+        affiliateId: '42',
+        query: { from: '0001-01-01', to: '9999-12-31' },
+      });
+      expect(rows).toHaveLength(365);
+      expect(rows[0].key).toBe('2026-01-01');
+      expect(rows.at(-1)!.key).toBe('2026-12-31');
+      expect(totals.leads).toBe(1);
+      // Sahifasi yo‘q sotuvchi — bo‘sh kunlar yo‘q
+      expect(
+        (
+          await stats().affiliateStats({
+            affiliateId: '99',
+            query: { from: '2026-12-01', to: '2026-12-05' },
+          })
+        ).rows,
+      ).toEqual([]);
+    });
+
     it('noto‘g‘ri so‘rov — 400 (to‘liq ISO vaqt, from > to, noto‘g‘ri sana, sotuvchi ID)', async () => {
       for (const [affiliateId, from, to] of [
         ['42', '2026-12-01T00:00:00Z', '2026-12-02'],
@@ -521,6 +553,17 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
       });
       expect(foreign.total).toBe(0);
       expect(financeSend).not.toHaveBeenCalled();
+      await expect(
+        stats().affiliateLeads({
+          affiliateId: '42',
+          query: {
+            from: '2027-01-14',
+            to: '2027-01-14',
+            page: 1e17,
+            limit: 100,
+          },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
     });
   });
 
@@ -647,6 +690,32 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
       );
     });
 
+    it('tartibsiz hodisa: eng erta yetkazildi va rad vaqti olinadi (ledger kuni bilan bir xil)', async () => {
+      const s1 = await mkStream('k7Qm2x');
+      const a = await mkLead(s1, '2026-12-01T05:00:00.000Z');
+      const b = await mkLead(s1, '2026-12-01T05:00:00.000Z');
+      await orders().onOrderStatusChanged(
+        event(a, LeadOrderStatus.REMITTED, '2026-12-05T05:00:00.000Z'),
+      );
+      await orders().onOrderStatusChanged(
+        event(a, LeadOrderStatus.DELIVERED, '2026-12-03T05:00:00.000Z'),
+      );
+      await orders().onOrderStatusChanged(
+        event(b, LeadOrderStatus.RETURNING, '2026-12-06T05:00:00.000Z'),
+      );
+      await orders().onOrderStatusChanged(
+        event(b, LeadOrderStatus.REFUSED, '2026-12-04T05:00:00.000Z'),
+      );
+      expect(await reload(a.id)).toMatchObject({
+        orderStatus: LeadOrderStatus.REMITTED,
+        deliveredAt: new Date('2026-12-03T05:00:00.000Z'),
+      });
+      expect(await reload(b.id)).toMatchObject({
+        orderStatus: LeadOrderStatus.RETURNING,
+        refusedAt: new Date('2026-12-04T05:00:00.000Z'),
+      });
+    });
+
     it('asosiy sayt (lid yo‘q), noto‘g‘ri hodisa va boshqa buyurtma e’tiborsiz; xato tashlanmaydi', async () => {
       const s = await mkStream('k7Qm2x');
       const l = await mkLead(s, '2026-12-01T05:00:00.000Z');
@@ -681,6 +750,35 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
       });
     });
 
+    it('eskirgan order.create-failed (qayta tasdiqdan oldingi yoki buyurtmasi bor lid) e’tiborsiz', async () => {
+      const s1 = await mkStream('k7Qm2x');
+      const again = await mkLead(s1, '2026-12-01T05:00:00.000Z');
+      await confirm(again, '2026-12-02T05:00:00.000Z');
+      const ordered = await mkLead(s1, '2026-12-01T05:00:00.000Z');
+      await confirm(ordered, '2026-12-01T06:00:00.000Z');
+      await orders().onOrderStatusChanged(
+        event(ordered, LeadOrderStatus.CONFIRMED, '2026-12-01T06:01:00.000Z'),
+      );
+      const q = new LeadQueueService(db, {} as never);
+      await q.onOrderCreateFailed({
+        eventId: 'cf-old',
+        leadId: again.id,
+        reason: 'OUT_OF_STOCK' as never,
+        at: '2026-12-01T06:00:00.000Z', // qayta tasdiqdan (12-02) oldin
+      });
+      await q.onOrderCreateFailed({
+        eventId: 'cf-ord',
+        leadId: ordered.id,
+        reason: 'OUT_OF_STOCK' as never,
+        at: '2026-12-01T07:00:00.000Z',
+      });
+      for (const l of [again, ordered])
+        expect(await reload(l.id)).toMatchObject({
+          status: LeadStatus.CONFIRMED,
+          confirmedBy: '41',
+        });
+    });
+
     it('order.create-failed tasdiqni bekor qiladi: «Tasdiqlangan» ga kirmaydi', async () => {
       const s = await mkStream('k7Qm2x');
       const l = await mkLead(s, '2026-12-01T05:00:00.000Z');
@@ -689,7 +787,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         eventId: 'cf-1',
         leadId: l.id,
         reason: 'OUT_OF_STOCK' as never,
-        at: new Date().toISOString(),
+        at: '2026-12-01T06:05:00.000Z', // tasdiqdan keyin
       });
       expect(await reload(l.id)).toMatchObject({
         status: LeadStatus.CALLBACK,

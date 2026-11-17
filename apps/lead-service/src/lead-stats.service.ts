@@ -21,7 +21,8 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
-import { tashkentDayStart } from './lead-schedule';
+import { DELIVERED_LIKE } from './lead-order.service';
+import { tashkentDayStart, tashkentParts } from './lead-schedule';
 import { percent } from './offer-math';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -121,6 +122,12 @@ export class LeadStatsService {
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
   ) {}
 
+  /** Bugungi Toshkent sanasi `YYYY-MM-DD` (testda almashtiriladi). */
+  protected todayTashkent(): string {
+    const t = tashkentParts(new Date());
+    return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+  }
+
   private income(
     query: FinanceAffiliateIncomeQuery,
   ): Promise<FinanceAffiliateIncomeResult> {
@@ -154,8 +161,19 @@ export class LeadStatsService {
       if (!r) rows.set(k, (r = emptyRow(k)));
       return r;
     };
-    if (groupBy === AffiliateStatsGroupBy.DAY)
-      for (const d of daysBetween(p.from, p.to)) row(d);
+    if (groupBy === AffiliateStatsGroupBy.DAY) {
+      // Bo‘sh kunlar faqat sotuvchi birinchi sahifasini ochgan kundan bugungacha (kelajak kunlari yopiq — dizayn
+      // «sotuvchi-statistika» kalendari): javob hajmi so‘rovdagi davrga emas, sotuvchining haqiqiy muddatiga bog‘liq.
+      const [{ first }] = (await this.db.query(
+        `SELECT to_char((min(created_at) AT TIME ZONE 'Asia/Tashkent')::date, 'YYYY-MM-DD') AS first
+           FROM lead.stream WHERE affiliate_id = $1`,
+        [affiliateId],
+      )) as Array<{ first: string | null }>;
+      const today = this.todayTashkent();
+      const lo = first && first > p.from ? first : p.from;
+      const hi = today < p.to ? today : p.to;
+      if (first && lo <= hi) for (const d of daysBetween(lo, hi)) row(d);
+    }
 
     const clicks = (await this.db.query(
       `SELECT ${key('c', 'created_at')} AS key, count(*)::int AS n
@@ -295,6 +313,9 @@ export class LeadStatsService {
       MAX_LIMIT,
       Math.max(1, Math.trunc(Number(q.limit)) || DEFAULT_LIMIT),
     );
+    const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset))
+      throw new BadRequestException('page juda katta');
     const where = `l.affiliate_id = $1 AND l.is_deleted = false
        AND l.created_at >= $2 AND l.created_at < $3
        AND ($4::bigint IS NULL OR l.stream_id = $4)
@@ -313,7 +334,7 @@ export class LeadStatsService {
         WHERE ${where}
         ORDER BY l.created_at DESC, l.id DESC
         LIMIT $6 OFFSET $7`,
-      [...params, limit, (page - 1) * limit],
+      [...params, limit, offset],
     )) as Array<{
       id: string;
       createdAt: Date;
@@ -451,6 +472,14 @@ export function commissionOf(
   if (status !== LeadStatus.CONFIRMED)
     return { commission: null, commissionState: null }; // hali ishlanmoqda
   if (orderStatus && NO_COMMISSION_ORDER.has(orderStatus))
+    return { commission: null, commissionState: AffiliateCommissionState.NONE };
+  // Yetkazilgan, lekin sotuvchi qatori ledgerda yo‘q: haq 0 bo‘lsa ledger qator yozmaydi (split.ts) — «Yozilmaydi».
+  // Haq musbat bo‘lsa — ledger hali yozmagan (hodisa yo‘lda) yoki finance xatosi: «Kutilmoqda» qoladi.
+  if (
+    orderStatus &&
+    DELIVERED_LIKE.has(orderStatus as LeadOrderStatus) &&
+    (expected === null || Number(expected) === 0)
+  )
     return { commission: null, commissionState: AffiliateCommissionState.NONE };
   return {
     commission: expected === null ? null : Number(expected),
