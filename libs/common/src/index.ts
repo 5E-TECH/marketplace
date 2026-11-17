@@ -53,6 +53,10 @@ export * from './dto/geo.dto';
 export * from './dto/order-tracking.dto';
 export * from './dto/return-request.dto';
 export * from './dto/admin-operations.dto';
+export * from './dto/lead.dto';
+export * from './dto/lead-affiliate.dto';
+export * from './dto/lead-operator.dto';
+export * from './dto/lead-events.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';

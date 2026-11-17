@@ -23,6 +23,8 @@ import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add
 import { ElchiApiClient } from './elchi-api.client';
 import { ElchiIntegrationController } from './elchi-integration.controller';
 import { ElchiIntegrationService } from './elchi-integration.service';
+import { GeoLookupController } from './geo-lookup.controller';
+import { GeoLookupService } from './geo-lookup.service';
 import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
 import { ParcelService } from './parcel.service';
 import { ElchiOutboxRelayService } from './elchi-outbox-relay.service';
@@ -67,10 +69,11 @@ const entities = [ElchiMarketProvision, GeoCache, OutboxEvent];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [ElchiIntegrationController],
+  controllers: [ElchiIntegrationController, GeoLookupController],
   providers: [
     ElchiIntegrationService,
     ElchiApiClient,
+    GeoLookupService,
     OutboxService,
     ParcelService,
     ElchiOutboxRelayService,
