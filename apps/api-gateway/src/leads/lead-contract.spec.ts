@@ -404,4 +404,39 @@ describe('Lid shartnomasi (BE-25)', () => {
       ]);
     });
   });
+
+  describe('BE-43: lid API si', () => {
+    it('partner/leads: kalit va Idempotency-Key sarlavhadan; api-keys sotuvchi ID si tokendan', async () => {
+      const send = jest.fn(() => of({}));
+      const pub = new PublicLeadsController({ send } as never);
+      await pub.createPartnerLead(
+        { code: 'k7Qm2x' } as never,
+        'elk_x',
+        'ord-1',
+        '203.0.113.7',
+        undefined,
+      );
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.partner.create' },
+        {
+          lead: { code: 'k7Qm2x' },
+          apiKey: 'elk_x',
+          idempotencyKey: 'ord-1',
+          ip: '203.0.113.7',
+          userAgent: null,
+        },
+      );
+      const aff = new AffiliateStreamsController({ send } as never);
+      await aff.createApiKey('77');
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.api-key.create' },
+        { affiliateId: '77' },
+      );
+      await aff.revokeApiKey('77', '12');
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.api-key.revoke' },
+        { affiliateId: '77', id: '12' },
+      );
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -18,6 +19,7 @@ import {
 } from 'typeorm';
 import {
   AffiliatePostbackEvent,
+  CheckoutDeliveryDestination,
   CreateLeadDto,
   LandingPageState,
   LeadCreatedDto,
@@ -25,6 +27,8 @@ import {
   LeadReviewReason,
   LeadSource,
   LeadStatus,
+  LeadVariant,
+  PartnerLeadDto,
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, LeadHistory, Stream } from './entities';
@@ -44,6 +48,28 @@ import {
   LEAD_RULES,
   phoneOperatorAllowed,
 } from './lead-rules';
+
+/** Lid yozish uchun umumiy kirish: sotuvchi sahifasi formasi (BE-12) yoki sotuvchi API si (BE-43). */
+interface LeadForm {
+  name: string;
+  phone: string;
+  addressLine: string | null;
+  whereDeliver: CheckoutDeliveryDestination | null;
+  variant?: LeadVariant | null;
+  clickId?: string;
+  sub1?: string;
+  sub2?: string;
+  sub3?: string;
+  sub4?: string;
+  sub5?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  fbclid?: string;
+  consentVersion: string | null;
+}
 
 /** Advisory lock kalit makonlari (ikki argumentli shakl: IP va raqam kalitlari to‘qnashmaydi). */
 const LOCK_SPACE_IP = 2101;
@@ -97,7 +123,11 @@ export class LeadIntakeService {
     const now = new Date();
     return this.db.transaction((manager) =>
       this.write(manager, {
-        dto,
+        dto: { ...dto, consentVersion: dto.consentVersion },
+        source: LeadSource.LANDING,
+        ipRule: true,
+        apiKeyId: null,
+        idempotencyKey: null,
         stream,
         address,
         now,
@@ -108,12 +138,127 @@ export class LeadIntakeService {
     );
   }
 
+  /**
+   * POST /partner/leads (BE-43, SOT-6). Kalit egasining sahifasi bo‘lishi kerak (TC5: boshqa sotuvchiniki → 403).
+   * Takror Idempotency-Key o‘sha lidni qaytaradi (TC2). Variant bo‘sh (TC1). Manzil to‘rtala maydon birga yoki
+   * hech biri — EQ-04 javobigacha ixtiyoriy; IP qoidasi qo‘llanmaydi (so‘rovlar sotuvchi serveridan).
+   */
+  async createFromApi(input: {
+    apiKey: { id: string; affiliateId: string };
+    idempotencyKey: string | null;
+    lead: PartnerLeadDto;
+    ip: string | null;
+    userAgent: string | null;
+  }): Promise<LeadCreatedDto> {
+    const dto = input.lead;
+    const idem = input.idempotencyKey?.trim().slice(0, 100) || null;
+    const existing = idem
+      ? await this.byIdempotency(input.apiKey.id, idem)
+      : null;
+    if (existing) return existing;
+
+    if (!phoneOperatorAllowed(dto.phone, this.operatorCodes()))
+      throw new BadRequestException({
+        message: ['phone O‘zbekiston operator kodi bilan bo‘lishi kerak'],
+      });
+    const stream = await this.streams.findOne({
+      where: { code: dto.code, isDeleted: false },
+    });
+    if (!stream) throw new NotFoundException('Bunday sotuvchi sahifasi yo‘q');
+    if (stream.affiliateId !== input.apiKey.affiliateId)
+      throw new ForbiddenException('Sahifa bu kalit egasiniki emas');
+    const offer = await this.catalog.get(stream.productId);
+    if (!offer || landingState(stream, offer) !== LandingPageState.OPEN)
+      throw new ConflictException({
+        message: 'Sahifa hozir ariza qabul qilmaydi',
+        errorCode: LeadErrorCode.LANDING_NOT_OPEN,
+      });
+
+    const fields = [
+      'regionSoato',
+      'districtSoato',
+      'addressLine',
+      'whereDeliver',
+    ] as const;
+    const missing = fields.filter(
+      (f) => dto[f] === undefined || dto[f] === null,
+    );
+    if (missing.length > 0 && missing.length < fields.length)
+      throw new BadRequestException({
+        message: missing.map(
+          (f) => `${f} manzil to‘liq bo‘lishi kerak (yoki hech biri)`,
+        ),
+      });
+    const address =
+      missing.length === 0
+        ? await this.address.resolve({
+            regionSoato: dto.regionSoato!,
+            districtSoato: dto.districtSoato!,
+          })
+        : null;
+
+    const now = new Date();
+    try {
+      return await this.db.transaction((manager) =>
+        this.write(manager, {
+          dto: {
+            name: dto.name,
+            phone: dto.phone,
+            addressLine: dto.addressLine ?? null,
+            whereDeliver: dto.whereDeliver ?? null,
+            variant: null,
+            sub1: dto.sub1,
+            sub2: dto.sub2,
+            sub3: dto.sub3,
+            sub4: dto.sub4,
+            sub5: dto.sub5,
+            consentVersion: null,
+          },
+          source: LeadSource.API,
+          ipRule: false,
+          apiKeyId: input.apiKey.id,
+          idempotencyKey: idem,
+          stream,
+          address,
+          now,
+          salePrice: effectiveSalePrice(Number(stream.salePrice), offer),
+          ip: input.ip,
+          userAgent: input.userAgent,
+        }),
+      );
+    } catch (err) {
+      // Parallel takror so‘rov: unikal indeks (api_key_id, idempotency_key) — birinchisining lidini qaytaramiz.
+      const again = idem
+        ? await this.byIdempotency(input.apiKey.id, idem)
+        : null;
+      if (again) return again;
+      throw err;
+    }
+  }
+
+  private async byIdempotency(
+    apiKeyId: string,
+    key: string,
+  ): Promise<LeadCreatedDto | null> {
+    const lead = await this.db.getRepository(Lead).findOne({
+      where: { apiKeyId, idempotencyKey: key },
+    });
+    return lead
+      ? { leadId: lead.id, duplicate: lead.status === LeadStatus.MERGED }
+      : null;
+  }
+
   private async write(
     manager: EntityManager,
     ctx: {
-      dto: CreateLeadDto;
+      dto: LeadForm;
+      source: LeadSource;
+      /** BE-12 IP qoidasi faqat sotuvchi sahifasi uchun: API lidi sotuvchi serveridan keladi (chegara — kalit bo‘yicha). */
+      ipRule: boolean;
+      apiKeyId: string | null;
+      idempotencyKey: string | null;
       stream: Stream;
-      address: ResolvedLeadAddress;
+      address: ResolvedLeadAddress | null;
       salePrice: number;
       now: Date;
       ip: string | null;
@@ -126,7 +271,7 @@ export class LeadIntakeService {
 
     // Qulflar tartibi doim bir xil (IP, keyin raqam + mahsulot) — o‘zaro kutish yo‘q.
     // IP: bir IP dan parallel arizalar ham hisobga tushadi (bot himoyasi).
-    if (ctx.ip)
+    if (ctx.ipRule && ctx.ip)
       await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
         LOCK_SPACE_IP,
         ctx.ip,
@@ -162,21 +307,24 @@ export class LeadIntakeService {
     );
 
     const heldForReview =
+      ctx.ipRule &&
       !!ctx.ip &&
       (await leads.count({
         where: { ip: ctx.ip, createdAt: MoreThanOrEqual(ipWindowStart(now)) },
       })) >= LEAD_RULES.ipMaxLeads;
 
     const submission = leads.create({
-      source: LeadSource.LANDING,
+      source: ctx.source,
+      apiKeyId: ctx.apiKeyId,
+      idempotencyKey: ctx.idempotencyKey,
       streamId: stream.id,
       clickId: click?.id ?? null,
       affiliateId: stream.affiliateId,
       productId: stream.productId,
       name: dto.name,
       phoneE164: dto.phone,
-      regionSoato: address.regionSoato,
-      districtSoato: address.districtSoato,
+      regionSoato: address?.regionSoato ?? null,
+      districtSoato: address?.districtSoato ?? null,
       addressLine: dto.addressLine,
       whereDeliver: dto.whereDeliver,
       variant: dto.variant ?? click?.variant ?? null,
@@ -196,7 +344,7 @@ export class LeadIntakeService {
       ip: ctx.ip,
       userAgent: ctx.userAgent,
       consentVersion: dto.consentVersion,
-      consentAt: now,
+      consentAt: dto.consentVersion ? now : null,
       reviewReason: heldForReview ? LeadReviewReason.IP_RATE : null,
     });
 

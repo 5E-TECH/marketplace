@@ -411,6 +411,90 @@ export class CreateLeadDto extends LeadTrackingDto {
   website?: unknown;
 }
 
+/**
+ * POST /partner/leads — sotuvchi o‘z saytidan (BE-43, SOT-6). Sarlavhalar: `X-Api-Key` (majburiy),
+ * `Idempotency-Key` (takror so‘rov o‘sha lidni qaytaradi). Manzil: to‘rtala maydon birga yoki hech biri
+ * (EQ-04 javobigacha ixtiyoriy; berilmasa operator qo‘ng‘iroqda yozadi va tasdiqlaydi — OPR-4).
+ */
+export class PartnerLeadDto {
+  @ApiProperty({
+    example: 'k7Qm2x',
+    description: 'Kalit egasining sotuvchi sahifasi kodi',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  code: string;
+
+  @ApiProperty({ example: 'Aziza' })
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
+
+  @ApiProperty({ example: '+998901234567' })
+  @Matches(PHONE_UZ, {
+    message: "phone +998XXXXXXXXX formatida bo'lishi kerak",
+  })
+  phone: string;
+
+  @ApiPropertyOptional({ example: '1726' })
+  @IsOptional()
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  regionSoato?: string;
+
+  @ApiPropertyOptional({ example: '1726266' })
+  @IsOptional()
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  districtSoato?: string;
+
+  @ApiPropertyOptional({ example: 'Turkiston ko‘chasi, 27-uy' })
+  @IsOptional()
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  addressLine?: string;
+
+  @ApiPropertyOptional({ enum: CheckoutDeliveryDestination })
+  @IsOptional()
+  @IsEnum(CheckoutDeliveryDestination)
+  whereDeliver?: CheckoutDeliveryDestination;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sub1?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sub2?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sub3?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sub4?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sub5?: string;
+}
+
 export class LeadCreatedDto {
   @ApiProperty({ example: '7001', description: 'Piksel eventID sifatida ham' })
   leadId: string;

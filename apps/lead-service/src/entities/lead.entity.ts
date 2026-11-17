@@ -200,4 +200,17 @@ export class Lead extends BaseEntity {
   /** `order.create-failed` (qoldiq yo‘q) bilan navbatga qaytgan vaqt (BE-13 TC8). */
   @Column({ name: 'stock_shortage_at', type: 'timestamptz', nullable: true })
   stockShortageAt: Date | null;
+
+  /** API lidi: qaysi kalit bilan kelgan (BE-43, SOT-6). */
+  @Column({ name: 'api_key_id', type: 'bigint', nullable: true })
+  apiKeyId: string | null;
+
+  /** API lidi: Idempotency-Key — takror so‘rov o‘sha lidni qaytaradi. */
+  @Column({
+    name: 'idempotency_key',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  idempotencyKey: string | null;
 }

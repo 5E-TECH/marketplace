@@ -14,6 +14,7 @@ import {
   typeOrmOptions,
 } from '@app/common';
 import { LEAD_ENTITIES } from './entities';
+import { ApiKeyService } from './api-key.service';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { LandingService } from './landing.service';
 import { LeadAddressController } from './lead-address.controller';
@@ -35,6 +36,7 @@ import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create
 import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
 import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
+import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 
 /** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42. */
 @Module({
@@ -92,6 +94,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
             CreateOfferContent1794873600000,
             AddLeadReview1794960000000,
             AddLeadQueue1795046400000,
+            AddApiLeads1795132800000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -119,6 +122,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
     LeadOutboxRelayService,
     LeadAdminService,
     PostbackService,
+    ApiKeyService,
   ],
 })
 export class LeadModule {}

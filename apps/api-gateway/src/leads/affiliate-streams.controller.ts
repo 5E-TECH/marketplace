@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -20,6 +21,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  AffiliateApiKeyCreatedDto,
+  AffiliateApiKeyDto,
   AffiliateLeadsPageDto,
   AffiliatePostbacksPageDto,
   AffiliatePostbacksQueryDto,
@@ -164,6 +167,43 @@ export class AffiliateStreamsController {
           streamId: query.streamId,
         },
       },
+    );
+  }
+
+  @Get('api-keys')
+  @ApiOperation({ summary: 'Lid API kalitlarim (BE-43, SOT-6)' })
+  @ApiOkResponse({ type: [AffiliateApiKeyDto] })
+  listApiKeys(
+    @CurrentUser('sub') affiliateId: string,
+  ): Promise<AffiliateApiKeyDto[]> {
+    return sendRpc(this.lead, { cmd: 'lead.api-key.list' }, { affiliateId });
+  }
+
+  @Post('api-keys')
+  @ApiOperation({
+    summary: 'Yangi lid API kaliti',
+    description:
+      'To‘liq kalit faqat shu javobda ko‘rsatiladi; bazada faqat xeshi saqlanadi.',
+  })
+  @ApiCreatedResponse({ type: AffiliateApiKeyCreatedDto })
+  createApiKey(
+    @CurrentUser('sub') affiliateId: string,
+  ): Promise<AffiliateApiKeyCreatedDto> {
+    return sendRpc(this.lead, { cmd: 'lead.api-key.create' }, { affiliateId });
+  }
+
+  @Delete('api-keys/:id')
+  @ApiOperation({ summary: 'Kalitni bekor qilish — darhol ishlamaydi' })
+  @ApiOkResponse({ type: AffiliateApiKeyDto })
+  @ApiNotFoundResponse({ description: 'Kalit topilmadi' })
+  revokeApiKey(
+    @CurrentUser('sub') affiliateId: string,
+    @Param('id', ParseLeadIdPipe) id: string,
+  ): Promise<AffiliateApiKeyDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.api-key.revoke' },
+      { affiliateId, id },
     );
   }
 }

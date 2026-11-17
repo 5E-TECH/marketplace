@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
@@ -28,6 +30,7 @@ import {
   LeadVariant,
 } from '@app/common';
 import {
+  AffiliateApiKey,
   Click,
   LEAD_ENTITIES,
   Lead,
@@ -41,6 +44,8 @@ import { LeadAddressService } from './lead-address.service';
 import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
 import { LeadAdminService } from './lead-admin.service';
 import { PostbackService } from './postback.service';
+import { ApiKeyService, hashApiKey } from './api-key.service';
+import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -101,6 +106,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         CreateOfferContent1794873600000,
         AddLeadReview1794960000000,
         AddLeadQueue1795046400000,
+        AddApiLeads1795132800000,
       ],
       synchronize: false,
       logging: false,
@@ -1834,6 +1840,171 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       expect(
         await db.query('SELECT event FROM lead.postback_delivery'),
       ).toEqual([{ event: 'rejected' }]);
+    });
+  });
+
+  describe('BE-43: sotuvchining lid API si', () => {
+    const keys = () => new ApiKeyService(db.getRepository(AffiliateApiKey));
+    const geo = {
+      ok: true,
+      regionSoato: '1726',
+      regionName: 'T',
+      districtSoato: '1726266',
+      districtName: 'Y',
+      elchiRegionId: '1',
+      elchiDistrictId: '10',
+    };
+    const intake = () =>
+      new LeadIntakeService(
+        db,
+        db.getRepository(Stream),
+        {
+          get: jest.fn(async () => ({
+            productId: '501',
+            cpaAvailable: true,
+            withdrawn: false,
+            approvedPrice: 251000,
+            maxSalePrice: 276000,
+            stock: 5,
+          })),
+        } as never,
+        new LeadAddressService(db, { send: jest.fn(() => of(geo)) } as never),
+        new ConfigService({}),
+      );
+    const mkStream = (affiliateId: string, code: string) =>
+      db
+        .getRepository(Stream)
+        .save({ code, affiliateId, productId: '501', salePrice: '262000' });
+    const partner = (code: string, extra: Record<string, unknown> = {}) =>
+      ({ code, name: 'Aziza', phone: '+998901234567', ...extra }) as never;
+
+    it('kalit faqat bir marta: bazada xesh va boshi; ro‘yxatda kalitning o‘zi yo‘q', async () => {
+      const created = await keys().create('77');
+      expect(created.key).toMatch(/^elk_[A-Za-z0-9]{32}$/);
+      const row = await db
+        .getRepository(AffiliateApiKey)
+        .findOneByOrFail({ id: created.id });
+      expect(row.keyHash).toBe(hashApiKey(created.key));
+      expect(row.keyPrefix).toBe(created.key.slice(0, 8));
+      expect(JSON.stringify(await keys().list('77'))).not.toContain(
+        created.key,
+      );
+    });
+
+    it('TC4: kalitsiz yoki bekor qilingan → 401; TC3: 61-so‘rov → 429', async () => {
+      const svc = keys();
+      await expect(svc.authenticate(null)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      const k = await svc.create('77');
+      const now = new Date();
+      for (let i = 0; i < 60; i++) await svc.authenticate(k.key, now);
+      await expect(svc.authenticate(k.key, now)).rejects.toMatchObject({
+        status: 429,
+      });
+      await svc.revoke('77', k.id);
+      await expect(
+        svc.authenticate(k.key, new Date(now.getTime() + 61_000)),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(svc.revoke('78', k.id)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('TC1: kalit egasiga, navbatga, variant bo‘sh; TC2: takror Idempotency-Key — o‘sha lid', async () => {
+      await mkStream('77', 'apiapi');
+      const k = await keys().create('77');
+      const first = await intake().createFromApi({
+        apiKey: { id: k.id, affiliateId: '77' },
+        idempotencyKey: 'ord-1001',
+        lead: partner('apiapi', { sub1: 'site-a' }),
+        ip: '203.0.113.50',
+        userAgent: 'partner-bot',
+      });
+      const row = await db
+        .getRepository(Lead)
+        .findOneByOrFail({ id: first.leadId });
+      expect(row).toMatchObject({
+        source: LeadSource.API,
+        affiliateId: '77',
+        status: LeadStatus.NEW,
+        variant: null,
+        regionSoato: null,
+        apiKeyId: k.id,
+        sub1: 'site-a',
+        consentAt: null,
+      });
+      const again = await intake().createFromApi({
+        apiKey: { id: k.id, affiliateId: '77' },
+        idempotencyKey: 'ord-1001',
+        lead: partner('apiapi', { phone: '+998909999999' }),
+        ip: null,
+        userAgent: null,
+      });
+      expect(again).toEqual(first);
+      expect(await db.getRepository(Lead).count()).toBe(1);
+    });
+
+    it('TC5: boshqa sotuvchining sahifasi → 403; qisman manzil → 400; to‘liq manzil yoziladi', async () => {
+      await mkStream('78', 'begona');
+      await mkStream('77', 'mening');
+      const k = await keys().create('77');
+      const apiKey = { id: k.id, affiliateId: '77' };
+      await expect(
+        intake().createFromApi({
+          apiKey,
+          idempotencyKey: null,
+          lead: partner('begona'),
+          ip: null,
+          userAgent: null,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        intake().createFromApi({
+          apiKey,
+          idempotencyKey: null,
+          lead: partner('mening', { regionSoato: '1726' }),
+          ip: null,
+          userAgent: null,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      const ok = await intake().createFromApi({
+        apiKey,
+        idempotencyKey: null,
+        lead: partner('mening', {
+          phone: '+998905550000',
+          regionSoato: '1726',
+          districtSoato: '1726266',
+          addressLine: 'Turkiston 27',
+          whereDeliver: CheckoutDeliveryDestination.CENTER,
+        }),
+        ip: null,
+        userAgent: null,
+      });
+      expect(
+        await db.getRepository(Lead).findOneByOrFail({ id: ok.leadId }),
+      ).toMatchObject({
+        regionSoato: '1726',
+        whereDeliver: 'CENTER',
+      });
+    });
+
+    it('API lidlariga IP qoidasi qo‘llanmaydi (so‘rovlar sotuvchi serveridan)', async () => {
+      await mkStream('77', 'apiip1');
+      const k = await keys().create('77');
+      for (let i = 0; i < 7; i++)
+        await intake().createFromApi({
+          apiKey: { id: k.id, affiliateId: '77' },
+          idempotencyKey: null,
+          lead: partner('apiip1', { phone: `+99890600000${i}` }),
+          ip: '203.0.113.60',
+          userAgent: null,
+        });
+      expect(
+        await db
+          .getRepository(Lead)
+          .count({ where: { reviewReason: LeadReviewReason.IP_RATE } }),
+      ).toBe(0);
     });
   });
 });

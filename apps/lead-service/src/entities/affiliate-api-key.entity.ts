@@ -12,6 +12,10 @@ export class AffiliateApiKey extends BaseEntity {
   @Column({ name: 'key_hash', type: 'varchar', length: 128 })
   keyHash: string;
 
+  /** Kabinetda tanish uchun kalit boshi (masalan «elk_7Qm2»). */
+  @Column({ name: 'key_prefix', type: 'varchar', length: 12, default: '' })
+  keyPrefix: string;
+
   /** Daqiqasiga so‘rovlar (SOT-6: 60). */
   @Column({ name: 'rate_limit_per_minute', type: 'int', default: 60 })
   rateLimitPerMinute: number;
