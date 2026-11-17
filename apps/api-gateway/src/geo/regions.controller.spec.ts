@@ -19,6 +19,24 @@ describe('RegionsController', () => {
     );
   });
 
+  it('JS o‘chiq forma uchun guruhlangan ro‘yxatni integration servisidan oladi (BE-38)', async () => {
+    const tree = [
+      {
+        satoCode: '1726',
+        name: 'Toshkent shahri',
+        districts: [{ satoCode: '1726266', name: 'Yunusobod tumani' }],
+      },
+    ];
+    const integration = { send: jest.fn(() => of(tree)) };
+    const controller = new RegionsController(integration as never);
+
+    await expect(controller.getRegionTree()).resolves.toEqual(tree);
+    expect(integration.send).toHaveBeenCalledWith(
+      { cmd: 'integration.geo.region-tree' },
+      {},
+    );
+  });
+
   it('tanlangan viloyat tumanlarini integration servisidan oladi', async () => {
     const integration = {
       send: jest.fn(() =>

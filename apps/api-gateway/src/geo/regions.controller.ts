@@ -9,7 +9,6 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
-import { notImplementedYet } from '../leads/lead-stub';
 
 @ApiTags('regions')
 @Public()
@@ -37,7 +36,11 @@ export class RegionsController {
   })
   @ApiOkResponse({ type: [LeadRegionGroupDto] })
   getRegionTree(): Promise<LeadRegionGroupDto[]> {
-    return notImplementedYet('BE-38');
+    return sendRpc(
+      this.integration,
+      { cmd: 'integration.geo.region-tree' },
+      {},
+    );
   }
 
   @Get(':regionId/districts')

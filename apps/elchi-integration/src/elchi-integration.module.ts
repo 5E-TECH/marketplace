@@ -21,6 +21,8 @@ import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add
 import { ElchiApiClient } from './elchi-api.client';
 import { ElchiIntegrationController } from './elchi-integration.controller';
 import { ElchiIntegrationService } from './elchi-integration.service';
+import { GeoLookupController } from './geo-lookup.controller';
+import { GeoLookupService } from './geo-lookup.service';
 
 const entities = [ElchiMarketProvision, GeoCache];
 
@@ -55,7 +57,7 @@ const entities = [ElchiMarketProvision, GeoCache];
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [ElchiIntegrationController],
-  providers: [ElchiIntegrationService, ElchiApiClient],
+  controllers: [ElchiIntegrationController, GeoLookupController],
+  providers: [ElchiIntegrationService, ElchiApiClient, GeoLookupService],
 })
 export class ElchiIntegrationModule {}
