@@ -1,6 +1,8 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  FINANCE_AFFILIATE_RPC,
+  FinanceAffiliateIncomeQuery,
   ORDER_EVENTS,
   OrderReturnedEvent,
   OrderStatusChangedEvent,
@@ -38,6 +40,12 @@ export class LedgerController {
   @MessagePattern({ cmd: 'finance.order.split' })
   orderSplit(@Payload() data: { orderId: string }) {
     return this.queries.orderSplit(String(data?.orderId ?? ''));
+  }
+
+  /** Sotuvchi daromadi statistikasi uchun (BE-28, lead-service chaqiradi). */
+  @MessagePattern({ cmd: FINANCE_AFFILIATE_RPC.INCOME })
+  affiliateIncome(@Payload() data: FinanceAffiliateIncomeQuery) {
+    return this.queries.affiliateIncome(data);
   }
 
   @MessagePattern({ cmd: 'finance.balance-check.latest' })

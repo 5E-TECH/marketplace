@@ -46,6 +46,7 @@ import { LeadAdminService } from './lead-admin.service';
 import { PostbackService } from './postback.service';
 import { ApiKeyService, hashApiKey } from './api-key.service';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
+import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -107,6 +108,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddLeadReview1794960000000,
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
+        AddLeadStats1795564800000,
       ],
       synchronize: false,
       logging: false,
@@ -1431,6 +1433,8 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         operatorId: '41',
         attempts: 3,
         expiresAt: new Date(Date.now() - 24 * 3600 * 1000),
+        confirmedAt: new Date(),
+        confirmedBy: '41',
       });
       const ev = {
         eventId: 'e1',
@@ -1445,6 +1449,8 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         status: LeadStatus.CALLBACK,
         operatorId: null,
         attempts: 0,
+        confirmedAt: null, // BE-28
+        confirmedBy: null,
       });
       expect(row.stockShortageAt).toBeInstanceOf(Date);
       expect(row.expiresAt!.getTime()).toBeGreaterThan(
@@ -1531,6 +1537,9 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         confirmedBy: '41',
         addressConfirmedBy: '40',
       });
+      // BE-28: tasdiq kuni va operatori statistikaga
+      expect(await reload(l.id)).toMatchObject({ confirmedBy: '41' });
+      expect((await reload(l.id)).confirmedAt).toBeInstanceOf(Date);
     });
 
     it('manzilni faqat lid egasi o‘zgartiradi (qulf ostida tekshiriladi)', async () => {

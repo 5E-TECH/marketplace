@@ -446,11 +446,23 @@ export class LeadStatsPeriodQueryDto {
 export class OperatorStatsDto {
   @ApiProperty({ example: 38 }) attempts: number;
   @ApiProperty({ example: 9 }) confirmed: number;
-  @ApiProperty({ example: 41, description: 'Tasdiq foizi' })
-  approveRate: number;
+  @ApiProperty({
+    example: 41,
+    nullable: true,
+    type: Number,
+    description:
+      'Tasdiq foizi: tasdiqlagan lidlar / shu davrda ishlagan yaroqli lidlar; maxraj 0 bo‘lsa bo‘sh',
+  })
+  approveRate: number | null;
 
-  @ApiProperty({ example: 78, description: 'Sotilish foizi' })
-  saleRate: number;
+  @ApiProperty({
+    example: 78,
+    nullable: true,
+    type: Number,
+    description:
+      'Sotilish foizi: shu davrda tasdiqlaganlaridan yetkazilgan / (yetkazilgan + rad); maxraj 0 bo‘lsa bo‘sh',
+  })
+  saleRate: number | null;
 
   @ApiProperty({
     example: 4,

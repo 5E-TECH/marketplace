@@ -39,7 +39,6 @@ import {
   UpdateOperatorStateDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from './lead-id.pipe';
-import { notImplementedYet } from './lead-stub';
 
 /**
  * Operator ish joyi API si (BE-25 shartnomasi).
@@ -199,7 +198,14 @@ export class OperatorLeadsController {
   @Get('stats')
   @ApiOperation({ summary: 'Mening statistikam (OPR-7)' })
   @ApiOkResponse({ type: OperatorStatsDto })
-  stats(@Query() _query: LeadStatsPeriodQueryDto): Promise<OperatorStatsDto> {
-    return notImplementedYet('BE-28');
+  stats(
+    @CurrentUser('sub') operatorId: string,
+    @Query() query: LeadStatsPeriodQueryDto,
+  ): Promise<OperatorStatsDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.stats.operator' },
+      { operatorId, query },
+    );
   }
 }

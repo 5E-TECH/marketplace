@@ -126,3 +126,15 @@ export const callbackGraceStart = (now: Date) =>
   new Date(now.getTime() - QUEUE_RULES.callbackGraceMinutes * MINUTE);
 export const reminderHorizon = (now: Date) =>
   new Date(now.getTime() + QUEUE_RULES.reminderMinutes * MINUTE);
+
+/** «YYYY-MM-DD» Toshkent sanasining boshlanishi (UTC lahza); `addDays` — shuncha kun keyingisi. */
+export function tashkentDayStart(date: string, addDays = 0): Date {
+  const [y, m, d] = date.split('-').map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d + addDays));
+  return fromTashkent(
+    base.getUTCFullYear(),
+    base.getUTCMonth() + 1,
+    base.getUTCDate(),
+    0,
+  );
+}

@@ -10,6 +10,7 @@ import { LeadOutcome } from '@app/common';
 /** Operator urinishi (T3). Qo‘ng‘iroq ID si va yozuvi telefoniya bilan keladi (BE-15, M2). */
 @Entity('lead_attempt')
 @Index('idx_lead_lead_attempt_lead_created', ['leadId', 'createdAt'])
+@Index('idx_lead_lead_attempt_operator_created', ['operatorId', 'createdAt'])
 export class LeadAttempt {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id: string;

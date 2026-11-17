@@ -5,7 +5,9 @@ import { CreateFinanceTables1724673600000 } from '../migrations/1724673600000-cr
 import { CreateCodReconciliation1724932800000 } from '../migrations/1724932800000-create-cod-reconciliation';
 import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-create-payout-schedule';
 import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-ledger';
+import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
 import { BalanceCheckService } from './balance-check.service';
+import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
 
@@ -73,6 +75,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
         CreateCodReconciliation1724932800000,
         CreatePayoutSchedule1727568000000,
         CreateLedger1795478400000,
+        AddJournalLeadIndex1795564800000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -490,5 +493,159 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     } finally {
       await ds.query(`DELETE FROM finance.setting WHERE changed_by = 'test'`);
     }
+  });
+
+  describe('BE-28: finance.affiliate.income — sotuvchi statistikasi uchun', () => {
+    const queries = () => new LedgerQueryService(ds);
+    const aff = (over: Parameters<typeof orderEvent>[0] = {}, item = {}) =>
+      orderEvent({ affiliateId: '42', ...over }, item);
+    const ret = (orderId: string, at: string) =>
+      ledger.onOrderReturned({
+        eventId: `ret-${orderId}`,
+        orderId,
+        returnRequestId: `RR-${orderId}`,
+        items: [{ productId: '88', quantity: 1 }],
+        occurredAt: at,
+      });
+
+    it('yetkazilgan kun HOLD; o‘tkazmadan keyin AVAILABLE; qaytarilgan kunda ko‘zgu qator (−) o‘sha ustunda', async () => {
+      await ledger.onOrderStatusChanged(aff()); // 2026-12-20 15:00 Toshkent
+      expect(
+        await queries().affiliateIncome({
+          affiliateId: '42',
+          from: '2026-12-20',
+          to: '2026-12-20',
+        }),
+      ).toEqual({
+        lines: [
+          {
+            leadId: '9001',
+            orderId: '501',
+            kind: 'DELIVERED',
+            day: '2026-12-20',
+            column: 'HOLD',
+            amount: 65000,
+            state: 'HOLD',
+          },
+        ],
+      });
+      await ledger.onRemittance(remittance());
+      await ret('501', '2026-12-22T10:00:00.000Z');
+      const { lines } = await queries().affiliateIncome({
+        affiliateId: '42',
+        from: '2026-12-01',
+        to: '2026-12-31',
+      });
+      expect(lines).toEqual([
+        expect.objectContaining({
+          kind: 'DELIVERED',
+          day: '2026-12-20',
+          column: 'AVAILABLE',
+          amount: 65000,
+          state: 'REVERSED',
+        }),
+        expect.objectContaining({
+          leadId: '9001',
+          kind: 'REVERSAL',
+          day: '2026-12-22',
+          column: 'AVAILABLE',
+          amount: -65000,
+          state: 'REVERSED',
+        }),
+      ]);
+      // Davr yig‘indisi — hisob balansi (qaytarilgandan keyin 0)
+      expect(lines.reduce((s, l) => s + l.amount, 0)).toBe(0);
+      expect((await balances())['AFFILIATE:42']).toBeUndefined();
+      // Faqat qaytarish kuni so‘ralsa — faqat minus qator (asl qator o‘z kunida qoladi)
+      const only = await queries().affiliateIncome({
+        affiliateId: '42',
+        from: '2026-12-22',
+        to: '2026-12-22',
+      });
+      expect(only.lines.map((l) => [l.kind, l.amount])).toEqual([
+        ['REVERSAL', -65000],
+      ]);
+      await expectBalanced();
+    });
+
+    it('HOLD da qaytarilsa — ikkala qator HOLD ustunida', async () => {
+      await ledger.onOrderStatusChanged(aff());
+      await ret('501', '2026-12-21T10:00:00.000Z');
+      const { lines } = await queries().affiliateIncome({
+        affiliateId: '42',
+        from: '2026-12-20',
+        to: '2026-12-21',
+      });
+      expect(lines.map((l) => [l.kind, l.day, l.column, l.amount])).toEqual([
+        ['DELIVERED', '2026-12-20', 'HOLD', 65000],
+        ['REVERSAL', '2026-12-21', 'HOLD', -65000],
+      ]);
+    });
+
+    it('leadIds: davrsiz, hozirgi holat bilan; ustama ulushi qo‘shiladi; boshqa sotuvchi va asosiy sayt kirmaydi', async () => {
+      await ledger.onOrderStatusChanged(aff());
+      await ledger.onOrderStatusChanged(
+        aff(
+          { eventId: 'e-502', orderId: '502', leadId: '9002' },
+          { salePrice: 276000 },
+        ),
+      );
+      await ledger.onOrderStatusChanged(
+        aff({
+          eventId: 'e-503',
+          orderId: '503',
+          leadId: '9003',
+          affiliateId: '43',
+        }),
+      );
+      await ledger.onOrderStatusChanged(
+        aff({ eventId: 'e-504', orderId: '504', leadId: null, source: 'SITE' }),
+      );
+      await ret('501', '2026-12-22T10:00:00.000Z');
+      const { lines } = await queries().affiliateIncome({
+        affiliateId: '42',
+        leadIds: ['9001', '9002', '9003'],
+      });
+      expect(lines.map((l) => [l.leadId, l.amount, l.state])).toEqual([
+        ['9001', 65000, 'REVERSED'],
+        ['9002', 65000 + 21250, 'HOLD'],
+      ]);
+      const period = await queries().affiliateIncome({
+        affiliateId: '42',
+        from: '2026-12-01',
+        to: '2026-12-31',
+      });
+      expect(period.lines.map((l) => l.orderId).sort()).toEqual([
+        '501',
+        '501',
+        '502',
+      ]);
+      expect(
+        await queries().affiliateIncome({ affiliateId: '42', leadIds: [] }),
+      ).toEqual({ lines: [] });
+    });
+
+    it('kun Toshkent bo‘yicha: 19:30 UTC — ertasi kun', async () => {
+      await ledger.onOrderStatusChanged(
+        aff({ occurredAt: '2026-12-20T19:30:00.000Z' }),
+      );
+      const day = (d: string) =>
+        queries().affiliateIncome({ affiliateId: '42', from: d, to: d });
+      expect((await day('2026-12-20')).lines).toEqual([]);
+      expect((await day('2026-12-21')).lines).toHaveLength(1);
+    });
+
+    it('noto‘g‘ri so‘rov — 400', async () => {
+      for (const q of [
+        { affiliateId: 'A', from: '2026-12-01', to: '2026-12-02' },
+        { affiliateId: '42', from: '2026-12-01T00:00:00Z', to: '2026-12-02' },
+        { affiliateId: '42', from: '2026-02-30', to: '2026-03-02' },
+        { affiliateId: '42', from: '2026-12-03', to: '2026-12-02' },
+        { affiliateId: '42', leadIds: ['1; DROP'] },
+      ])
+        await expect(queries().affiliateIncome(q)).rejects.toMatchObject({
+          status: 400,
+        });
+    });
   });
 });
