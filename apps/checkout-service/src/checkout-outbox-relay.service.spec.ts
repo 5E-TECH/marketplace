@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { OutboxEvent } from '@app/common';
+import { OutboxEvent, OutboxPermanentError } from '@app/common';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 
 describe('CheckoutOutboxRelayService (BE-03)', () => {
@@ -43,13 +43,13 @@ describe('CheckoutOutboxRelayService (BE-03)', () => {
     );
   });
 
-  it('noma’lum hodisa yuborilmaydi va xato bilan PENDING qoladi', async () => {
+  it('noma’lum hodisa yuborilmaydi — qayta urinilmaydigan xato (FAILED)', async () => {
     const { relay, finance, results } = setup([
       { id: '2', eventType: 'order.created', payload: {} },
     ]);
 
     await expect(relay.relayPending()).resolves.toBe(0);
     expect(finance.emit).not.toHaveBeenCalled();
-    expect(results[0]).toBeInstanceOf(Error);
+    expect(results[0]).toBeInstanceOf(OutboxPermanentError);
   });
 });

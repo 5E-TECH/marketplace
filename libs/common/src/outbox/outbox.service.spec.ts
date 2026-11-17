@@ -28,8 +28,17 @@ describe('OutboxService', () => {
   });
 
   it('relay: qatorlar SKIP LOCKED bilan olinadi, xato bo‘lgan hodisa PENDING qoladi', async () => {
-    const qb = {
+    const sub = {
+      select: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getQuery: () => '(older)',
+    };
+    const qb = {
+      subQuery: jest.fn(() => sub),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
       setLock: jest.fn().mockReturnThis(),
@@ -53,6 +62,7 @@ describe('OutboxService', () => {
 
     expect(qb.setLock).toHaveBeenCalledWith('pessimistic_write');
     expect(qb.setOnLocked).toHaveBeenCalledWith('skip_locked');
+    expect(qb.andWhere).toHaveBeenCalledWith('NOT EXISTS (older)');
     expect(txRepo.update).toHaveBeenCalledTimes(1);
     expect(txRepo.update).toHaveBeenCalledWith(
       '2',

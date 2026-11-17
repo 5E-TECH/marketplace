@@ -1,8 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
-import { OutboxEvent, OutboxService, RmqClient } from '@app/common';
+import { firstValueFrom, timeout } from 'rxjs';
+import {
+  OutboxEvent,
+  OutboxPermanentError,
+  OutboxService,
+  RmqClient,
+} from '@app/common';
+
+/** Broker uzilganda emit tugamaydi; relay tranzaksiyasi cheksiz ochiq qolmasin. */
+const PUBLISH_TIMEOUT_MS = 5_000;
 
 /**
  * BE-03: checkout outbox hodisalarini commit dan keyin yuboradi.
@@ -25,11 +33,17 @@ export class CheckoutOutboxRelayService {
 
   private async publish(event: OutboxEvent): Promise<void> {
     if (!event.eventType.startsWith('finance.')) {
-      // Noma'lum hodisa PENDING qoladi va logga tushadi — jim yo'qolmaydi.
-      throw new Error(`Outbox: ${event.eventType} uchun qabul qiluvchi yo‘q`);
+      // Noma'lum hodisa FAILED bo'ladi va logga tushadi: jim yo'qolmaydi va
+      // navbatni to'sib qo'ymaydi.
+      throw new OutboxPermanentError(
+        `Outbox: ${event.eventType} uchun qabul qiluvchi yo‘q`,
+      );
     }
-    await firstValueFrom(this.finance.emit(event.eventType, event.payload), {
-      defaultValue: undefined,
-    });
+    await firstValueFrom(
+      this.finance
+        .emit(event.eventType, event.payload)
+        .pipe(timeout(PUBLISH_TIMEOUT_MS)),
+      { defaultValue: undefined },
+    );
   }
 }

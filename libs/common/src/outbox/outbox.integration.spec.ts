@@ -2,7 +2,7 @@ import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { runAsLeader } from '../scheduling/leader-lock';
 import { OutboxEvent } from './outbox-event.entity';
-import { OutboxService } from './outbox.service';
+import { OutboxPermanentError, OutboxService } from './outbox.service';
 import { processOnce, processedEventTableSql } from './processed-event';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -113,6 +113,78 @@ describeWithPostgres('BE-03 outbox va yetakchi qulf (PostgreSQL)', () => {
     expect(first + second + third).toBe(30);
     expect(new Set(published).size).toBe(30);
     expect(published).toHaveLength(30);
+  });
+
+  it('tartib: bitta aggregate hodisasi oldingisi yuborilmaguncha ketmaydi', async () => {
+    const order = (n: number, type: string) => ({
+      ...event(n),
+      aggregateId: '55',
+      eventType: type,
+    });
+    await outbox(a).record(order(1, 'finance.payout.requested'));
+    await outbox(a).record(order(2, 'finance.refund.requested'));
+    await outbox(a).record(event(3)); // boshqa buyurtma
+    const published: string[] = [];
+    let failFirst = true;
+    const publish = async (e: OutboxEvent) => {
+      if (e.eventType === 'finance.payout.requested' && failFirst) {
+        failFirst = false;
+        throw new Error('rmq uzildi');
+      }
+      published.push(`${e.aggregateId}:${e.eventType}`);
+    };
+
+    // 1-urish: payout xato → refund ham kutadi, boshqa buyurtma ketadi
+    await outbox(a).relayPending(publish);
+    expect(published).toEqual(['3:finance.payout.requested']);
+    // 2-urish: payout; 3-urish: refund — tartib saqlandi
+    await outbox(a).relayPending(publish);
+    await outbox(b).relayPending(publish);
+    expect(published).toEqual([
+      '3:finance.payout.requested',
+      '55:finance.payout.requested',
+      '55:finance.refund.requested',
+    ]);
+  });
+
+  it('tartib: ikkinchi relay qulflangan hodisadan keyingisini olmaydi', async () => {
+    const order = (n: number) => ({ ...event(n), aggregateId: '77' });
+    await outbox(a).record(order(1));
+    await outbox(a).record(order(2));
+    const seenByB: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const relayA = outbox(a).relayPending(async () => {
+      await gate; // A birinchi hodisani ushlab turadi
+    });
+    await sleep(50);
+    await outbox(b).relayPending(async (e) => {
+      seenByB.push(
+        String(e.payload && (e.payload as { eventId: string }).eventId),
+      );
+    });
+    release();
+    await relayA;
+    expect(seenByB).toEqual([]);
+  });
+
+  it('qayta urinib bo‘lmaydigan xato → FAILED, navbat to‘silmaydi', async () => {
+    await outbox(a).record(event(1));
+    await outbox(a).record(event(2));
+    const published: string[] = [];
+    await outbox(a).relayPending(async (e) => {
+      if (e.aggregateId === '1')
+        throw new OutboxPermanentError('qabul qiluvchi yo‘q');
+      published.push(e.aggregateId);
+    });
+    const rows = await a.query(
+      `SELECT aggregate_id, status FROM ${SCHEMA}.outbox_event ORDER BY id`,
+    );
+    expect(published).toEqual(['2']);
+    expect(rows).toEqual([
+      { aggregate_id: '1', status: 'FAILED' },
+      { aggregate_id: '2', status: 'PROCESSED' },
+    ]);
   });
 
   it('TC3: bir hodisa ikki marta kelsa iste’molchi ikkinchisini e’tiborsiz qoldiradi', async () => {

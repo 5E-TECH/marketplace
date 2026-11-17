@@ -3,6 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { OutboxEvent, OutboxStatus } from './outbox-event.entity';
 
+/**
+ * Qayta urinish foyda bermaydigan xato (masalan, hodisa turi uchun qabul
+ * qiluvchi yo'q): relay hodisani FAILED qiladi, navbat boshini to'sib qo'ymaydi.
+ */
+export class OutboxPermanentError extends Error {}
+
 export interface OutboxEventInput {
   aggregateType: string;
   aggregateId: string;
@@ -18,6 +24,11 @@ export interface OutboxEventInput {
  *    yuboradi va PROCESSED belgilaydi — o'sha tranzaksiyada. Ikkinchi relay
  *    nusxasi qulflangan qatorlarni o'tkazib yuboradi, shuning uchun bir hodisa
  *    ikki relay tomonidan bir vaqtda yuborilmaydi.
+ *
+ * Tartib: bir aggregate (masalan, bitta buyurtma) hodisalaridan faqat eng
+ * eskisi olinadi — undan oldingisi PENDING tursa, keyingisi kutadi. Shunda
+ * «to'lov» va «qaytarish» hodisalari o'rin almashmaydi (xato yoki ikkinchi
+ * relay bo'lsa ham).
  *
  * Kafolat «kamida bir marta»: yuborilgandan keyin commit muvaffaqiyatsiz
  * bo'lsa, hodisa keyingi urinishda qayta ketadi. Iste'molchilar `eventId`
@@ -47,9 +58,19 @@ export class OutboxService {
   ): Promise<number> {
     return this.repo.manager.transaction(async (manager) => {
       const repo = manager.getRepository(OutboxEvent);
-      const pending = await repo
-        .createQueryBuilder('event')
+      const qb = repo.createQueryBuilder('event');
+      const older = qb
+        .subQuery()
+        .select('1')
+        .from(OutboxEvent, 'older')
+        .where('older.aggregateType = event.aggregateType')
+        .andWhere('older.aggregateId = event.aggregateId')
+        .andWhere('older.status = :status')
+        .andWhere('older.id < event.id')
+        .getQuery();
+      const pending = await qb
         .where('event.status = :status', { status: OutboxStatus.PENDING })
+        .andWhere(`NOT EXISTS ${older}`)
         .orderBy('event.id', 'ASC')
         .take(batchSize)
         .setLock('pessimistic_write')
@@ -64,6 +85,9 @@ export class OutboxService {
           this.logger.error(
             `Outbox publish xatosi (id=${event.id}): ${(e as Error).message}`,
           );
+          if (e instanceof OutboxPermanentError) {
+            await repo.update(event.id, { status: OutboxStatus.FAILED });
+          }
           continue;
         }
         await repo.update(event.id, {
