@@ -171,6 +171,25 @@ export class ElchiApiClient {
     // tashlab yuborardik. Yorliqdagi QR ichiga aynan shu yoziladi — C1.45.
     const qrToken = this.pluck(res, 'qr_code_token');
     const toBePaid = this.money(this.pluck(res, 'to_be_paid'));
+    if (!qrToken) {
+      // Takroriy (idempotent) javobda Elchi buyurtmani o'qiy olmasa faqat
+      // { shipment_id, idempotent: true } qaytaradi — QR va summa yo'q
+      // (Elchi-Backend `idempotentShipmentRes`). Ularni GET dan olamiz;
+      // GET xatosi chaqiruvchiga o'tadi va so'rov qayta uriniladi (BE-20).
+      const shipment = await this.getShipment(String(id));
+      return {
+        shipment_id: String(id),
+        ...(trackingUrl ? { tracking_url: String(trackingUrl) } : {}),
+        ...(shipment.qr_code_token
+          ? { qr_code_token: shipment.qr_code_token }
+          : {}),
+        ...(toBePaid !== undefined
+          ? { to_be_paid: toBePaid }
+          : shipment.to_be_paid !== undefined
+            ? { to_be_paid: shipment.to_be_paid }
+            : {}),
+      };
+    }
     return {
       shipment_id: String(id),
       ...(trackingUrl ? { tracking_url: String(trackingUrl) } : {}),

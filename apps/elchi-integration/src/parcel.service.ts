@@ -7,6 +7,7 @@ import {
   ElchiParcelCancelResultEvent,
   ElchiParcelCreatedEvent,
   ElchiParcelFailedEvent,
+  ElchiShipmentResult,
   LeadOrderStatus,
   ORDER_EVENTS,
   OrderStatusChangedEvent,
@@ -15,7 +16,11 @@ import {
   processOnce,
   runAsLeader,
 } from '@app/common';
-import { ElchiApiClient, ElchiApiError } from './elchi-api.client';
+import {
+  CreateElchiShipmentInput,
+  ElchiApiClient,
+  ElchiApiError,
+} from './elchi-api.client';
 import { ElchiIntegrationService } from './elchi-integration.service';
 
 export type ParcelStatus =
@@ -28,8 +33,8 @@ interface ParcelRow {
   payload: OrderStatusChangedEvent;
   shipmentId: string | null;
   attempts: number;
-  /** Oxirgi Elchi ga yaratish so'rovi yaqinda bo'lganmi (javobi kelmagan bo'lishi mumkin). */
-  createRecent: boolean;
+  /** Yaratish so'rovi Elchi ga yuborilganmi (`last_create_at` bor). */
+  sent: boolean;
 }
 
 /**
@@ -49,32 +54,40 @@ const REJECT_STATUSES = new Set([400, 422]);
 /** Elchi og'irlik chegarasi: 0.001–1000 kg (Elchi-Backend `product-measure.ts`). */
 const MAX_WEIGHT_GRAMS = 1_000_000;
 
-/** Bitta ishchi urishining vaqt chegarasi [taklif]: yetakchi tranzaksiyasi uzoq ochiq qolmasin. */
+/** Bitta ishchi urishining vaqt chegarasi [taklif]. */
 const TICK_BUDGET_MS = 60_000;
 
 /**
- * Javobi kelmagan yaratishdan keyin Elchi posilkani hali yaratayotgan bo'lishi
- * mumkin (gateway 65 s kutadi). Shu vaqt ichida «topilmadi» (404) ga
- * ishonilmaydi — bekor qilish qayta uriniladi [taklif: 65 s + zaxira].
+ * Olingan qator shu vaqt band turadi [taklif]: Elchi yaratish kutishi 70 s va
+ * QR so'rovi 15 s dan uzun. Jarayon o'lsa, qator lease tugagach qayta olinadi.
  */
-const CREATE_SETTLE_S = 120;
+const CLAIM_LEASE_S = 120;
 
 /** Geo kesh tuman topilmaganda bir daqiqada ko'pi bilan bir marta yangilanadi [taklif]. */
 const GEO_SYNC_INTERVAL_MS = 60_000;
 
 const CONSUMER = 'elchi-parcel';
 
+type BuildResult =
+  | { body: CreateElchiShipmentInput }
+  | { retry: string }
+  | { fail: Pick<ElchiParcelFailedEvent, 'reason' | 'message'> };
+
 /**
  * BE-20: Elchi posilkasi buyurtma tranzaksiyasidan tashqarida, navbat orqali.
  *
  * 1. `order.status.changed` («Tasdiqlandi») → `parcel_request` qatori
  *    (buyurtma bo'yicha bitta, takroriy hodisa ikkinchisini yaratmaydi).
- * 2. Ishchi (cron, yetakchi qulf bilan) navbatdagi qatorni oladi va Elchi
- *    platforma marketida posilka yaratadi; natija `elchi.parcel.created`
- *    bilan outbox orqali checkout ga qaytadi (BE-19 yozadi).
- * 3. «Bekor qilindi» → Elchi ga hali yuborilmagan bo'lsa navbatdan chiqadi;
- *    yuborilgan bo'lsa (yaratilgan yoki javobi kelmagan) Elchi da bekor
- *    qilinadi — idempotent.
+ * 2. Ishchi (cron, yetakchi qulf bilan) navbatdagi qatorni qisqa
+ *    tranzaksiyada oladi (lease), «yuborildi» belgisini Elchi ga yuborishdan
+ *    OLDIN commit qiladi, Elchi ni tranzaksiyadan tashqarida chaqiradi va
+ *    natijani holatni tekshirib yozadi. Natija `elchi.parcel.created` bilan
+ *    outbox orqali checkout ga qaytadi (BE-19 yozadi).
+ * 3. «Bekor qilindi» → Elchi ga yuborilmagan bo'lsa navbatdan chiqadi;
+ *    yuborilgan bo'lsa Elchi da bekor qilinadi (idempotent). Elchi bekor
+ *    qilishda posilkani faqat o'z bog'lovchi yozuvi orqali topadi; yozuv
+ *    yo'q bo'lsa (yaratish javobi yo'qolgan) 404 beradi — shunda takroriy
+ *    (idempotent) yaratish posilka ID sini qaytaradi va u bekor qilinadi.
  *
  * Elchi ga buyurtma `mp-order:<orderId>` bilan boradi: eski har-do'kon yo'li
  * (`integration.shipment.create`, BE-18 gacha o'zgarmaydi) raqamli
@@ -138,37 +151,44 @@ export class ParcelService {
     const started = Date.now();
     let handled = 0;
     while (handled < limit && Date.now() - started < TICK_BUDGET_MS) {
-      let current: ParcelRow | undefined;
+      const row = await this.claimNext();
+      if (!row) break;
       try {
-        const done = await this.dataSource.transaction(async (manager) => {
-          const [row] = (await manager.query(
-            `SELECT id::text, order_id AS "orderId", status, payload,
-                    shipment_id AS "shipmentId", attempts,
-                    COALESCE(last_create_at > now() - make_interval(secs => ${CREATE_SETTLE_S}), false)
-                      AS "createRecent"
-               FROM integration.parcel_request
-              WHERE status IN ('PENDING','CANCEL_PENDING')
-                AND next_attempt_at <= now()
-              ORDER BY next_attempt_at, id
-              LIMIT 1
-              FOR UPDATE SKIP LOCKED`,
-          )) as ParcelRow[];
-          if (!row) return false;
-          current = row;
-          if (row.status === 'PENDING') await this.create(manager, row);
-          else await this.cancel(manager, row);
-          return true;
-        });
-        if (!done) break;
+        if (row.status === 'PENDING') await this.create(row);
+        else await this.cancel(row);
       } catch (error) {
         // Kutilmagan xato (baza, ma'lumot): qator navbat boshini to'sib
         // qo'ymasin — urinish yoziladi va keyinga suriladi.
-        if (!current) throw error;
-        await this.bumpAfterCrash(current, error as Error);
+        await this.bumpAfterCrash(row, error as Error);
       }
       handled++;
     }
     return handled;
+  }
+
+  /** Qisqa tranzaksiya: vaqti kelgan qatorni oladi va lease bilan band qiladi. */
+  private claimNext(): Promise<ParcelRow | undefined> {
+    return this.dataSource.transaction(async (manager) => {
+      const [row] = (await manager.query(
+        `SELECT id::text, order_id AS "orderId", status, payload,
+                shipment_id AS "shipmentId", attempts,
+                last_create_at IS NOT NULL AS "sent"
+           FROM integration.parcel_request
+          WHERE status IN ('PENDING','CANCEL_PENDING')
+            AND next_attempt_at <= now()
+          ORDER BY next_attempt_at, id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED`,
+      )) as ParcelRow[];
+      if (!row) return undefined;
+      await manager.query(
+        `UPDATE integration.parcel_request
+            SET next_attempt_at = clock_timestamp() + make_interval(secs => $2)
+          WHERE id = $1`,
+        [row.id, CLAIM_LEASE_S],
+      );
+      return row;
+    });
   }
 
   private async enqueue(
@@ -219,14 +239,12 @@ export class ParcelService {
    *  - qator bo'lmasa CANCELLED belgisi qoladi: biz «Tasdiqlandi» ni
    *    ko'rmaganmiz, Elchi ga hech narsa ketmagan; kechikkan «Tasdiqlandi»
    *    posilka yaratmaydi;
-   *  - FAILED va yaratish so'rovi hech yuborilmagan → CANCELLED;
-   *  - qolgan hammasi (PENDING, CREATED, so'rov yuborilgan FAILED) →
-   *    CANCEL_PENDING: Elchi da bekor qilinadi.
-   * PENDING ni ham Elchi orqali bekor qilamiz: ishchining tranzaksiyasi Elchi
-   * posilkani yaratgandan keyin rollback bo'lsa (jarayon o'ldi, ulanish
-   * uzildi), `last_create_at` belgisi ham qaytadi — u «yuborilmagan»
-   * degani emas. `last_create_at` shu yerda qo'yiladi, shunda 120 s ichidagi
-   * 404 ga ishonilmaydi.
+   *  - Elchi ga yaratish so'rovi yuborilmagan (PENDING yoki FAILED,
+   *    `last_create_at` yo'q) → CANCELLED. Belgi Elchi ga yuborishdan oldin
+   *    alohida commit qilinadi, shuning uchun bunga ishonsa bo'ladi;
+   *  - qolgani (CREATED, yuborilgan PENDING/FAILED) → CANCEL_PENDING: ishchi
+   *    Elchi da bekor qiladi. Yaratish shu payt ketayotgan bo'lsa, natija
+   *    yozilganda CANCEL_PENDING ko'riladi va posilka bekor qilinadi.
    */
   private async requestCancel(
     manager: EntityManager,
@@ -237,16 +255,11 @@ export class ParcelService {
        VALUES ($1, 'CANCELLED', $2::jsonb)
        ON CONFLICT (order_id) DO UPDATE
          SET status = CASE
-               WHEN parcel_request.status = 'FAILED'
+               WHEN parcel_request.status IN ('PENDING','FAILED')
                     AND parcel_request.last_create_at IS NULL THEN 'CANCELLED'
                WHEN parcel_request.status IN ('PENDING','CREATED','FAILED')
                     THEN 'CANCEL_PENDING'
                ELSE parcel_request.status
-             END,
-             last_create_at = CASE
-               WHEN parcel_request.status = 'PENDING'
-                 THEN COALESCE(parcel_request.last_create_at, clock_timestamp())
-               ELSE parcel_request.last_create_at
              END,
              next_attempt_at = now(),
              updated_at = now()`,
@@ -254,45 +267,174 @@ export class ParcelService {
     );
   }
 
-  private async create(manager: EntityManager, row: ParcelRow): Promise<void> {
+  private async create(row: ParcelRow): Promise<void> {
+    const built = await this.buildShipment(row);
+    if ('retry' in built) {
+      await this.retryLater(row, built.retry);
+      return;
+    }
+    if ('fail' in built) {
+      this.logger.warn(`Buyurtma ${row.orderId}: ${built.fail.message}`);
+      await this.fail(row, built.fail.reason, built.fail.message);
+      return;
+    }
+    // «Yuborildi» belgisi Elchi chaqiruvidan OLDIN commit qilinadi. Qator shu
+    // orada bekor qilingan bo'lsa (PENDING emas) — so'rov yuborilmaydi.
+    const marked = (await this.dataSource.query(
+      `UPDATE integration.parcel_request SET last_create_at = clock_timestamp()
+        WHERE id = $1 AND status = 'PENDING'
+        RETURNING id`,
+      [row.id],
+    )) as unknown[];
+    if (!marked.length) return;
+
+    let result: ElchiShipmentResult;
+    try {
+      result = await this.elchi.createShipment(built.body);
+    } catch (error) {
+      await this.createFailed(row, error as Error);
+      return;
+    }
+    await this.finishCreate(row, result);
+  }
+
+  private async createFailed(row: ParcelRow, error: Error): Promise<void> {
+    if (
+      error instanceof ElchiApiError &&
+      error.status === 409 &&
+      error.code === 'ORDER_INTAKE_CLOSED'
+    ) {
+      // Bugungi qabul yopiq: Elchi kalitni band qilmaydi, `reopens_at` dan
+      // keyin o'sha external_order_id ishlaydi (Elchi-Backend
+      // integration-service `requestPartnerOrderCreate`).
+      await this.retryLater(row, error.message, error.reopensAt);
+      return;
+    }
+    if (
+      error instanceof ElchiApiError &&
+      (REJECT_STATUSES.has(error.status) || error.status === 409)
+    ) {
+      this.logger.warn(`Buyurtma ${row.orderId}: ${error.message}`);
+      await this.fail(row, 'ELCHI_REJECTED', error.message);
+      return;
+    }
+    await this.retryLater(row, error.message);
+  }
+
+  /**
+   * Elchi natijasini qatorning HOZIRGI holati bo'yicha yozadi:
+   *  - PENDING → CREATED va `elchi.parcel.created` (QR kodi bo'lsa; bo'lmasa
+   *    posilka ID si yoziladi va qayta so'raladi — yorliqqa QR kerak);
+   *  - CANCEL_PENDING (yaratish paytida «Bekor qilindi» keldi) → posilka ID si
+   *    yoziladi, hodisa yo'q, darhol bekor qilish navbatiga.
+   */
+  private async finishCreate(
+    row: ParcelRow,
+    result: ElchiShipmentResult,
+  ): Promise<void> {
+    const toBePaid =
+      result.to_be_paid === undefined || !Number.isFinite(result.to_be_paid)
+        ? null
+        : Math.round(result.to_be_paid);
+    const fields = [
+      row.id,
+      String(result.shipment_id),
+      result.qr_code_token ?? null,
+      result.tracking_url ?? null,
+      toBePaid,
+    ];
+    await this.dataSource.transaction(async (manager) => {
+      const [current] = (await manager.query(
+        `SELECT status FROM integration.parcel_request WHERE id = $1 FOR UPDATE`,
+        [row.id],
+      )) as Array<{ status: ParcelStatus }>;
+      if (current?.status === 'CANCEL_PENDING') {
+        await manager.query(
+          `UPDATE integration.parcel_request
+              SET shipment_id=$2, qr_code_token=$3, tracking_url=$4,
+                  to_be_paid=$5, next_attempt_at=now(), updated_at=now()
+            WHERE id=$1`,
+          fields,
+        );
+        return;
+      }
+      if (current?.status !== 'PENDING') {
+        this.logger.warn(
+          `Buyurtma ${row.orderId}: posilka ${result.shipment_id} yaratildi, lekin qator ${current?.status ?? 'yo‘q'}`,
+        );
+        return;
+      }
+      if (!result.qr_code_token) {
+        await manager.query(
+          `UPDATE integration.parcel_request
+              SET shipment_id=$2, tracking_url=$3, to_be_paid=$4,
+                  attempts=attempts+1,
+                  next_attempt_at=clock_timestamp() + make_interval(secs => $5),
+                  last_error='Elchi javobida QR kodi yo‘q', updated_at=now()
+            WHERE id=$1`,
+          [
+            row.id,
+            String(result.shipment_id),
+            result.tracking_url ?? null,
+            toBePaid,
+            this.delayFor(row),
+          ],
+        );
+        return;
+      }
+      await manager.query(
+        `UPDATE integration.parcel_request
+            SET status='CREATED', shipment_id=$2, qr_code_token=$3,
+                tracking_url=$4, to_be_paid=$5, last_error=NULL,
+                attempts=attempts+1, updated_at=now()
+          WHERE id=$1`,
+        fields,
+      );
+      await this.outbox.record(
+        {
+          aggregateType: 'order',
+          aggregateId: String(row.orderId),
+          eventType: ORDER_EVENTS.PARCEL_CREATED,
+          payload: {
+            eventId: `${ORDER_EVENTS.PARCEL_CREATED}:${row.orderId}`,
+            orderId: String(row.orderId),
+            shipmentId: String(result.shipment_id),
+            qrCodeToken: result.qr_code_token,
+            trackingUrl: result.tracking_url ?? null,
+            toBePaid,
+            createdAt: new Date().toISOString(),
+          } satisfies ElchiParcelCreatedEvent,
+        },
+        manager,
+      );
+    });
+  }
+
+  /** Elchi so'rovi tanasi: SOATO → Elchi ID, platforma marketi, tovarlar. */
+  private async buildShipment(row: ParcelRow): Promise<BuildResult> {
     const event = row.payload;
+    const manager = this.dataSource.manager;
     let geo = await this.resolveGeo(manager, event);
     if (!geo) {
       const sync = await this.refreshGeoCache();
       if (sync === 'fresh') geo = await this.resolveGeo(manager, event);
-      if (!geo && sync === 'unavailable') {
-        // Kesh yangilanmadi — tuman yo'qligiga ishonib bo'lmaydi.
-        await this.retryLater(manager, row, 'Geo kesh yangilanmadi');
-        return;
-      }
+      // Kesh yangilanmadi — tuman yo'qligiga ishonib bo'lmaydi.
+      if (!geo && sync === 'unavailable')
+        return { retry: 'Geo kesh yangilanmadi' };
     }
     if (!geo) {
-      const message = `Tuman topilmadi: SOATO ${event.recipient.districtSoato} (viloyat ${event.recipient.regionSoato})`;
-      this.logger.warn(`Buyurtma ${row.orderId}: ${message}`);
-      await this.fail(manager, row, 'DISTRICT_NOT_FOUND', message);
-      return;
+      return {
+        fail: {
+          reason: 'DISTRICT_NOT_FOUND',
+          message: `Tuman topilmadi: SOATO ${event.recipient.districtSoato} (viloyat ${event.recipient.regionSoato})`,
+        },
+      };
     }
     const marketId = this.config.get<string>('ELCHI_PLATFORM_MARKET_ID');
-    if (!marketId) {
-      // Sozlama yo'q — posilka navbatda kutadi va logga tushadi.
-      await this.retryLater(
-        manager,
-        row,
-        'ELCHI_PLATFORM_MARKET_ID sozlanmagan',
-      );
-      return;
-    }
-    await manager.query(
-      `UPDATE integration.parcel_request SET last_create_at = clock_timestamp() WHERE id = $1`,
-      [row.id],
-    );
-    // try faqat Elchi chaqiruvini o'raydi: bazaga yozishdagi xato tranzaksiyani
-    // bekor qiladi va qator `bumpAfterCrash` bilan qayta uriniladi (Elchi
-    // takroriy so'rovga o'sha posilkani qaytaradi). Aks holda posilka CREATED
-    // bo'lib, `elchi.parcel.created` yozilmay qolardi.
-    let result: Awaited<ReturnType<ElchiApiClient['createShipment']>>;
-    try {
-      result = await this.elchi.createShipment({
+    // Sozlama yo'q — posilka navbatda kutadi va logga tushadi.
+    if (!marketId) return { retry: 'ELCHI_PLATFORM_MARKET_ID sozlanmagan' };
+    return {
+      body: {
         external_order_id: elchiOrderRef(String(row.orderId)),
         elchi_market_id: marketId,
         customer: {
@@ -307,107 +449,51 @@ export class ParcelService {
             ? 'center'
             : 'address',
         items: event.items.map((item) => ({
-          name: item.name,
+          // Elchi yangi tovarni market ichida NOMI bo'yicha bog'laydi va bir
+          // marketda bir xil nomli ikki tovar bo'lmaydi (Elchi-Backend
+          // `resolveCatalogProductId`). Hamma posilka bitta platforma
+          // marketida — ikki sotuvchining bir xil nomli tovari bitta katalog
+          // tovariga bog'lanib, og'irlik adashardi. ID bilan nom noyob [taklif].
+          name: `${item.name} #${item.productId}`,
           quantity: item.quantity,
           external_product_id: String(item.productId),
           ...(item.weightGrams ? { weight_kg: item.weightGrams / 1000 } : {}),
         })),
         cod_amount: event.codAmount,
-      });
-    } catch (error) {
-      if (
-        error instanceof ElchiApiError &&
-        error.status === 409 &&
-        error.code === 'ORDER_INTAKE_CLOSED'
-      ) {
-        // Bugungi qabul yopiq: Elchi kalitni band qilmaydi, `reopens_at` dan
-        // keyin o'sha external_order_id ishlaydi (Elchi-Backend
-        // integration-service `requestPartnerOrderCreate`).
-        await this.retryLater(manager, row, error.message, error.reopensAt);
-        return;
-      }
-      if (
-        error instanceof ElchiApiError &&
-        (REJECT_STATUSES.has(error.status) || error.status === 409)
-      ) {
-        this.logger.warn(`Buyurtma ${row.orderId}: ${error.message}`);
-        await this.fail(manager, row, 'ELCHI_REJECTED', error.message);
-        return;
-      }
-      await this.retryLater(manager, row, (error as Error).message);
-      return;
-    }
-    const toBePaid =
-      result.to_be_paid === undefined || !Number.isFinite(result.to_be_paid)
-        ? null
-        : Math.round(result.to_be_paid);
-    await manager.query(
-      `UPDATE integration.parcel_request
-          SET status='CREATED', shipment_id=$2, qr_code_token=$3,
-              tracking_url=$4, to_be_paid=$5, last_error=NULL,
-              attempts=attempts+1, updated_at=now()
-        WHERE id=$1`,
-      [
-        row.id,
-        String(result.shipment_id),
-        result.qr_code_token ?? null,
-        result.tracking_url ?? null,
-        toBePaid,
-      ],
-    );
-    await this.outbox.record(
-      {
-        aggregateType: 'order',
-        aggregateId: String(row.orderId),
-        eventType: ORDER_EVENTS.PARCEL_CREATED,
-        payload: {
-          eventId: `${ORDER_EVENTS.PARCEL_CREATED}:${row.orderId}`,
-          orderId: String(row.orderId),
-          shipmentId: String(result.shipment_id),
-          qrCodeToken: result.qr_code_token ?? null,
-          trackingUrl: result.tracking_url ?? null,
-          toBePaid,
-          createdAt: new Date().toISOString(),
-        } satisfies ElchiParcelCreatedEvent,
       },
-      manager,
-    );
+    };
   }
 
-  /**
-   * Elchi da bekor qilish. `shipment_id` noma'lum bo'lsa (javob kelmagan
-   * yaratish), Elchi posilkani `external_order_id` bo'yicha topadi; 404 —
-   * posilka umuman yaratilmagan.
-   */
-  private async cancel(manager: EntityManager, row: ParcelRow): Promise<void> {
+  /** Elchi da bekor qilish: posilka ID si bo'yicha, bo'lmasa tashqi id bo'yicha. */
+  private async cancel(row: ParcelRow): Promise<void> {
+    if (!row.shipmentId && !row.sent) {
+      await this.finishCancel(row, 'CANCELLED', null, null);
+      return;
+    }
     const ref = row.shipmentId ?? elchiOrderRef(String(row.orderId));
     try {
       await this.elchi.cancelShipment(ref);
     } catch (error) {
-      await this.cancelFailed(manager, row, error as Error);
+      await this.cancelFailed(row, error as Error);
       return;
     }
-    await this.setStatus(manager, row.id, 'CANCELLED', null);
-    await this.recordCancelResult(
-      manager,
+    await this.finishCancel(
       row,
+      'CANCELLED',
       ORDER_EVENTS.PARCEL_CANCELLED,
       null,
     );
   }
 
-  private async cancelFailed(
-    manager: EntityManager,
-    row: ParcelRow,
-    error: Error,
-  ): Promise<void> {
+  private async cancelFailed(row: ParcelRow, error: Error): Promise<void> {
     if (error instanceof ElchiApiError && error.status === 404) {
-      if (!row.shipmentId && row.createRecent) {
-        // Javobi kelmagan yaratish hali tugamagan bo'lishi mumkin.
-        await this.retryLater(manager, row, error.message);
+      if (!row.shipmentId) {
+        // Elchi buyurtmani faqat bog'lovchi yozuv orqali topadi; yaratish
+        // javobi yo'qolgan bo'lsa yozuv yo'q-u buyurtma bor bo'lishi mumkin.
+        await this.recoverShipment(row);
         return;
       }
-      await this.setStatus(manager, row.id, 'CANCELLED', error.message);
+      await this.finishCancel(row, 'CANCELLED', null, error.message);
       return;
     }
     if (
@@ -418,16 +504,69 @@ export class ParcelService {
       this.logger.warn(
         `Buyurtma ${row.orderId}: Elchi posilkani bekor qilmadi (${error.status})`,
       );
-      await this.setStatus(manager, row.id, 'CREATED', error.message);
-      await this.recordCancelResult(
-        manager,
+      await this.finishCancel(
         row,
+        'CREATED',
         ORDER_EVENTS.PARCEL_CANCEL_FAILED,
         error.message,
       );
       return;
     }
-    await this.retryLater(manager, row, error.message);
+    await this.retryLater(row, error.message);
+  }
+
+  /**
+   * Bekor qilinadigan, lekin posilka ID si noma'lum qator: takroriy
+   * (idempotent) yaratish Elchi dagi buyurtmani qaytaradi va bog'lovchi
+   * yozuvni tiklaydi; ID yoziladi va keyingi urishda bekor qilinadi. Elchi
+   * so'rovni rad etsa (400/422) — buyurtma umuman yo'q. Asl so'rov Elchi ga
+   * yetmagan bo'lsa, yangi buyurtma yaratilib darhol bekor qilinadi.
+   */
+  private async recoverShipment(row: ParcelRow): Promise<void> {
+    const built = await this.buildShipment(row);
+    if (!('body' in built)) {
+      await this.retryLater(
+        row,
+        'retry' in built ? built.retry : built.fail.message,
+      );
+      return;
+    }
+    let result: ElchiShipmentResult;
+    try {
+      result = await this.elchi.createShipment(built.body);
+    } catch (error) {
+      if (error instanceof ElchiApiError && REJECT_STATUSES.has(error.status)) {
+        await this.finishCancel(row, 'CANCELLED', null, error.message);
+        return;
+      }
+      await this.retryLater(row, (error as Error).message);
+      return;
+    }
+    await this.finishCreate(row, result);
+  }
+
+  /** Bekor qilish natijasi — faqat qator hali CANCEL_PENDING bo'lsa. */
+  private async finishCancel(
+    row: ParcelRow,
+    status: 'CANCELLED' | 'CREATED',
+    eventType:
+      | typeof ORDER_EVENTS.PARCEL_CANCELLED
+      | typeof ORDER_EVENTS.PARCEL_CANCEL_FAILED
+      | null,
+    message: string | null,
+  ): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const updated = (await manager.query(
+        `UPDATE integration.parcel_request
+            SET status=$2, last_error=$3, attempts=attempts+1, updated_at=now()
+          WHERE id=$1 AND status='CANCEL_PENDING'
+          RETURNING id`,
+        [row.id, status, message],
+      )) as unknown[];
+      if (updated.length && eventType) {
+        await this.recordCancelResult(manager, row, eventType, message);
+      }
+    });
   }
 
   /** SOATO → Elchi viloyat/tuman ID si (geo kesh, C1.44; EQ-06 2026-11-16). */
@@ -526,36 +665,38 @@ export class ParcelService {
     return null;
   }
 
+  private delayFor(row: ParcelRow): number {
+    return RETRY_DELAYS_S[Math.min(row.attempts, RETRY_DELAYS_S.length - 1)];
+  }
+
   /**
-   * Keyinroq qayta urinish. `now()` emas, `clock_timestamp()`: `now()`
-   * tranzaksiya boshlangan vaqt — 70 s lik Elchi chaqiruvidan keyin
-   * `now() + 30 s` allaqachon o'tib ketgan bo'lardi.
+   * Keyinroq qayta urinish — faqat qator hali olingan holatida bo'lsa (shu
+   * orada «Bekor qilindi» kelgan bo'lsa, uning navbati buzilmaydi).
+   * `clock_timestamp()`: `now()` tranzaksiya boshi emas, hozirgi vaqt.
    */
   private async retryLater(
-    manager: EntityManager,
     row: ParcelRow,
     message: string,
     retryAt?: string | null,
   ): Promise<void> {
-    const delay =
-      RETRY_DELAYS_S[Math.min(row.attempts, RETRY_DELAYS_S.length - 1)];
+    const delay = this.delayFor(row);
     const at = retryAt && !Number.isNaN(Date.parse(retryAt)) ? retryAt : null;
     this.logger.warn(
       `Buyurtma ${row.orderId}: Elchi so‘rovi o‘tmadi (${row.attempts + 1}-urinish), ${at ?? `${delay} s dan keyin`} qayta: ${message}`,
     );
-    await manager.query(
+    await this.dataSource.query(
       `UPDATE integration.parcel_request
           SET attempts=attempts+1,
               next_attempt_at=GREATEST(
                 clock_timestamp() + make_interval(secs => $2),
                 COALESCE($4::timestamptz, '-infinity'::timestamptz)),
               last_error=$3, updated_at=now()
-        WHERE id=$1`,
-      [row.id, delay, message, at],
+        WHERE id=$1 AND status=$5`,
+      [row.id, delay, message, at, row.status],
     );
   }
 
-  /** Tranzaksiya xato bilan tugagan qator: alohida tranzaksiyada keyinga suriladi. */
+  /** Kutilmagan xato: qator keyinga suriladi (lease dan keyin emas, backoff bilan). */
   private async bumpAfterCrash(row: ParcelRow, error: Error): Promise<void> {
     this.logger.error(
       `Buyurtma ${row.orderId}: posilka qatorini ishlashda xato: ${error.message}`,
@@ -565,24 +706,33 @@ export class ParcelService {
           SET attempts = attempts + 1,
               next_attempt_at = clock_timestamp() + make_interval(
                 secs => (ARRAY[30,60,120,240,300])[LEAST(attempts, 4) + 1]),
-              last_create_at = CASE WHEN status = 'PENDING' THEN clock_timestamp()
-                                    ELSE last_create_at END,
               last_error = $2, updated_at = now()
-        WHERE id = $1`,
+        WHERE id = $1 AND status IN ('PENDING','CANCEL_PENDING')`,
       [row.id, error.message],
     );
   }
 
+  /** Qaytarilmas xato: FAILED va `elchi.parcel.failed` — qator hali PENDING bo'lsa. */
   private async fail(
-    manager: EntityManager,
     row: ParcelRow,
     reason: ElchiParcelFailedEvent['reason'],
     message: string,
   ): Promise<void> {
-    await this.setStatus(manager, row.id, 'FAILED', message);
-    await this.recordFailed(manager, String(row.orderId), row.payload.eventId, {
-      reason,
-      message,
+    await this.dataSource.transaction(async (manager) => {
+      const updated = (await manager.query(
+        `UPDATE integration.parcel_request
+            SET status='FAILED', last_error=$2, attempts=attempts+1, updated_at=now()
+          WHERE id=$1 AND status='PENDING'
+          RETURNING id`,
+        [row.id, message],
+      )) as unknown[];
+      if (!updated.length) return;
+      await this.recordFailed(
+        manager,
+        String(row.orderId),
+        row.payload.eventId,
+        { reason, message },
+      );
     });
   }
 
@@ -635,20 +785,6 @@ export class ParcelService {
         } satisfies ElchiParcelCancelResultEvent,
       },
       manager,
-    );
-  }
-
-  private async setStatus(
-    manager: EntityManager,
-    id: string,
-    status: ParcelStatus,
-    lastError: string | null,
-  ): Promise<void> {
-    await manager.query(
-      `UPDATE integration.parcel_request
-          SET status=$2, last_error=$3, attempts=attempts+1, updated_at=now()
-        WHERE id=$1`,
-      [id, status, lastError],
     );
   }
 }

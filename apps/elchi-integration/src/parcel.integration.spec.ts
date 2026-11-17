@@ -230,7 +230,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       where_deliver: 'address',
       items: [
         {
-          name: 'Simsiz quloqchin',
+          name: 'Simsiz quloqchin #88',
           quantity: 1,
           external_product_id: '88',
           weight_kg: 0.35,
@@ -365,7 +365,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
   });
 
-  it('javobi kelmagan yaratishdan keyin bekor qilish Elchi ga tashqi id bilan boradi', async () => {
+  it('javobi kelmagan yaratishdan keyin bekor qilish: 404 → takroriy yaratish ID beradi → ID bo‘yicha bekor', async () => {
     await service.onOrderStatusChanged(confirmed());
     elchi.createShipment.mockRejectedValueOnce(
       new Error('The operation was aborted due to timeout'),
@@ -374,38 +374,38 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
     expect(await parcel()).toMatchObject({ status: 'CANCEL_PENDING' });
 
-    // Elchi hali yaratayotgan bo'lishi mumkin: yaqinda yuborilgan bo'lsa 404 ga ishonilmaydi
+    // Elchi bog'lovchi yozuvsiz buyurtmani tashqi id bo'yicha topmaydi
     elchi.cancelShipment.mockRejectedValueOnce(
-      new ElchiApiError(404, 'topilmadi'),
+      new ElchiApiError(404, 'Shipment topilmadi'),
     );
     await service.processDue();
-    expect(elchi.cancelShipment).toHaveBeenCalledWith('mp-order:501');
-    expect(await parcel()).toMatchObject({
-      status: 'CANCEL_PENDING',
-      waiting: true,
-    });
 
-    // Elchi oxir-oqibat yaratgan edi — endi bekor qilinadi
-    await makeDue();
-    await service.processDue();
-    expect(elchi.cancelShipment).toHaveBeenCalledTimes(2);
-    expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
-    expect(elchi.createShipment).toHaveBeenCalledTimes(1);
+    expect(elchi.cancelShipment.mock.calls).toEqual([
+      ['mp-order:501'],
+      ['1251131'],
+    ]);
+    expect(elchi.createShipment).toHaveBeenCalledTimes(2);
+    expect(await parcel()).toMatchObject({
+      status: 'CANCELLED',
+      shipmentId: '1251131',
+    });
+    // posilka bekor qilingan buyurtma uchun «yaratildi» hodisasi ketmaydi
+    expect(await outboxTypes()).toEqual(['elchi.parcel.cancelled']);
   });
 
-  it('eski yaratishdan keyin 404 — posilka yaratilmagan, CANCELLED', async () => {
+  it('404 va takroriy yaratishni Elchi rad etsa (400) — buyurtma Elchi da yo‘q, CANCELLED', async () => {
     await service.onOrderStatusChanged(confirmed());
-    elchi.createShipment.mockRejectedValueOnce(new Error('timeout'));
+    elchi.createShipment
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new ElchiApiError(400, 'district_id noto‘g‘ri'));
     await service.processDue();
-    await ds.query(
-      `UPDATE integration.parcel_request SET last_create_at = now() - interval '10 minutes'`,
-    );
     await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
     elchi.cancelShipment.mockRejectedValueOnce(
       new ElchiApiError(404, 'topilmadi'),
     );
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
+    expect(await outboxTypes()).toEqual([]);
   });
 
   it('Elchi yetkazilgan posilkani bekor qilmasa (409) posilka CREATED qoladi va cancel-failed ketadi', async () => {
@@ -449,32 +449,67 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     ]);
   });
 
-  it('yuborilmagan PENDING ham Elchi orqali bekor qilinadi (rollback dan keyin belgi yo‘qolgan bo‘lishi mumkin)', async () => {
+  it('yuborilmagan PENDING darhol bekor qilinadi — Elchi ga murojaat yo‘q', async () => {
     await service.onOrderStatusChanged(confirmed());
     await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
-    expect(await parcel()).toMatchObject({ status: 'CANCEL_PENDING' });
-
-    // 120 s ichida 404 ga ishonilmaydi
-    elchi.cancelShipment.mockRejectedValueOnce(
-      new ElchiApiError(404, 'topilmadi'),
-    );
-    await service.processDue();
-    expect(elchi.cancelShipment).toHaveBeenCalledWith('mp-order:501');
-    expect(await parcel()).toMatchObject({
-      status: 'CANCEL_PENDING',
-      waiting: true,
-    });
-
-    await ds.query(
-      `UPDATE integration.parcel_request
-          SET last_create_at = now() - interval '10 minutes', next_attempt_at = now()`,
-    );
-    elchi.cancelShipment.mockRejectedValueOnce(
-      new ElchiApiError(404, 'topilmadi'),
-    );
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'CANCELLED' });
     expect(elchi.createShipment).not.toHaveBeenCalled();
+    expect(elchi.cancelShipment).not.toHaveBeenCalled();
+  });
+
+  it('«yuborildi» belgisi Elchi chaqiruvidan oldin commit qilinadi (rollback uni o‘chira olmaydi)', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    let seenFromOtherConnection: unknown;
+    elchi.createShipment.mockImplementationOnce(async () => {
+      [seenFromOtherConnection] = await ds.query(
+        `SELECT last_create_at IS NOT NULL AS sent FROM integration.parcel_request`,
+      );
+      throw new Error('jarayon o‘ldi');
+    });
+    await service.processDue();
+    expect(seenFromOtherConnection).toEqual({ sent: true });
+    // keyingi «Bekor qilindi» Elchi orqali boradi
+    await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+    expect(await parcel()).toMatchObject({ status: 'CANCEL_PENDING' });
+  });
+
+  it('yaratish ketayotganda «Bekor qilindi» keldi: posilka ID si yoziladi va bekor qilinadi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockImplementationOnce(async () => {
+      // qator band (lease), lekin qulflanmagan — hodisa kutmaydi
+      await service.onOrderStatusChanged(cancelledEvent('evt-cancel-1'));
+      return {
+        shipment_id: '1251131',
+        qr_code_token: 'qr-abc',
+        to_be_paid: 276000,
+      };
+    });
+    await service.processDue();
+
+    expect(elchi.cancelShipment).toHaveBeenCalledWith('1251131');
+    expect(await parcel()).toMatchObject({
+      status: 'CANCELLED',
+      shipmentId: '1251131',
+    });
+    expect(await outboxTypes()).toEqual(['elchi.parcel.cancelled']);
+  });
+
+  it('Elchi javobida QR kodi bo‘lmasa CREATED yozilmaydi; keyingi urinishda olinadi', async () => {
+    await service.onOrderStatusChanged(confirmed());
+    elchi.createShipment.mockResolvedValueOnce({ shipment_id: '1251131' });
+    await service.processDue();
+    expect(await parcel()).toMatchObject({
+      status: 'PENDING',
+      shipmentId: '1251131',
+      waiting: true,
+    });
+    expect(await outboxTypes()).toEqual([]);
+
+    await makeDue();
+    await service.processDue();
+    expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    expect(await outboxTypes()).toEqual(['elchi.parcel.created']);
   });
 
   it('har xato yangi «Tasdiqlandi» dan keyin yangi elchi.parcel.failed eventId oladi', async () => {

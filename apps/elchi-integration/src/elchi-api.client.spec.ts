@@ -197,6 +197,41 @@ describe('ElchiApiClient config (C2.20)', () => {
     fetchMock.mockRestore();
   });
 
+  it('BE-20: takroriy javobda QR bo‘lmasa GET /partner/shipments/:id dan olinadi', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ data: { shipment_id: '77', idempotent: true } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: { shipment_id: '77', tracking: 'qr-77', cod_amount: 276000 },
+          }),
+      } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz/',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+    await expect(
+      client.createShipment(shipmentBody('ADDRESS') as never),
+    ).resolves.toEqual({
+      shipment_id: '77',
+      qr_code_token: 'qr-77',
+      to_be_paid: 276000,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'https://api.elchi.uz/partner/shipments/77',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    fetchMock.mockRestore();
+  });
+
   it('BE-20: ORDER_INTAKE_CLOSED kodi va reopens_at xato tanasidan o‘qiladi', () => {
     const error = new ElchiApiError(409, 'closed', {
       statusCode: 409,
