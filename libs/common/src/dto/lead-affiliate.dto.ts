@@ -1,12 +1,15 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -140,13 +143,32 @@ export class AffiliateOfferDto {
   @ApiProperty({ example: 65000, description: 'Sotuvchi haqi, so‘m' })
   affiliateFee: number;
 
-  @ApiProperty({ example: 1850, description: 'EPC, so‘m' }) epc: number;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'EPC, so‘m: daromad / klik. Bo‘sh — statistika yo‘q (daromad BE-22, BE-28 dan keyin)',
+  })
+  epc: number | null;
 
-  @ApiProperty({ example: 41, description: 'Tasdiq foizi' })
-  approveRate: number;
+  @ApiProperty({
+    example: 41,
+    nullable: true,
+    type: Number,
+    description:
+      'Tasdiq foizi: tasdiqlangan / yaroqli lidlar (hamma sotuvchilar). Bo‘sh — lid yo‘q',
+  })
+  approveRate: number | null;
 
-  @ApiProperty({ example: 78, description: 'Sotilish foizi' })
-  saleRate: number;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'Sotilish foizi: mijoz olgan / jo‘natilgan buyurtmalar (TZ 1-bo‘lim «Sotilish foizi (jo‘natilgandan)»). Bo‘sh — statistika yo‘q (BE-21, BE-28 dan keyin)',
+  })
+  saleRate: number | null;
 
   @ApiProperty({ example: 120 }) stock: number;
   @ApiProperty({ example: true }) hasVideo: boolean;
@@ -195,12 +217,24 @@ export class UpdateAffiliateStreamBodyDto {
   @ApiPropertyOptional() @IsString() @MaxLength(255) sub4: string;
   @ApiPropertyOptional() @IsString() @MaxLength(255) sub5: string;
 
-  @ApiPropertyOptional({ example: '1234567890' })
+  @ApiPropertyOptional({
+    example: '1234567890',
+    description: 'Faqat raqamlar; bo‘sh satr — o‘chirish',
+  })
   @IsString()
   @MaxLength(64)
+  @Matches(/^\d*$/, { message: 'metaPixelId faqat raqamlardan iborat bo‘ladi' })
   metaPixelId: string;
 
-  @ApiPropertyOptional() @IsString() @MaxLength(64) tiktokPixelId: string;
+  @ApiPropertyOptional({
+    description: 'Lotin harflari va raqamlar; bo‘sh satr — o‘chirish',
+  })
+  @IsString()
+  @MaxLength(64)
+  @Matches(/^[A-Za-z0-9]*$/, {
+    message: 'tiktokPixelId faqat lotin harflari va raqamlardan iborat bo‘ladi',
+  })
+  tiktokPixelId: string;
 
   @ApiPropertyOptional({
     description: 'Postback URL (yuborish ishga tushgandan keyin, BE-14)',
@@ -280,7 +314,14 @@ export class AffiliateStreamDto {
 
   @ApiProperty({ example: 1240 }) clicks: number;
   @ApiProperty({ example: 37 }) leads: number;
-  @ApiProperty({ example: 12 }) sales: number;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'Yetkazilgan buyurtmalar; bo‘sh — statistika hali yo‘q (BE-28)',
+  })
+  sales: number | null;
   @ApiProperty({ example: '2026-11-18T09:12:00.000Z' }) createdAt: Date;
 }
 
@@ -429,4 +470,57 @@ export class AffiliateLeadsPageDto {
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 3 }) totalPages: number;
+}
+
+/** GET/PUT /admin/offer-content/:productId — offer matnlari: suhbat skripti, afzalliklar, qutida (BE-11, FE-12; ega qarori 2026-11-17). */
+export class OfferContentDto {
+  @ApiProperty({ example: '501' }) productId: string;
+
+  @ApiProperty({
+    example:
+      'Assalomu alaykum! Simsiz quloqchin buyurtmangiz bo‘yicha qo‘ng‘iroq qilyapman…',
+    nullable: true,
+    type: String,
+    description: 'Suhbat skripti — operator lid kartasida ko‘radi (OPR-2)',
+  })
+  callScript: string | null;
+
+  @ApiProperty({
+    type: [String],
+    example: ['Telefonga Bluetooth orqali ulanadi'],
+    description: 'Afzalliklar — sotuvchi sahifasidagi «… haqida» bloki',
+  })
+  highlights: string[];
+
+  @ApiProperty({
+    type: [String],
+    example: ['Quloqchinlar (juft)', 'Quvvatlovchi g‘ilof', 'Quvvat kabeli'],
+    description: 'Qutida — sotuvchi sahifasidagi «Qutida» bloki',
+  })
+  boxContents: string[];
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  updatedAt: string | null;
+}
+
+export class UpdateOfferContentDto {
+  @ApiPropertyOptional({ nullable: true, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  callScript?: string | null;
+
+  @ApiProperty({ type: [String], maxItems: 10 })
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  highlights: string[];
+
+  @ApiProperty({ type: [String], maxItems: 20 })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  boxContents: string[];
 }

@@ -89,6 +89,15 @@ export function IsLeadBigintId(field: string): PropertyDecorator {
 export const trimLeadText = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+/** Sotuvchi sahifasidagi kreativ (rasm yoki video). */
+export class LandingPageCreativeDto {
+  @ApiProperty({ example: '9001' }) id: string;
+  @ApiProperty({ enum: ['IMAGE', 'VIDEO'], example: 'VIDEO' }) type:
+    'IMAGE' | 'VIDEO';
+  @ApiProperty({ example: 'https://cdn.example.uz/creatives/9001.mp4' })
+  url: string;
+}
+
 /** Xususiyat qatori: «Aloqa — Bluetooth» (holat-matnlari.md standart-1 «Xususiyatlar»). */
 export class LandingPageSpecDto {
   @ApiProperty({ example: 'Og‘irlik' }) name: string;
@@ -112,8 +121,20 @@ export class LandingPageProductDto {
   })
   images: string[];
 
-  @ApiProperty({ example: null, nullable: true, type: String })
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'Mahsulot videosi; bo‘lmasa admin kreativlaridagi birinchi video (Video shabloni)',
+  })
   videoUrl: string | null;
+
+  @ApiProperty({
+    type: [LandingPageCreativeDto],
+    description: 'Admin yuklagan kreativlar: rasm va video (BE-08, SOT-9)',
+  })
+  creatives: LandingPageCreativeDto[];
 
   @ApiProperty({
     example: 'Telefonga Bluetooth orqali ulanadi. Ixcham g‘ilofda saqlanadi.',
@@ -427,3 +448,61 @@ export type LeadAddressResolution =
       elchiDistrictId: string;
     }
   | { ok: false; field: 'regionSoato' | 'districtSoato'; error: string };
+
+/**
+ * lead-service ← catalog-service: offer ma’lumoti (BE-11). lead-service shu shaklni kutadi;
+ * katalog tomoni (handlerlar) — BE-07 va BE-09, Dilshod. Pul — so‘m, butun son.
+ */
+export const LEAD_CATALOG_RPC = {
+  /** { productId } → CatalogOfferSnapshot | null */
+  OFFER_GET: 'catalog.offer.get',
+  /**
+   * CatalogOfferListQuery → CatalogOfferSnapshot[]. `productIds` berilsa — har mavjud mahsulot holatidan qat’i nazar
+   * (cpaAvailable/withdrawn/approvedPrice o‘z holicha; «Mening sahifalarim» nomlari uchun). `search`/`categoryId` bilan
+   * katalog faqat sotuvchilarga ochiqlarini qaytarishi mumkin; lead-service baribir qayta saralaydi.
+   */
+  OFFER_LIST: 'catalog.offer.list',
+} as const;
+
+export interface CatalogOfferSnapshot {
+  productId: string;
+  name: string;
+  subtitle: string | null;
+  description: string | null;
+  images: string[];
+  videoUrl: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** Mahsulot atributlari: «Aloqa — Bluetooth». */
+  attributes: Array<{ name: string; value: string }>;
+  weightGrams: number | null;
+  /** «Dori vositasi emas» (BE-07). */
+  isBad: boolean;
+  /** Offer sotuvchilarga ochiq: cpa_enabled, faol, bloklanmagan, kamida bitta video (BE-07, BE-27). */
+  cpaAvailable: boolean;
+  /** Sotuvdan olingan (o‘chirilgan yoki olib tashlangan) — sahifa holati WITHDRAWN. */
+  withdrawn: boolean;
+  /** Tasdiqlangan narx (BE-09); bo‘sh — hali tasdiqlanmagan, sahifa ochilmaydi. */
+  approvedPrice: number | null;
+  /**
+   * Sahifadagi eng katta narx (NRX-4, BE-09): kategoriya ustamasi, bozor narxi chegarasi va yaxlitlash katalogda.
+   * Bo‘sh — ustama yo‘q, faqat tasdiqlangan narx.
+   */
+  maxSalePrice: number | null;
+  /** Sotuvchi haqi (BE-07). */
+  affiliateFee: number | null;
+  /** Ko‘rinadigan yetkazish: markazgacha va eshikkacha (BE-09). */
+  centerDeliveryFee: number;
+  addressDeliveryFee: number;
+  /** Band qilinmagan qoldiq, dona. */
+  stock: number;
+  /** Admin yuklagan kreativlar (BE-08 fayl servisi). */
+  creatives: Array<{ id: string; type: 'IMAGE' | 'VIDEO'; url: string }>;
+  createdAt: string;
+}
+
+export interface CatalogOfferListQuery {
+  search?: string;
+  categoryId?: string;
+  productIds?: string[];
+}

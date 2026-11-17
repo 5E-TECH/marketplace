@@ -1,7 +1,18 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Ip,
+  Param,
+  Post,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -14,6 +25,8 @@ import {
   LandingPageDto,
   LeadCreatedDto,
   Public,
+  RmqClient,
+  sendRpc,
 } from '@app/common';
 import { notImplementedYet } from './lead-stub';
 
@@ -25,6 +38,8 @@ import { notImplementedYet } from './lead-stub';
 @Public()
 @Controller()
 export class PublicLeadsController {
+  constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}
+
   @Get('landing/:code')
   @ApiOperation({
     summary: 'Sotuvchi sahifasi ma’lumoti (kod bo‘yicha)',
@@ -34,8 +49,8 @@ export class PublicLeadsController {
   })
   @ApiOkResponse({ type: LandingPageDto })
   @ApiNotFoundResponse({ description: 'Bunday sotuvchi sahifasi yo‘q' })
-  getLandingPage(@Param('code') _code: string): Promise<LandingPageDto> {
-    return notImplementedYet('BE-11');
+  getLandingPage(@Param('code') code: string): Promise<LandingPageDto> {
+    return sendRpc(this.lead, { cmd: 'lead.landing.get' }, { code });
   }
 
   @Post('clicks')
@@ -44,12 +59,25 @@ export class PublicLeadsController {
     description:
       'Sotuvchi sahifasi serveri yuboradi; mijozning IP va user agenti so‘rov sarlavhasidan olinadi (BE-11).',
   })
+  @ApiHeader({
+    name: 'user-agent',
+    required: false,
+    description:
+      'Mijoz brauzerining user agenti — sotuvchi sahifasi serveri uzatadi',
+  })
   @ApiCreatedResponse({ type: LandingClickCreatedDto })
   @ApiBadRequestResponse({ description: 'Maydonlar noto‘g‘ri' })
   createClick(
-    @Body() _dto: CreateLandingClickDto,
+    @Body() click: CreateLandingClickDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
   ): Promise<LandingClickCreatedDto> {
-    return notImplementedYet('BE-11');
+    // IP — trust-proxy sozlamasidan (trust-proxy.ts): sotuvchi sahifasi serveri X-Forwarded-For ni uzatadi.
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.click.create' },
+      { click, ip: ip || null, userAgent: userAgent?.slice(0, 1000) || null },
+    );
   }
 
   @Post('leads')

