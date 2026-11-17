@@ -1,4 +1,4 @@
-import { numericTransformer } from '@app/common';
+import { moneyTransformer, numericTransformer } from '@app/common';
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 /** Platformada doim bitta (id=1) yozuv bo'ladi. */
@@ -19,11 +19,9 @@ export class PlatformSettings {
 
   @Column({
     name: 'minimum_order_amount',
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
+    type: 'bigint',
     default: 0,
-    transformer: numericTransformer,
+    transformer: moneyTransformer,
   })
   minimumOrderAmount: number;
 

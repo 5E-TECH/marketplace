@@ -36,6 +36,7 @@ import { PlatformSettingsService } from './settings/platform-settings.service';
 import { AdminUserAccessController } from './admin-user-access/admin-user-access.controller';
 import { AdminUserAccessService } from './admin-user-access/admin-user-access.service';
 import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
+import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { BroadcastRecipientsController } from './broadcast/broadcast-recipients.controller';
 import { BroadcastRecipientsService } from './broadcast/broadcast-recipients.service';
 
@@ -72,6 +73,7 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
             CreateRecoverySupport1723100000000,
             CreatePlatformSettings1725897600000,
             AddUserAuthVersion1725984000000,
+            MoneyToBigint1795219200000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
