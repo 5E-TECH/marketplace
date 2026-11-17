@@ -20,6 +20,11 @@ import { POSTBACK_RULES, postbackRetryAt } from './postback.service';
  */
 export const CAPI_RULES = {
   maxAgeMs: 7 * 24 * 3600 * 1000,
+  /**
+   * Lead: Meta brauzer va server hodisasini (event_name + event_id) faqat 48 soat ichida birlashtiradi
+   * (oqish-meta.md, dedup) — kechroq yuborilgan Lead ikki marta sanaladi, shuning uchun yuborilmaydi.
+   */
+  leadDedupWindowMs: 48 * 3600 * 1000,
   /** Graph API versiyasi sozlamada: `META_GRAPH_VERSION` (2026-11: v26.0 — oqish-meta.md). */
   defaultGraphVersion: 'v26.0',
   currency: 'UZS',
@@ -93,7 +98,7 @@ export function buildCapiEvent(input: CapiEventInput): Record<string, unknown> {
     user_data: userData,
     custom_data: purchase
       ? {
-          value: input.value ?? 0,
+          value: input.value,
           currency: CAPI_RULES.currency,
           content_type: 'product',
           content_ids: [input.productId],
@@ -248,13 +253,11 @@ export class CapiService {
     reason: string,
     extra: Partial<CapiDelivery> = {},
   ) {
-    await this.db
-      .getRepository(CapiDelivery)
-      .update(row.id, {
-        nextAttemptAt: null,
-        lastError: short(reason),
-        ...extra,
-      });
+    await this.db.getRepository(CapiDelivery).update(row.id, {
+      nextAttemptAt: null,
+      lastError: short(reason),
+      ...extra,
+    });
   }
 
   private landingUrl(code: string): string {
@@ -278,9 +281,24 @@ export class CapiService {
       await this.fail(row, 'Piksel ID noto‘g‘ri');
       return false;
     }
-    const eventTime = row.eventTime ?? row.createdAt;
-    if (now.getTime() - eventTime.getTime() > CAPI_RULES.maxAgeMs) {
+    const purchase = row.event === AffiliateCapiEvent.PURCHASE;
+    // Purchase: eng erta yetkazilgan vaqt (tartibsiz hodisada navbatdagi qatorda kechroq vaqt qolgan bo‘lishi mumkin)
+    const eventTime =
+      (purchase && lead.deliveredAt) || row.eventTime || row.createdAt;
+    const age = now.getTime() - eventTime.getTime();
+    if (age > CAPI_RULES.maxAgeMs) {
       await this.fail(row, 'Hodisa 7 kundan eski — Meta qabul qilmaydi');
+      return false;
+    }
+    if (!purchase && age > CAPI_RULES.leadDedupWindowMs) {
+      await this.fail(
+        row,
+        'Lead 48 soatdan kech — brauzer pikseli bilan birlashtirib bo‘lmaydi, yuborilmadi',
+      );
+      return false;
+    }
+    if (purchase && row.value === null) {
+      await this.fail(row, 'Purchase summasi noma’lum — yuborilmadi');
       return false;
     }
     let token: string;

@@ -490,6 +490,52 @@ describeWithPostgres(
         );
       });
 
+      it('Lead 48 soatdan kech — brauzer bilan dedup oynasi o‘tgan, yuborilmaydi', async () => {
+        await due(new Date(Date.now() - 49 * 3600 * 1000));
+        const { svc, calls } = capi([ok]);
+        await svc.sendDue();
+        expect(calls).toHaveLength(0);
+        expect((await rows())[0]).toMatchObject({
+          nextAttemptAt: null,
+          lastError: expect.stringContaining('48 soatdan kech'),
+        });
+      });
+
+      it('Purchase: vaqt — lidning eng erta yetkazilgan vaqti; summa noma’lum bo‘lsa yuborilmaydi', async () => {
+        const s = await mkStream({ code: 'pppppp' });
+        const lead = await mkLead(s);
+        const t1 = new Date(Date.now() - 2 * 3600 * 1000);
+        const t2 = new Date(Date.now() - 3600 * 1000);
+        await db.query(
+          `UPDATE lead.lead SET delivered_at = $2, order_id = 9001 WHERE id = $1`,
+          [lead.id, t1],
+        );
+        const svc0 = new CapiService(db, config());
+        await db.transaction((m) => svc0.enqueuePurchase(m, lead, 292000, t2));
+        const { svc, calls } = capi([ok]);
+        await svc.sendDue();
+        const data = calls[0].body.data as Array<{
+          event_time: number;
+          custom_data: { value: number };
+        }>;
+        expect(data[0].event_time).toBe(Math.floor(t1.getTime() / 1000));
+        expect(data[0].custom_data.value).toBe(292000);
+
+        const other = await mkLead(s, { phoneE164: '+998901112233' });
+        await db.transaction((m) =>
+          svc0.enqueuePurchase(m, other, Number.NaN, t2),
+        );
+        const bad = capi([ok]);
+        await bad.svc.sendDue();
+        expect(bad.calls).toHaveLength(0);
+        const row = (await rows()).find((r) => r.leadId === other.id)!;
+        expect(row).toMatchObject({
+          value: null,
+          nextAttemptAt: null,
+          lastError: 'Purchase summasi noma’lum — yuborilmadi',
+        });
+      });
+
       it('LEAD_CAPI o‘chiq bo‘lsa cron hech narsa yubormaydi', async () => {
         await due();
         const off = capi([ok]);
