@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ActivityLog, UpdateAdminSettingsDto } from '@app/common';
+import { ActivityLog, MAX_MONEY, UpdateAdminSettingsDto } from '@app/common';
 import { DataSource, Repository } from 'typeorm';
 import { PlatformSettings } from '../entities/platform-settings.entity';
 
@@ -68,8 +68,10 @@ export class PlatformSettingsService {
       !Number.isFinite(dto?.commissionPercent) ||
       dto.commissionPercent < 0 ||
       dto.commissionPercent > 100 ||
-      !Number.isFinite(dto?.minimumOrderAmount) ||
+      // BE-01: pul butun so'm; gateway siz RPC chaqiruvchilar ham 400 oladi.
+      !Number.isSafeInteger(dto?.minimumOrderAmount) ||
       dto.minimumOrderAmount < 0 ||
+      dto.minimumOrderAmount > MAX_MONEY ||
       !/^(?:|\+998\d{9})$/.test(dto?.supportPhone)
     ) {
       throw new BadRequestException('Platforma sozlamalari noto‘g‘ri');

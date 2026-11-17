@@ -261,6 +261,15 @@ describe('CheckoutService (C2.9)', () => {
     );
   });
 
+  it('BE-01: MAX_MONEY dan katta buyurtma rad etiladi', async () => {
+    const { service, integration } = setup();
+    integration.send.mockImplementation(() => of({ amount: 999_999_999_999 }));
+
+    await expect(service.create('5', dto())).rejects.toThrow(
+      'Buyurtma summasi juda katta',
+    );
+  });
+
   it('BE-01: kasr tarif rad etiladi — pul butun so‘mda', async () => {
     const { service, integration } = setup();
     integration.send.mockImplementation(() => of({ amount: 20.5 }));

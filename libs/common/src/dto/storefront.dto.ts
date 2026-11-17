@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
   IsOptional,
@@ -8,6 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductDto } from './product.dto';
 import { ProductVariantDto } from './product-variant.dto';
@@ -49,16 +50,26 @@ export class StorefrontProductsQueryDto {
 
   @ApiPropertyOptional({ example: 100000, minimum: 0 })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt() // BE-01: pul — butun so‘m
+  // BE-01: narx butun so‘m; URL dagi kasr filtr chegarasi butunga
+  // keltiriladi (min — yuqoriga, max — pastga), natija o‘zgarmaydi.
+  @Transform(({ value }) =>
+    value === undefined || value === null ? value : Math.ceil(Number(value)),
+  )
+  @IsInt()
   @Min(0)
+  @Max(MAX_MONEY)
   minPrice?: number;
 
   @ApiPropertyOptional({ example: 15000000, minimum: 0 })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt() // BE-01: pul — butun so‘m
+  // BE-01: narx butun so‘m; URL dagi kasr filtr chegarasi butunga
+  // keltiriladi (min — yuqoriga, max — pastga), natija o‘zgarmaydi.
+  @Transform(({ value }) =>
+    value === undefined || value === null ? value : Math.floor(Number(value)),
+  )
+  @IsInt()
   @Min(0)
+  @Max(MAX_MONEY)
   maxPrice?: number;
 
   @ApiPropertyOptional({

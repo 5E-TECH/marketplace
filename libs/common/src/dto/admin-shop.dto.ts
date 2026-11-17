@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { ShopStatus } from '../enums';
 import { ProductStatus } from '../enums';
 
@@ -63,12 +64,14 @@ export class UpdateShopTariffsDto {
   @ApiProperty({ example: 25000, minimum: 1 })
   @Type(() => Number)
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(1)
   tariffHome: number;
 
   @ApiProperty({ example: 15000, minimum: 1 })
   @Type(() => Number)
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(1)
   tariffCenter: number;
 }

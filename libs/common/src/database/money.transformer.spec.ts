@@ -1,4 +1,5 @@
 import {
+  MAX_MONEY,
   moneyFromDb,
   moneyOrNull,
   moneyTransformer,
@@ -27,5 +28,8 @@ describe('moneyTransformer (BE-01)', () => {
     expect(() => moneyTransformer.to(10.5)).toThrow();
     expect(moneyTransformer.to(262000)).toBe(262000);
     expect(() => moneyTransformer.from('99999999999999999999')).toThrow();
+    // NUMERIC(14,2) butun qism chegarasi saqlanadi (payment/finance hali shunda)
+    expect(moneyTransformer.to(MAX_MONEY)).toBe(MAX_MONEY);
+    expect(() => moneyTransformer.to(MAX_MONEY + 1)).toThrow('chegaradan');
   });
 });

@@ -5,10 +5,12 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 
 export class CreateProductVariantDto {
   @ApiProperty({ example: 'IPHONE-16-BLACK-256' })
@@ -31,12 +33,14 @@ export class CreateProductVariantDto {
   @ApiPropertyOptional({ example: 16000000, minimum: 0, nullable: true })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   price?: number | null;
 
   @ApiPropertyOptional({ example: 17000000, minimum: 0, nullable: true })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   oldPrice?: number | null;
 

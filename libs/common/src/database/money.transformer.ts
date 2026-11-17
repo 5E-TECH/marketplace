@@ -5,11 +5,20 @@ import { ValueTransformer } from 'typeorm';
  * pg BIGINT ni satr qaytaradi — `number` ga o‘giriladi; Number.MAX_SAFE_INTEGER (≈ 9·10^15 so‘m) dan oshsa xato.
  * Yozishda faqat butun son qabul qilinadi: kasr so‘m bazaga tushmaydi (yaxlitlash — hisoblovchi kodning ishi).
  */
+/**
+ * Pul summasining yuqori chegarasi: 10^12 − 1 so‘m. NUMERIC(14,2) dagi
+ * butun qism chegarasi saqlanadi, chunki payment va finance xizmatlari hali
+ * shu turda (`payment.service.ts` dagi `amount >= 1e12` tekshiruvi ham shunday).
+ */
+export const MAX_MONEY = 999_999_999_999;
+
 export const moneyTransformer: ValueTransformer = {
   to: (value?: number | null): number | null | undefined => {
     if (value === null || value === undefined) return value;
     if (!Number.isSafeInteger(value))
       throw new Error(`Pul butun so‘m bo‘lishi kerak: ${value}`);
+    if (Math.abs(value) > MAX_MONEY)
+      throw new Error(`Pul summasi chegaradan katta: ${value}`);
     return value;
   },
   from: (value?: string | number | null): number | null | undefined => {

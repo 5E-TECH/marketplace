@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { SalesOrderStatus } from '../enums';
 import { CheckoutPaymentMethod } from './cart.dto';
 
@@ -93,6 +94,7 @@ export class AdminOrderRefundDto extends AdminOrderActionDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(1)
   amount?: number;
 }

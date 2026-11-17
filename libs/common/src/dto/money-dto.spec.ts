@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { AdminOrderRefundDto } from './admin-order.dto';
 import { UpdateAdminSettingsDto } from './admin-settings.dto';
 import { UpdateShopTariffsDto } from './admin-shop.dto';
@@ -15,7 +16,8 @@ import { StorefrontProductsQueryDto } from './storefront.dto';
  * DTO ning qolgan majburiy maydonlari bu testning ishi emas.
  */
 describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
-  const cases: Array<[string, new () => object, string, number]> = [
+  type Case = [string, new () => object, string, number];
+  const bodyCases: Case[] = [
     ['CreateProductDto', CreateProductDto, 'price', 150000],
     ['CreateProductDto', CreateProductDto, 'oldPrice', 180000],
     ['CreateProductVariantDto', CreateProductVariantDto, 'price', 150000],
@@ -27,6 +29,11 @@ describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
       'minimumOrderAmount',
       50000,
     ],
+    ['AdminReturnRefundDto', AdminReturnRefundDto, 'amount', 150000],
+    ['AdminOrderRefundDto', AdminOrderRefundDto, 'amount', 150000],
+  ];
+  // Filtrlar kasrni rad etmaydi — butunga keltiradi (pastdagi test).
+  const queryCases: Case[] = [
     [
       'StorefrontProductsQueryDto',
       StorefrontProductsQueryDto,
@@ -34,9 +41,8 @@ describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
       10000,
     ],
     ['SearchProductsQueryDto', SearchProductsQueryDto, 'maxPrice', 90000],
-    ['AdminReturnRefundDto', AdminReturnRefundDto, 'amount', 150000],
-    ['AdminOrderRefundDto', AdminOrderRefundDto, 'amount', 150000],
   ];
+  const cases = [...bodyCases, ...queryCases];
 
   async function errorsFor(
     dto: new () => object,
@@ -47,7 +53,7 @@ describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
     return errors.filter((error) => error.property === field);
   }
 
-  it.each(cases)(
+  it.each(bodyCases)(
     '%s.%s: kasr rad etiladi',
     async (_name, dto, field, value) => {
       const errors = await errorsFor(dto, field, value + 0.5);
@@ -62,6 +68,27 @@ describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
       expect(await errorsFor(dto, field, value)).toHaveLength(0);
     },
   );
+
+  it.each(cases)(
+    '%s.%s: MAX_MONEY dan katta rad etiladi',
+    async (_name, dto, field) => {
+      const errors = await errorsFor(dto, field, MAX_MONEY + 1);
+      expect(errors).toHaveLength(1);
+      expect(errors[0].constraints).toHaveProperty('max');
+    },
+  );
+
+  it('narx filtri: URL dagi kasr butunga keltiriladi (min yuqoriga, max pastga)', () => {
+    expect(
+      plainToInstance(SearchProductsQueryDto, {
+        minPrice: '1500.5',
+        maxPrice: '9000.9',
+      }),
+    ).toMatchObject({ minPrice: 1501, maxPrice: 9000 });
+    expect(
+      plainToInstance(StorefrontProductsQueryDto, { minPrice: '1500.5' }),
+    ).toMatchObject({ minPrice: 1501 });
+  });
 
   it('komissiya foizi kasrligicha qoladi (pul emas)', async () => {
     expect(

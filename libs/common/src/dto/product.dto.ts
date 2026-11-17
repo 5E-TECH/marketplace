@@ -13,6 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { MAX_MONEY } from '../database/money.transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { ProductStatus } from '../enums';
 
@@ -35,12 +36,14 @@ export class CreateProductDto {
 
   @ApiProperty({ example: 14999000, minimum: 0 })
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   price: number;
 
   @ApiPropertyOptional({ example: 15999000, minimum: 0, nullable: true })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
+  @Max(MAX_MONEY)
   @Min(0)
   oldPrice?: number | null;
 
