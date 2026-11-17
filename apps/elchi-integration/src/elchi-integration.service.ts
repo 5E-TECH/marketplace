@@ -8,6 +8,7 @@ import {
   CheckoutDeliveryDestination,
   ElchiShipmentResult,
   RmqClient,
+  runAsLeader,
 } from '@app/common';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
@@ -170,10 +171,20 @@ export class ElchiIntegrationService {
     }
   }
 
-  /** Muvaffaqiyatsiz provisioninglarni davriy qayta uradi. */
+  /** BE-03: bir nechta nusxada faqat qulfni olgan nusxa qayta uradi. */
   @Cron(CronExpression.EVERY_30_SECONDS, {
     name: 'elchi-market-provision-retry',
+    waitForCompletion: true,
   })
+  async retryFailedProvisionsTick(): Promise<void> {
+    await runAsLeader(
+      this.provisionRepo.manager.connection,
+      'elchi-market-provision-retry',
+      () => this.retryFailedProvisions(),
+    );
+  }
+
+  /** Muvaffaqiyatsiz provisioninglarni davriy qayta uradi. */
   async retryFailedProvisions(): Promise<number> {
     const failed = await this.provisionRepo.find({
       where: { status: STATUS.FAILED, isDeleted: false },
@@ -233,11 +244,19 @@ export class ElchiIntegrationService {
     return result;
   }
 
-  /** Har kuni drift va eski marketlarni avtomatik tuzatadi. */
   @Cron('0 30 2 * * *', {
     name: 'elchi-market-tariff-daily-sync',
     timeZone: 'Asia/Tashkent',
   })
+  async syncMarketTariffsDailyTick(): Promise<void> {
+    await runAsLeader(
+      this.provisionRepo.manager.connection,
+      'elchi-market-tariff-daily-sync',
+      () => this.syncMarketTariffsDaily(),
+    );
+  }
+
+  /** Har kuni drift va eski marketlarni avtomatik tuzatadi. */
   async syncMarketTariffsDaily(): Promise<void> {
     try {
       await this.syncMarketTariffs();
@@ -305,11 +324,22 @@ export class ElchiIntegrationService {
     };
   }
 
+  /** Bir vaqtda bitta sinxronlash (BE-38): toza bazada parallel so‘rovlar bir xil qatorni ikki marta yozmaydi. */
+  private geoSyncInFlight: Promise<GeoSyncResult> | null = null;
+
   /**
    * Elchi viloyat/tuman ma'lumotini geo_cache'ga sinxronlaydi (upsert).
    * Marketplace manzilini Elchi region/district'ga moslash uchun.
+   * Parallel chaqiruvlar bitta ishga qo‘shiladi (uq_geo_kind_elchi buzilmaydi).
    */
-  async syncGeoCache(): Promise<GeoSyncResult> {
+  syncGeoCache(): Promise<GeoSyncResult> {
+    this.geoSyncInFlight ??= this.runGeoSync().finally(() => {
+      this.geoSyncInFlight = null;
+    });
+    return this.geoSyncInFlight;
+  }
+
+  private async runGeoSync(): Promise<GeoSyncResult> {
     // Ikkala tashqi so‘rov ham muvaffaqiyatli bo‘lmaguncha bazani o‘zgartirmaymiz.
     const [regions, districts] = await Promise.all([
       this.elchi.getRegions(),
@@ -375,11 +405,19 @@ export class ElchiIntegrationService {
     return result;
   }
 
-  /** C1.44 — Elchi geo keshini har kuni Toshkent vaqti bilan 02:00 da yangilaydi. */
   @Cron('0 0 2 * * *', {
     name: 'elchi-geo-cache-daily-sync',
     timeZone: 'Asia/Tashkent',
   })
+  async syncGeoCacheDailyTick(): Promise<void> {
+    await runAsLeader(
+      this.provisionRepo.manager.connection,
+      'elchi-geo-cache-daily-sync',
+      () => this.syncGeoCacheDaily(),
+    );
+  }
+
+  /** C1.44 — Elchi geo keshini har kuni Toshkent vaqti bilan 02:00 da yangilaydi. */
   async syncGeoCacheDaily(): Promise<void> {
     try {
       await this.syncGeoCache();

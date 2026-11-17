@@ -1,4 +1,4 @@
-import { ElchiApiClient } from './elchi-api.client';
+import { ElchiApiClient, ElchiApiError } from './elchi-api.client';
 
 describe('ElchiApiClient config (C2.20)', () => {
   const config = (values: Record<string, string | undefined>) => ({
@@ -168,6 +168,80 @@ describe('ElchiApiClient config (C2.20)', () => {
       fetchMock.mockRestore();
     },
   );
+
+  it('BE-20 TC5: cancelShipment POST /partner/shipments/:id/cancel ga boradi', async () => {
+    const { fetchMock, client } = shipmentClient();
+    await client.cancelShipment('1251131');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.elchi.uz/partner/shipments/1251131/cancel',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('BE-20: Elchi xatosi HTTP status bilan ElchiApiError', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: async () => 'sold',
+    } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz/',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+    const error = await client.cancelShipment('1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ElchiApiError);
+    expect((error as ElchiApiError).status).toBe(409);
+    expect((error as ElchiApiError).code).toBeNull();
+    fetchMock.mockRestore();
+  });
+
+  it('BE-20: takroriy javobda QR bo‘lmasa GET /partner/shipments/:id dan olinadi', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ data: { shipment_id: '77', idempotent: true } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: { shipment_id: '77', tracking: 'qr-77', cod_amount: 276000 },
+          }),
+      } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz/',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+    await expect(
+      client.createShipment(shipmentBody('ADDRESS') as never),
+    ).resolves.toEqual({
+      shipment_id: '77',
+      qr_code_token: 'qr-77',
+      to_be_paid: 276000,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'https://api.elchi.uz/partner/shipments/77',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('BE-20: ORDER_INTAKE_CLOSED kodi va reopens_at xato tanasidan o‘qiladi', () => {
+    const error = new ElchiApiError(409, 'closed', {
+      statusCode: 409,
+      code: 'ORDER_INTAKE_CLOSED',
+      reopens_at: '2026-11-18T04:00:00.000Z',
+    });
+    expect(error.code).toBe('ORDER_INTAKE_CLOSED');
+    expect(error.reopensAt).toBe('2026-11-18T04:00:00.000Z');
+  });
 
   it('notanish yoki bo‘sh qiymatda xavfsiz "address" yuboriladi', async () => {
     for (const input of [undefined, '', 'uyga']) {

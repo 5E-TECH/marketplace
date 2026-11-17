@@ -58,6 +58,11 @@ import { BuyerReturnsController } from './returns/buyer-returns.controller';
 import { SellerReturnsController } from './sellers/seller-returns.controller';
 import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
+import { PublicLeadsController } from './leads/public-leads.controller';
+import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
+import { OperatorLeadsController } from './leads/operator-leads.controller';
+import { AdminLeadsController } from './leads/admin-leads.controller';
+import { AdminOfferContentController } from './leads/admin-offer-content.controller';
 
 @Module({
   imports: [
@@ -151,6 +156,12 @@ import { AdminReturnsController } from './admin/admin-returns.controller';
             RmqQueue.INTEGRATION,
           ),
       },
+      {
+        name: RmqClient.LEAD,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.LEAD),
+      },
     ]),
   ],
   controllers: [
@@ -196,6 +207,11 @@ import { AdminReturnsController } from './admin/admin-returns.controller';
     SellerReturnsController,
     AdminReturnsController,
     SellerFinanceController,
+    PublicLeadsController,
+    AffiliateStreamsController,
+    OperatorLeadsController,
+    AdminLeadsController,
+    AdminOfferContentController,
   ],
   providers: [
     AppService,

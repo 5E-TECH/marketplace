@@ -18,10 +18,11 @@ describe('ReadinessService (C4.7)', () => {
       clients[8] as never,
       clients[9] as never,
       clients[10] as never,
+      clients[11] as never,
     );
 
   it('TC1: barcha servislar sog‘lom bo‘lsa ready qaytaradi', async () => {
-    const clients = Array.from({ length: 11 }, client);
+    const clients = Array.from({ length: 12 }, client);
     const service = makeService(clients);
     await expect(service.check()).resolves.toMatchObject({ status: 'ready' });
     expect(clients.every((item) => item.send.mock.calls.length === 1)).toBe(
@@ -30,7 +31,7 @@ describe('ReadinessService (C4.7)', () => {
   });
 
   it('bitta servis javob bermasa 503 beradi', async () => {
-    const clients = Array.from({ length: 11 }, client);
+    const clients = Array.from({ length: 12 }, client);
     clients[2].send.mockImplementation(() =>
       throwError(() => new Error('down')),
     );

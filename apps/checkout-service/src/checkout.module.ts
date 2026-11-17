@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
+  OutboxEvent,
+  OutboxService,
   ensureSchema,
   shouldRunMigrations,
   RmqClient,
@@ -36,6 +39,8 @@ import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
 import { CreateReturnRequests1727481600000 } from './migrations/1727481600000-create-return-requests';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
+import { CreateCheckoutOutbox1795305600000 } from './migrations/1795305600000-create-checkout-outbox';
+import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { ReturnRequestsController } from './return-requests.controller';
 import { ReturnRequestService } from './return-request.service';
 import { ReturnRequestQueryService } from './return-request-query.service';
@@ -45,6 +50,7 @@ import { ReturnNotifierService } from './return-notifier.service';
 @Module({
   imports: [
     CommonConfigModule,
+    ScheduleModule.forRoot(),
     ServiceHealthModule.register('checkout-service'),
     ClientsModule.registerAsync([
       {
@@ -101,7 +107,7 @@ import { ReturnNotifierService } from './return-notifier.service';
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'checkout');
         return {
-          ...typeOrmOptions(config, 'checkout', [Cart, CartItem]),
+          ...typeOrmOptions(config, 'checkout', [Cart, CartItem, OutboxEvent]),
           synchronize: false,
           migrations: [
             CreateCheckoutTables1722513600000,
@@ -115,11 +121,13 @@ import { ReturnNotifierService } from './return-notifier.service';
             AddSellerOrderToBePaid1726588800000,
             CreateReturnRequests1727481600000,
             MoneyToBigint1795219200000,
+            CreateCheckoutOutbox1795305600000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
       },
     }),
+    TypeOrmModule.forFeature([OutboxEvent]),
   ],
   controllers: [
     SellerOrdersController,
@@ -140,6 +148,8 @@ import { ReturnNotifierService } from './return-notifier.service';
     ReturnRequestQueryService,
     ReturnRefundService,
     ReturnNotifierService,
+    OutboxService,
+    CheckoutOutboxRelayService,
   ],
 })
 export class CheckoutModule {}

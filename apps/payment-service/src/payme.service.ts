@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PaymentProvider, PaymentStatus } from '@app/common';
+import { PaymentProvider, PaymentStatus, runAsLeader } from '@app/common';
 import { timingSafeEqual } from 'crypto';
 import { Between, In, Not, LessThanOrEqual, Repository } from 'typeorm';
 import { paymentAtomic, validReference } from './payment-atomic';
@@ -380,10 +380,17 @@ export class PaymeService {
     };
   }
 
+  /** BE-03: bir nechta nusxada faqat qulfni olgan nusxa ishlaydi. */
   @Cron(CronExpression.EVERY_MINUTE, {
     name: 'payme-timeout',
     waitForCompletion: true,
   })
+  async expirePendingTick(): Promise<void> {
+    await runAsLeader(this.payments.manager.connection, 'payme-timeout', () =>
+      this.expirePending(),
+    );
+  }
+
   async expirePending(): Promise<void> {
     await paymentAtomic(this.payments, async (manager) => {
       const worker = new PaymeService(

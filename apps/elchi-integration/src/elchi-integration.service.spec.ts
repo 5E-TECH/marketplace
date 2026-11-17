@@ -662,4 +662,30 @@ describe('ElchiIntegrationService.createShipment (shopId → elchi_market_id)', 
         .elchi_market_id,
     ).toBe('137');
   });
+
+  it('BE-38: parallel syncGeoCache bitta sinxronlashga qo‘shiladi, tugagach yangisi boshlanadi', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { service, elchi } = makeService({
+      elchi: {
+        getRegions: jest.fn(async () => {
+          await gate;
+          return [{ id: '1', name: 'Toshkent', sato_code: '1726000' }];
+        }),
+        getDistricts: jest.fn(async () => [
+          { id: '10', name: 'Yunusobod', region_id: '1', sato_code: '1726266' },
+        ]),
+      },
+    });
+
+    const first = service.syncGeoCache();
+    const second = service.syncGeoCache();
+    expect(second).toBe(first);
+    release();
+    await Promise.all([first, second]);
+    expect(elchi.getRegions).toHaveBeenCalledTimes(1);
+
+    await service.syncGeoCache();
+    expect(elchi.getRegions).toHaveBeenCalledTimes(2);
+  });
 });

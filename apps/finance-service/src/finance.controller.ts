@@ -3,6 +3,7 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CreateCommissionDto,
   FinanceCodSettledEvent,
+  FinanceRemittanceEvent,
   FinanceDateRangeQueryDto,
   FinanceLedgerQueryDto,
   FinancePayoutQueryDto,
@@ -15,6 +16,7 @@ import {
 } from '@app/common';
 import { FinanceService } from './finance.service';
 import { SellerFinanceService } from './seller-finance.service';
+import { LedgerService } from './ledger/ledger.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -22,6 +24,7 @@ export class FinanceController {
   constructor(
     private readonly finance: FinanceService,
     private readonly sellerFinance: SellerFinanceService,
+    private readonly ledger: LedgerService,
   ) {}
 
   @EventPattern('finance.payout.requested')
@@ -39,9 +42,18 @@ export class FinanceController {
     return this.finance.refund(event);
   }
 
+  /**
+   * 2-versiya (BE-22: Elchi o'tkazmasi buyurtma bo'yicha) — yangi hisoblar
+   * modeliga; eski (versiyasiz) hodisa eski kodga, o'zgarishsiz.
+   */
   @EventPattern('finance.cod.settled')
-  codSettled(@Payload() event: FinanceCodSettledEvent) {
-    return this.finance.processCodSettled(event);
+  codSettled(
+    @Payload() event: FinanceCodSettledEvent | FinanceRemittanceEvent,
+  ) {
+    if ((event as FinanceRemittanceEvent)?.schemaVersion === 2) {
+      return this.ledger.onRemittance(event as FinanceRemittanceEvent);
+    }
+    return this.finance.processCodSettled(event as FinanceCodSettledEvent);
   }
 
   @MessagePattern({ cmd: 'finance.reconciliation.report' })

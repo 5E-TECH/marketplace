@@ -28,6 +28,7 @@ export * from './dto/product.dto';
 export * from './dto/storefront.dto';
 export * from './dto/search.dto';
 export * from './dto/cart.dto';
+export * from './dto/order-events.dto';
 export * from './dto/product-variant.dto';
 export * from './dto/file.dto';
 export * from './dto/inventory.dto';
@@ -53,6 +54,11 @@ export * from './dto/geo.dto';
 export * from './dto/order-tracking.dto';
 export * from './dto/return-request.dto';
 export * from './dto/admin-operations.dto';
+export * from './dto/lead.dto';
+export * from './dto/lead-affiliate.dto';
+export * from './dto/lead-operator.dto';
+export * from './dto/lead-events.dto';
+export * from './dto/affiliate-income.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
@@ -91,5 +97,7 @@ export * from './idempotency/idempotency-record.entity';
 export * from './idempotency/idempotency.service';
 export * from './outbox/outbox-event.entity';
 export * from './outbox/outbox.service';
+export * from './outbox/processed-event';
+export * from './scheduling/leader-lock';
 export * from './activity-log/activity-log.entity';
 export * from './activity-log/activity-log.service';

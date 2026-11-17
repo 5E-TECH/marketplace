@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
@@ -19,6 +20,12 @@ import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
 import { SellerFinanceService } from './seller-finance.service';
 import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
+import { CreateLedger1795478400000 } from './migrations/1795478400000-create-ledger';
+import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add-journal-lead-index';
+import { LedgerController } from './ledger/ledger.controller';
+import { LedgerService } from './ledger/ledger.service';
+import { LedgerQueryService } from './ledger/ledger-query.service';
+import { BalanceCheckService } from './ledger/balance-check.service';
 
 const entities = [
   SellerLedger,
@@ -31,6 +38,7 @@ const entities = [
 @Module({
   imports: [
     CommonConfigModule,
+    ScheduleModule.forRoot(),
     ServiceHealthModule.register('finance-service'),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -43,6 +51,8 @@ const entities = [
             CreateFinanceTables1724673600000,
             CreateCodReconciliation1724932800000,
             CreatePayoutSchedule1727568000000,
+            CreateLedger1795478400000,
+            AddJournalLeadIndex1795564800000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -50,7 +60,13 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [FinanceController],
-  providers: [FinanceService, SellerFinanceService],
+  controllers: [FinanceController, LedgerController],
+  providers: [
+    FinanceService,
+    SellerFinanceService,
+    LedgerService,
+    LedgerQueryService,
+    BalanceCheckService,
+  ],
 })
 export class FinanceModule {}
