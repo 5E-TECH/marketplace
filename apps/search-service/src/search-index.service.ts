@@ -5,6 +5,8 @@ import {
   CatalogProductChangedEvent,
   SearchProductsPageDto,
   SearchProductsQueryDto,
+  moneyFromDb,
+  moneyOrNull,
 } from '@app/common';
 import { SearchDocument } from './entities/search-document.entity';
 
@@ -106,7 +108,7 @@ export class SearchIndexService {
         productId: String(item.productId),
         shopId: String(item.shopId),
         categoryId: item.categoryId == null ? null : String(item.categoryId),
-        price: Number(item.price),
+        price: moneyFromDb(item.price as string),
         relevance: Number(item.relevance),
       })) as SearchProductsPageDto['items'],
       total,
@@ -120,8 +122,8 @@ export class SearchIndexService {
             count: Number(row.count),
           }),
         ),
-        minPrice: prices.minPrice == null ? null : Number(prices.minPrice),
-        maxPrice: prices.maxPrice == null ? null : Number(prices.maxPrice),
+        minPrice: moneyOrNull(prices.minPrice),
+        maxPrice: moneyOrNull(prices.maxPrice),
       },
     };
   }
