@@ -203,11 +203,13 @@ export class ElchiApiClient {
       this.pluck(res, 'price') ??
       this.pluck(res, 'tariff') ??
       this.pluck(res, 'delivery_price');
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount < 0) {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
       throw new Error('Elchi javobida yaroqli tarif summasi yo‘q');
     }
-    return { amount };
+    // Pul bizda butun so'mda (BE-01); Elchi "25000.00" ko'rinishida yuborishi
+    // mumkin, shuning uchun yaxlitlanadi.
+    return { amount: Math.round(parsed) };
   }
 
   private async request(
@@ -241,11 +243,14 @@ export class ElchiApiClient {
     return r?.[key] ?? r?.data?.[key] ?? r?.data?.data?.[key] ?? undefined;
   }
 
-  /** Summa maydoni: yo'q yoki son bo'lmasa `undefined` (0 ni saqlaydi). */
+  /**
+   * Summa maydoni: yo'q yoki son bo'lmasa `undefined` (0 ni saqlaydi).
+   * Butun so'mga yaxlitlanadi — checkout ustuni BIGINT (BE-01).
+   */
   private money(value: unknown): number | undefined {
     if (value === undefined || value === null || value === '') return undefined;
     const amount = Number(value);
-    return Number.isFinite(amount) ? amount : undefined;
+    return Number.isFinite(amount) ? Math.round(amount) : undefined;
   }
 
   /** Javobdan massivni ajratadi (`data` yoki `data.data` yoki to‘g‘ridan). */
