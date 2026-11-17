@@ -20,7 +20,11 @@ export type LineKind =
   | 'HIDDEN_DELIVERY'
   | 'REFUSAL_FEE'
   | 'COD_RECEIVABLE'
-  | 'ELCHI_KEPT';
+  | 'ELCHI_KEPT'
+  // BE-23 pul yechish: sotuvchidan −summa, soliq +1%, to‘lov chiqimi +qolgani
+  | 'WITHDRAWAL'
+  | 'WITHDRAWAL_TAX'
+  | 'WITHDRAWAL_NET';
 
 export interface SplitLine {
   account: AccountType;
