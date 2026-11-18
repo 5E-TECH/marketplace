@@ -33,6 +33,19 @@ const RETURNED: LeadOrderStatus[] = [
 export const VARIANT_REPORT_NOTE =
   'Sinov oldindan belgilangan posilka soniga yetguncha natijaga qarab to‘xtatilmaydi: erta qarash noto‘g‘ri g‘olib beradi (sinov-s1-s3.md «Qaror qoidasi»)';
 
+/** YYYY-MM-DD va mavjud sana (2027-02-31 rad etiladi — aks holda davr jim kengayardi). */
+const realDay = (s: string) =>
+  DAY.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+
+/**
+ * CSV katagi: formula sifatida ochilmasin (= + - @ tab CR bilan boshlansa «'»), «;», qo‘shtirnoq va qator
+ * ko‘chishi bo‘lsa qo‘shtirnoqda. Mahsulot nomini sotuvchi yozadi.
+ */
+export const csvCell = (value: string): string => {
+  const v = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+
 type Counts = Omit<
   VariantReportRowDto,
   | 'variant'
@@ -77,7 +90,7 @@ export class VariantReportService {
   ): Promise<VariantReportDto> {
     const from = String(query?.from ?? '');
     const to = String(query?.to ?? '');
-    if (!DAY.test(from) || !DAY.test(to) || from > to)
+    if (!realDay(from) || !realDay(to) || from > to)
       throw new BadRequestException({
         message: ['from va to YYYY-MM-DD, from ≤ to'],
       });
@@ -115,9 +128,15 @@ export class VariantReportService {
                   WHERE l.merged_into_id IS NULL AND l.delivered_at IS NOT NULL
                     AND NOT (l.order_status = ANY($5::text[]))), 0)::bigint::text AS amount
            FROM lead.lead l
-           LEFT JOIN lead.lead r ON r.id = l.merged_into_id
+           -- Dublikat zanjiri (ariza → operator «Dublikat» → …) oxirgi asosiy lidgacha; variant — o‘shaniki
            CROSS JOIN LATERAL (
-             SELECT CASE WHEN l.merged_into_id IS NULL THEN l.variant ELSE r.variant END AS variant
+             WITH RECURSIVE up AS (
+               SELECT l.id AS id, l.merged_into_id AS next, l.variant AS variant, 0 AS depth
+               UNION ALL
+               SELECT p.id, p.merged_into_id, p.variant, up.depth + 1
+                 FROM up JOIN lead.lead p ON p.id = up.next WHERE up.depth < 20
+             )
+             SELECT variant FROM up WHERE next IS NULL LIMIT 1
            ) v
           WHERE l.is_deleted = false AND l.created_at >= $1 AND l.created_at < $2
             AND v.variant IS NOT NULL AND ($3::bigint IS NULL OR l.product_id = $3)
@@ -230,8 +249,6 @@ export class VariantReportService {
     query: VariantReportQueryDto,
   ): Promise<{ fileName: string; content: string }> {
     const r = await this.report(query);
-    const esc = (v: string) =>
-      /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const header = [
       'Variant',
       'Mahsulot ID',
@@ -257,7 +274,10 @@ export class VariantReportService {
         x.visits,
         x.applications,
         x.duplicates,
-        x.duplicateRate ?? '',
+        // «;» — o‘zbek/rus Excel; o‘nlik ajratgich vergul (5,8), aks holda sana bo‘lib ochiladi
+        x.duplicateRate === null
+          ? ''
+          : String(x.duplicateRate).replace('.', ','),
         x.valid,
         x.confirmed,
         x.shipped,
@@ -269,7 +289,7 @@ export class VariantReportService {
           .map(([k, n]) => `${k}: ${n}`)
           .join(', '),
       ]
-        .map((v) => esc(String(v)))
+        .map((v) => csvCell(String(v)))
         .join(';'),
     );
     return {

