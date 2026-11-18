@@ -26,6 +26,8 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 export const SKIPPED_NO_WINDOW = 'RETURN_WINDOW_NOT_SET';
+/** Davrning bank fayli olingan: yangi akt qayta yuklangan faylga eski aktlar bilan chiqib, ikki marta to‘lanardi. */
+export const SKIPPED_PERIOD_EXPORTED = 'PERIOD_ALREADY_EXPORTED';
 
 export interface SettlementFile {
   fileName: string;
@@ -139,6 +141,13 @@ const SETTLEMENT_RUN_LOCK_CLASS = 2304;
 /** Kelajak lahzasi bilan ishga tushirib bo‘lmaydi (muddati o‘tmagan tovar kirib qoladi); soat farqi uchun 5 daqiqa. */
 const CLOCK_SKEW_MS = 5 * 60_000;
 
+/** Ishga tushirish va bank fayli bir-birini kutadi: fayl olinayotganda davrga yangi akt tuzilmaydi. */
+const lockRun = (m: EntityManager) =>
+  m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+    SETTLEMENT_RUN_LOCK_CLASS,
+    'finance-wholesaler-settlement',
+  ]);
+
 function validDay(value: unknown, field: string): string {
   const s = String(value ?? '');
   const d = new Date(`${s}T00:00:00Z`);
@@ -159,6 +168,8 @@ function validDay(value: unknown, field: string): string {
  *   `finance.setting.return_window_days`) to‘lgan, avval aktga kirmagan, buyurtmasida hal qilinmagan xato yo‘q.
  *   Akt tuzilgach o‘zgarmaydi: shu davrga keyin muddati yetgan qator keyingi haftaga qoladi.
  * - Muddat sozlanmagan bo‘lsa akt tuzilmaydi (manbasiz sukut yo‘q).
+ * - Bank fayli olingan davr yopiq: biror akti READY dan chiqqan bo‘lsa, `run` shu davrga yangi akt tuzmaydi —
+ *   qatorlar keyingi haftaga qoladi (aks holda qayta yuklangan fayl eski aktlarni yana chiqarardi).
  * - Bank fayli (moliya yuklab oladi): har tayyor akt qulf ostida qayta tekshiriladi — qaytgan yoki xatoli qator chiqadi,
  *   oldingi to‘lovlardan keyingi qaytarish qarzi ushlanadi, summa muzlatiladi (EXPORTED, exported_total).
  *   Hammasi qarzga ketsa — NETTED, tovarlar qaytgan bo‘lsa — VOID. Faylda faqat muzlatilgan summa.
@@ -219,16 +230,25 @@ export class SettlementService {
     if (asOf.getTime() > this.nowMs() + CLOCK_SKEW_MS)
       throw new BadRequestException('asOf kelajakda bo‘lishi mumkin emas');
     return this.db.transaction(async (m) => {
-      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        SETTLEMENT_RUN_LOCK_CLASS,
-        'finance-wholesaler-settlement',
-      ]);
+      await lockRun(m);
       const [{ cutoff, periodStart, periodEnd }] = (await m.query(
         `SELECT (date_trunc('week', $1::timestamptz AT TIME ZONE 'Asia/Tashkent') AT TIME ZONE 'Asia/Tashkent') AS cutoff,
                 to_char(date_trunc('week', $1::timestamptz AT TIME ZONE 'Asia/Tashkent') - interval '7 days', 'YYYY-MM-DD') AS "periodStart",
                 to_char(date_trunc('week', $1::timestamptz AT TIME ZONE 'Asia/Tashkent') - interval '1 day', 'YYYY-MM-DD') AS "periodEnd"`,
         [asOf],
       )) as Array<{ cutoff: Date; periodStart: string; periodEnd: string }>;
+      // Bank fayli olingan davr (READY dan chiqqan akt — EXPORTED, PAID, NETTED yoki VOID) yopiq
+      const [closed] = (await m.query(
+        `SELECT 1 FROM finance.wholesaler_settlement WHERE period_end = $1::date AND status <> 'READY' LIMIT 1`,
+        [periodEnd],
+      )) as unknown[];
+      if (closed)
+        return {
+          periodEnd,
+          skipped: SKIPPED_PERIOD_EXPORTED,
+          settlements: 0,
+          items: 0,
+        };
       const days = await this.returnWindowDays(m, asOf);
       if (days === null)
         return {
@@ -271,7 +291,7 @@ export class SettlementService {
       for (const [wholesalerId, list] of [...byWholesaler].sort(([a], [b]) =>
         a < b ? -1 : 1,
       )) {
-        // Akt o‘zgarmaydi: shu davr akti bo‘lsa (bank fayliga chiqqan bo‘lishi mumkin) yangi qatorlar keyingi haftaga
+        // Akt o‘zgarmaydi: optovikning shu davr akti allaqachon bo‘lsa, yangi qatorlar keyingi haftaga
         const created = returningRows<{ id: string }>(
           await m.query(
             `INSERT INTO finance.wholesaler_settlement (wholesaler_id, period_start, period_end, return_window_days)
@@ -442,10 +462,12 @@ export class SettlementService {
   /**
    * Bank fayli (TC3): davrning tayyor aktlari muzlatiladi, faylda — muzlatilgan summalar (oldin muzlatilganlari ham,
    * shuning uchun qayta yuklab olish o‘sha faylni beradi). 0 so‘mlik akt kirmaydi.
+   * Ishga tushirish qulfi ostida: fayl olingach `run` davrga yangi akt qo‘sha olmaydi (davr yopiq).
    */
   async bankFile(input: { periodEnd: string }): Promise<SettlementFile> {
     const periodEnd = validDay(input?.periodEnd, 'periodEnd');
     const rows = await this.db.transaction(async (m) => {
+      await lockRun(m);
       const ready = (await m.query(
         `${SELECT} WHERE s.period_end = $1::date AND s.status = 'READY' ORDER BY s.wholesaler_id, s.id`,
         [periodEnd],

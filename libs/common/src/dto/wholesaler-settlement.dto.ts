@@ -187,7 +187,8 @@ export class SettlementRunResultDto {
     nullable: true,
     type: String,
     description:
-      'RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi',
+      'RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi; ' +
+      'PERIOD_ALREADY_EXPORTED — davrning bank fayli olingan, yangi akt tuzilmadi (qatorlar keyingi haftaga)',
   })
   skipped: string | null;
 

@@ -11,7 +11,11 @@ import { CreateWholesalerSettlement1795737600000 } from '../migrations/179573760
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
-import { SettlementService, SKIPPED_NO_WINDOW } from './settlement.service';
+import {
+  SettlementService,
+  SKIPPED_NO_WINDOW,
+  SKIPPED_PERIOD_EXPORTED,
+} from './settlement.service';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
 const describePostgres = url ? describe : describe.skip;
@@ -392,6 +396,90 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       exportedTotal: 140000,
     });
     expect((await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).items).toBe(1);
+  });
+
+  it('bank faylidan keyin qo‘lda run boshqa optovikka akt tuzmaydi; fayl qayta yuklansa summa ikki marta chiqmaydi', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    const late = await deliver('502', '2026-12-28T10:00:00.000Z', false); // Elchi puli hali kelmagan
+    expect(await svc.run({ asOf: MONDAY })).toMatchObject({
+      settlements: 1,
+      items: 1,
+    });
+    const lines = async (periodEnd: string) =>
+      Buffer.from((await svc.bankFile({ periodEnd })).base64, 'base64')
+        .toString('utf8')
+        .split('\r\n')
+        .filter(Boolean)
+        .slice(1);
+    const first = await lines('2027-01-10');
+    expect(first).toHaveLength(1);
+    expect(first[0]).toContain('Optovik #501;');
+    // Fayl bankka ketdi; 502 ning puli keldi va moliya qo‘lda run bosdi
+    await ledger.onRemittance({
+      schemaVersion: 2,
+      eventId: `rem-${late}`,
+      orderId: late,
+      shipmentId: `s-${late}`,
+      elchiStatus: 'paid',
+      collectedFromCustomer: 291000,
+      elchiFee: 40000,
+      marketPaidAmount: 251000,
+      occurredAt: '2027-01-12T10:00:00.000Z',
+    });
+    expect(await svc.run({ asOf: MONDAY })).toEqual({
+      periodEnd: '2027-01-10',
+      skipped: SKIPPED_PERIOD_EXPORTED,
+      settlements: 0,
+      items: 0,
+    });
+    expect((await svc.list({ query: { periodEnd: '2027-01-10' } })).total).toBe(
+      1,
+    );
+    // Qayta yuklangan fayl — o‘sha bitta qator, 501 ikkinchi marta to‘lanmaydi
+    expect(await lines('2027-01-10')).toEqual(first);
+    // 502 keyingi hafta aktida, o‘z faylida bir marta
+    expect(await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).toMatchObject({
+      skipped: null,
+      settlements: 1,
+      items: 1,
+    });
+    const second = await lines('2027-01-17');
+    expect(second).toHaveLength(1);
+    expect(second[0]).toContain('Optovik #502;');
+    expect(second[0]).toContain(';140000;');
+  });
+
+  it('bank fayli ishga tushirish qulfini kutadi: run tugamaguncha akt muzlatilmaydi', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    const [s] = (await svc.list({ query: {} })).items;
+    const holder = new Client({ connectionString: url });
+    await holder.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        2304,
+        'finance-wholesaler-settlement',
+      ]);
+      let done = false;
+      const file = svc.bankFile({ periodEnd: '2027-01-10' }).finally(() => {
+        done = true;
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      expect(done).toBe(false);
+      expect((await svc.get({ id: s.id })).status).toBe(
+        WholesalerSettlementStatus.READY,
+      );
+      await holder.query('COMMIT');
+      await file;
+      expect((await svc.get({ id: s.id })).status).toBe(
+        WholesalerSettlementStatus.EXPORTED,
+      );
+    } finally {
+      await holder.end();
+    }
   });
 
   it('noto‘g‘ri kiritma — 400 (kelajak lahza, mavjud bo‘lmagan sana); yo‘q akt — 404', async () => {

@@ -19279,7 +19279,7 @@
             "type": "string",
             "example": null,
             "nullable": true,
-            "description": "RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi"
+            "description": "RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi; PERIOD_ALREADY_EXPORTED — davrning bank fayli olingan, yangi akt tuzilmadi (qatorlar keyingi haftaga)"
           },
           "settlements": {
             "type": "number",
