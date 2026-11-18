@@ -104,3 +104,5 @@ export * from './outbox/processed-event';
 export * from './scheduling/leader-lock';
 export * from './activity-log/activity-log.entity';
 export * from './activity-log/activity-log.service';
+// BE-39: S1 va S3 sinovi hisoboti
+export * from './dto/lead-report.dto';

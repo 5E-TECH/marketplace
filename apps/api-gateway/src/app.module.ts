@@ -57,6 +57,7 @@ import { AdminInventoryController } from './admin/admin-inventory.controller';
 import { BuyerReturnsController } from './returns/buyer-returns.controller';
 import { SellerReturnsController } from './sellers/seller-returns.controller';
 import { SellerFinanceController } from './sellers/seller-finance.controller';
+import { AdminVariantReportController } from './leads/admin-variant-report.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
@@ -212,6 +213,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     SellerReturnsController,
     AdminReturnsController,
     SellerFinanceController,
+    AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,
     // BE-23: pul yechish
