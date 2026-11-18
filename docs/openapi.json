@@ -10676,6 +10676,270 @@
         ]
       }
     },
+    "/api/v1/admin/finance/settlements": {
+      "get": {
+        "operationId": "AdminSettlementsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "READY",
+                "EXPORTED",
+                "PAID",
+                "NETTED",
+                "VOID"
+              ]
+            }
+          },
+          {
+            "name": "wholesalerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "501",
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodEnd",
+            "required": false,
+            "in": "query",
+            "description": "Davr oxiri (yakshanba)",
+            "schema": {
+              "example": "2027-01-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik aktlari (holat, optovik, davr filtri)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/bank-file": {
+      "get": {
+        "description": "Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).",
+        "operationId": "AdminSettlementsController_bankFile",
+        "parameters": [
+          {
+            "name": "periodEnd",
+            "required": true,
+            "in": "query",
+            "description": "Davr oxiri (yakshanba): shu davrning tayyor aktlari",
+            "schema": {
+              "example": "2027-01-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Bu davrda to‘lanadigan akt yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/run": {
+      "post": {
+        "description": "Takror ishga tushirish xavfsiz: bir tovar qatori bir marta aktga kiradi.",
+        "operationId": "AdminSettlementsController_run",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementRunResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hisob-kitobni qo‘lda ishga tushirish (cron har dushanba 09:00)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}": {
+      "get": {
+        "operationId": "AdminSettlementsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt va uning tovar qatorlari",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}/act.pdf": {
+      "get": {
+        "operationId": "AdminSettlementsController_actPdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt-sverka PDF",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}/paid": {
+      "post": {
+        "description": "Faqat bank faylidan keyin (EXPORTED); ledgerga aynan fayldagi summa (WHOLESALER_PAID). Keyin qaytgan tovar qarzi keyingi aktdan ushlanadi. Takror — o‘sha natija.",
+        "operationId": "AdminSettlementsController_paid",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Akt topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "«To‘landi»: moliya bankda o‘tkazdi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
     "/api/v1/operator/leads/next": {
       "post": {
         "description": "Vaqti kelgan qayta qo‘ng‘iroqlar, keyin eng yangi lidlar. 5 tadan ortiq bron yoki tanaffus holatida rad (OPR-1, BE-13).",
@@ -18810,6 +19074,229 @@
           "selfEmployed",
           "updatedBy",
           "updatedAt"
+        ]
+      },
+      "WholesalerSettlementItemDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "example": "9001"
+          },
+          "productId": {
+            "type": "string",
+            "example": "88",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1,
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "example": 140000,
+            "description": "Bazaviy narx × soni, so‘m"
+          },
+          "deliveredAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-02T10:00:00.000Z",
+            "description": "Yetkazilgan vaqt"
+          }
+        },
+        "required": [
+          "orderId",
+          "productId",
+          "quantity",
+          "amount",
+          "deliveredAt"
+        ]
+      },
+      "WholesalerSettlementDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "number": {
+            "type": "string",
+            "example": "AS-000012",
+            "description": "Akt raqami"
+          },
+          "wholesalerId": {
+            "type": "string",
+            "example": "501",
+            "description": "Optovik ID si (ledger WHOLESALER hisobi egasi)"
+          },
+          "periodStart": {
+            "type": "string",
+            "example": "2027-01-04",
+            "description": "Davr boshi (dushanba), Toshkent"
+          },
+          "periodEnd": {
+            "type": "string",
+            "example": "2027-01-10",
+            "description": "Davr oxiri (yakshanba), Toshkent"
+          },
+          "returnWindowDays": {
+            "type": "number",
+            "example": 10,
+            "description": "Qaytarish muddati, kun (EQ-10 sozlamasi)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "EXPORTED",
+              "PAID",
+              "NETTED",
+              "VOID"
+            ],
+            "example": "READY"
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 280000,
+            "description": "O‘tkaziladigan summa, so‘m"
+          },
+          "exportedTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Bank fayliga kirgan (muzlatilgan) summa — «To‘landi» aynan shuni yozadi"
+          },
+          "debtDeducted": {
+            "type": "number",
+            "example": 0,
+            "description": "Oldingi qaytarishlardan qolgan qarzga ushlangan summa"
+          },
+          "exportedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "itemsCount": {
+            "type": "number",
+            "example": 2
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerSettlementItemDto"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-11T04:00:00.000Z"
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "paidBy": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "wholesalerId",
+          "periodStart",
+          "periodEnd",
+          "returnWindowDays",
+          "status",
+          "totalAmount",
+          "exportedTotal",
+          "debtDeducted",
+          "exportedAt",
+          "itemsCount",
+          "items",
+          "createdAt",
+          "paidAt",
+          "paidBy"
+        ]
+      },
+      "WholesalerSettlementPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerSettlementDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "RunSettlementDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "example": "2027-01-11T04:00:00.000Z",
+            "description": "Qaysi lahza uchun (sukut — hozir); kesish — shu haftaning dushanbasi 00:00 Toshkent"
+          }
+        }
+      },
+      "SettlementRunResultDto": {
+        "type": "object",
+        "properties": {
+          "periodEnd": {
+            "type": "string",
+            "example": "2027-01-10"
+          },
+          "skipped": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi; PERIOD_ALREADY_EXPORTED — davrning bank fayli olingan, yangi akt tuzilmadi (qatorlar keyingi haftaga)"
+          },
+          "settlements": {
+            "type": "number",
+            "example": 3,
+            "description": "Tuzilgan yoki to‘ldirilgan aktlar"
+          },
+          "items": {
+            "type": "number",
+            "example": 7,
+            "description": "Aktga kirgan tovar qatorlari"
+          }
+        },
+        "required": [
+          "periodEnd",
+          "skipped",
+          "settlements",
+          "items"
         ]
       },
       "LeadProductRefDto": {
