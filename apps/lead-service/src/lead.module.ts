@@ -35,6 +35,8 @@ import { LeadStatsService } from './lead-stats.service';
 import { OfferService } from './offer.service';
 import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
+import { VariantReportController } from './variant-report.controller';
+import { VariantReportService } from './variant-report.service';
 import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
 import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
 import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
@@ -120,6 +122,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
     LeadAddressController,
     LeadOfferController,
     LeadIntakeController,
+    VariantReportController,
     LeadQueueController,
     LeadAdminController,
     LeadStatsController,
@@ -128,6 +131,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
     LeadAddressService,
     CatalogOfferClient,
     OfferService,
+    VariantReportService,
     StreamService,
     LandingService,
     LeadIntakeService,

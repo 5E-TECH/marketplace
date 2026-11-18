@@ -9518,6 +9518,116 @@
         ]
       }
     },
+    "/api/v1/admin/reports/s1-s3": {
+      "get": {
+        "description": "Hal qiluvchi raqam — 1000 tashrifga tushgan pul. Variantsiz lidlar kirmaydi; dublikat birinchi arizaning variantida. Sinov natijaga qarab erta to‘xtatilmaydi.",
+        "operationId": "AdminVariantReportController_report",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni; tashrif va ariza shu davrda",
+            "schema": {
+              "example": "2027-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2027-01-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": false,
+            "in": "query",
+            "description": "Bitta mahsulot",
+            "schema": {
+              "example": "501",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariantReportDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "S1 va S3: variant va mahsulot kesimida tashrifdan qabul qilingan posilkagacha",
+        "tags": [
+          "admin-reports"
+        ]
+      }
+    },
+    "/api/v1/admin/reports/s1-s3/csv": {
+      "get": {
+        "operationId": "AdminVariantReportController_csv",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni; tashrif va ariza shu davrda",
+            "schema": {
+              "example": "2027-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2027-01-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": false,
+            "in": "query",
+            "description": "Bitta mahsulot",
+            "schema": {
+              "example": "501",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xuddi shu hisobot CSV da (UTF-8, «;»)",
+        "tags": [
+          "admin-reports"
+        ]
+      }
+    },
     "/api/v1/landing/{code}": {
       "get": {
         "description": "Mahsulot, kreativlar, ko‘rinadigan narx va yetkazish, shablon, piksel va sahifa holati. Bazaviy narx, sotuvchi haqi va optovik ma’lumoti qaytmaydi (BE-11).",
@@ -16881,6 +16991,144 @@
         },
         "required": [
           "frequency"
+        ]
+      },
+      "VariantReportRowDto": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": [
+              "s1",
+              "s3"
+            ],
+            "example": "s1"
+          },
+          "productId": {
+            "type": "string",
+            "example": "501",
+            "nullable": true,
+            "description": "Bo‘sh — variantning hamma mahsuloti (jami qatori)"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Simsiz quloqchinlar"
+          },
+          "visits": {
+            "type": "number",
+            "example": 4210,
+            "description": "Tashrif (klik)"
+          },
+          "applications": {
+            "type": "number",
+            "example": 312,
+            "description": "Ariza: hamma ariza, dublikat birinchi arizaning variantida"
+          },
+          "duplicates": {
+            "type": "number",
+            "example": 18
+          },
+          "duplicateRate": {
+            "type": "number",
+            "example": 5.8,
+            "nullable": true,
+            "description": "Dublikat foizi (bir xona aniqlikda)"
+          },
+          "valid": {
+            "type": "number",
+            "example": 260
+          },
+          "confirmed": {
+            "type": "number",
+            "example": 121
+          },
+          "shipped": {
+            "type": "number",
+            "example": 115,
+            "description": "Elchi’ga topshirilgan"
+          },
+          "accepted": {
+            "type": "number",
+            "example": 82,
+            "description": "Qabul qilingan (yetkazildi)"
+          },
+          "returned": {
+            "type": "number",
+            "example": 2,
+            "description": "Qabul qilingan, keyin qaytarilgan"
+          },
+          "amount": {
+            "type": "number",
+            "example": 21320000,
+            "description": "Qabul qilingan va qaytarilmagan posilkalardan tushgan pul, so‘m: lid narxi × miqdor"
+          },
+          "amountPer1000Visits": {
+            "type": "number",
+            "example": 5064133,
+            "nullable": true,
+            "description": "1000 tashrifga tushgan pul, so‘m (hal qiluvchi raqam)"
+          },
+          "rejectReasons": {
+            "type": "object",
+            "example": {
+              "TOO_EXPENSIVE": 40,
+              "NOT_NEEDED": 22
+            },
+            "description": "Rad sabablari"
+          }
+        },
+        "required": [
+          "variant",
+          "productId",
+          "productName",
+          "visits",
+          "applications",
+          "duplicates",
+          "duplicateRate",
+          "valid",
+          "confirmed",
+          "shipped",
+          "accepted",
+          "returned",
+          "amount",
+          "amountPer1000Visits",
+          "rejectReasons"
+        ]
+      },
+      "VariantReportDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "2027-01-01"
+          },
+          "to": {
+            "type": "string",
+            "example": "2027-01-31"
+          },
+          "generatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-02-01T09:00:00.000Z"
+          },
+          "rows": {
+            "description": "Avval jami qatorlar (har variant), keyin variant × mahsulot",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantReportRowDto"
+            }
+          },
+          "note": {
+            "type": "string",
+            "example": "Sinov oldindan belgilangan posilka soniga yetguncha natijaga qarab to‘xtatilmaydi (sinov-s1-s3.md)"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "generatedAt",
+          "rows",
+          "note"
         ]
       },
       "LandingPageCreativeDto": {
