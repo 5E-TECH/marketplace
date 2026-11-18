@@ -62,6 +62,8 @@ import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
+import { AdminFraudController } from './leads/admin-fraud.controller';
+import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
 import { AdminOfferContentController } from './leads/admin-offer-content.controller';
 
 @Module({
@@ -212,6 +214,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     OperatorLeadsController,
     AdminLeadsController,
     AdminOfferContentController,
+    SupervisorLeadsController,
+    AdminFraudController,
   ],
   providers: [
     AppService,
