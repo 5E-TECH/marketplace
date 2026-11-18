@@ -12,6 +12,7 @@ import { DataSource } from 'typeorm';
 import {
   AffiliateOfferSort,
   AffiliatePostbackEvent,
+  LeadOrderStatus,
   AffiliateStreamStatus,
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
@@ -44,6 +45,8 @@ import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
 import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
 import { LeadAdminService } from './lead-admin.service';
+import { LeadOrderService } from './lead-order.service';
+import { orderEvent } from '../../finance-service/src/ledger/order-events.samples';
 import { PostbackService } from './postback.service';
 import { ApiKeyService, hashApiKey } from './api-key.service';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
@@ -1834,6 +1837,55 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).resolves.toMatchObject({
         postbackUrl: 'https://tracker.example.com/pb',
       });
+    });
+
+    it('yetkazildi (order.status.changed) → «delivered» postback bir marta (BE-14, SOT-5)', async () => {
+      const { lead } = await setup();
+      const orders = new LeadOrderService(
+        db,
+        undefined,
+        new PostbackService(db, config),
+      );
+      const ev = orderEvent({
+        eventId: 'pb-del',
+        orderId: '9001',
+        leadId: lead.id,
+        status: LeadOrderStatus.DELIVERED,
+        occurredAt: new Date().toISOString(),
+      });
+      await orders.onOrderStatusChanged(ev);
+      await orders.onOrderStatusChanged({
+        ...ev,
+        eventId: 'pb-rem',
+        status: LeadOrderStatus.REMITTED,
+      });
+      await orders.onOrderStatusChanged({
+        ...ev,
+        eventId: 'pb-tr',
+        status: LeadOrderStatus.IN_TRANSIT,
+      });
+      expect(
+        await db.query('SELECT event FROM lead.postback_delivery'),
+      ).toEqual([{ event: 'delivered' }]);
+    });
+
+    it('sir ochilmasa — imzosiz yuborilmaydi va FAILED bo‘ladi (abadiy navbatda qolmaydi)', async () => {
+      const { lead, stream } = await setup();
+      const { svc, calls } = service([200]);
+      await db.transaction((m) =>
+        svc.enqueue(m, lead, AffiliatePostbackEvent.LEAD),
+      );
+      await db.query(
+        `UPDATE lead.stream SET postback_secret_enc = 'buzuq' WHERE id = $1`,
+        [stream.id],
+      );
+      await svc.sendDue();
+      expect(calls).toHaveLength(0);
+      const [row] = await db.query(
+        'SELECT attempts, next_attempt_at FROM lead.postback_delivery',
+      );
+      expect(row).toEqual({ attempts: 1, next_attempt_at: null });
+      expect((await svc.journal('77', {})).items[0].status).toBe('FAILED');
     });
 
     it('navbat: «Tasdiqlandi» va «Rad etildi» postback navbatiga tushadi', async () => {
