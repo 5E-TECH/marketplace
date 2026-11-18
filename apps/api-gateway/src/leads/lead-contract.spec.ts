@@ -11,7 +11,6 @@ import {
   CreateLeadDto,
   FraudActionType,
   FraudDecisionDto,
-  FraudIncidentStatus,
   LeadCardDto,
   LeadHistoryEntryDto,
   LeadPreviousDto,
@@ -23,7 +22,7 @@ import {
   TransferLeadDto,
   UpdateAffiliateStreamDto,
 } from '@app/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AdminFraudController } from './admin-fraud.controller';
 import { AdminLeadsController } from './admin-leads.controller';
 import { AdminOfferContentController } from './admin-offer-content.controller';
@@ -468,15 +467,16 @@ describe('Lid shartnomasi (BE-25)', () => {
       ]);
     });
 
-    it('BLOCK_AFFILIATE: avval identity da blok, keyin qaror; boshqa choralar faqat lead-service', async () => {
-      const lead = jest.fn((pattern: { cmd: string }) =>
-        of(
-          pattern.cmd === 'lead.fraud.get'
-            ? { id: '12', status: FraudIncidentStatus.OPEN, affiliateId: '42' }
-            : { id: '12' },
-        ),
-      );
-      const identity = jest.fn(() => of({}));
+    it('BLOCK_AFFILIATE: avval qaror (lead-service), keyin identity da blok; identity xatosi — 502; boshqa choralar faqat lead-service', async () => {
+      const calls: string[] = [];
+      const lead = jest.fn((pattern: { cmd: string }) => {
+        calls.push(pattern.cmd);
+        return of({ id: '12', affiliateId: '42' });
+      });
+      const identity = jest.fn((pattern: { cmd: string }) => {
+        calls.push(pattern.cmd);
+        return of({});
+      });
       const ctrl = new AdminFraudController(
         { send: lead } as never,
         { send: identity } as never,
@@ -486,14 +486,21 @@ describe('Lid shartnomasi (BE-25)', () => {
         reason: 'Uchinchi marta o‘z buyurtmasi',
       } as FraudDecisionDto;
       await ctrl.decide('7', '12', block);
+      expect(lead).toHaveBeenCalledWith(
+        { cmd: 'lead.fraud.decide' },
+        { actorId: '7', id: '12', decision: block },
+      );
       expect(identity).toHaveBeenCalledWith(
         { cmd: 'identity.user.set-blocked' },
         { actorId: '7', userId: '42', blocked: true },
       );
-      expect(lead).toHaveBeenLastCalledWith(
-        { cmd: 'lead.fraud.decide' },
-        { actorId: '7', id: '12', decision: block },
+      expect(calls).toEqual(['lead.fraud.decide', 'identity.user.set-blocked']);
+      identity.mockImplementationOnce(() =>
+        throwError(() => new Error('identity ishlamayapti')),
       );
+      await expect(ctrl.decide('7', '12', block)).rejects.toMatchObject({
+        status: 502,
+      });
       identity.mockClear();
       await ctrl.decide('7', '12', {
         action: FraudActionType.WARN,

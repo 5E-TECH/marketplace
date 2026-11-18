@@ -32,6 +32,7 @@ import { LeadCardService } from './lead-card.service';
 import { LeadAddressService } from './lead-address.service';
 import { LeadAdminService } from './lead-admin.service';
 import { LeadIntakeService } from './lead-intake.service';
+import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadSupervisorService } from './lead-supervisor.service';
 import { StreamService } from './stream.service';
@@ -298,6 +299,18 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       ).resolves.toMatchObject({ fromOperatorId: '41' });
       await expect(
         t.transfer('7', stuck.id, { operatorId: '43' }, now),
+      ).rejects.toMatchObject({
+        response: { errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE },
+      });
+      // Mijoz aytgan vaqti hali kelmagan qo‘ng‘iroq egasida qoladi
+      const later = await addLead({
+        status: LeadStatus.CALLBACK,
+        operatorId: '41',
+        attempts: 1,
+        nextAttemptAt: new Date(now.getTime() + 60 * MIN),
+      });
+      await expect(
+        t.transfer('7', later.id, { operatorId: '43' }, now),
       ).rejects.toMatchObject({
         response: { errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE },
       });
@@ -580,6 +593,35 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
         reason: 'tekshiruv',
       });
       expect((await f.get(incident.id)).actions).toHaveLength(1);
+      // Haq ushlangan: ogohlantirish hodisani yopmaydi (haq taqdiri hal bo‘lmagan)
+      const warned = await f.decide('7', incident.id, {
+        action: FraudActionType.WARN,
+        reason: 'Birinchi marta — ogohlantirish',
+      });
+      expect(warned.status).toBe(FraudIncidentStatus.OPEN);
+      // Shu lid bo‘yicha boshqa (qo‘lda ochilgan) hodisaning «Asossiz»i bu ushlashni qo‘yib yubormaydi
+      const other = await f.create('7', {
+        rule: FraudRule.FAKE_CONFIRM,
+        leadId: own.id,
+        operatorId: '38',
+        reason: 'Tasdiq shubhali',
+      });
+      await expect(
+        f.decide('7', other.id, {
+          action: FraudActionType.RELEASE_FEE,
+          reason: 'x',
+        }),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { errorCode: LeadErrorCode.FRAUD_ACTION_NOT_APPLICABLE },
+      });
+      await f.decide('7', other.id, {
+        action: FraudActionType.DISMISS,
+        reason: 'Asossiz',
+      });
+      expect(await f.activeHolds(db.manager, { leadId: own.id })).toEqual([
+        own.id,
+      ]);
 
       const released = await f.decide('7', incident.id, {
         action: FraudActionType.RELEASE_FEE,
@@ -616,6 +658,38 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       expect(await f.activeHolds(db.manager, { affiliateId: '42' })).toEqual(
         [],
       );
+    });
+
+    it('relay: yo‘nalishi yo‘q hodisalar navbat boshida turib qolsa ham lead.confirmed yuboriladi', async () => {
+      const repo = db.getRepository(OutboxEvent);
+      const blocked = Array.from({ length: 25 }, (_, i) =>
+        repo.create({
+          aggregateType: 'fraud',
+          aggregateId: String(i + 1),
+          eventType: 'fraud.unrouted.test',
+          payload: { i },
+        }),
+      );
+      await repo.save(blocked);
+      await repo.save(
+        repo.create({
+          aggregateType: 'lead',
+          aggregateId: '1',
+          eventType: LEAD_EVENTS.CONFIRMED,
+          payload: { leadId: '1' },
+        }),
+      );
+      const checkout = { emit: jest.fn(() => of(undefined)) };
+      const relay = new LeadOutboxRelayService(
+        repo,
+        checkout as never,
+        { emit: jest.fn(() => of(undefined)) } as never,
+        new ConfigService({ LEAD_OUTBOX_RELAY: 'on' }),
+      );
+      await expect(relay.relay()).resolves.toBe(1);
+      expect(checkout.emit).toHaveBeenCalledWith(LEAD_EVENTS.CONFIRMED, {
+        leadId: '1',
+      });
     });
 
     it('qo‘lda hodisa (soxta tasdiq); «Asossiz»; mos kelmagan chora — 400; choralar tarixi o‘chmaydi', async () => {
