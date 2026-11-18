@@ -3,6 +3,8 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   FINANCE_AFFILIATE_RPC,
   FinanceAffiliateIncomeQuery,
+  FraudFeeEvent,
+  LEAD_EVENTS,
   ORDER_EVENTS,
   OrderReturnedEvent,
   OrderStatusChangedEvent,
@@ -30,6 +32,22 @@ export class LedgerController {
   @EventPattern(ORDER_EVENTS.RETURNED)
   orderReturned(@Payload() event: OrderReturnedEvent) {
     return this.ledger.onOrderReturned(event);
+  }
+
+  /** BE-35: firibgarlik markazi — sotuvchi haqini ushlash, qo‘yib yuborish, bekor qilish. */
+  @EventPattern(LEAD_EVENTS.FRAUD_FEE_HOLD)
+  feeHold(@Payload() event: FraudFeeEvent) {
+    return this.ledger.onFeeHold(event, 'HELD');
+  }
+
+  @EventPattern(LEAD_EVENTS.FRAUD_FEE_RELEASE)
+  feeRelease(@Payload() event: FraudFeeEvent) {
+    return this.ledger.onFeeHold(event, 'RELEASED');
+  }
+
+  @EventPattern(LEAD_EVENTS.FRAUD_FEE_CANCEL)
+  feeCancel(@Payload() event: FraudFeeEvent) {
+    return this.ledger.onFeeHold(event, 'CANCELLED');
   }
 
   @MessagePattern({ cmd: 'finance.accounts.list' })

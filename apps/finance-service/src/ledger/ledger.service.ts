@@ -8,6 +8,7 @@ import {
   moneyFromDb,
   processOnce,
   returningRows,
+  FraudFeeEvent,
 } from '@app/common';
 import {
   AccountType,
@@ -21,6 +22,12 @@ import {
 const ACCOUNT_LOCK_CLASS = 2301;
 /** Buyurtma qulfi kalit sinfi [taklif]: bir buyurtma hodisalari ketma-ket. */
 const ORDER_LOCK_CLASS = 2302;
+/** BE-35: `e` yozuvi — sotuvchi (AFFILIATE) yozuvi va lid haqi ushlangan yoki bekor qilingan. */
+const FEE_HELD = `EXISTS (
+  SELECT 1 FROM finance.journal fj
+    JOIN finance.fee_hold fh ON fh.lead_id = fj.lead_id AND fh.status IN ('HELD','CANCELLED')
+    JOIN finance.account fa ON fa.id = e.account_id AND fa.type = 'AFFILIATE'
+   WHERE fj.id = e.journal_id)`;
 
 export type JournalKind =
   | 'ORDER_DELIVERED'
@@ -101,6 +108,92 @@ export class LedgerService {
     await this.guard('finance.remittance', event, (manager) =>
       this.recordRemittance(manager, event),
     );
+  }
+
+  /**
+   * BE-35: sotuvchi haqi firibgarlik tekshiruvida (TZ 7). Lid bo‘yicha `fee_hold`:
+   * - HELD — sotuvchi yozuvlari (AFFILIATE) Elchi o‘tkazmasidan keyin ham HOLD da qoladi;
+   * - RELEASED — o‘tkazma kelgan bo‘lsa, ushlangan yozuvlar shu zahoti AVAILABLE ga o‘tadi, kelmagan bo‘lsa odatdagidek;
+   * - CANCELLED (sotuvchi bloklandi) — yakuniy: haq sotuvchiga hech qachon o‘tmaydi va HOLD da qoladi; uni
+   *   platformaga o‘tkazish egaga savol [taklif]. Qaytarish odatdagidek ishlaydi.
+   * Haq allaqachon AVAILABLE bo‘lsa (ushlash kech keldi), yozuvlar o‘zgarmaydi — faqat holat yoziladi va log.
+   * Buyurtma qulfi (2302) bilan o‘tkazma va qaytarish hodisalariga ketma-ket.
+   */
+  async onFeeHold(
+    event: FraudFeeEvent,
+    status: 'HELD' | 'RELEASED' | 'CANCELLED',
+  ): Promise<void> {
+    await this.guard(
+      `finance.fraud-fee-${status.toLowerCase()}`,
+      event,
+      async (manager) => {
+        if (
+          !event.affiliateId ||
+          !Array.isArray(event.leadIds) ||
+          !event.leadIds.length
+        )
+          throw new SplitError('affiliateId yoki leadIds yo‘q');
+        const leadIds = [...new Set(event.leadIds.map(String))].sort();
+        const orders = (await manager.query(
+          `SELECT DISTINCT order_id AS "orderId" FROM finance.journal
+          WHERE lead_id = ANY($1::text[]) AND kind = 'ORDER_DELIVERED' ORDER BY order_id`,
+          [leadIds],
+        )) as Array<{ orderId: string }>;
+        for (const o of orders)
+          await manager.query(
+            'SELECT pg_advisory_xact_lock($1, hashtext($2))',
+            [ORDER_LOCK_CLASS, `finance-order:${String(o.orderId)}`],
+          );
+        for (const leadId of leadIds) {
+          const changed = returningRows<{ leadId: string }>(
+            await manager.query(
+              `INSERT INTO finance.fee_hold (lead_id, affiliate_id, status, incident_id, reason)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (lead_id) DO UPDATE
+               SET status = EXCLUDED.status, incident_id = EXCLUDED.incident_id, reason = EXCLUDED.reason, updated_at = now()
+             WHERE fee_hold.status <> 'CANCELLED'
+             RETURNING lead_id::text AS "leadId"`,
+              [
+                leadId,
+                event.affiliateId,
+                status,
+                event.incidentId ?? null,
+                event.reason ?? null,
+              ],
+            ),
+          );
+          if (!changed.length) continue; // bekor qilingan — yakuniy
+          if (status === 'RELEASED') await this.releaseHeldFee(manager, leadId);
+          if (status === 'HELD') {
+            const [late] = (await manager.query(
+              `SELECT 1 FROM finance.ledger_entry e
+               JOIN finance.journal j ON j.id = e.journal_id AND j.lead_id = $1 AND j.kind = 'ORDER_DELIVERED'
+               JOIN finance.account a ON a.id = e.account_id AND a.type = 'AFFILIATE'
+              WHERE e.state = 'AVAILABLE' LIMIT 1`,
+              [leadId],
+            )) as unknown[];
+            if (late)
+              this.logger.warn(
+                `Lid ${leadId}: sotuvchi haqi allaqachon mavjud balansda — ushlash kech keldi (BE-35)`,
+              );
+          }
+        }
+      },
+    );
+  }
+
+  /** Ushlash olib tashlandi: o‘tkazma kelgan (jurnalda AVAILABLE yozuv bor) bo‘lsa sotuvchi yozuvlari AVAILABLE ga. */
+  private async releaseHeldFee(
+    manager: EntityManager,
+    leadId: string,
+  ): Promise<void> {
+    const journals = (await manager.query(
+      `SELECT j.id::text AS id FROM finance.journal j
+        WHERE j.lead_id = $1 AND j.kind = 'ORDER_DELIVERED'
+          AND EXISTS (SELECT 1 FROM finance.ledger_entry x WHERE x.journal_id = j.id AND x.state = 'AVAILABLE')`,
+      [leadId],
+    )) as Array<{ id: string }>;
+    for (const j of journals) await this.makeAvailable(manager, j.id);
   }
 
   async onOrderReturned(event: OrderReturnedEvent): Promise<void> {
@@ -503,8 +596,8 @@ export class LedgerService {
     journalId: string,
   ): Promise<void> {
     const entries = (await manager.query(
-      `SELECT id::text, account_id::text AS "accountId", amount
-         FROM finance.ledger_entry WHERE journal_id = $1 AND state = 'HOLD'`,
+      `SELECT e.id::text, e.account_id::text AS "accountId", e.amount
+         FROM finance.ledger_entry e WHERE e.journal_id = $1 AND e.state = 'HOLD' AND NOT ${FEE_HELD}`,
       [journalId],
     )) as Array<{ id: string; accountId: string; amount: string }>;
     if (!entries.length) return;
@@ -515,9 +608,9 @@ export class LedgerService {
     // UPDATE … RETURNING → [qatorlar, soni] (TypeORM): returningRows.
     const moved = returningRows<{ accountId: string; amount: string }>(
       await manager.query(
-        `UPDATE finance.ledger_entry SET state = 'AVAILABLE', available_at = now()
-        WHERE journal_id = $1 AND state = 'HOLD'
-        RETURNING account_id::text AS "accountId", amount`,
+        `UPDATE finance.ledger_entry e SET state = 'AVAILABLE', available_at = now()
+        WHERE e.journal_id = $1 AND e.state = 'HOLD' AND NOT ${FEE_HELD}
+        RETURNING e.account_id::text AS "accountId", e.amount`,
         [journalId],
       ),
     );

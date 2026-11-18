@@ -28,6 +28,7 @@ import { WithdrawalService } from './ledger/withdrawal.service';
 import { CreateWholesalerSettlement1795737600000 } from './migrations/1795737600000-create-wholesaler-settlement';
 import { SettlementController } from './ledger/settlement.controller';
 import { SettlementService } from './ledger/settlement.service';
+import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fee-hold';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
@@ -61,6 +62,7 @@ const entities = [
             AddJournalLeadIndex1795564800000,
             CreateWithdrawal1795651200000,
             CreateWholesalerSettlement1795737600000,
+            CreateFeeHold1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

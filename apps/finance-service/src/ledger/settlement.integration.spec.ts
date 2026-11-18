@@ -8,6 +8,7 @@ import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-le
 import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
 import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
 import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
+import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -109,6 +110,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         AddJournalLeadIndex1795564800000,
         CreateWithdrawal1795651200000,
         CreateWholesalerSettlement1795737600000,
+        CreateFeeHold1795824000000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -127,7 +129,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     await ds.query(`TRUNCATE finance.wholesaler_settlement_item, finance.wholesaler_settlement,
       finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
       finance.ledger_entry, finance.journal, finance.remittance_item, finance.elchi_remittance,
-      finance.balance_check, finance.processed_event, finance.event_failure`);
+      finance.balance_check, finance.processed_event, finance.event_failure, finance.fee_hold`);
     await ds.query(`DELETE FROM finance.account WHERE owner_id <> ''`);
     await ds.query(
       `UPDATE finance.account SET hold_balance = 0, available_balance = 0`,
