@@ -22,6 +22,9 @@ import { SellerFinanceService } from './seller-finance.service';
 import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
 import { CreateLedger1795478400000 } from './migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add-journal-lead-index';
+import { CreateWithdrawal1795651200000 } from './migrations/1795651200000-create-withdrawal';
+import { WithdrawalController } from './ledger/withdrawal.controller';
+import { WithdrawalService } from './ledger/withdrawal.service';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
@@ -53,6 +56,7 @@ const entities = [
             CreatePayoutSchedule1727568000000,
             CreateLedger1795478400000,
             AddJournalLeadIndex1795564800000,
+            CreateWithdrawal1795651200000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -60,13 +64,14 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [FinanceController, LedgerController],
+  controllers: [FinanceController, LedgerController, WithdrawalController],
   providers: [
     FinanceService,
     SellerFinanceService,
     LedgerService,
     LedgerQueryService,
     BalanceCheckService,
+    WithdrawalService,
   ],
 })
 export class FinanceModule {}
