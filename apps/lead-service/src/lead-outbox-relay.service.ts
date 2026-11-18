@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -21,6 +21,9 @@ export class LeadOutboxRelayService {
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     @Inject(RmqClient.NOTIFICATION) private readonly notification: ClientProxy,
     private readonly config: ConfigService,
+    @Optional()
+    @Inject(RmqClient.FINANCE)
+    private readonly finance?: ClientProxy,
   ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS, {
@@ -67,9 +70,14 @@ export class LeadOutboxRelayService {
   private route(eventType: string): ClientProxy | null {
     if (eventType === LEAD_EVENTS.CONFIRMED) return this.checkout;
     if (eventType === LEAD_EVENTS.CALLBACK_REMINDER) return this.notification;
-    // BE-35: sotuvchiga chora xabari. fraud.fee.* moliyaga — moliya iste’molchisi qo‘shilgach (BE-35 2-PR);
-    // ungacha outbox da PENDING qoladi, yo‘qolmaydi.
+    // BE-35: sotuvchiga chora xabari; sotuvchi haqini ushlash, qo‘yib yuborish va bekor qilish — moliyaga.
     if (eventType === LEAD_EVENTS.FRAUD_MEASURE) return this.notification;
+    if (
+      eventType === LEAD_EVENTS.FRAUD_FEE_HOLD ||
+      eventType === LEAD_EVENTS.FRAUD_FEE_RELEASE ||
+      eventType === LEAD_EVENTS.FRAUD_FEE_CANCEL
+    )
+      return this.finance ?? null;
     return null;
   }
 }

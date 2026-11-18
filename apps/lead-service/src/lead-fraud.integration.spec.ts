@@ -32,6 +32,7 @@ import { LeadCardService } from './lead-card.service';
 import { LeadAddressService } from './lead-address.service';
 import { LeadAdminService } from './lead-admin.service';
 import { LeadIntakeService } from './lead-intake.service';
+import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadSupervisorService } from './lead-supervisor.service';
 import { StreamService } from './stream.service';
@@ -615,6 +616,28 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       ).toBe(AffiliateStreamStatus.STOPPED);
       expect(await f.activeHolds(db.manager, { affiliateId: '42' })).toEqual(
         [],
+      );
+
+      // Relay: fraud.fee.* — moliyaga, fraud.measure.applied — notification ga
+      const finance = { emit: jest.fn(() => of(undefined)) };
+      const notification = { emit: jest.fn(() => of(undefined)) };
+      const relay = new LeadOutboxRelayService(
+        db.getRepository(OutboxEvent),
+        { emit: jest.fn(() => of(undefined)) } as never,
+        notification as never,
+        new ConfigService({ LEAD_OUTBOX_RELAY: 'on' }),
+        finance as never,
+      );
+      await relay.relay();
+      expect(finance.emit.mock.calls.map((c: unknown[]) => c[0])).toEqual([
+        LEAD_EVENTS.FRAUD_FEE_HOLD,
+        LEAD_EVENTS.FRAUD_FEE_RELEASE,
+        LEAD_EVENTS.FRAUD_FEE_HOLD,
+        LEAD_EVENTS.FRAUD_FEE_CANCEL,
+      ]);
+      expect(notification.emit).toHaveBeenCalledWith(
+        LEAD_EVENTS.FRAUD_MEASURE,
+        expect.objectContaining({ action: 'BLOCK_AFFILIATE' }),
       );
     });
 

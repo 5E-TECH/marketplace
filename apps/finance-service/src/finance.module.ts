@@ -22,6 +22,7 @@ import { SellerFinanceService } from './seller-finance.service';
 import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
 import { CreateLedger1795478400000 } from './migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add-journal-lead-index';
+import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fee-hold';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
@@ -53,6 +54,7 @@ const entities = [
             CreatePayoutSchedule1727568000000,
             CreateLedger1795478400000,
             AddJournalLeadIndex1795564800000,
+            CreateFeeHold1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };

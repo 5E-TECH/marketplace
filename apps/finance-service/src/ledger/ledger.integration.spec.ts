@@ -6,6 +6,7 @@ import { CreateCodReconciliation1724932800000 } from '../migrations/172493280000
 import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-create-payout-schedule';
 import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
+import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
@@ -76,6 +77,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
         CreatePayoutSchedule1727568000000,
         CreateLedger1795478400000,
         AddJournalLeadIndex1795564800000,
+        CreateFeeHold1795824000000,
       ],
       migrationsRun: true,
       synchronize: false,
