@@ -14,6 +14,8 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { csvCell, VariantReportService } from './variant-report.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -119,6 +121,8 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
         AddLeadStats1795564800000,
+        AddCapiFields1795651200000,
+        AddFraudCenter1795824000000,
       ],
       synchronize: false,
       logging: false,

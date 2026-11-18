@@ -62,6 +62,16 @@ export enum LeadErrorCode {
   ADDRESS_NOT_CONFIRMED = 'ADDRESS_NOT_CONFIRMED',
   /** POST /leads: sotuvchi sahifasi hozir ariza qabul qilmaydi (holat OPEN emas) — 409 (BE-12, SF-02 TC8). */
   LANDING_NOT_OPEN = 'LANDING_NOT_OPEN',
+  /** O‘tkazish: lid navbatda yoki operatorda emas (yopilgan, tekshiruvda, dublikat) — 409 (BE-35). */
+  LEAD_NOT_TRANSFERABLE = 'LEAD_NOT_TRANSFERABLE',
+  /** Qayta ochish faqat «Rad etildi» lidga — 409 (BE-35). */
+  LEAD_NOT_REJECTED = 'LEAD_NOT_REJECTED',
+  /** Shu raqam va mahsulotda faol lid bor — ikkinchisi ochilmaydi (LID-4) — 409 (BE-35). */
+  ACTIVE_LEAD_EXISTS = 'ACTIVE_LEAD_EXISTS',
+  /** Firibgarlik hodisasi allaqachon yopilgan — 409 (BE-35). */
+  FRAUD_INCIDENT_CLOSED = 'FRAUD_INCIDENT_CLOSED',
+  /** Chora hodisaga mos emas (masalan, sahifasiz hodisada «sahifani to‘xtatish») — 400 (BE-35). */
+  FRAUD_ACTION_NOT_APPLICABLE = 'FRAUD_ACTION_NOT_APPLICABLE',
 }
 
 /** Operator holati (T4 operator_state). BREAK — yangi lid berilmaydi. */
@@ -267,6 +277,16 @@ export class LeadCardDto {
     description: 'Buyurtma yaratilmadi: qoldiq yo‘q (order.create-failed)',
   })
   stockShortage: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'Qora ro‘yxat (TZ 7: bir raqam 2 marta rad etgan): necha marta rad etgani; bo‘sh — ro‘yxatda emas. ' +
+      'Chora EQ-04 javobidan keyin (BE-35)',
+  })
+  blacklistRejections: number | null;
 
   @ApiProperty({ example: 0 }) attemptsCount: number;
 

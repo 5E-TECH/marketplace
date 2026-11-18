@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import {
   BadRequestException,
   ConflictException,
@@ -11,6 +12,7 @@ import { DataSource } from 'typeorm';
 import {
   AffiliateOfferSort,
   AffiliatePostbackEvent,
+  LeadOrderStatus,
   AffiliateStreamStatus,
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
@@ -43,10 +45,14 @@ import { LandingService } from './landing.service';
 import { LeadAddressService } from './lead-address.service';
 import { HONEYPOT_LEAD_ID, LeadIntakeService } from './lead-intake.service';
 import { LeadAdminService } from './lead-admin.service';
+import { LeadOrderService } from './lead-order.service';
+import { orderEvent } from '../../finance-service/src/ledger/order-events.samples';
 import { PostbackService } from './postback.service';
 import { ApiKeyService, hashApiKey } from './api-key.service';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -60,6 +66,9 @@ import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
+/** lead sxemasini qayta yaratadigan integratsiya testlari parallel workerda bir-birini buzmasin (BE-31). */
+const LEAD_SCHEMA_TEST_LOCK = 2_304_002;
+let schemaLock: Client | undefined;
 
 /**
  * BE-10 — haqiqiy PostgreSQL ustida. Faqat `lead` sxemasiga tegadi.
@@ -109,22 +118,30 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
         AddLeadStats1795564800000,
+        AddCapiFields1795651200000,
+        AddFraudCenter1795824000000,
       ],
       synchronize: false,
       logging: false,
     });
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      LEAD_SCHEMA_TEST_LOCK,
+    ]);
     await db.initialize();
     // TC2: toza bazada migratsiya boshidan oxirigacha o‘tadi
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000);
 
   afterAll(async () => {
     if (db?.isInitialized) {
       await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
       await db.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {
@@ -1822,6 +1839,55 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       ).resolves.toMatchObject({
         postbackUrl: 'https://tracker.example.com/pb',
       });
+    });
+
+    it('yetkazildi (order.status.changed) → «delivered» postback bir marta (BE-14, SOT-5)', async () => {
+      const { lead } = await setup();
+      const orders = new LeadOrderService(
+        db,
+        undefined,
+        new PostbackService(db, config),
+      );
+      const ev = orderEvent({
+        eventId: 'pb-del',
+        orderId: '9001',
+        leadId: lead.id,
+        status: LeadOrderStatus.DELIVERED,
+        occurredAt: new Date().toISOString(),
+      });
+      await orders.onOrderStatusChanged(ev);
+      await orders.onOrderStatusChanged({
+        ...ev,
+        eventId: 'pb-rem',
+        status: LeadOrderStatus.REMITTED,
+      });
+      await orders.onOrderStatusChanged({
+        ...ev,
+        eventId: 'pb-tr',
+        status: LeadOrderStatus.IN_TRANSIT,
+      });
+      expect(
+        await db.query('SELECT event FROM lead.postback_delivery'),
+      ).toEqual([{ event: 'delivered' }]);
+    });
+
+    it('sir ochilmasa — imzosiz yuborilmaydi va FAILED bo‘ladi (abadiy navbatda qolmaydi)', async () => {
+      const { lead, stream } = await setup();
+      const { svc, calls } = service([200]);
+      await db.transaction((m) =>
+        svc.enqueue(m, lead, AffiliatePostbackEvent.LEAD),
+      );
+      await db.query(
+        `UPDATE lead.stream SET postback_secret_enc = 'buzuq' WHERE id = $1`,
+        [stream.id],
+      );
+      await svc.sendDue();
+      expect(calls).toHaveLength(0);
+      const [row] = await db.query(
+        'SELECT attempts, next_attempt_at FROM lead.postback_delivery',
+      );
+      expect(row).toEqual({ attempts: 1, next_attempt_at: null });
+      expect((await svc.journal('77', {})).items[0].status).toBe('FAILED');
     });
 
     it('navbat: «Tasdiqlandi» va «Rad etildi» postback navbatiga tushadi', async () => {

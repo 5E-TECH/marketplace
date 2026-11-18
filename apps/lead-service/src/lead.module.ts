@@ -29,6 +29,7 @@ import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
+import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadStatsController } from './lead-stats.controller';
 import { LeadStatsService } from './lead-stats.service';
@@ -43,8 +44,15 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
+import { AffiliateIdentityClient } from './affiliate-identity.client';
+import { FraudScheduler } from './fraud.scheduler';
+import { FraudService } from './fraud.service';
+import { LeadSupervisorController } from './lead-supervisor.controller';
+import { LeadSupervisorService } from './lead-supervisor.service';
 
-/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28. */
+/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28; nazoratchi va firibgarlik — BE-35. */
 @Module({
   imports: [
     CommonConfigModule,
@@ -88,6 +96,15 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
           ),
       },
       {
+        name: RmqClient.IDENTITY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.getOrThrow<string>('RABBITMQ_URL')],
+            RmqQueue.IDENTITY,
+          ),
+      },
+      {
         name: RmqClient.INTEGRATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
@@ -111,6 +128,8 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
             AddLeadQueue1795046400000,
             AddApiLeads1795132800000,
             AddLeadStats1795564800000,
+            AddCapiFields1795651200000,
+            AddFraudCenter1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -126,6 +145,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
     LeadQueueController,
     LeadAdminController,
     LeadStatsController,
+    LeadSupervisorController,
   ],
   providers: [
     LeadAddressService,
@@ -144,6 +164,11 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
     ApiKeyService,
     LeadStatsService,
     LeadOrderService,
+    CapiService,
+    AffiliateIdentityClient,
+    FraudService,
+    FraudScheduler,
+    LeadSupervisorService,
   ],
 })
 export class LeadModule {}

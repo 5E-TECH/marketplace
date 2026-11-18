@@ -61,8 +61,13 @@ import { AdminVariantReportController } from './leads/admin-variant-report.contr
 import { AdminReturnsController } from './admin/admin-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
+import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
+import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
+import { AdminFraudController } from './leads/admin-fraud.controller';
+import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
 import { AdminOfferContentController } from './leads/admin-offer-content.controller';
 
 @Module({
@@ -211,9 +216,16 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,
+    // BE-23: pul yechish
+    AffiliateWithdrawalsController,
+    AdminWithdrawalsController,
+    // BE-33: optovik hisob-kitobi
+    AdminSettlementsController,
     OperatorLeadsController,
     AdminLeadsController,
     AdminOfferContentController,
+    SupervisorLeadsController,
+    AdminFraudController,
   ],
   providers: [
     AppService,

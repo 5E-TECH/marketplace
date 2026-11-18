@@ -1,16 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import {
   AdminLeadsPageDto,
   AdminLeadsQueryDto,
   CatalogOfferSnapshot,
+  isLeadBigintId,
   LeadCardDto,
+  LeadErrorCode,
+  LeadReopenedDto,
+  LeadStatus,
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
-import { Lead } from './entities';
+import { Lead, LeadHistory } from './entities';
 import { LeadCardService, maskPhone } from './lead-card.service';
+import { LOCK_SPACE_LEAD } from './lead-intake.service';
+import { contactDeadline } from './lead-rules';
 import { tashkentDayStart as dayStart } from './lead-schedule';
+
+const ACTIVE = [LeadStatus.NEW, LeadStatus.BOOKED, LeadStatus.CALLBACK];
 
 const DEFAULT_LIMIT = 20;
 const nameOf = (id: string | null) => (id ? `#${id}` : null);
@@ -88,5 +101,86 @@ export class LeadAdminService {
     });
     if (!lead) throw new NotFoundException('Lid topilmadi');
     return this.cards.build(lead);
+  }
+
+  /**
+   * Admin «Rad etildi» lidni qayta ochadi (TZ 3-bo‘lim ruxsatlar jadvali: faqat admin; 5-bo‘lim 10-qoida: «3 kun
+   * ichida faqat admin ochadi»; BE-35 TC4). Sabab majburiy; lid tarixiga kim, qachon va sabab (11-qoida).
+   * Lid navbatga yangi lid sifatida qaytadi: urinishlar 0 dan, yangi 3 kunlik aloqa oynasi (2-qoida) [taklif].
+   * Admin uchun 3 kunlik chegara yo‘q [taklif]. Shu raqam va mahsulotda faol lid bo‘lsa — 409 (LID-4: ikkita faol
+   * lid ochilmaydi). Qulf — lid qabul qilish bilan bir xil (raqam + mahsulot).
+   */
+  async reopen(
+    actorId: string,
+    leadId: string,
+    reason: string,
+    now = new Date(),
+  ): Promise<LeadReopenedDto> {
+    if (!isLeadBigintId(leadId))
+      throw new BadRequestException('leadId noto‘g‘ri');
+    const why = String(reason ?? '').trim();
+    if (!why)
+      throw new BadRequestException({
+        message: ['reason qayta ochish sababi majburiy'],
+      });
+    return this.leads.manager.transaction(async (m) => {
+      const leads = m.getRepository(Lead);
+      const head = await leads.findOne({
+        where: { id: leadId, isDeleted: false },
+      });
+      if (!head) throw new NotFoundException('Lid topilmadi');
+      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        LOCK_SPACE_LEAD,
+        `${head.phoneE164}:${head.productId}`,
+      ]);
+      const lead = await leads.findOne({
+        where: { id: leadId, isDeleted: false },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lead || lead.status !== LeadStatus.REJECTED || lead.mergedIntoId)
+        throw new ConflictException({
+          message: 'Faqat «Rad etildi» holatidagi lid qayta ochiladi',
+          errorCode: LeadErrorCode.LEAD_NOT_REJECTED,
+        });
+      const active = await leads.findOne({
+        where: {
+          id: Not(lead.id),
+          phoneE164: lead.phoneE164,
+          productId: lead.productId,
+          status: In(ACTIVE),
+          mergedIntoId: IsNull(),
+          isDeleted: false,
+        },
+      });
+      if (active)
+        throw new ConflictException({
+          message: `Shu raqam va mahsulotda faol lid bor (#${active.id})`,
+          errorCode: LeadErrorCode.ACTIVE_LEAD_EXISTS,
+        });
+      const reject = lead.rejectReason;
+      lead.status = LeadStatus.NEW;
+      lead.rejectReason = null;
+      lead.attempts = 0;
+      lead.operatorId = null;
+      lead.bookedUntil = null;
+      lead.bookedFromCallback = false;
+      lead.nextAttemptAt = now;
+      lead.expiresAt = contactDeadline(now);
+      await leads.save(lead);
+      const history = m.getRepository(LeadHistory);
+      await history.save(
+        history.create({
+          leadId: lead.id,
+          fromStatus: LeadStatus.REJECTED,
+          toStatus: LeadStatus.NEW,
+          actorId,
+          field: 'reopen',
+          oldValue: { rejectReason: reject },
+          newValue: { reason: why },
+          note: `Admin qayta ochdi: ${why}`,
+        }),
+      );
+      return { leadId: lead.id, status: lead.status };
+    });
   }
 }

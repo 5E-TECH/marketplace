@@ -33,8 +33,10 @@ import {
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, LeadHistory, Stream } from './entities';
 import { landingState } from './landing.service';
+import { FraudService } from './fraud.service';
 import { effectiveSalePrice } from './offer-math';
 import { PostbackService } from './postback.service';
+import { CapiService } from './capi.service';
 import {
   LeadAddressService,
   ResolvedLeadAddress,
@@ -73,7 +75,7 @@ interface LeadForm {
 
 /** Advisory lock kalit makonlari (ikki argumentli shakl: IP va raqam kalitlari to‘qnashmaydi). */
 const LOCK_SPACE_IP = 2101;
-const LOCK_SPACE_LEAD = 2102;
+export const LOCK_SPACE_LEAD = 2102;
 
 /** Yashirin maydon to‘ldirilganda qaytadi: lid yozilmagan, sahifa piksel yubormaydi. */
 export const HONEYPOT_LEAD_ID = '0';
@@ -91,6 +93,8 @@ export class LeadIntakeService {
     private readonly address: LeadAddressService,
     private readonly config: ConfigService,
     @Optional() private readonly postback?: PostbackService,
+    @Optional() private readonly capi?: CapiService,
+    @Optional() private readonly fraud?: FraudService,
   ) {}
 
   async create(input: {
@@ -306,12 +310,16 @@ export class LeadIntakeService {
       now,
     );
 
-    const heldForReview =
-      ctx.ipRule &&
-      !!ctx.ip &&
-      (await leads.count({
-        where: { ip: ctx.ip, createdAt: MoreThanOrEqual(ipWindowStart(now)) },
-      })) >= LEAD_RULES.ipMaxLeads;
+    const ipLeads =
+      ctx.ipRule && ctx.ip
+        ? await leads.count({
+            where: {
+              ip: ctx.ip,
+              createdAt: MoreThanOrEqual(ipWindowStart(now)),
+            },
+          })
+        : 0;
+    const heldForReview = ipLeads >= LEAD_RULES.ipMaxLeads;
 
     const submission = leads.create({
       source: ctx.source,
@@ -367,12 +375,15 @@ export class LeadIntakeService {
       );
       target = resultLead;
       // SOT-5: «lid» hodisasi; tekshiruvga tushgan ariza ko‘rib chiqilmaguncha yuborilmaydi [taklif]
-      if (!heldForReview)
+      if (!heldForReview) {
         await this.postback?.enqueue(
           manager,
           resultLead,
           AffiliatePostbackEvent.LEAD,
         );
+        // BE-31: Meta CAPI Lead (event_id = lid ID — brauzer pikseli bilan bitta hodisa)
+        await this.capi?.enqueueLead(manager, resultLead);
+      }
     } else {
       const root = await leads.findOneOrFail({
         where: { id: decision.rootId },
@@ -420,6 +431,14 @@ export class LeadIntakeService {
       target = root;
     }
 
+    // BE-35: firibgarlik markazida hodisa «Spam lid» va «Lidlar tekshiruvga olindi»
+    if (heldForReview)
+      await this.fraud?.onIpReview(
+        manager,
+        resultLead,
+        ipLeads + 1,
+        LEAD_RULES.ipWindowMinutes,
+      );
     await this.markBlacklisted(manager, dto.phone, target);
     return { leadId: resultLead.id, duplicate: decision.kind !== 'NEW' };
   }
@@ -450,6 +469,7 @@ export class LeadIntakeService {
         note: `Qora ro‘yxat: bu raqam ${rejections} marta rad etgan (7-bo‘lim). Ishga tushishdagi chora — EQ-04`,
       }),
     );
+    await this.fraud?.onBlacklisted(manager, target, rejections);
   }
 
   /**

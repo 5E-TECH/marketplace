@@ -257,10 +257,20 @@ export class PostbackService {
     };
     if (stream.postbackSecretEnc) {
       const ts = String(Math.floor(now.getTime() / 1000));
-      const secret = decryptSecret(
-        stream.postbackSecretEnc,
-        this.config.getOrThrow<string>('INTEGRATION_CREDENTIAL_SECRET'),
-      );
+      let secret: string;
+      try {
+        secret = decryptSecret(
+          stream.postbackSecretEnc,
+          this.config.getOrThrow<string>('INTEGRATION_CREDENTIAL_SECRET'),
+        );
+      } catch {
+        // Kalit almashgan yoki yozuv buzuq: imzosiz yubormaymiz, qator abadiy navbatda qolmasin — FAILED
+        await repo.update(row.id, {
+          attempts: row.attempts + 1,
+          nextAttemptAt: null,
+        });
+        return false;
+      }
       headers['x-elchi-timestamp'] = ts;
       headers['x-elchi-signature'] =
         `sha256=${signHmacSha256(`${ts}.${url}`, secret)}`;
