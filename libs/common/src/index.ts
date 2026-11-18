@@ -59,6 +59,8 @@ export * from './dto/lead-affiliate.dto';
 export * from './dto/lead-operator.dto';
 export * from './dto/lead-events.dto';
 export * from './dto/affiliate-income.dto';
+export * from './dto/withdrawal.dto';
+export * from './dto/wholesaler-settlement.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
