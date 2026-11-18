@@ -11248,7 +11248,7 @@
     },
     "/api/v1/admin/fraud/incidents/{id}/decision": {
       "post": {
-        "description": "Sabab va dalil majburiy; choralar tarixiga yoziladi. BLOCK_AFFILIATE — sotuvchi akkaunti bloklanadi (identity), sahifalari to‘xtaydi, ushlangan haqi bekor qilinadi. HOLD_FEE dan keyin hodisa ochiq qoladi.",
+        "description": "Sabab va dalil majburiy; choralar tarixiga yoziladi. BLOCK_AFFILIATE — sahifalari to‘xtaydi, ushlangan haqi bekor qilinadi, keyin akkaunt bloklanadi (identity; xato bo‘lsa 502). HOLD_FEE dan keyin va haq ushlangan lidda haq taqdiri hal bo‘lguncha hodisa ochiq qoladi.",
         "operationId": "AdminFraudController_decide",
         "parameters": [
           {

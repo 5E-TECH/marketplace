@@ -201,6 +201,18 @@ export class LeadSupervisorService {
               : 'Bu lidni o‘tkazib bo‘lmaydi: navbatda yoki operatorda emas',
           errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE,
         });
+      // Mijoz aytgan vaqti hali kelmagan qo‘ng‘iroq egasida qoladi (4, 8-qoidalar): o‘tkazilsa egasi va eslatmasi yo‘qolardi
+      if (
+        lead.status === LeadStatus.CALLBACK &&
+        lead.operatorId !== null &&
+        lead.nextAttemptAt !== null &&
+        lead.nextAttemptAt.getTime() > now.getTime()
+      )
+        throw new ConflictException({
+          message:
+            'Rejalashtirilgan qo‘ng‘iroq vaqti hali kelmagan — lid operatorida qoladi',
+          errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE,
+        });
       const active = await leads.count({
         where: {
           operatorId: target,

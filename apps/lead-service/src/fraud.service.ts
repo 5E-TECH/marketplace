@@ -637,9 +637,10 @@ export class FraudService {
         case FraudActionType.BLOCK_AFFILIATE: {
           const affiliateId = need(incident.affiliateId, 'sotuvchi');
           const stopped = await m.query(
-            `UPDATE lead.stream SET status = $2, fraud_stopped_at = COALESCE(fraud_stopped_at, $3), updated_at = now()
+            // fraud_stopped_at qo‘yilmaydi: blok olinsa (BE-27) sahifalar qayta ochiladi, alohida to‘xtatilgani — yo‘q
+            `UPDATE lead.stream SET status = $2, updated_at = now()
               WHERE affiliate_id = $1 AND is_deleted = false RETURNING id::text`,
-            [affiliateId, AffiliateStreamStatus.STOPPED, now],
+            [affiliateId, AffiliateStreamStatus.STOPPED],
           );
           const held = await this.activeHolds(m, { affiliateId });
           await this.record(m, {
@@ -706,6 +707,16 @@ export class FraudService {
           break;
         }
       }
+      // Haq ushlangan lid bo‘yicha hodisa faqat haq taqdiri hal bo‘lganda yopiladi: qo‘yib yuborish, bloklash yoki «Asossiz»
+      if (
+        status === FraudIncidentStatus.RESOLVED &&
+        incident.leadId &&
+        dto.action !== FraudActionType.RELEASE_FEE &&
+        dto.action !== FraudActionType.BLOCK_AFFILIATE &&
+        (await this.activeHolds(m, { leadId: incident.leadId, incidentId }))
+          .length
+      )
+        status = FraudIncidentStatus.OPEN;
       if (status !== FraudIncidentStatus.OPEN) {
         incident.status = status;
         incident.closedAt = now;
@@ -721,18 +732,19 @@ export class FraudService {
   /** Ushlangan haq (oxirgi chorasi HOLD_FEE, keyin qo‘yib yuborilmagan va sotuvchi bloklanmagan) lidlari. */
   async activeHolds(
     m: EntityManager,
-    by: { leadId?: string; affiliateId?: string },
+    by: { leadId?: string; affiliateId?: string; incidentId?: string },
   ): Promise<string[]> {
     const rows = (await m.query(
       `SELECT h.target_id AS "leadId" FROM lead.fraud_action h
         WHERE h.action = 'HOLD_FEE' AND h.target_type = 'LEAD'
           AND ($1::text IS NULL OR h.target_id = $1) AND ($2::bigint IS NULL OR h.affiliate_id = $2)
+          AND ($3::bigint IS NULL OR h.incident_id = $3)
           AND NOT EXISTS (SELECT 1 FROM lead.fraud_action r WHERE r.target_type = 'LEAD' AND r.target_id = h.target_id
                            AND r.action IN ('HOLD_FEE','RELEASE_FEE') AND r.id > h.id)
           AND NOT EXISTS (SELECT 1 FROM lead.fraud_action b WHERE b.action = 'BLOCK_AFFILIATE'
                            AND b.affiliate_id = h.affiliate_id AND b.id > h.id)
         ORDER BY h.id`,
-      [by.leadId ?? null, by.affiliateId ?? null],
+      [by.leadId ?? null, by.affiliateId ?? null, by.incidentId ?? null],
     )) as Array<{ leadId: string }>;
     return rows.map((r) => r.leadId);
   }
@@ -789,7 +801,9 @@ export class FraudService {
       LOCK_SPACE_FRAUD,
       `fee:${leadId}`,
     ]);
-    if (!(await this.activeHolds(m, { leadId })).length) return false;
+    // Faqat shu hodisa ushlagan haq: boshqa ochiq hodisaning ushlashi saqlanadi
+    if (!(await this.activeHolds(m, { leadId, incidentId })).length)
+      return false;
     const [lead] = (await m.query(
       `SELECT affiliate_id::text AS a FROM lead.lead WHERE id = $1`,
       [leadId],

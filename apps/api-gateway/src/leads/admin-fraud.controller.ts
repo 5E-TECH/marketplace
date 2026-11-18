@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  BadGatewayException,
   Body,
   Controller,
   Get,
@@ -28,8 +28,6 @@ import {
   FraudIncidentDetailDto,
   FraudIncidentPageDto,
   FraudIncidentQueryDto,
-  FraudIncidentStatus,
-  LeadErrorCode,
   RmqClient,
   Role,
   Roles,
@@ -97,7 +95,7 @@ export class AdminFraudController {
   @ApiOperation({
     summary: 'Qaror: chora yoki «Asossiz»',
     description:
-      'Sabab va dalil majburiy; choralar tarixiga yoziladi. BLOCK_AFFILIATE — sotuvchi akkaunti bloklanadi (identity), sahifalari to‘xtaydi, ushlangan haqi bekor qilinadi. HOLD_FEE dan keyin hodisa ochiq qoladi.',
+      'Sabab va dalil majburiy; choralar tarixiga yoziladi. BLOCK_AFFILIATE — sahifalari to‘xtaydi, ushlangan haqi bekor qilinadi, keyin akkaunt bloklanadi (identity; xato bo‘lsa 502). HOLD_FEE dan keyin va haq ushlangan lidda haq taqdiri hal bo‘lguncha hodisa ochiq qoladi.',
   })
   @ApiOkResponse({ type: FraudIncidentDetailDto })
   @ApiBadRequestResponse({
@@ -109,35 +107,28 @@ export class AdminFraudController {
     @Param('id', ParseLeadIdPipe) id: string,
     @Body() decision: FraudDecisionDto,
   ): Promise<FraudIncidentDetailDto> {
-    if (decision.action === FraudActionType.BLOCK_AFFILIATE) {
-      // Avval hodisa ochiqligi va sotuvchisi tekshiriladi, keyin identity (takroriy blok zararsiz), so‘ng qaror.
-      const incident = await sendRpc<FraudIncidentDetailDto>(
-        this.lead,
-        { cmd: 'lead.fraud.get' },
-        { id },
-      );
-      if (incident.status !== FraudIncidentStatus.OPEN)
-        return sendRpc(
-          this.lead,
-          { cmd: 'lead.fraud.decide' },
-          { actorId, id, decision },
-        );
-      if (!incident.affiliateId)
-        throw new BadRequestException({
-          message: 'Bu chora uchun hodisada sotuvchi yo‘q',
-          errorCode: LeadErrorCode.FRAUD_ACTION_NOT_APPLICABLE,
-        });
-      await sendRpc(
-        this.identity,
-        { cmd: 'identity.user.set-blocked' },
-        { actorId, userId: incident.affiliateId, blocked: true },
-      );
-    }
-    return sendRpc(
+    // Avval qaror (yozuv, sahifalar, haq), keyin identity: blok yozuvsiz qolmasin
+    const result = await sendRpc<FraudIncidentDetailDto>(
       this.lead,
       { cmd: 'lead.fraud.decide' },
       { actorId, id, decision },
     );
+    if (
+      decision.action === FraudActionType.BLOCK_AFFILIATE &&
+      result.affiliateId
+    )
+      try {
+        await sendRpc(
+          this.identity,
+          { cmd: 'identity.user.set-blocked' },
+          { actorId, userId: result.affiliateId, blocked: true },
+        );
+      } catch {
+        throw new BadGatewayException(
+          'Qaror yozildi va sahifalar to‘xtatildi, lekin akkaunt bloklanmadi — «Foydalanuvchilar» bo‘limida bloklang',
+        );
+      }
+    return result;
   }
 
   @Get('actions')

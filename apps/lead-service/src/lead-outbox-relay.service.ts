@@ -39,6 +39,10 @@ export class LeadOutboxRelayService {
         const rows = await repo
           .createQueryBuilder('event')
           .where('event.status = :status', { status: OutboxStatus.PENDING })
+          // Faqat yo‘nalishi bor hodisalar: yuborilmaydigani navbat boshida turib qolib, qolganini to‘smasin (BE-35)
+          .andWhere('event.eventType IN (:...types)', {
+            types: Object.values(LEAD_EVENTS).filter((t) => this.route(t)),
+          })
           .orderBy('event.id', 'ASC')
           .take(20)
           .setLock('pessimistic_write')
