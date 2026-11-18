@@ -71,4 +71,8 @@ export class Stream extends BaseEntity {
   /** AES-GCM bilan shifrlangan; javobda qaytmaydi (BE-11). */
   @Column({ name: 'capi_token_enc', type: 'text', nullable: true })
   capiTokenEnc: string | null;
+
+  /** Firibgarlik markazi sahifani to‘xtatgan vaqt (BE-35). Sotuvchi bloki olinganda bunday sahifa qayta ochilmaydi. */
+  @Column({ name: 'fraud_stopped_at', type: 'timestamptz', nullable: true })
+  fraudStoppedAt: Date | null;
 }

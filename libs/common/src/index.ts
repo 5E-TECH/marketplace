@@ -58,6 +58,7 @@ export * from './dto/lead.dto';
 export * from './dto/lead-affiliate.dto';
 export * from './dto/lead-operator.dto';
 export * from './dto/lead-events.dto';
+export * from './dto/lead-fraud.dto';
 export * from './dto/affiliate-income.dto';
 
 // So'rov konteksti / kuzatuv

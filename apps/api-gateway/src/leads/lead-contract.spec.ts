@@ -9,16 +9,22 @@ import {
   AffiliateStatsRowDto,
   AffiliateStreamDto,
   CreateLeadDto,
+  FraudActionType,
+  FraudDecisionDto,
+  FraudIncidentStatus,
   LeadCardDto,
   LeadHistoryEntryDto,
   LeadPreviousDto,
   LeadPriceDto,
   OperatorLeadListItemDto,
+  ReopenLeadDto,
   Role,
   ROLES_KEY,
+  TransferLeadDto,
   UpdateAffiliateStreamDto,
 } from '@app/common';
 import { of } from 'rxjs';
+import { AdminFraudController } from './admin-fraud.controller';
 import { AdminLeadsController } from './admin-leads.controller';
 import { AdminOfferContentController } from './admin-offer-content.controller';
 import { AffiliateStreamsController } from './affiliate-streams.controller';
@@ -26,6 +32,7 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 import { NOT_IMPLEMENTED, notImplementedYet } from './lead-stub';
 import { OperatorLeadsController } from './operator-leads.controller';
 import { PublicLeadsController } from './public-leads.controller';
+import { SupervisorLeadsController } from './supervisor-leads.controller';
 
 const validLead = {
   code: 'k7Qm2x',
@@ -410,6 +417,98 @@ describe('Lid shartnomasi (BE-25)', () => {
         Role.ADMIN,
         Role.SUPERADMIN,
       ]);
+    });
+  });
+
+  describe('BE-35: nazoratchi, qayta ochish, firibgarlik markazi', () => {
+    it('TC5: qayta ochish va firibgarlik — faqat ADMIN va SUPERADMIN (operator → 403); kim — tokendan', async () => {
+      const send = jest.fn(() => of({}));
+      await new AdminLeadsController({ send } as never).reopen('7', '1092', {
+        reason: 'Mijoz qayta so‘radi',
+      });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.admin.reopen' },
+        { actorId: '7', leadId: '1092', reason: 'Mijoz qayta so‘radi' },
+      );
+      for (const ctrl of [
+        AdminLeadsController,
+        AdminFraudController,
+        SupervisorLeadsController,
+      ])
+        expect(Reflect.getMetadata(ROLES_KEY, ctrl)).toEqual([
+          Role.ADMIN,
+          Role.SUPERADMIN,
+        ]);
+      expect(await errorsIn(ReopenLeadDto, { reason: '   ' })).toEqual([
+        'reason',
+      ]);
+      expect(await errorsIn(ReopenLeadDto, {})).toEqual(['reason']);
+    });
+
+    it('qizil ro‘yxat va o‘tkazish lead-service ga; operator ID si tekshiriladi', async () => {
+      const send = jest.fn(() => of({}));
+      const sup = new SupervisorLeadsController({ send } as never);
+      await sup.redList();
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.supervisor.red-list' },
+        {},
+      );
+      await sup.transfer('7', '1277', { operatorId: '41' });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.supervisor.transfer' },
+        { actorId: '7', leadId: '1277', transfer: { operatorId: '41' } },
+      );
+      await sup.transfers({ date: '2027-01-14' });
+      expect(send).toHaveBeenLastCalledWith(
+        { cmd: 'lead.supervisor.transfers' },
+        { date: '2027-01-14' },
+      );
+      expect(await errorsIn(TransferLeadDto, { operatorId: 'abc' })).toEqual([
+        'operatorId',
+      ]);
+    });
+
+    it('BLOCK_AFFILIATE: avval identity da blok, keyin qaror; boshqa choralar faqat lead-service', async () => {
+      const lead = jest.fn((pattern: { cmd: string }) =>
+        of(
+          pattern.cmd === 'lead.fraud.get'
+            ? { id: '12', status: FraudIncidentStatus.OPEN, affiliateId: '42' }
+            : { id: '12' },
+        ),
+      );
+      const identity = jest.fn(() => of({}));
+      const ctrl = new AdminFraudController(
+        { send: lead } as never,
+        { send: identity } as never,
+      );
+      const block = {
+        action: FraudActionType.BLOCK_AFFILIATE,
+        reason: 'Uchinchi marta o‘z buyurtmasi',
+      } as FraudDecisionDto;
+      await ctrl.decide('7', '12', block);
+      expect(identity).toHaveBeenCalledWith(
+        { cmd: 'identity.user.set-blocked' },
+        { actorId: '7', userId: '42', blocked: true },
+      );
+      expect(lead).toHaveBeenLastCalledWith(
+        { cmd: 'lead.fraud.decide' },
+        { actorId: '7', id: '12', decision: block },
+      );
+      identity.mockClear();
+      await ctrl.decide('7', '12', {
+        action: FraudActionType.WARN,
+        reason: 'x',
+      } as FraudDecisionDto);
+      expect(identity).not.toHaveBeenCalled();
+      expect(
+        await errorsIn(FraudDecisionDto, {
+          action: 'REVIEW_HOLD',
+          reason: 'x',
+        }),
+      ).toEqual(['action']);
+      expect(
+        await errorsIn(FraudDecisionDto, { action: 'WARN', reason: '' }),
+      ).toEqual(['reason']);
     });
   });
 

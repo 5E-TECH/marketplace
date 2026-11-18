@@ -47,6 +47,7 @@ import { PostbackService } from './postback.service';
 import { ApiKeyService, hashApiKey } from './api-key.service';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -109,6 +110,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
         AddLeadStats1795564800000,
+        AddFraudCenter1795824000000,
       ],
       synchronize: false,
       logging: false,

@@ -67,6 +67,9 @@ export class LeadOutboxRelayService {
   private route(eventType: string): ClientProxy | null {
     if (eventType === LEAD_EVENTS.CONFIRMED) return this.checkout;
     if (eventType === LEAD_EVENTS.CALLBACK_REMINDER) return this.notification;
+    // BE-35: sotuvchiga chora xabari. fraud.fee.* moliyaga — moliya iste’molchisi qo‘shilgach (BE-35 2-PR);
+    // ungacha outbox da PENDING qoladi, yo‘qolmaydi.
+    if (eventType === LEAD_EVENTS.FRAUD_MEASURE) return this.notification;
     return null;
   }
 }
