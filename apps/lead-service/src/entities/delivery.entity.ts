@@ -35,4 +35,16 @@ export class PostbackDelivery extends DeliveryRow {}
 @Index('uq_lead_capi_delivery_lead_event', ['leadId', 'event'], {
   unique: true,
 })
-export class CapiDelivery extends DeliveryRow {}
+export class CapiDelivery extends DeliveryRow {
+  /** Hodisa vaqti (BE-31): Lead — lid kelgan, Purchase — yetkazilgan. */
+  @Column({ name: 'event_time', type: 'timestamptz', nullable: true })
+  eventTime: Date | null;
+
+  /** Purchase summasi, so‘m (UZS). */
+  @Column({ type: 'bigint', nullable: true })
+  value: string | null;
+
+  /** Meta xatosi yoki sabab — sotuvchi jurnalida (BE-31 TC3). */
+  @Column({ name: 'last_error', type: 'varchar', length: 500, nullable: true })
+  lastError: string | null;
+}

@@ -24,6 +24,7 @@ import {
   AffiliateApiKeyCreatedDto,
   AffiliateApiKeyDto,
   AffiliateLeadsPageDto,
+  AffiliateCapiDeliveriesPageDto,
   AffiliatePostbacksPageDto,
   AffiliatePostbacksQueryDto,
   AffiliateLeadsQueryDto,
@@ -154,6 +155,30 @@ export class AffiliateStreamsController {
       this.lead,
       { cmd: 'lead.stats.affiliate-leads' },
       { affiliateId, query },
+    );
+  }
+
+  @Get('capi-deliveries')
+  @ApiOperation({
+    summary:
+      'Meta CAPI yuborish jurnali: Lead va Purchase, holat va xato sababi (BE-31)',
+  })
+  @ApiOkResponse({ type: AffiliateCapiDeliveriesPageDto })
+  capiDeliveries(
+    @CurrentUser('sub') affiliateId: string,
+    @Query() query: AffiliatePostbacksQueryDto,
+  ): Promise<AffiliateCapiDeliveriesPageDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.capi.journal' },
+      {
+        affiliateId,
+        query: {
+          page: query.page,
+          limit: query.limit,
+          streamId: query.streamId,
+        },
+      },
     );
   }
 

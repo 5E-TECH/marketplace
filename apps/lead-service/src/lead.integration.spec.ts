@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import {
   BadRequestException,
   ConflictException,
@@ -47,6 +48,7 @@ import { PostbackService } from './postback.service';
 import { ApiKeyService, hashApiKey } from './api-key.service';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -60,6 +62,9 @@ import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
+/** lead sxemasini qayta yaratadigan integratsiya testlari parallel workerda bir-birini buzmasin (BE-31). */
+const LEAD_SCHEMA_TEST_LOCK = 2_304_002;
+let schemaLock: Client | undefined;
 
 /**
  * BE-10 — haqiqiy PostgreSQL ustida. Faqat `lead` sxemasiga tegadi.
@@ -109,22 +114,29 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
         AddLeadStats1795564800000,
+        AddCapiFields1795651200000,
       ],
       synchronize: false,
       logging: false,
     });
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      LEAD_SCHEMA_TEST_LOCK,
+    ]);
     await db.initialize();
     // TC2: toza bazada migratsiya boshidan oxirigacha o‘tadi
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000);
 
   afterAll(async () => {
     if (db?.isInitialized) {
       await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
       await db.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {
