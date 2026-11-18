@@ -60,6 +60,9 @@ import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
+import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
+import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
 import { AdminOfferContentController } from './leads/admin-offer-content.controller';
@@ -209,6 +212,11 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     SellerFinanceController,
     PublicLeadsController,
     AffiliateStreamsController,
+    // BE-23: pul yechish
+    AffiliateWithdrawalsController,
+    AdminWithdrawalsController,
+    // BE-33: optovik hisob-kitobi
+    AdminSettlementsController,
     OperatorLeadsController,
     AdminLeadsController,
     AdminOfferContentController,
