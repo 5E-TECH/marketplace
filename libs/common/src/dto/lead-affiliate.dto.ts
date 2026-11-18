@@ -592,6 +592,72 @@ export class AffiliatePostbacksPageDto {
   @ApiProperty({ example: 1 }) totalPages: number;
 }
 
+/** Meta Conversions API hodisalari (BE-31; SOT-5): Lead — yangi lid, Purchase — buyurtma yetkazildi. */
+export enum AffiliateCapiEvent {
+  LEAD = 'LEAD',
+  PURCHASE = 'PURCHASE',
+}
+
+/** Meta CAPI yuborish jurnali (BE-31 TC3: token xato bo‘lsa FAILED va sababi sotuvchiga ko‘rinadi). */
+export class AffiliateCapiDeliveryDto {
+  @ApiProperty({ example: '601' }) id: string;
+  @ApiProperty({ example: '7001', description: 'Lid ID — Meta event_id' })
+  leadId: string;
+
+  @ApiProperty({ example: 'k7Qm2x' }) streamCode: string;
+  @ApiProperty({ enum: AffiliateCapiEvent, example: AffiliateCapiEvent.LEAD })
+  event: AffiliateCapiEvent;
+
+  @ApiProperty({
+    enum: AffiliatePostbackStatus,
+    example: AffiliatePostbackStatus.SENT,
+  })
+  status: AffiliatePostbackStatus;
+
+  @ApiProperty({ example: 1 }) attempts: number;
+
+  @ApiProperty({ example: 200, nullable: true, type: Number })
+  responseCode: number | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'Meta xatosi yoki sabab (masalan, «190: token yaroqsiz»)',
+  })
+  lastError: string | null;
+
+  @ApiProperty({
+    example: 292000,
+    nullable: true,
+    type: Number,
+    description: 'Purchase summasi, so‘m (UZS)',
+  })
+  value: number | null;
+
+  @ApiProperty({
+    example: '2027-01-14T09:33:00.000Z',
+    nullable: true,
+    type: String,
+  })
+  deliveredAt: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  nextAttemptAt: string | null;
+
+  @ApiProperty({ example: '2027-01-14T09:32:00.000Z' }) createdAt: Date;
+}
+
+export class AffiliateCapiDeliveriesPageDto {
+  @ApiProperty({ type: [AffiliateCapiDeliveryDto] })
+  items: AffiliateCapiDeliveryDto[];
+
+  @ApiProperty({ example: 12 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 1 }) totalPages: number;
+}
+
 /** Sotuvchining lid API kaliti (BE-43, SOT-6). Kalitning o‘zi faqat yaratilganda bir marta ko‘rsatiladi. */
 export class AffiliateApiKeyDto {
   @ApiProperty({ example: '12' }) id: string;

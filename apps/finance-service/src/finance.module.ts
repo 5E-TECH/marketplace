@@ -22,6 +22,12 @@ import { SellerFinanceService } from './seller-finance.service';
 import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
 import { CreateLedger1795478400000 } from './migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add-journal-lead-index';
+import { CreateWithdrawal1795651200000 } from './migrations/1795651200000-create-withdrawal';
+import { WithdrawalController } from './ledger/withdrawal.controller';
+import { WithdrawalService } from './ledger/withdrawal.service';
+import { CreateWholesalerSettlement1795737600000 } from './migrations/1795737600000-create-wholesaler-settlement';
+import { SettlementController } from './ledger/settlement.controller';
+import { SettlementService } from './ledger/settlement.service';
 import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fee-hold';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
@@ -54,6 +60,8 @@ const entities = [
             CreatePayoutSchedule1727568000000,
             CreateLedger1795478400000,
             AddJournalLeadIndex1795564800000,
+            CreateWithdrawal1795651200000,
+            CreateWholesalerSettlement1795737600000,
             CreateFeeHold1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
@@ -62,13 +70,20 @@ const entities = [
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [FinanceController, LedgerController],
+  controllers: [
+    FinanceController,
+    LedgerController,
+    WithdrawalController,
+    SettlementController,
+  ],
   providers: [
     FinanceService,
     SellerFinanceService,
     LedgerService,
     LedgerQueryService,
     BalanceCheckService,
+    WithdrawalService,
+    SettlementService,
   ],
 })
 export class FinanceModule {}

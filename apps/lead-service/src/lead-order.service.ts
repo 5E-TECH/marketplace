@@ -1,11 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
+  AffiliatePostbackEvent,
   LeadOrderStatus,
   OrderStatusChangedEvent,
   processOnce,
 } from '@app/common';
+import { CapiService } from './capi.service';
 import { Lead } from './entities';
+import { PostbackService } from './postback.service';
 import { expectedAffiliateCommission } from './order-commission';
 
 /** Yetkazilgan buyurtmaning keyingi holatlari: DELIVERED hodisasi kelmay qolsa ham yetkazilgan kun yoziladi. */
@@ -34,7 +37,11 @@ export const ORDER_STATUS_CONSUMER = 'lead.order-status';
 export class LeadOrderService {
   private readonly logger = new Logger(LeadOrderService.name);
 
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    @Optional() private readonly capi?: CapiService,
+    @Optional() private readonly postback?: PostbackService,
+  ) {}
 
   async onOrderStatusChanged(event: OrderStatusChangedEvent): Promise<void> {
     if (!event?.eventId || event.leadId === null || event.leadId === undefined)
@@ -95,6 +102,21 @@ export class LeadOrderService {
         const expected = expectedAffiliateCommission(event.items);
         if (expected !== null) lead.expectedCommission = String(expected);
         await leads.save(lead);
+        // BE-31: Meta CAPI Purchase — birinchi yetkazilganda (lead_id + event unikal), summa — mijoz to‘lagan jami
+        if (DELIVERED_LIKE.has(event.status) && lead.deliveredAt) {
+          await this.capi?.enqueuePurchase(
+            manager,
+            lead,
+            event.codAmount,
+            lead.deliveredAt,
+          );
+          // BE-14 (SOT-5): «yetkazildi» postback — bir marta (lead_id + event unikal)
+          await this.postback?.enqueue(
+            manager,
+            lead,
+            AffiliatePostbackEvent.DELIVERED,
+          );
+        }
       },
     );
   }

@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
@@ -23,10 +24,14 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
+/** lead sxemasini qayta yaratadigan integratsiya testlari parallel workerda bir-birini buzmasin (BE-31). */
+const LEAD_SCHEMA_TEST_LOCK = 2_304_002;
+let schemaLock: Client | undefined;
 
 /**
  * BE-28 — statistika haqiqiy PostgreSQL ustida (faqat `lead` sxemasi). Pul finance-service dan keladi:
@@ -159,6 +164,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         AddLeadQueue1795046400000,
         AddApiLeads1795132800000,
         AddLeadStats1795564800000,
+        AddCapiFields1795651200000,
         AddFraudCenter1795824000000,
       ],
       synchronize: false,
@@ -168,17 +174,23 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
     jest
       .spyOn(LeadStatsService.prototype as never, 'todayTashkent' as never)
       .mockReturnValue('2026-12-31' as never);
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      LEAD_SCHEMA_TEST_LOCK,
+    ]);
     await db.initialize();
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000);
 
   afterAll(async () => {
     if (db?.isInitialized) {
       await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
       await db.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {
@@ -806,8 +818,9 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
 
   describe('migratsiya', () => {
     it('mavjud tasdiqlangan lidlarga tasdiq vaqti va operatori oxirgi CONFIRMED urinishidan yoziladi; down/up', async () => {
-      await db.undoLastMigration(); // BE-35 (firibgarlik markazi) — keyingi migratsiya
-      await db.undoLastMigration(); // BE-28
+      await db.undoLastMigration(); // BE-35 (firibgarlik markazi)
+      await db.undoLastMigration(); // BE-31 capi maydonlari
+      await db.undoLastMigration(); // BE-28 statistika ustunlari
       const [{ id }] = await db.query(
         `INSERT INTO lead.stream (code, affiliate_id, product_id, sale_price) VALUES ('mig001', 42, 501, 189000) RETURNING id`,
       );

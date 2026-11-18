@@ -6,6 +6,8 @@ import { CreateCodReconciliation1724932800000 } from '../migrations/172493280000
 import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-create-payout-schedule';
 import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
+import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
+import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerQueryService } from './ledger-query.service';
@@ -14,6 +16,9 @@ import { orderEvent } from './order-events.samples';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
 const describePostgres = url ? describe : describe.skip;
+/** Session advisory lock: finance sxemasi testlari ketma-ket (BE-23 tekshiruvi). */
+const FINANCE_SCHEMA_TEST_LOCK = 2_304_001;
+let schemaLock: Client | undefined;
 
 /**
  * BE-22 TC0–TC8 haqiqiy Postgres da. Har test oxirida kechki balans
@@ -62,6 +67,12 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
         'FINANCE_TEST_DATABASE_URL nomi _finance_test bilan tugashi kerak',
       );
     }
+    // finance sxemasini DROP/CREATE qiladigan integratsiya testlari (ledger, withdrawal) parallel workerda bir-birini buzmasin
+    schemaLock = new Client({ connectionString: url });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      FINANCE_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: url });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS finance CASCADE');
@@ -77,6 +88,8 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
         CreatePayoutSchedule1727568000000,
         CreateLedger1795478400000,
         AddJournalLeadIndex1795564800000,
+        CreateWithdrawal1795651200000,
+        CreateWholesalerSettlement1795737600000,
         CreateFeeHold1795824000000,
       ],
       migrationsRun: true,
@@ -85,11 +98,12 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
     }).initialize();
     ledger = new LedgerService(ds);
     check = new BalanceCheckService(ds);
-  });
+  }, 300_000);
 
   beforeEach(async () => {
     await ds.query(`TRUNCATE finance.ledger_entry, finance.journal, finance.remittance_item,
-      finance.elchi_remittance, finance.balance_check, finance.processed_event, finance.event_failure`);
+      finance.elchi_remittance, finance.balance_check, finance.processed_event, finance.event_failure,
+      finance.wholesaler_settlement_item, finance.wholesaler_settlement, finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile`);
     await ds.query(`DELETE FROM finance.account WHERE owner_id <> ''`);
     await ds.query(
       `UPDATE finance.account SET hold_balance = 0, available_balance = 0`,
@@ -101,6 +115,7 @@ describePostgres('BE-22 hisoblar va taqsimot (PostgreSQL)', () => {
       await ds.query('DROP SCHEMA IF EXISTS finance CASCADE');
       await ds.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   it('TC1: 251 000 yetkazildi → optovik 140 000, sotuvchi 65 000, markaz 12 000, platforma 34 000 — HOLD', async () => {

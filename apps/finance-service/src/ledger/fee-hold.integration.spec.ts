@@ -6,6 +6,8 @@ import { CreateCodReconciliation1724932800000 } from '../migrations/172493280000
 import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-create-payout-schedule';
 import { CreateLedger1795478400000 } from '../migrations/1795478400000-create-ledger';
 import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-add-journal-lead-index';
+import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
+import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
@@ -102,6 +104,8 @@ describePostgres('BE-35 sotuvchi haqini ushlash (PostgreSQL)', () => {
         CreatePayoutSchedule1727568000000,
         CreateLedger1795478400000,
         AddJournalLeadIndex1795564800000,
+        CreateWithdrawal1795651200000,
+        CreateWholesalerSettlement1795737600000,
         CreateFeeHold1795824000000,
       ],
       migrationsRun: true,

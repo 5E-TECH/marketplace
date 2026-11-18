@@ -29,10 +29,15 @@ const FEE_HELD = `EXISTS (
     JOIN finance.account fa ON fa.id = e.account_id AND fa.type = 'AFFILIATE'
    WHERE fj.id = e.journal_id)`;
 
-type JournalKind =
-  'ORDER_DELIVERED' | 'ORDER_REFUSED' | 'ORDER_REVERSAL' | 'ELCHI_SETTLEMENT';
+export type JournalKind =
+  | 'ORDER_DELIVERED'
+  | 'ORDER_REFUSED'
+  | 'ORDER_REVERSAL'
+  | 'ELCHI_SETTLEMENT'
+  | 'WITHDRAWAL_PAID'
+  | 'WHOLESALER_PAID';
 
-interface Line {
+export interface Line {
   account: AccountType;
   ownerId: string;
   lineKind: LineKind;
@@ -42,10 +47,13 @@ interface Line {
   amount: number;
 }
 
-interface JournalHead {
+export interface JournalHead {
   kind: JournalKind;
   referenceId: string;
-  orderId: string;
+  /** Pul yechish (WITHDRAWAL_PAID) jurnalida buyurtma yo‘q — null (BE-23). */
+  orderId: string | null;
+  /** Hodisasiz jurnal (pul yechish) uchun sotuvchi — journal.affiliate_id (soliq hisoboti, T01:471). */
+  affiliateId?: string | null;
   eventId: string;
   occurredAt: string;
   gross: number;
@@ -755,7 +763,7 @@ export class LedgerService {
    * (takror). Hisoblar yaratiladi, ID bo'yicha tartiblab qulflanadi, balans
    * keshi o'zgaradi.
    */
-  private async writeJournal(
+  async writeJournal(
     manager: EntityManager,
     head: JournalHead,
     lines: Line[],
@@ -778,7 +786,7 @@ export class LedgerService {
         e?.orderNumber ?? null,
         e?.leadId ?? null,
         e?.streamId ?? null,
-        e?.affiliateId ?? null,
+        e?.affiliateId ?? head.affiliateId ?? null,
         e?.source ?? null,
         head.gross,
         head.eventId,
@@ -828,7 +836,7 @@ export class LedgerService {
     return journal.id;
   }
 
-  private async accountId(
+  async accountId(
     manager: EntityManager,
     type: AccountType,
     ownerId: string,
@@ -846,10 +854,7 @@ export class LedgerService {
   }
 
   /** Hisob qulflari ID bo'yicha o'sish tartibida — o'zaro kutish (deadlock) yo'q. */
-  private async lockAccounts(
-    manager: EntityManager,
-    ids: string[],
-  ): Promise<void> {
+  async lockAccounts(manager: EntityManager, ids: string[]): Promise<void> {
     const sorted = [...new Set(ids)].sort((a, b) => Number(a) - Number(b));
     for (const id of sorted) {
       await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
