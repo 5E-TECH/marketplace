@@ -11,6 +11,7 @@ import {
 import { LandingService } from './landing.service';
 import { OfferService } from './offer.service';
 import { PostbackService } from './postback.service';
+import { CapiService } from './capi.service';
 import { StreamService } from './stream.service';
 
 /** BE-11 RPC lari: offerlar, sotuvchi sahifalari, ochiq sahifa va kliklar, offer matnlari. */
@@ -22,6 +23,7 @@ export class LeadOfferController {
     private readonly streams: StreamService,
     private readonly landing: LandingService,
     private readonly postbacks: PostbackService,
+    private readonly capi: CapiService,
   ) {}
 
   @MessagePattern({ cmd: 'lead.offer.list' })
@@ -73,6 +75,18 @@ export class LeadOfferController {
     },
   ) {
     return this.postbacks.journal(input.affiliateId, input.query ?? {});
+  }
+
+  /** BE-31: Meta CAPI yuborish jurnali (FE-28). */
+  @MessagePattern({ cmd: 'lead.capi.journal' })
+  capiJournal(
+    @Payload()
+    input: {
+      affiliateId: string;
+      query: { page?: number; limit?: number; streamId?: string };
+    },
+  ) {
+    return this.capi.journal(input.affiliateId, input.query ?? {});
   }
 
   @MessagePattern({ cmd: 'lead.landing.get' })

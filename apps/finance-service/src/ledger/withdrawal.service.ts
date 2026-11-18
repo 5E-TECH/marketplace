@@ -1,0 +1,509 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
+import {
+  AdminWithdrawalQueryDto,
+  AffiliateBalanceDto,
+  AffiliateSelfEmployedDto,
+  ErrorCode,
+  MAX_MONEY,
+  moneyFromDb,
+  WithdrawalBlockReason,
+  WithdrawalDto,
+  WithdrawalPageDto,
+  WithdrawalQueryDto,
+  WithdrawalStatus,
+} from '@app/common';
+import { Line, LedgerService } from './ledger.service';
+
+const ID = /^\d{1,19}$/;
+/** Ushlanadigan soliq — 1% (BE-23 kartasi; TZ 8-bo‘lim). */
+export const WITHDRAWAL_TAX_PERCENT = 1;
+/** Bundan katta so‘rov — ikki xil xodim tasdig‘i (MOL-5: «5 mln dan katta»). */
+export const TWO_APPROVALS_ABOVE = 5_000_000;
+/** Pul yechish qulfi kalit sinfi [taklif]: 2101/2102 lead, 2201 cron, 2301/2302 ledger, 6303 payment band. */
+const WITHDRAWAL_LOCK_CLASS = 2303;
+const OPEN: WithdrawalStatus[] = [
+  WithdrawalStatus.REQUESTED,
+  WithdrawalStatus.APPROVED,
+];
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+const TODAY = `(now() AT TIME ZONE 'Asia/Tashkent')::date`;
+
+/** 1% soliq, butun so‘m, yuqoriga yaxlitlab — soliq kam ushlanmasin [taklif; EQ-10 buxgalter]. */
+export function withdrawalTax(amount: number): number {
+  return Math.ceil((amount * WITHDRAWAL_TAX_PERCENT) / 100);
+}
+
+const rule = (message: string) =>
+  new BadRequestException({
+    message,
+    errorCode: ErrorCode.BUSINESS_RULE_VIOLATION,
+  });
+const state = (message: string) =>
+  new ConflictException({ message, errorCode: ErrorCode.INVALID_STATE });
+
+function validId(value: unknown, field: string): string {
+  const s = String(value ?? '');
+  if (!ID.test(s)) throw new BadRequestException(`${field} noto‘g‘ri`);
+  return s;
+}
+
+interface RequestRow {
+  id: string;
+  affiliateId: string;
+  amount: string;
+  taxAmount: string;
+  netAmount: string;
+  status: WithdrawalStatus;
+  requiredApprovals: number;
+  rejectReason: string | null;
+  createdAt: Date;
+  paidAt: Date | null;
+  paidBy: string | null;
+}
+
+const SELECT = `SELECT r.id::text, r.affiliate_id AS "affiliateId", r.amount::text, r.tax_amount::text AS "taxAmount",
+       r.net_amount::text AS "netAmount", r.status, r.required_approvals AS "requiredApprovals",
+       r.reject_reason AS "rejectReason", r.created_at AS "createdAt", r.paid_at AS "paidAt", r.paid_by AS "paidBy"
+  FROM finance.withdrawal_request r`;
+
+/**
+ * BE-23: sotuvchining pul yechish so‘rovlari (MOL-5, SOT-7). To‘lov qo‘lda: moliya kartaga o‘tkazib «To‘landi»
+ * belgilaydi (avtomatik — BE-32).
+ * - So‘rovda ledgerga yozilmaydi: ochiq so‘rovlar (So‘raldi, Tasdiqlandi) summasi «band», yechish mumkin =
+ *   mavjud − band (dizayn: summa «To‘landi» gacha «Mavjud» da turadi, DZ-07).
+ * - «To‘landi» da bitta jurnal: AFFILIATE −summa, TAX +1% soliq (alohida qator — qabul mezoni),
+ *   COD_CLEARING +kartaga o‘tgan pul (platformadagi naqd kamayadi) [taklif hisob].
+ * - Kuniga 1 so‘rov (Toshkent kuni, rad etilgani hisobga olinmaydi), kamida `withdrawal_min` (50 000),
+ *   5 mln dan katta — ikki xil xodim tasdig‘i, o‘zini o‘zi band qilganlik belgisi bo‘lmasa — rad (T01:471).
+ */
+@Injectable()
+export class WithdrawalService {
+  constructor(
+    private readonly db: DataSource,
+    private readonly ledger: LedgerService,
+  ) {}
+
+  private async minAmount(m: EntityManager): Promise<number> {
+    const [row] = (await m.query(
+      `SELECT value FROM finance.setting
+        WHERE key = 'withdrawal_min' AND effective_from <= now()
+        ORDER BY effective_from DESC LIMIT 1`,
+    )) as Array<{ value: string }>;
+    if (!row) throw new Error('withdrawal_min sozlamasi yo‘q');
+    return moneyFromDb(row.value);
+  }
+
+  private async snapshot(m: EntityManager, affiliateId: string) {
+    const [acc] = (await m.query(
+      `SELECT hold_balance::text AS hold, available_balance::text AS available
+         FROM finance.account WHERE type = 'AFFILIATE' AND owner_id = $1`,
+      [affiliateId],
+    )) as Array<{ hold: string; available: string }>;
+    // Band — faqat ochiq so‘rovlar; bugungi kun — rad etilmagan har qanday so‘rov (to‘langani ham kunni band qiladi)
+    const [res] = (await m.query(
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE status = ANY($2::text[])), 0)::text AS reserved,
+              COALESCE(bool_or(request_day = ${TODAY}), false) AS today
+         FROM finance.withdrawal_request
+        WHERE affiliate_id = $1 AND status <> 'REJECTED'`,
+      [affiliateId, OPEN],
+    )) as Array<{ reserved: string; today: boolean }>;
+    const [profile] = (await m.query(
+      `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1`,
+      [affiliateId],
+    )) as Array<{ selfEmployed: boolean }>;
+    const available = moneyFromDb(acc?.available);
+    const reserved = moneyFromDb(res.reserved);
+    return {
+      hold: moneyFromDb(acc?.hold),
+      available,
+      reserved,
+      withdrawable: Math.max(0, available - reserved),
+      selfEmployed: profile?.selfEmployed ?? false,
+      todayRequested: res.today === true,
+    };
+  }
+
+  /** Kabinet: balans va so‘rov yuborish mumkinmi (FE-07). */
+  async balance(input: { affiliateId: string }): Promise<AffiliateBalanceDto> {
+    const affiliateId = validId(input?.affiliateId, 'affiliateId');
+    const m = this.db.manager;
+    const s = await this.snapshot(m, affiliateId);
+    const minAmount = await this.minAmount(m);
+    return {
+      hold: s.hold,
+      available: s.available,
+      reserved: s.reserved,
+      withdrawable: s.withdrawable,
+      minAmount,
+      taxPercent: WITHDRAWAL_TAX_PERCENT,
+      twoApprovalAbove: TWO_APPROVALS_ABOVE,
+      selfEmployed: s.selfEmployed,
+      blockReason: !s.selfEmployed
+        ? WithdrawalBlockReason.NOT_SELF_EMPLOYED
+        : s.todayRequested
+          ? WithdrawalBlockReason.DAILY_LIMIT
+          : s.withdrawable < minAmount
+            ? WithdrawalBlockReason.BELOW_MIN
+            : null,
+    };
+  }
+
+  /** Sotuvchi so‘rovi (SOT-7). TC2 min, TC3 kunlik, TC5 maqom — so‘rov yaratilmaydi. */
+  async create(input: {
+    affiliateId: string;
+    amount: number;
+  }): Promise<WithdrawalDto> {
+    const affiliateId = validId(input?.affiliateId, 'affiliateId');
+    const amount = input?.amount;
+    if (
+      typeof amount !== 'number' ||
+      !Number.isSafeInteger(amount) ||
+      amount < 1 ||
+      amount > MAX_MONEY
+    )
+      throw new BadRequestException('amount: butun so‘m bo‘lishi kerak');
+    const id = await this.db.transaction(async (m) => {
+      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        WITHDRAWAL_LOCK_CLASS,
+        `finance-withdrawal:${affiliateId}`,
+      ]);
+      const min = await this.minAmount(m);
+      if (amount < min)
+        throw rule(`Eng kam so‘rov — ${min} so‘m (so‘ralgani ${amount})`);
+      const s = await this.snapshot(m, affiliateId);
+      if (!s.selfEmployed)
+        throw rule(
+          'O‘zini o‘zi band qilganlik maqomi tasdiqlanmagan — to‘lov qilinmaydi (T01:471)',
+        );
+      if (s.todayRequested)
+        throw rule('Bugun so‘rov yuborilgan: kuniga bitta so‘rov');
+      if (amount > s.withdrawable)
+        throw rule(
+          `Yechish mumkin bo‘lgan summa ${s.withdrawable} so‘m — so‘ralgani ${amount}`,
+        );
+      const tax = withdrawalTax(amount);
+      try {
+        const [row] = (await m.query(
+          `INSERT INTO finance.withdrawal_request
+             (affiliate_id, amount, tax_amount, net_amount, required_approvals, request_day)
+           VALUES ($1, $2, $3, $4, $5, ${TODAY})
+           RETURNING id::text`,
+          [
+            affiliateId,
+            amount,
+            tax,
+            amount - tax,
+            amount > TWO_APPROVALS_ABOVE ? 2 : 1,
+          ],
+        )) as Array<{ id: string }>;
+        return row.id;
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505')
+          throw rule('Bugun so‘rov yuborilgan: kuniga bitta so‘rov');
+        throw err;
+      }
+    });
+    return this.get(this.db.manager, id);
+  }
+
+  async listMine(input: {
+    affiliateId: string;
+    query: WithdrawalQueryDto;
+  }): Promise<WithdrawalPageDto> {
+    const affiliateId = validId(input?.affiliateId, 'affiliateId');
+    return this.page(input?.query ?? {}, affiliateId);
+  }
+
+  /** Moliya ro‘yxati (FE-20). */
+  async adminList(input: {
+    query: AdminWithdrawalQueryDto;
+  }): Promise<WithdrawalPageDto> {
+    const q = input?.query ?? {};
+    const affiliateId = q.affiliateId
+      ? validId(q.affiliateId, 'affiliateId')
+      : null;
+    return this.page(q, affiliateId);
+  }
+
+  private async page(
+    q: WithdrawalQueryDto,
+    affiliateId: string | null,
+  ): Promise<WithdrawalPageDto> {
+    if (
+      q.status !== undefined &&
+      !Object.values(WithdrawalStatus).includes(q.status)
+    )
+      throw new BadRequestException('status noto‘g‘ri');
+    const page = Math.max(1, Math.trunc(Number(q.page)) || 1);
+    const limit = Math.min(
+      MAX_LIMIT,
+      Math.max(1, Math.trunc(Number(q.limit)) || DEFAULT_LIMIT),
+    );
+    const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset))
+      throw new BadRequestException('page juda katta');
+    const where = `($1::text IS NULL OR r.affiliate_id = $1) AND ($2::text IS NULL OR r.status = $2)`;
+    const params = [affiliateId, q.status ?? null];
+    const [{ total }] = (await this.db.query(
+      `SELECT count(*)::int AS total FROM finance.withdrawal_request r WHERE ${where}`,
+      params,
+    )) as Array<{ total: number }>;
+    const rows = (await this.db.query(
+      `${SELECT} WHERE ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT $3 OFFSET $4`,
+      [...params, limit, offset],
+    )) as RequestRow[];
+    return {
+      items: await this.toDtos(this.db.manager, rows),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Tasdiq (MOL-5). 5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi;
+   * bir xodim ikkinchi marta tasdiqlay olmaydi (TC4).
+   */
+  async approve(input: {
+    id: string;
+    approverId: string;
+  }): Promise<WithdrawalDto> {
+    const id = validId(input?.id, 'id');
+    const approverId = validId(input?.approverId, 'approverId');
+    await this.db.transaction(async (m) => {
+      const row = await this.lockRow(m, id);
+      if (row.status !== WithdrawalStatus.REQUESTED)
+        throw state(`So‘rov ${row.status} holatida — tasdiqlab bo‘lmaydi`);
+      const inserted = (await m.query(
+        `INSERT INTO finance.withdrawal_approval (request_id, approver_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING request_id`,
+        [id, approverId],
+      )) as unknown[];
+      if (!inserted.length)
+        throw state(
+          'Bu so‘rovni siz tasdiqlagansiz — ikkinchi tasdiqni boshqa xodim beradi',
+        );
+      const [{ n }] = (await m.query(
+        `SELECT count(*)::int AS n FROM finance.withdrawal_approval WHERE request_id = $1`,
+        [id],
+      )) as Array<{ n: number }>;
+      if (n >= row.requiredApprovals)
+        await m.query(
+          `UPDATE finance.withdrawal_request SET status = 'APPROVED', approved_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [id],
+        );
+    });
+    return this.get(this.db.manager, id);
+  }
+
+  /** Rad etish (sabab bilan). Ledgerga yozuv yo‘q — band summa bo‘shaydi. */
+  async reject(input: {
+    id: string;
+    rejectedBy: string;
+    reason: string;
+  }): Promise<WithdrawalDto> {
+    const id = validId(input?.id, 'id');
+    const rejectedBy = validId(input?.rejectedBy, 'rejectedBy');
+    const reason = String(input?.reason ?? '').trim();
+    if (!reason || reason.length > 500)
+      throw new BadRequestException('reason: 1–500 belgi');
+    await this.db.transaction(async (m) => {
+      const row = await this.lockRow(m, id);
+      if (!OPEN.includes(row.status))
+        throw state(`So‘rov ${row.status} holatida — rad etib bo‘lmaydi`);
+      await m.query(
+        `UPDATE finance.withdrawal_request
+            SET status = 'REJECTED', reject_reason = $2, rejected_by = $3, rejected_at = now(), updated_at = now()
+          WHERE id = $1`,
+        [id, reason, rejectedBy],
+      );
+    });
+    return this.get(this.db.manager, id);
+  }
+
+  /**
+   * «To‘landi» (moliya kartaga qo‘lda o‘tkazdi). Faqat «Tasdiqlandi» dan (TC4); takror bosilsa — o‘sha natija.
+   * Maqom va mavjud balans shu paytda qayta tekshiriladi (qaytarishdan keyin balans kamaygan bo‘lishi mumkin).
+   */
+  async markPaid(input: {
+    id: string;
+    paidBy: string;
+  }): Promise<WithdrawalDto> {
+    const id = validId(input?.id, 'id');
+    const paidBy = validId(input?.paidBy, 'paidBy');
+    await this.db.transaction(async (m) => {
+      const [head] = (await m.query(
+        `SELECT affiliate_id AS "affiliateId" FROM finance.withdrawal_request WHERE id = $1`,
+        [id],
+      )) as Array<{ affiliateId: string }>;
+      if (!head) throw new NotFoundException('So‘rov topilmadi');
+      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        WITHDRAWAL_LOCK_CLASS,
+        `finance-withdrawal:${head.affiliateId}`,
+      ]);
+      const row = await this.lockRow(m, id);
+      if (row.status === WithdrawalStatus.PAID) return; // takror bosildi
+      if (row.status !== WithdrawalStatus.APPROVED)
+        throw state(
+          `So‘rov ${row.status} holatida — «To‘landi» faqat tasdiqlangandan keyin`,
+        );
+      const [{ n }] = (await m.query(
+        `SELECT count(*)::int AS n FROM finance.withdrawal_approval WHERE request_id = $1`,
+        [id],
+      )) as Array<{ n: number }>;
+      if (n < row.requiredApprovals)
+        throw state(`Tasdiqlar yetmaydi: ${n}/${row.requiredApprovals}`);
+      const [profile] = (await m.query(
+        `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1`,
+        [row.affiliateId],
+      )) as Array<{ selfEmployed: boolean }>;
+      if (!profile?.selfEmployed)
+        throw rule(
+          'O‘zini o‘zi band qilganlik maqomi tasdiqlanmagan — to‘lov qilinmaydi (T01:471)',
+        );
+      const amount = moneyFromDb(row.amount);
+      const tax = moneyFromDb(row.taxAmount);
+      const net = moneyFromDb(row.netAmount);
+      const aff = await this.ledger.accountId(m, 'AFFILIATE', row.affiliateId);
+      const taxAcc = await this.ledger.accountId(m, 'TAX', '');
+      const cod = await this.ledger.accountId(m, 'COD_CLEARING', '');
+      await this.ledger.lockAccounts(m, [aff, taxAcc, cod]);
+      const [{ available }] = (await m.query(
+        `SELECT available_balance::text AS available FROM finance.account WHERE id = $1`,
+        [aff],
+      )) as Array<{ available: string }>;
+      if (moneyFromDb(available) < amount)
+        throw state(
+          `Mavjud balans yetmaydi: ${moneyFromDb(available)} so‘m, so‘rov ${amount} — rad eting yoki kuting`,
+        );
+      const reference = `withdrawal:${id}`;
+      const lines: Line[] = [
+        {
+          account: 'AFFILIATE',
+          ownerId: row.affiliateId,
+          lineKind: 'WITHDRAWAL',
+          itemSeq: 0,
+          productId: null,
+          amount: -amount,
+        },
+        {
+          account: 'TAX',
+          ownerId: '',
+          lineKind: 'WITHDRAWAL_TAX',
+          itemSeq: 0,
+          productId: null,
+          amount: tax,
+        },
+        {
+          account: 'COD_CLEARING',
+          ownerId: '',
+          lineKind: 'WITHDRAWAL_NET',
+          itemSeq: 0,
+          productId: null,
+          amount: net,
+        },
+      ].filter((l) => l.amount !== 0) as Line[];
+      const journalId = await this.ledger.writeJournal(
+        m,
+        {
+          kind: 'WITHDRAWAL_PAID',
+          referenceId: reference,
+          orderId: null,
+          affiliateId: row.affiliateId,
+          eventId: reference,
+          occurredAt: new Date().toISOString(),
+          gross: amount,
+        },
+        lines,
+        'AVAILABLE',
+      );
+      if (!journalId)
+        throw new Error(
+          `withdrawal ${id}: jurnal allaqachon bor, holat PAID emas`,
+        );
+      await m.query(
+        `UPDATE finance.withdrawal_request
+            SET status = 'PAID', paid_by = $2, paid_at = now(), journal_id = $3, updated_at = now()
+          WHERE id = $1`,
+        [id, paidBy, journalId],
+      );
+    });
+    return this.get(this.db.manager, id);
+  }
+
+  /** O‘zini o‘zi band qilganlik belgisi — moliya qo‘lda (T01:471; BE-06 maydonlari kelguncha) [taklif]. */
+  async setSelfEmployed(input: {
+    affiliateId: string;
+    selfEmployed: boolean;
+    updatedBy: string;
+  }): Promise<AffiliateSelfEmployedDto> {
+    const affiliateId = validId(input?.affiliateId, 'affiliateId');
+    const updatedBy = validId(input?.updatedBy, 'updatedBy');
+    if (typeof input?.selfEmployed !== 'boolean')
+      throw new BadRequestException('selfEmployed: true yoki false');
+    const [row] = (await this.db.query(
+      `INSERT INTO finance.affiliate_payout_profile (affiliate_id, self_employed, updated_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (affiliate_id) DO UPDATE
+         SET self_employed = EXCLUDED.self_employed, updated_by = EXCLUDED.updated_by, updated_at = now()
+       RETURNING affiliate_id AS "affiliateId", self_employed AS "selfEmployed",
+                 updated_by AS "updatedBy", updated_at AS "updatedAt"`,
+      [affiliateId, input.selfEmployed, updatedBy],
+    )) as AffiliateSelfEmployedDto[];
+    return row;
+  }
+
+  private async lockRow(m: EntityManager, id: string): Promise<RequestRow> {
+    const [row] = (await m.query(`${SELECT} WHERE r.id = $1 FOR UPDATE`, [
+      id,
+    ])) as RequestRow[];
+    if (!row) throw new NotFoundException('So‘rov topilmadi');
+    return row;
+  }
+
+  private async get(m: EntityManager, id: string): Promise<WithdrawalDto> {
+    const [row] = (await m.query(`${SELECT} WHERE r.id = $1`, [
+      id,
+    ])) as RequestRow[];
+    if (!row) throw new NotFoundException('So‘rov topilmadi');
+    return (await this.toDtos(m, [row]))[0];
+  }
+
+  private async toDtos(
+    m: EntityManager,
+    rows: RequestRow[],
+  ): Promise<WithdrawalDto[]> {
+    if (!rows.length) return [];
+    const approvals = (await m.query(
+      `SELECT request_id::text AS "requestId", approver_id AS "approvedBy", created_at AS "approvedAt"
+         FROM finance.withdrawal_approval WHERE request_id = ANY($1::bigint[])
+        ORDER BY created_at, approver_id`,
+      [rows.map((r) => r.id)],
+    )) as Array<{ requestId: string; approvedBy: string; approvedAt: Date }>;
+    return rows.map((r) => ({
+      id: r.id,
+      affiliateId: r.affiliateId,
+      amount: moneyFromDb(r.amount),
+      taxAmount: moneyFromDb(r.taxAmount),
+      netAmount: moneyFromDb(r.netAmount),
+      status: r.status,
+      requiredApprovals: r.requiredApprovals,
+      approvals: approvals
+        .filter((a) => a.requestId === r.id)
+        .map((a) => ({ approvedBy: a.approvedBy, approvedAt: a.approvedAt })),
+      rejectReason: r.rejectReason,
+      createdAt: r.createdAt,
+      paidAt: r.paidAt,
+      paidBy: r.paidBy,
+    }));
+  }
+}

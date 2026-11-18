@@ -29,6 +29,7 @@ import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
 import { LeadOfferController } from './lead-offer.controller';
+import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadStatsController } from './lead-stats.controller';
 import { LeadStatsService } from './lead-stats.service';
@@ -41,6 +42,7 @@ import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
+import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { AffiliateIdentityClient } from './affiliate-identity.client';
 import { FraudScheduler } from './fraud.scheduler';
@@ -124,6 +126,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
             AddLeadQueue1795046400000,
             AddApiLeads1795132800000,
             AddLeadStats1795564800000,
+            AddCapiFields1795651200000,
             AddFraudCenter1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
@@ -157,6 +160,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     ApiKeyService,
     LeadStatsService,
     LeadOrderService,
+    CapiService,
     AffiliateIdentityClient,
     FraudService,
     FraudScheduler,

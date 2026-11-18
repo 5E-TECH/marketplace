@@ -10136,6 +10136,64 @@
         ]
       }
     },
+    "/api/v1/affiliate/capi-deliveries": {
+      "get": {
+        "operationId": "AffiliateStreamsController_capiDeliveries",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "streamId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "3301",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateCapiDeliveriesPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Meta CAPI yuborish jurnali: Lead va Purchase, holat va xato sababi (BE-31)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
     "/api/v1/affiliate/postbacks": {
       "get": {
         "operationId": "AffiliateStreamsController_postbacks",
@@ -10286,6 +10344,657 @@
         "summary": "Kalitni bekor qilish — darhol ishlamaydi",
         "tags": [
           "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/balance": {
+      "get": {
+        "description": "blockReason bo‘sh bo‘lmasa so‘rov tugmasi yopiq: maqom yo‘q, bugun so‘rov bor yoki summa minimaldan kam (BE-23).",
+        "operationId": "AffiliateWithdrawalsController_balance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateBalanceDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Balans: ushlab turilgan, mavjud, band va yechish mumkin",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/withdrawals": {
+      "post": {
+        "description": "Kuniga 1 ta, kamida 50 000 so‘m, 1% soliq ushlanadi; 5 mln dan katta — ikki tasdiq. O‘zini o‘zi band qilganlik belgisi bo‘lmasa rad (BE-23).",
+        "operationId": "AffiliateWithdrawalsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BUSINESS_RULE_VIOLATION: minimaldan kam, bugun so‘rov bor, maqom yo‘q yoki balans yetmaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pul yechish so‘rovi",
+        "tags": [
+          "affiliate"
+        ]
+      },
+      "get": {
+        "operationId": "AffiliateWithdrawalsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "PAID",
+                "REJECTED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mening so‘rovlarim (yangilari birinchi)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/withdrawals": {
+      "get": {
+        "operationId": "AdminWithdrawalsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "PAID",
+                "REJECTED"
+              ]
+            }
+          },
+          {
+            "name": "affiliateId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "42",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pul yechish so‘rovlari (holat, sotuvchi filtri)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/withdrawals/{id}/approve": {
+      "post": {
+        "description": "5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi.",
+        "operationId": "AdminWithdrawalsController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tasdiqlash",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/withdrawals/{id}/reject": {
+      "post": {
+        "operationId": "AdminWithdrawalsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectWithdrawalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: to‘langan yoki rad etilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rad etish (sabab bilan); band summa bo‘shaydi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/withdrawals/{id}/paid": {
+      "post": {
+        "description": "Faqat tasdiqlangan so‘rov; ledgerga jurnal: sotuvchidan −summa, 1% soliq alohida qator. Takror bosilsa — o‘sha natija.",
+        "operationId": "AdminWithdrawalsController_paid",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: tasdiqlanmagan, tasdiqlar yetmaydi yoki balans yetmaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "«To‘landi»: moliya kartaga qo‘lda o‘tkazdi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/affiliates/{id}/self-employed": {
+      "put": {
+        "description": "Belgisiz sotuvchining so‘rovi rad etiladi (T01:471).",
+        "operationId": "AdminWithdrawalsController_setSelfEmployed",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSelfEmployedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateSelfEmployedDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘zini o‘zi band qilganlik belgisi (moliya tekshirgach qo‘lda)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements": {
+      "get": {
+        "operationId": "AdminSettlementsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "READY",
+                "EXPORTED",
+                "PAID",
+                "NETTED",
+                "VOID"
+              ]
+            }
+          },
+          {
+            "name": "wholesalerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "501",
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodEnd",
+            "required": false,
+            "in": "query",
+            "description": "Davr oxiri (yakshanba)",
+            "schema": {
+              "example": "2027-01-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik aktlari (holat, optovik, davr filtri)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/bank-file": {
+      "get": {
+        "description": "Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).",
+        "operationId": "AdminSettlementsController_bankFile",
+        "parameters": [
+          {
+            "name": "periodEnd",
+            "required": true,
+            "in": "query",
+            "description": "Davr oxiri (yakshanba): shu davrning tayyor aktlari",
+            "schema": {
+              "example": "2027-01-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Bu davrda to‘lanadigan akt yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/run": {
+      "post": {
+        "description": "Takror ishga tushirish xavfsiz: bir tovar qatori bir marta aktga kiradi.",
+        "operationId": "AdminSettlementsController_run",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementRunResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hisob-kitobni qo‘lda ishga tushirish (cron har dushanba 09:00)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}": {
+      "get": {
+        "operationId": "AdminSettlementsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt va uning tovar qatorlari",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}/act.pdf": {
+      "get": {
+        "operationId": "AdminSettlementsController_actPdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt-sverka PDF",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settlements/{id}/paid": {
+      "post": {
+        "description": "Faqat bank faylidan keyin (EXPORTED); ledgerga aynan fayldagi summa (WHOLESALER_PAID). Keyin qaytgan tovar qarzi keyingi aktdan ushlanadi. Takror — o‘sha natija.",
+        "operationId": "AdminSettlementsController_paid",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Akt topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "«To‘landi»: moliya bankda o‘tkazdi",
+        "tags": [
+          "admin-finance"
         ]
       }
     },
@@ -18476,6 +19185,125 @@
           "totalPages"
         ]
       },
+      "AffiliateCapiDeliveryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "601"
+          },
+          "leadId": {
+            "type": "string",
+            "example": "7001",
+            "description": "Lid ID — Meta event_id"
+          },
+          "streamCode": {
+            "type": "string",
+            "example": "k7Qm2x"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "LEAD",
+              "PURCHASE"
+            ],
+            "example": "LEAD"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SENT",
+              "FAILED"
+            ],
+            "example": "SENT"
+          },
+          "attempts": {
+            "type": "number",
+            "example": 1
+          },
+          "responseCode": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Meta xatosi yoki sabab (masalan, «190: token yaroqsiz»)"
+          },
+          "value": {
+            "type": "number",
+            "example": 292000,
+            "nullable": true,
+            "description": "Purchase summasi, so‘m (UZS)"
+          },
+          "deliveredAt": {
+            "type": "string",
+            "example": "2027-01-14T09:33:00.000Z",
+            "nullable": true
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T09:32:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "leadId",
+          "streamCode",
+          "event",
+          "status",
+          "attempts",
+          "responseCode",
+          "lastError",
+          "value",
+          "deliveredAt",
+          "nextAttemptAt",
+          "createdAt"
+        ]
+      },
+      "AffiliateCapiDeliveriesPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliateCapiDeliveryDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 12
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
       "AffiliatePostbackDto": {
         "type": "object",
         "properties": {
@@ -18670,6 +19498,497 @@
           "lastUsedAt",
           "revokedAt",
           "key"
+        ]
+      },
+      "AffiliateBalanceDto": {
+        "type": "object",
+        "properties": {
+          "hold": {
+            "type": "number",
+            "example": 130000,
+            "description": "Ushlab turilgan (HOLD), so‘m"
+          },
+          "available": {
+            "type": "number",
+            "example": 1200000,
+            "description": "Mavjud (AVAILABLE), so‘m; qaytarishdan keyin manfiy bo‘lishi mumkin"
+          },
+          "reserved": {
+            "type": "number",
+            "example": 0,
+            "description": "Ochiq so‘rovlarda band (So‘raldi va Tasdiqlandi), so‘m"
+          },
+          "withdrawable": {
+            "type": "number",
+            "example": 1200000,
+            "description": "Yechish mumkin: mavjud − band (0 dan kam emas)"
+          },
+          "minAmount": {
+            "type": "number",
+            "example": 50000,
+            "description": "Eng kam so‘rov, so‘m"
+          },
+          "taxPercent": {
+            "type": "number",
+            "example": 1,
+            "description": "Ushlanadigan soliq, %"
+          },
+          "twoApprovalAbove": {
+            "type": "number",
+            "example": 5000000,
+            "description": "Bundan katta so‘rov ikki xodim tasdig‘ini talab qiladi"
+          },
+          "selfEmployed": {
+            "type": "boolean",
+            "example": true
+          },
+          "blockReason": {
+            "type": "string",
+            "enum": [
+              "NOT_SELF_EMPLOYED",
+              "DAILY_LIMIT",
+              "BELOW_MIN"
+            ],
+            "nullable": true,
+            "example": null,
+            "description": "Bo‘sh — so‘rov yuborish mumkin"
+          }
+        },
+        "required": [
+          "hold",
+          "available",
+          "reserved",
+          "withdrawable",
+          "minAmount",
+          "taxPercent",
+          "twoApprovalAbove",
+          "selfEmployed",
+          "blockReason"
+        ]
+      },
+      "CreateWithdrawalDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 1000000,
+            "description": "So‘ralgan summa, butun so‘m (soliq shundan ushlanadi)"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "WithdrawalApprovalDto": {
+        "type": "object",
+        "properties": {
+          "approvedBy": {
+            "type": "string",
+            "example": "7"
+          },
+          "approvedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-21T09:00:00.000Z"
+          }
+        },
+        "required": [
+          "approvedBy",
+          "approvedAt"
+        ]
+      },
+      "WithdrawalDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "affiliateId": {
+            "type": "string",
+            "example": "42"
+          },
+          "amount": {
+            "type": "number",
+            "example": 1000000,
+            "description": "So‘ralgan summa"
+          },
+          "taxAmount": {
+            "type": "number",
+            "example": 10000,
+            "description": "Ushlanadigan 1% soliq"
+          },
+          "netAmount": {
+            "type": "number",
+            "example": 990000,
+            "description": "Kartaga o‘tkaziladi"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "APPROVED",
+              "PAID",
+              "REJECTED"
+            ],
+            "example": "REQUESTED"
+          },
+          "requiredApprovals": {
+            "type": "number",
+            "example": 1,
+            "description": "Kerakli tasdiqlar soni (1 yoki 2)"
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WithdrawalApprovalDto"
+            }
+          },
+          "rejectReason": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-21T08:00:00.000Z"
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "paidBy": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "affiliateId",
+          "amount",
+          "taxAmount",
+          "netAmount",
+          "status",
+          "requiredApprovals",
+          "approvals",
+          "rejectReason",
+          "createdAt",
+          "paidAt",
+          "paidBy"
+        ]
+      },
+      "WithdrawalPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WithdrawalDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "RejectWithdrawalDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Karta ma’lumoti noto‘g‘ri"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "SetSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "selfEmployed": {
+            "type": "boolean",
+            "example": true,
+            "description": "O‘zini o‘zi band qilganlik maqomi tekshirildi (T01:471); moliya qo‘lda qo‘yadi"
+          }
+        },
+        "required": [
+          "selfEmployed"
+        ]
+      },
+      "AffiliateSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "affiliateId": {
+            "type": "string",
+            "example": "42"
+          },
+          "selfEmployed": {
+            "type": "boolean",
+            "example": true
+          },
+          "updatedBy": {
+            "type": "string",
+            "example": "7"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-21T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "affiliateId",
+          "selfEmployed",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "WholesalerSettlementItemDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "example": "9001"
+          },
+          "productId": {
+            "type": "string",
+            "example": "88",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1,
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "example": 140000,
+            "description": "Bazaviy narx × soni, so‘m"
+          },
+          "deliveredAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-02T10:00:00.000Z",
+            "description": "Yetkazilgan vaqt"
+          }
+        },
+        "required": [
+          "orderId",
+          "productId",
+          "quantity",
+          "amount",
+          "deliveredAt"
+        ]
+      },
+      "WholesalerSettlementDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "number": {
+            "type": "string",
+            "example": "AS-000012",
+            "description": "Akt raqami"
+          },
+          "wholesalerId": {
+            "type": "string",
+            "example": "501",
+            "description": "Optovik ID si (ledger WHOLESALER hisobi egasi)"
+          },
+          "periodStart": {
+            "type": "string",
+            "example": "2027-01-04",
+            "description": "Davr boshi (dushanba), Toshkent"
+          },
+          "periodEnd": {
+            "type": "string",
+            "example": "2027-01-10",
+            "description": "Davr oxiri (yakshanba), Toshkent"
+          },
+          "returnWindowDays": {
+            "type": "number",
+            "example": 10,
+            "description": "Qaytarish muddati, kun (EQ-10 sozlamasi)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "EXPORTED",
+              "PAID",
+              "NETTED",
+              "VOID"
+            ],
+            "example": "READY"
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 280000,
+            "description": "O‘tkaziladigan summa, so‘m"
+          },
+          "exportedTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Bank fayliga kirgan (muzlatilgan) summa — «To‘landi» aynan shuni yozadi"
+          },
+          "debtDeducted": {
+            "type": "number",
+            "example": 0,
+            "description": "Oldingi qaytarishlardan qolgan qarzga ushlangan summa"
+          },
+          "exportedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "itemsCount": {
+            "type": "number",
+            "example": 2
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerSettlementItemDto"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-11T04:00:00.000Z"
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "paidBy": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "wholesalerId",
+          "periodStart",
+          "periodEnd",
+          "returnWindowDays",
+          "status",
+          "totalAmount",
+          "exportedTotal",
+          "debtDeducted",
+          "exportedAt",
+          "itemsCount",
+          "items",
+          "createdAt",
+          "paidAt",
+          "paidBy"
+        ]
+      },
+      "WholesalerSettlementPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerSettlementDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "RunSettlementDto": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "example": "2027-01-11T04:00:00.000Z",
+            "description": "Qaysi lahza uchun (sukut — hozir); kesish — shu haftaning dushanbasi 00:00 Toshkent"
+          }
+        }
+      },
+      "SettlementRunResultDto": {
+        "type": "object",
+        "properties": {
+          "periodEnd": {
+            "type": "string",
+            "example": "2027-01-10"
+          },
+          "skipped": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "RETURN_WINDOW_NOT_SET — qaytarish muddati (EQ-10) sozlanmagan, akt tuzilmadi; PERIOD_ALREADY_EXPORTED — davrning bank fayli olingan, yangi akt tuzilmadi (qatorlar keyingi haftaga)"
+          },
+          "settlements": {
+            "type": "number",
+            "example": 3,
+            "description": "Tuzilgan yoki to‘ldirilgan aktlar"
+          },
+          "items": {
+            "type": "number",
+            "example": 7,
+            "description": "Aktga kirgan tovar qatorlari"
+          }
+        },
+        "required": [
+          "periodEnd",
+          "skipped",
+          "settlements",
+          "items"
         ]
       },
       "LeadProductRefDto": {

@@ -36,6 +36,7 @@ import { landingState } from './landing.service';
 import { FraudService } from './fraud.service';
 import { effectiveSalePrice } from './offer-math';
 import { PostbackService } from './postback.service';
+import { CapiService } from './capi.service';
 import {
   LeadAddressService,
   ResolvedLeadAddress,
@@ -92,6 +93,7 @@ export class LeadIntakeService {
     private readonly address: LeadAddressService,
     private readonly config: ConfigService,
     @Optional() private readonly postback?: PostbackService,
+    @Optional() private readonly capi?: CapiService,
     @Optional() private readonly fraud?: FraudService,
   ) {}
 
@@ -373,12 +375,15 @@ export class LeadIntakeService {
       );
       target = resultLead;
       // SOT-5: «lid» hodisasi; tekshiruvga tushgan ariza ko‘rib chiqilmaguncha yuborilmaydi [taklif]
-      if (!heldForReview)
+      if (!heldForReview) {
         await this.postback?.enqueue(
           manager,
           resultLead,
           AffiliatePostbackEvent.LEAD,
         );
+        // BE-31: Meta CAPI Lead (event_id = lid ID — brauzer pikseli bilan bitta hodisa)
+        await this.capi?.enqueueLead(manager, resultLead);
+      }
     } else {
       const root = await leads.findOneOrFail({
         where: { id: decision.rootId },
