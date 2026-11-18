@@ -17068,6 +17068,12 @@
             "nullable": true,
             "description": "1000 tashrifga tushgan pul, so‘m (hal qiluvchi raqam)"
           },
+          "targetReached": {
+            "type": "boolean",
+            "example": false,
+            "nullable": true,
+            "description": "Jami qatorida: variant maqsadga yetdimi (qabul qilingan ≥ targetAcceptedPerVariant); mahsulot qatorida bo‘sh"
+          },
           "rejectReasons": {
             "type": "object",
             "example": {
@@ -17092,6 +17098,7 @@
           "returned",
           "amount",
           "amountPer1000Visits",
+          "targetReached",
           "rejectReasons"
         ]
       },
@@ -17118,6 +17125,16 @@
               "$ref": "#/components/schemas/VariantReportRowDto"
             }
           },
+          "targetAcceptedPerVariant": {
+            "type": "number",
+            "example": 400,
+            "description": "Har variantda qabul qilingan posilka maqsadi (ega qarori 2026-11-18; sinov-s1-s3.md «Qancha kerak»). Davr sinov boshidan olinadi"
+          },
+          "targetReached": {
+            "type": "boolean",
+            "example": false,
+            "description": "Ikkala variant ham maqsadga yetdi — sinov natijasini o‘qish mumkin"
+          },
           "note": {
             "type": "string",
             "example": "Sinov oldindan belgilangan posilka soniga yetguncha natijaga qarab to‘xtatilmaydi (sinov-s1-s3.md)"
@@ -17128,6 +17145,8 @@
           "to",
           "generatedAt",
           "rows",
+          "targetAcceptedPerVariant",
+          "targetReached",
           "note"
         ]
       },

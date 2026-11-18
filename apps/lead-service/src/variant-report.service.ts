@@ -30,6 +30,8 @@ const RETURNED: LeadOrderStatus[] = [
   LeadOrderStatus.RETURNING,
   LeadOrderStatus.RETURNED_GRADED,
 ];
+/** Har variantda qabul qilingan posilka maqsadi: ega qarori 2026-11-18 (sinov-s1-s3.md «Qancha kerak», ≈22% farq). */
+export const VARIANT_TARGET_ACCEPTED = 400;
 export const VARIANT_REPORT_NOTE =
   'Sinov oldindan belgilangan posilka soniga yetguncha natijaga qarab to‘xtatilmaydi: erta qarash noto‘g‘ri g‘olib beradi (sinov-s1-s3.md «Qaror qoidasi»)';
 
@@ -53,6 +55,7 @@ type Counts = Omit<
   | 'productName'
   | 'duplicateRate'
   | 'amountPer1000Visits'
+  | 'targetReached'
 >;
 
 const empty = (): Counts => ({
@@ -240,8 +243,20 @@ export class VariantReportService {
         amountPer1000Visits: r.visits
           ? Math.round((r.amount * 1000) / r.visits)
           : null,
+        targetReached:
+          r.productId === null ? r.accepted >= VARIANT_TARGET_ACCEPTED : null,
       }));
-    return { from, to, generatedAt: now, rows: out, note: VARIANT_REPORT_NOTE };
+    return {
+      from,
+      to,
+      generatedAt: now,
+      rows: out,
+      targetAcceptedPerVariant: VARIANT_TARGET_ACCEPTED,
+      targetReached: out
+        .filter((r) => r.productId === null)
+        .every((r) => r.targetReached),
+      note: VARIANT_REPORT_NOTE,
+    };
   }
 
   /** CSV (UTF-8 BOM, «;») — Excel uchun [taklif]. */
@@ -265,6 +280,7 @@ export class VariantReportService {
       'Summa, so‘m',
       '1000 tashrifga, so‘m',
       'Rad sabablari',
+      `Maqsad ${VARIANT_TARGET_ACCEPTED} posilka`,
     ];
     const lines = r.rows.map((x) =>
       [
@@ -288,6 +304,7 @@ export class VariantReportService {
         Object.entries(x.rejectReasons)
           .map(([k, n]) => `${k}: ${n}`)
           .join(', '),
+        x.targetReached === null ? '' : x.targetReached ? 'yetdi' : 'yetmadi',
       ]
         .map((v) => csvCell(String(v)))
         .join(';'),

