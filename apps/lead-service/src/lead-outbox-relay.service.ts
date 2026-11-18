@@ -36,6 +36,10 @@ export class LeadOutboxRelayService {
         const rows = await repo
           .createQueryBuilder('event')
           .where('event.status = :status', { status: OutboxStatus.PENDING })
+          // Faqat yo‘nalishi bor hodisalar: yuborilmaydigani navbat boshida turib qolib, qolganini to‘smasin (BE-35)
+          .andWhere('event.eventType IN (:...types)', {
+            types: Object.values(LEAD_EVENTS).filter((t) => this.route(t)),
+          })
           .orderBy('event.id', 'ASC')
           .take(20)
           .setLock('pessimistic_write')
@@ -67,6 +71,9 @@ export class LeadOutboxRelayService {
   private route(eventType: string): ClientProxy | null {
     if (eventType === LEAD_EVENTS.CONFIRMED) return this.checkout;
     if (eventType === LEAD_EVENTS.CALLBACK_REMINDER) return this.notification;
+    // BE-35: sotuvchiga chora xabari. fraud.fee.* moliyaga — moliya iste’molchisi qo‘shilgach (BE-35 2-PR);
+    // ungacha outbox da PENDING qoladi, yo‘qolmaydi.
+    if (eventType === LEAD_EVENTS.FRAUD_MEASURE) return this.notification;
     return null;
   }
 }

@@ -13,7 +13,36 @@ export const LEAD_EVENTS = {
   ORDER_CREATE_FAILED: 'order.create-failed',
   /** lead-service ichida: rejalashtirilgan qo‘ng‘iroqqa 5 daqiqa qoldi (8-qoida) [taklif]. */
   CALLBACK_REMINDER: 'lead.callback.reminder',
+  /** lead-service → finance-service: sotuvchi haqi tekshiruvgacha ushlab turiladi (BE-35, TZ 7). */
+  FRAUD_FEE_HOLD: 'fraud.fee.hold',
+  /** lead-service → finance-service: ushlab turilgan haq qo‘yib yuboriladi (BE-35). */
+  FRAUD_FEE_RELEASE: 'fraud.fee.release',
+  /** lead-service → finance-service: sotuvchi bloklandi — ushlab turilgan haq bekor qilinadi (TZ 7, 3-qadam). */
+  FRAUD_FEE_CANCEL: 'fraud.fee.cancel',
+  /** lead-service → notification-service: sotuvchiga chora (ogohlantirish, sahifa to‘xtatildi) [taklif]. */
+  FRAUD_MEASURE: 'fraud.measure.applied',
 } as const;
+
+/** fraud.fee.* — lid bo‘yicha (moliya jurnalida `lead_id` bor). CANCEL da `leadIds` — sotuvchining ushlangan hamma lidi. */
+export interface FraudFeeEvent {
+  eventId: string;
+  incidentId: string | null;
+  affiliateId: string;
+  leadIds: string[];
+  reason: string;
+  at: string;
+}
+
+/** fraud.measure.applied — sotuvchiga xabar uchun (6.12; matn notification-service da). */
+export interface FraudMeasureEvent {
+  eventId: string;
+  incidentId: string | null;
+  affiliateId: string;
+  streamId: string | null;
+  action: string;
+  reason: string;
+  at: string;
+}
 
 /** lead.confirmed — operator manzil tasdiqlagan liddan buyurtma yaratish uchun hamma ma’lumot. */
 export interface LeadConfirmedEvent {

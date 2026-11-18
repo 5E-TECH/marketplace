@@ -43,8 +43,14 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
+import { AffiliateIdentityClient } from './affiliate-identity.client';
+import { FraudScheduler } from './fraud.scheduler';
+import { FraudService } from './fraud.service';
+import { LeadSupervisorController } from './lead-supervisor.controller';
+import { LeadSupervisorService } from './lead-supervisor.service';
 
-/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28. */
+/** Lid xizmati (BE-10). Manzil — BE-38; offer va sahifalar — BE-11; lid qabul qilish — BE-12; operator navbati — BE-13; admin lidlari — BE-42; statistika — BE-28; nazoratchi va firibgarlik — BE-35. */
 @Module({
   imports: [
     CommonConfigModule,
@@ -88,6 +94,15 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
           ),
       },
       {
+        name: RmqClient.IDENTITY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.getOrThrow<string>('RABBITMQ_URL')],
+            RmqQueue.IDENTITY,
+          ),
+      },
+      {
         name: RmqClient.INTEGRATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
@@ -112,6 +127,7 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
             AddApiLeads1795132800000,
             AddLeadStats1795564800000,
             AddCapiFields1795651200000,
+            AddFraudCenter1795824000000,
           ],
           migrationsRun: shouldRunMigrations(config),
         };
@@ -126,6 +142,7 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
     LeadQueueController,
     LeadAdminController,
     LeadStatsController,
+    LeadSupervisorController,
   ],
   providers: [
     LeadAddressService,
@@ -144,6 +161,10 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
     LeadStatsService,
     LeadOrderService,
     CapiService,
+    AffiliateIdentityClient,
+    FraudService,
+    FraudScheduler,
+    LeadSupervisorService,
   ],
 })
 export class LeadModule {}

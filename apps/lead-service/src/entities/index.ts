@@ -2,6 +2,7 @@ import { OutboxEvent } from '@app/common';
 import { AffiliateApiKey } from './affiliate-api-key.entity';
 import { Click } from './click.entity';
 import { CapiDelivery, PostbackDelivery } from './delivery.entity';
+import { FraudAction, FraudIncident } from './fraud.entity';
 import { LeadAttempt } from './lead-attempt.entity';
 import { LeadHistory } from './lead-history.entity';
 import { Lead } from './lead.entity';
@@ -13,6 +14,8 @@ export {
   AffiliateApiKey,
   CapiDelivery,
   Click,
+  FraudAction,
+  FraudIncident,
   Lead,
   LeadAttempt,
   LeadHistory,
@@ -34,5 +37,7 @@ export const LEAD_ENTITIES = [
   CapiDelivery,
   AffiliateApiKey,
   OfferContent,
+  FraudIncident,
+  FraudAction,
   OutboxEvent,
 ];

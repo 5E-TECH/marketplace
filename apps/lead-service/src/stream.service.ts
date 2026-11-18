@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
-import { In, QueryFailedError, Repository } from 'typeorm';
+import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import {
   AffiliateStreamDto,
   AffiliateStreamsPageDto,
@@ -168,8 +168,11 @@ export class StreamService {
     affiliateId: string,
     status: AffiliateStreamStatus,
   ): Promise<{ updated: number }> {
+    // BE-35: firibgarlik sababli to‘xtatilgan sahifa blok olinganda qayta ochilmaydi
     const res = await this.streams.update(
-      { affiliateId, isDeleted: false },
+      status === AffiliateStreamStatus.ACTIVE
+        ? { affiliateId, isDeleted: false, fraudStoppedAt: IsNull() }
+        : { affiliateId, isDeleted: false },
       { status },
     );
     return { updated: res.affected ?? 0 };

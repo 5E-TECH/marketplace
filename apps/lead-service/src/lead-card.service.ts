@@ -17,6 +17,7 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Lead, LeadAttempt, LeadHistory, OfferContent } from './entities';
+import { LEAD_RULES } from './lead-rules';
 import { reminderHorizon } from './lead-schedule';
 
 const ADDRESS_FIELDS = [
@@ -101,7 +102,7 @@ export class LeadCardService {
   }
 
   async build(lead: Lead): Promise<LeadCardDto> {
-    const [offer, content, attempts, history, previous, address] =
+    const [offer, content, attempts, history, previous, address, rejections] =
       await Promise.all([
         this.catalog.get(lead.productId).catch(() => null),
         this.contents.findOne({
@@ -117,6 +118,14 @@ export class LeadCardService {
         }),
         this.previousLeads(lead),
         this.address(lead),
+        this.leads.count({
+          where: {
+            phoneE164: lead.phoneE164,
+            status: LeadStatus.REJECTED,
+            mergedIntoId: IsNull(),
+            isDeleted: false,
+          },
+        }),
       ]);
     return {
       id: lead.id,
@@ -137,6 +146,8 @@ export class LeadCardService {
       rejectReason: lead.rejectReason,
       callScript: content?.callScript ?? null,
       stockShortage: !!lead.stockShortageAt,
+      blacklistRejections:
+        rejections >= LEAD_RULES.blacklistRejections ? rejections : null,
       attemptsCount: lead.attempts,
       bookedUntil: lead.bookedUntil?.toISOString() ?? null,
       nextAttemptAt: lead.nextAttemptAt?.toISOString() ?? null,

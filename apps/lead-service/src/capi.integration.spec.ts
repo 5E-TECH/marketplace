@@ -32,6 +32,7 @@ import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-q
 import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
+import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 
 describe('BE-31: CAPI hodisasi (sof funksiyalar)', () => {
   const base = {
@@ -205,6 +206,7 @@ describeWithPostgres(
           AddApiLeads1795132800000,
           AddLeadStats1795564800000,
           AddCapiFields1795651200000,
+          AddFraudCenter1795824000000,
         ],
         synchronize: false,
         logging: false,

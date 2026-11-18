@@ -1,7 +1,16 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -10,7 +19,10 @@ import {
 import {
   AdminLeadsPageDto,
   AdminLeadsQueryDto,
+  CurrentUser,
   LeadCardDto,
+  LeadReopenedDto,
+  ReopenLeadDto,
   RmqClient,
   Role,
   Roles,
@@ -46,5 +58,29 @@ export class AdminLeadsController {
   @ApiNotFoundResponse({ description: 'Lid topilmadi' })
   getCard(@Param('id', ParseLeadIdPipe) leadId: string): Promise<LeadCardDto> {
     return sendRpc(this.lead, { cmd: 'lead.admin.card' }, { leadId });
+  }
+
+  @Post(':id/reopen')
+  @ApiOperation({
+    summary: '«Rad etildi» lidni qayta ochish (faqat admin, sabab majburiy)',
+    description:
+      'TZ 3 ruxsatlar jadvali va 5-bo‘lim 10-qoida (BE-35). Lid navbatga qaytadi; tarixga kim, qachon va sabab yoziladi.',
+  })
+  @ApiOkResponse({ type: LeadReopenedDto })
+  @ApiNotFoundResponse({ description: 'Lid topilmadi' })
+  @ApiConflictResponse({
+    description:
+      'LEAD_NOT_REJECTED; ACTIVE_LEAD_EXISTS — shu raqam va mahsulotda faol lid bor',
+  })
+  reopen(
+    @CurrentUser('sub') actorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Body() body: ReopenLeadDto,
+  ): Promise<LeadReopenedDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.admin.reopen' },
+      { actorId, leadId, reason: body.reason },
+    );
   }
 }
