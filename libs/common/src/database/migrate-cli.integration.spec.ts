@@ -18,13 +18,14 @@ class Item {
   @PrimaryGeneratedColumn() id: number;
   @Column({ type: 'varchar', length: 20 }) name: string;
   @Column({ type: 'integer', nullable: true }) qty: number | null;
+  @Column({ type: 'varchar', length: 10, default: 'ACTIVE' }) status: string;
 }
 
 class CreateItem1700000000001 implements MigrationInterface {
   name = 'CreateItem1700000000001';
   async up(q: QueryRunner) {
     await q.query(
-      `CREATE TABLE "${SCHEMA}"."item" ("id" SERIAL PRIMARY KEY, "name" varchar(20) NOT NULL)`,
+      `CREATE TABLE "${SCHEMA}"."item" ("id" SERIAL PRIMARY KEY, "name" varchar(20) NOT NULL, "status" varchar(10) NOT NULL DEFAULT 'active')`,
     );
   }
   async down(q: QueryRunner) {
@@ -56,6 +57,27 @@ class QtyNullable1700000000003 implements MigrationInterface {
   }
 }
 
+class StatusDefault1700000000004 implements MigrationInterface {
+  name = 'StatusDefault1700000000004';
+  async up(q: QueryRunner) {
+    await q.query(
+      `ALTER TABLE "${SCHEMA}"."item" ALTER COLUMN "status" SET DEFAULT 'ACTIVE'`,
+    );
+  }
+  async down(q: QueryRunner) {
+    await q.query(
+      `ALTER TABLE "${SCHEMA}"."item" ALTER COLUMN "status" SET DEFAULT 'active'`,
+    );
+  }
+}
+
+const UP_TO_QTY = [
+  CreateItem1700000000001,
+  AddQtyNotNull1700000000002,
+  QtyNullable1700000000003,
+];
+const ALL = [...UP_TO_QTY, StatusDefault1700000000004];
+
 const def = (
   migrations: DatabaseDefinition['migrations'],
 ): DatabaseDefinition => ({ schema: SCHEMA, entities: [Item], migrations });
@@ -86,7 +108,7 @@ describeWithPostgres('BE-04 migratsiya CLI (PostgreSQL)', () => {
     await admin.destroy();
   });
 
-  it('TC2/TC3: check — entity ustuni migratsiyada yo‘q yoki NULL farq qilsa 1, mos bo‘lsa 0; show va revert', async () => {
+  it('TC2/TC3: check — ustun yo‘q, NULL yoki sukut farq qilsa 1, mos bo‘lsa 0; show va revert', async () => {
     const missing = await run([CreateItem1700000000001], 'check');
     expect(missing.code).toBe(1);
     expect(missing.out).toContain(`ustun yo‘q: ${SCHEMA}.item.qty`);
@@ -100,65 +122,25 @@ describeWithPostgres('BE-04 migratsiya CLI (PostgreSQL)', () => {
       `NULL farq qiladi: ${SCHEMA}.item.qty — entity NULL mumkin, bazada NOT NULL`,
     );
 
-    expect(
-      (
-        await run(
-          [
-            CreateItem1700000000001,
-            AddQtyNotNull1700000000002,
-            QtyNullable1700000000003,
-          ],
-          'show',
-        )
-      ).out,
-    ).toContain('yurgizilmagan — QtyNullable1700000000003');
-    const ok = await run(
-      [
-        CreateItem1700000000001,
-        AddQtyNotNull1700000000002,
-        QtyNullable1700000000003,
-      ],
-      'check',
+    // catalog’dagi 'active' / 'ACTIVE' kabi: ustun bor, turi va NULL mos, sukuti boshqa
+    const wrongDefault = await run(UP_TO_QTY, 'check');
+    expect(wrongDefault.code).toBe(1);
+    expect(wrongDefault.out).toContain(
+      `sukut farq qiladi (entity ACTIVE, bazada active): ${SCHEMA}.item.status`,
     );
+
+    expect((await run(ALL, 'show')).out).toContain(
+      'yurgizilmagan — StatusDefault1700000000004',
+    );
+    const ok = await run(ALL, 'check');
     expect(ok.code).toBe(0);
     expect(ok.out).toContain('hamma jadval va ustun migratsiyada bor');
-    expect(
-      (
-        await run(
-          [
-            CreateItem1700000000001,
-            AddQtyNotNull1700000000002,
-            QtyNullable1700000000003,
-          ],
-          'show',
-        )
-      ).out,
-    ).toContain('hammasi yurgizilgan');
+    expect((await run(ALL, 'show')).out).toContain('hammasi yurgizilgan');
 
-    expect(
-      (
-        await run(
-          [
-            CreateItem1700000000001,
-            AddQtyNotNull1700000000002,
-            QtyNullable1700000000003,
-          ],
-          'revert',
-        )
-      ).code,
-    ).toBe(0);
-    expect(
-      (
-        await run(
-          [
-            CreateItem1700000000001,
-            AddQtyNotNull1700000000002,
-            QtyNullable1700000000003,
-          ],
-          'show',
-        )
-      ).out,
-    ).toContain('yurgizilmagan — QtyNullable1700000000003');
+    expect((await run(ALL, 'revert')).code).toBe(0);
+    expect((await run(ALL, 'show')).out).toContain(
+      'yurgizilmagan — StatusDefault1700000000004',
+    );
   });
 
   it('noma’lum buyruq — 2, ulanish ochilmaydi', async () => {

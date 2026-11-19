@@ -81,9 +81,9 @@ Sxema faqat migratsiyadan: `synchronize` hech qayerda yo‘q, dev da ham. Entity
 - CLI buyruqlari (ulanish servis bilan bir xil `DB_*` yoki `MIGRATE_DATABASE_URL`, servis berilmasa — hammasi):
   - `npm run db:migrate [-- <servis>]` — yangi migratsiyalarni yurgizadi;
   - `npm run db:migrate:show` — yurgizilmaganlarini ko‘rsatadi;
-  - `npm run db:migrate:revert -- <servis>` — oxirgisini qaytaradi;
-  - `npm run db:migrate:check` — yurgizib, sxema entity’larga yetishini tekshiradi.
-- `check` jadval, ustun, tur va NULL ni solishtiradi. Bazadagi ortiqcha CHECK, indeks va FK xato emas.
+  - `npm run db:migrate:revert -- <servis>` — oxirgisini qaytaradi; faqat aniq bitta servis uchun (down migratsiya ma’lumotni o‘chirishi mumkin);
+  - `npm run db:migrate:check` — yurgizib, sxema entity’larga yetishini tekshiradi. Bo‘sh bazada ishlating (`MIGRATE_DATABASE_URL`): eski dev bazasida `synchronize` yaratgan ustunlar farqni yashiradi.
+- `check` jadval, ustun, tur, NULL va oddiy sukut qiymatini solishtiradi. Indeks, unique, CHECK va FK solishtirilmaydi; bazadagi ortiqchalari xato emas.
 - Prod (`DB_AUTO_MIGRATE=false`) da konteyner ichida: `node scripts/migrate.mjs run --dist` yoki `node dist/apps/<servis>/apps/<servis>/src/migrate.js run`.
 - CI toza bazada `check --dist` ni yurgizadi.
 - Integratsion testlar CI da Postgres bilan ishlaydi: `TEST_DATABASE_URL`, moliya — `FINANCE_TEST_DATABASE_URL` (`_finance_test`), to‘lov — `PAYMENT_TEST_DATABASE_URL`.

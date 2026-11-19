@@ -14,6 +14,9 @@ import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
+/** ledger.integration.spec.ts dagi bilan bir xil: finance sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
+const FINANCE_SCHEMA_TEST_LOCK = 2_304_001;
+let schemaLock: Client | undefined;
 const describePostgres = url ? describe : describe.skip;
 
 /**
@@ -89,6 +92,12 @@ describePostgres('BE-35 sotuvchi haqini ushlash (PostgreSQL)', () => {
       throw new Error(
         'FINANCE_TEST_DATABASE_URL nomi _finance_test bilan tugashi kerak',
       );
+    // ledger, withdrawal va settlement spec’lari bilan bir qulf: finance sxemasini parallel workerda buzmasin
+    schemaLock = new Client({ connectionString: url });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      FINANCE_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: url });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS finance CASCADE');
@@ -132,6 +141,7 @@ describePostgres('BE-35 sotuvchi haqini ushlash (PostgreSQL)', () => {
       await ds.query('DROP SCHEMA IF EXISTS finance CASCADE');
       await ds.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   it('ushlangan haq Elchi o‘tkazmasidan keyin ham HOLD da; qo‘yib yuborilsa — shu zahoti AVAILABLE; takror hodisa — bir marta', async () => {

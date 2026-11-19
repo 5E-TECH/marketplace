@@ -8,6 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const SERVICES = [
   'identity-service',
@@ -22,11 +23,18 @@ export const SERVICES = [
   'lead-service',
 ];
 
-const root = path.resolve(import.meta.dirname, '..');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const [command, ...rest] = process.argv.slice(2);
 const fromDist = rest.includes('--dist');
 const services = rest.filter((arg) => !arg.startsWith('--'));
 const targets = services.length ? services : SERVICES;
+// Qaytarish ma’lumotni o‘chirishi mumkin (down migratsiyalar jadval tashlaydi) — faqat aniq bitta servis uchun.
+if (command === 'revert' && services.length !== 1) {
+  console.error(
+    'revert uchun aniq bitta servis nomi kerak: node scripts/migrate.mjs revert <servis>',
+  );
+  process.exit(2);
+}
 for (const service of targets)
   if (!SERVICES.includes(service)) {
     console.error(`noma’lum servis: ${service}`);

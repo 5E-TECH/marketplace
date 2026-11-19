@@ -4,7 +4,8 @@ import { Client } from 'pg';
 
 /**
  * Servis uchun TypeORM sozlamalari (schema-per-service).
- * Sxema faqat migratsiyadan (BE-04): dev ham, prod ham — `npm run db:migrate:check` toza bazada farqni tekshiradi.
+ * Sxema faqat migratsiyadan (BE-04): dev ham, prod ham. CI bo‘sh bazada `db:migrate:check` bilan farqni tekshiradi;
+ * lokal tekshiruv uchun ham bo‘sh baza oling — eski dev bazasida `synchronize` yaratgan ustunlar farqni yashiradi.
  */
 export function typeOrmOptions(
   config: ConfigService,

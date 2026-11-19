@@ -47,17 +47,47 @@ const TYPE_ALIASES: Record<string, string> = {
   character: 'character',
 };
 
+/** Bazadagi sukut ifodasi oddiy qiymatga: `'ACTIVE'::character varying` → `ACTIVE`, `'0'::bigint` → `0`, `(-1)` → `-1`. */
+function plainDefault(value: string): string {
+  const quoted = /^'((?:[^']|'')*)'(?:::.+)?$/s.exec(value);
+  if (quoted) return quoted[1].replace(/''/g, "'");
+  const number = /^\(?(-?\d+(?:\.\d+)?)\)?(?:::.+)?$/.exec(value);
+  return number ? number[1] : value;
+}
+
 /**
- * Migratsiyalardan keyingi sxema entity’larga yetadimi: har entity jadvali, har ustuni bor, turi va NULL ga ruxsati
- * mos. TypeORM’ning o‘z `schema:log` i bu yerda yaramaydi — migratsiyalar SQL da yozilgan (CHECK, qisman indeks,
- * FK), u ularni o‘chirishni taklif qiladi. Bazadagi ortiqcha cheklov va indekslar xato emas.
+ * Entity’ning oddiy sukuti (satr, son, mantiqiy) bazadagisi bilan bir xilmi. Funksiya sukuti (`() => 'now()'`) va
+ * obyekt solishtirilmaydi. Masalan, catalog’dagi `'active'` / `'ACTIVE'` xatosi shu yerda ushlanadi.
+ */
+function compareDefault(entity: unknown, db: string | null): string | null {
+  if (
+    typeof entity !== 'string' &&
+    typeof entity !== 'number' &&
+    typeof entity !== 'boolean'
+  )
+    return null;
+  if (db === null) return `yo‘q (entity ${String(entity)})`;
+  const have = plainDefault(db);
+  const same =
+    typeof entity === 'number'
+      ? Number(have) === entity
+      : have === String(entity);
+  return same ? null : `farq qiladi (entity ${String(entity)}, bazada ${have})`;
+}
+
+/**
+ * Migratsiyalardan keyingi sxema entity’larga yetadimi: har entity jadvali, har ustuni bor, turi, NULL ga ruxsati va
+ * oddiy sukut qiymati mos. TypeORM’ning o‘z `schema:log` i bu yerda yaramaydi — migratsiyalar SQL da yozilgan (CHECK,
+ * qisman indeks, FK), u ularni o‘chirishni taklif qiladi. Indeks, unique, CHECK va FK solishtirilmaydi; bazadagi
+ * ortiqcha cheklovlar xato emas. Bo‘sh bazada ishlating (CI): eski dev bazasida `synchronize` yaratgan ustunlar
+ * farqni yashiradi.
  */
 export async function schemaDrift(
   ds: DataSource,
   schema: string,
 ): Promise<string[]> {
   const rows = (await ds.query(
-    `SELECT table_name, column_name, data_type, udt_name, is_nullable FROM information_schema.columns WHERE table_schema = $1`,
+    `SELECT table_name, column_name, data_type, udt_name, is_nullable, column_default FROM information_schema.columns WHERE table_schema = $1`,
     [schema],
   )) as Array<{
     table_name: string;
@@ -65,6 +95,7 @@ export async function schemaDrift(
     data_type: string;
     udt_name: string;
     is_nullable: 'YES' | 'NO';
+    column_default: string | null;
   }>;
   const tables = new Map<string, Map<string, (typeof rows)[number]>>();
   for (const row of rows) {
@@ -98,6 +129,8 @@ export async function schemaDrift(
         problems.push(
           `tur farq qiladi: ${where} — entity ${want}, bazada ${have}`,
         );
+      const defaultProblem = compareDefault(column.default, db.column_default);
+      if (defaultProblem) problems.push(`sukut ${defaultProblem}: ${where}`);
       if (column.isNullable !== (db.is_nullable === 'YES')) {
         problems.push(
           `NULL farq qiladi: ${where} — entity ${column.isNullable ? 'NULL mumkin' : 'NOT NULL'}, bazada ${db.is_nullable === 'YES' ? 'NULL mumkin' : 'NOT NULL'}`,
@@ -135,7 +168,7 @@ async function pending(ds: DataSource): Promise<string[]> {
  * - `run` — sxema yaratiladi (yo‘q bo‘lsa), hamma yangi migratsiya, har biri o‘z tranzaksiyasida;
  * - `revert` — oxirgi migratsiya qaytariladi;
  * - `show` — hali yurgizilmagan migratsiyalar;
- * - `check` — `run`, keyin entity’lar bilan solishtirish: farq bo‘lsa (migratsiyada yo‘q ustun, indeks, tur) — chiqish kodi 1.
+ * - `check` — `run`, keyin `schemaDrift` (jadval, ustun, tur, NULL, sukut): farq bo‘lsa — chiqish kodi 1.
  * Qaytaradi: chiqish kodi.
  */
 export async function runMigrationCli(

@@ -18,6 +18,8 @@ WORKDIR /app
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --chown=node:node scripts/health-monitor.mjs ./scripts/health-monitor.mjs
+# BE-04: migratsiya CLI (DB_AUTO_MIGRATE=false bo‘lganda deploy qadami) — dist dagi migrate.js larni yurgizadi
+COPY --chown=node:node scripts/migrate.mjs ./scripts/migrate.mjs
 
 USER node
 CMD ["node", "dist/apps/api-gateway/apps/api-gateway/src/main.js"]
