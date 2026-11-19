@@ -3,10 +3,18 @@ import {
   ExecutionContext,
   Inject,
   Injectable,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ClientProxy } from '@nestjs/microservices';
 import { IS_PUBLIC_KEY, JwtUser, RmqClient, sendRpc } from '@app/common';
+
+export const ALLOW_STALE_TOKEN_KEY = 'allowStaleToken';
+/**
+ * Token yaroqli (imzo, muddat), lekin eskirgan bo‘lsa ham (bloklangan, rol yoki parol o‘zgargan) ishlaydigan yo‘l.
+ * Faqat logout uchun: bloklangan foydalanuvchi ham chiqib, HttpOnly cookie'larini tozalay olsin (BE-05).
+ */
+export const AllowStaleToken = () => SetMetadata(ALLOW_STALE_TOKEN_KEY, true);
 
 /**
  * C6.5 — JWT ichidagi rol/versiyani joriy DB holati bilan tekshiradi. Rol yoki authVersion o'zgargan (masalan,
@@ -27,6 +35,13 @@ export class CurrentRoleGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+    if (
+      this.reflector.getAllAndOverride<boolean>(ALLOW_STALE_TOKEN_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    )
+      return true;
 
     const request = context.switchToHttp().getRequest();
     const user = request.user as JwtUser | undefined;

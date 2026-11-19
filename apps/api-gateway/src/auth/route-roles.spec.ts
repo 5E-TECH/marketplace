@@ -333,8 +333,12 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
     }).toMatchSnapshot();
   });
 
-  it('bloklangan foydalanuvchi tokeni (authVersion eskirgan) har bir yopiq yo‘lda darhol 401 — rolsiz yo‘llarda ham', async () => {
-    for (const route of routes.filter((r) => !r.isPublic))
+  it('bloklangan foydalanuvchi tokeni (authVersion eskirgan) har bir yopiq yo‘lda darhol 401 — rolsiz yo‘llarda ham; faqat logout ishlaydi', async () => {
+    const logout = routes.find((r) => r.key === 'POST /auth/logout')!;
+    expect(await statusOf(logout, { sub: BLOCKED, role: Role.AFFILIATE })).toBe(
+      200,
+    );
+    for (const route of routes.filter((r) => !r.isPublic && r !== logout))
       expect([
         route.key,
         await statusOf(route, { sub: BLOCKED, role: Role.AFFILIATE }),
