@@ -399,7 +399,7 @@ describe('Lid shartnomasi (BE-25)', () => {
   });
 
   describe('BE-42: admin lidlari', () => {
-    it('ro‘yxat va karta lead-service ga; faqat ADMIN va SUPERADMIN (TC3: operator → 403)', async () => {
+    it('ro‘yxat va karta lead-service ga; ADMIN, nazoratchi va SUPERADMIN (TC3: operator → 403)', async () => {
       const send = jest.fn(() => of({}));
       const admin = new AdminLeadsController({ send } as never);
       await admin.list({ status: 'NEW' as never, page: 2 });
@@ -414,13 +414,14 @@ describe('Lid shartnomasi (BE-25)', () => {
       );
       expect(Reflect.getMetadata(ROLES_KEY, AdminLeadsController)).toEqual([
         Role.ADMIN,
+        Role.SUPERVISOR,
         Role.SUPERADMIN,
       ]);
     });
   });
 
   describe('BE-35: nazoratchi, qayta ochish, firibgarlik markazi', () => {
-    it('TC5: qayta ochish va firibgarlik — faqat ADMIN va SUPERADMIN (operator → 403); kim — tokendan', async () => {
+    it('TC5: qayta ochish va firibgarlik — faqat ADMIN va SUPERADMIN (operator → 403); o‘tkazish — nazoratchi ham; kim — tokendan', async () => {
       const send = jest.fn(() => of({}));
       await new AdminLeadsController({ send } as never).reopen('7', '1092', {
         reason: 'Mijoz qayta so‘radi',
@@ -429,15 +430,16 @@ describe('Lid shartnomasi (BE-25)', () => {
         { cmd: 'lead.admin.reopen' },
         { actorId: '7', leadId: '1092', reason: 'Mijoz qayta so‘radi' },
       );
-      for (const ctrl of [
-        AdminLeadsController,
-        AdminFraudController,
-        SupervisorLeadsController,
-      ])
-        expect(Reflect.getMetadata(ROLES_KEY, ctrl)).toEqual([
-          Role.ADMIN,
-          Role.SUPERADMIN,
-        ]);
+      expect(
+        Reflect.getMetadata(ROLES_KEY, AdminLeadsController.prototype.reopen),
+      ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+      expect(Reflect.getMetadata(ROLES_KEY, AdminFraudController)).toEqual([
+        Role.ADMIN,
+        Role.SUPERADMIN,
+      ]);
+      expect(Reflect.getMetadata(ROLES_KEY, SupervisorLeadsController)).toEqual(
+        [Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN],
+      );
       expect(await errorsIn(ReopenLeadDto, { reason: '   ' })).toEqual([
         'reason',
       ]);

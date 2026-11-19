@@ -21,7 +21,7 @@ import {
 
 // Lid-sotuv: operator ish joyi, nazoratchi va admin lidlar ro‘yxati (BE-25 shartnomasi).
 // Real kod: BE-13 (navbat, natija), BE-38 (manzil), BE-42 (ro‘yxat, mijoz tarixi), BE-28 (statistika).
-// Rollar OPERATOR_LEAD va SUPERVISOR BE-05 da qo‘shiladi; hozirgi Role.OPERATOR — do‘kon xodimi.
+// Rollar (BE-05): operator ish joyi — OPERATOR_LEAD va SUPERVISOR; navbat xulosasi — SUPERVISOR va admin.
 // S1/S3 varianti hech bir javobda yo‘q (sinov-s1-s3.md «Ko‘r sinov»).
 
 /** Operator natijasi (OPR-3, TZ 5-bo‘lim). Nomlar [taklif]. */

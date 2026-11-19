@@ -1,6 +1,6 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { of } from 'rxjs';
-import { CheckoutPaymentMethod, IS_PUBLIC_KEY, Role } from '@app/common';
+import { CheckoutPaymentMethod, IS_PUBLIC_KEY, LegacyRole } from '@app/common';
 import { CheckoutController } from './checkout.controller';
 
 describe('CheckoutController (C2.19)', () => {
@@ -54,7 +54,7 @@ describe('CheckoutController (C2.19)', () => {
   it('login user uchun eski checkout oqimini saqlaydi', async () => {
     const { controller, checkout, identity } = setup();
     await controller.create(
-      { sub: '42', role: Role.BUYER },
+      { sub: '42', role: LegacyRole.BUYER } as never,
       dto,
       undefined,
       'ignored-session',
@@ -106,7 +106,7 @@ describe('CheckoutController (C2.19)', () => {
     const { controller, checkout } = setup();
 
     await controller.confirm(
-      { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+      { user: { sub: '9', role: LegacyRole.BUYER }, headers: {} } as never,
       '42',
     );
 

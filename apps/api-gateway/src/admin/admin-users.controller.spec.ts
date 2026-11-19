@@ -28,7 +28,7 @@ describe('AdminUsersController (C1.29)', () => {
     const ctrl = makeController(send);
     const actor = { sub: '1', role: Role.SUPERADMIN } as never;
 
-    await ctrl.updateRole(actor, '9', { role: Role.SELLER }, '1.2.3.4');
+    await ctrl.updateRole(actor, '9', { role: Role.OPERATOR_LEAD }, '1.2.3.4');
     await ctrl.impersonate(actor, '9', '1.2.3.4');
 
     expect(send).toHaveBeenNthCalledWith(
@@ -37,7 +37,7 @@ describe('AdminUsersController (C1.29)', () => {
       {
         actorId: '1',
         userId: '9',
-        dto: { role: Role.SELLER },
+        dto: { role: Role.OPERATOR_LEAD },
         ip: '1.2.3.4',
       },
     );
@@ -51,10 +51,10 @@ describe('AdminUsersController (C1.29)', () => {
   it('TC1: list -> identity.user.admin-list ga query uzatiladi', async () => {
     const send = jest.fn(() => of({ items: [], total: 0 }));
     const ctrl = makeController(send);
-    await ctrl.list({ role: Role.SELLER, page: 1, limit: 20 } as never);
+    await ctrl.list({ role: Role.OPERATOR_LEAD, page: 1, limit: 20 } as never);
     expect(send).toHaveBeenCalledWith(
       { cmd: 'identity.user.admin-list' },
-      { query: { role: Role.SELLER, page: 1, limit: 20 } },
+      { query: { role: Role.OPERATOR_LEAD, page: 1, limit: 20 } },
     );
   });
 

@@ -30,12 +30,15 @@ describe('AdminDashboardController (C1.28)', () => {
     );
     const identity = jest.fn(() =>
       of({
-        total: 40,
-        SELLER: 12,
-        BUYER: 25,
+        total: 41,
+        AFFILIATE: 25,
+        WHOLESALER: 3,
+        OPERATOR_LEAD: 6,
+        SUPERVISOR: 1,
+        WAREHOUSE: 2,
+        FINANCE: 1,
         ADMIN: 2,
-        OPERATOR: 1,
-        SUPERADMIN: 0,
+        SUPERADMIN: 1,
       }),
     );
     const checkout = jest.fn(() =>
@@ -56,7 +59,16 @@ describe('AdminDashboardController (C1.28)', () => {
     expect(checkout).toHaveBeenCalledWith({ cmd: 'checkout.admin.stats' }, {});
     expect(res).toEqual({
       shops: { total: 12, pending: 3, active: 8, suspended: 1, rejected: 0 },
-      users: { total: 40, sellers: 12, buyers: 25, admins: 2, operators: 1 },
+      users: {
+        total: 41,
+        sellers: 25,
+        wholesalers: 3,
+        operators: 6,
+        supervisors: 1,
+        warehouse: 2,
+        finance: 1,
+        admins: 2,
+      },
       orders: { total: 320, today: 7 },
       gmv: 54000000,
       revenue: 2700000,
@@ -71,10 +83,13 @@ describe('AdminDashboardController (C1.28)', () => {
       jest.fn(() =>
         of({
           total: 0,
-          SELLER: 0,
-          BUYER: 0,
+          AFFILIATE: 0,
+          WHOLESALER: 0,
+          OPERATOR_LEAD: 0,
+          SUPERVISOR: 0,
+          WAREHOUSE: 0,
+          FINANCE: 0,
           ADMIN: 0,
-          OPERATOR: 0,
           SUPERADMIN: 0,
         }),
       ),
@@ -83,7 +98,16 @@ describe('AdminDashboardController (C1.28)', () => {
 
     await expect(ctrl.dashboard()).resolves.toEqual({
       shops: { total: 0, pending: 0, active: 0, suspended: 0, rejected: 0 },
-      users: { total: 0, sellers: 0, buyers: 0, admins: 0, operators: 0 },
+      users: {
+        total: 0,
+        sellers: 0,
+        wholesalers: 0,
+        operators: 0,
+        supervisors: 0,
+        warehouse: 0,
+        finance: 0,
+        admins: 0,
+      },
       orders: { total: 0, today: 0 },
       gmv: 0,
       revenue: 0,

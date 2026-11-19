@@ -4,16 +4,12 @@ import {
   Get,
   Inject,
   Patch,
-  Post,
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
-  ApiConflictResponse,
-  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -25,13 +21,10 @@ import {
   AuthErrorResponseDto,
   CurrentUser,
   JwtUser,
-  Public,
-  Role,
-  Roles,
+  LegacyRole,
   RmqClient,
+  Roles,
   SelfGuard,
-  SellerRegisterDto,
-  SellerRegisterResponseDto,
   SellerShopResponseDto,
   sendRpc,
   UpdateSellerShopDto,
@@ -45,24 +38,8 @@ export class SellersController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
   ) {}
 
-  @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @Post('register')
-  @ApiOperation({
-    summary: 'Inactive SELLER va PENDING shopni atomik yaratish',
-  })
-  @ApiCreatedResponse({ type: SellerRegisterResponseDto })
-  @ApiBadRequestResponse({ type: AuthErrorResponseDto })
-  @ApiConflictResponse({
-    description: 'Telefon yoki shop mavjud',
-    type: AuthErrorResponseDto,
-  })
-  register(@Body() dto: SellerRegisterDto) {
-    return sendRpc(this.identity, { cmd: 'seller.register' }, dto);
-  }
-
   @Get('me')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @UseGuards(SelfGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Joriy sotuvchining do‘kon profilini olish' })
@@ -87,7 +64,7 @@ export class SellersController {
   }
 
   @Patch('me')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @UseGuards(SelfGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Joriy sotuvchining do‘kon profilini tahrirlash' })

@@ -14,6 +14,8 @@ import {
   CurrentUser,
   FINANCE_WITHDRAWAL_RPC,
   RmqClient,
+  Role,
+  Roles,
   sendRpc,
   WithdrawalDto,
   WithdrawalPageDto,
@@ -22,9 +24,10 @@ import {
 
 /**
  * Sotuvchi kabineti: balans va pul yechish (BE-23; SOT-7, MOL-5). Sotuvchi ID si tokendan (`sub`).
- * Rol cheklovi `@Roles(Role.AFFILIATE)` BE-05 dan keyin (boshqa `/affiliate` yo‘llari kabi).
+ * Faqat sotuvchi (BE-05; boshqa `/affiliate` yo‘llari kabi).
  */
 @ApiTags('affiliate')
+@Roles(Role.AFFILIATE)
 @ApiBearerAuth()
 @Controller('affiliate')
 export class AffiliateWithdrawalsController {

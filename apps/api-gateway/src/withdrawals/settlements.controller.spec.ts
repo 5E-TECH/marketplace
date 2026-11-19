@@ -3,7 +3,7 @@ import { Role, ROLES_KEY } from '@app/common';
 import { AdminSettlementsController } from './admin-settlements.controller';
 
 describe('BE-33: optovik aktlari endpointlari finance-service ga', () => {
-  it('yo‘naltirish; «To‘landi» xodimi tokendan; «To‘landi» va qo‘lda ishga tushirish — faqat SUPERADMIN', async () => {
+  it('yo‘naltirish; «To‘landi» xodimi tokendan; «To‘landi» va qo‘lda ishga tushirish — FINANCE va SUPERADMIN', async () => {
     const send = jest.fn(() => of({ ok: true }));
     const c = new AdminSettlementsController({ send } as never);
     await c.list({ status: undefined, periodEnd: '2027-01-10' });
@@ -28,9 +28,10 @@ describe('BE-33: optovik aktlari endpointlari finance-service ga', () => {
     );
     const roles = (m: keyof AdminSettlementsController) =>
       Reflect.getMetadata(ROLES_KEY, AdminSettlementsController.prototype[m]);
-    expect(roles('paid')).toEqual([Role.SUPERADMIN]);
-    expect(roles('run')).toEqual([Role.SUPERADMIN]);
+    // BE-05: moliya xodimi (FINANCE) tasdiqlaydi; ko‘rish — admin ham
+    expect(roles('paid')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
+    expect(roles('run')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
     for (const m of ['list', 'get', 'actPdf', 'bankFile'] as const)
-      expect(roles(m)).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+      expect(roles(m)).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
   });
 });

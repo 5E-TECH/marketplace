@@ -33,6 +33,8 @@ import {
   OperatorStateDto,
   OperatorStatsDto,
   RmqClient,
+  Role,
+  Roles,
   sendRpc,
   SubmitLeadResultDto,
   UpdateLeadAddressDto,
@@ -43,9 +45,11 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 /**
  * Operator ish joyi API si (BE-25 shartnomasi).
  * Real kod: BE-13 (navbat, natija), BE-38 (manzil), BE-42 (mijoz tarixi), BE-28 (statistika).
- * Rol cheklovi `@Roles(Role.OPERATOR_LEAD)` (navbat xulosasi — SUPERVISOR) BE-05 dan keyin qo‘shiladi.
+ * Rollar (TZ 3-bo‘lim jadvali, BE-05): lidni bron qilish va natija — operator, nazoratchi (superadmin — hamma amal);
+ * navbat xulosasi — nazoratchi, admin va superadmin.
  */
 @ApiTags('operator')
+@Roles(Role.OPERATOR_LEAD, Role.SUPERVISOR, Role.SUPERADMIN)
 @ApiBearerAuth()
 @Controller('operator')
 export class OperatorLeadsController {
@@ -186,6 +190,7 @@ export class OperatorLeadsController {
   }
 
   @Get('queue-summary')
+  @Roles(Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({
     summary: 'Navbat xulosasi (nazoratchi)',
     description: 'Navbat hajmi va operatorlar holati (BE-13).',

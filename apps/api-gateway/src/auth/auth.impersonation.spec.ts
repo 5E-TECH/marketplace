@@ -15,7 +15,7 @@ describe('AuthController impersonation xavfsizligi (C6.5)', () => {
       controller.updateProfile(
         {
           sub: '42',
-          role: Role.SELLER,
+          role: Role.AFFILIATE,
           impersonatedBy: '1',
           tokenType: 'impersonation',
         },

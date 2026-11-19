@@ -17,7 +17,7 @@ import {
 import { IsLeadBigintId, LeadStatus, StreamTemplate } from './lead.dto';
 
 // Lid-sotuv: sotuvchi (AFFILIATE) kabineti — offerlar, sotuvchi sahifalari, statistika (BE-25 shartnomasi).
-// Real kod: BE-11 (offer va sahifa), BE-28 (statistika). Rol AFFILIATE BE-05 da qo‘shiladi.
+// Real kod: BE-11 (offer va sahifa), BE-28 (statistika). Yo‘llar faqat AFFILIATE roli uchun (BE-05).
 // Qoidalar: S1/S3 varianti, mijoz manzili va to‘liq telefon sotuvchiga qaytmaydi;
 // postback siri va CAPI tokeni faqat yoziladi, javobda qaytmaydi (BE-11).
 

@@ -1,5 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { Role } from '../enums';
+import { Role, STAFF_ROLES } from '../enums';
 import {
   CreateAdminTeamMemberDto,
   UpdateAdminTeamRoleDto,
@@ -28,10 +28,25 @@ describe('Admin team DTO (C6.1)', () => {
     ).resolves.toBeInstanceOf(UpdateAdminTeamRoleDto);
   });
 
+  it.each([...STAFF_ROLES])(
+    'BE-05: xodim roli %s qabul qilinadi (TC1)',
+    async (role) => {
+      await expect(
+        pipe.transform(
+          { name: 'Xodim', phone: '+998901112233', role },
+          { type: 'body', metatype: CreateAdminTeamMemberDto },
+        ),
+      ).resolves.toBeInstanceOf(CreateAdminTeamMemberDto);
+    },
+  );
+
   it.each([
     { name: '', phone: '+998901112233', role: Role.ADMIN },
     { name: 'Admin', phone: '901112233', role: Role.ADMIN },
-    { name: 'Admin', phone: '+998901112233', role: Role.SELLER },
+    // BE-05: eski SELLER va tashqi rollar (sotuvchi, optovik) jamoaga kirmaydi
+    { name: 'Admin', phone: '+998901112233', role: 'SELLER' },
+    { name: 'Admin', phone: '+998901112233', role: Role.AFFILIATE },
+    { name: 'Admin', phone: '+998901112233', role: Role.WHOLESALER },
     {
       name: 'Admin',
       phone: '+998901112233',

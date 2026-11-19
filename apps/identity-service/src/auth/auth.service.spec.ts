@@ -2,7 +2,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { of } from 'rxjs';
-import { Role, ShopStatus } from '@app/common';
+import { Role } from '@app/common';
 import { AuthService } from './auth.service';
 
 // C0.4: register hash, login JWT(sub,role), noto'g'ri parol 401, dublikat phone 409, soxta token 401
@@ -99,34 +99,45 @@ describe('AuthService (C0.4)', () => {
       name: 'Akmal',
       phone: '+998901112233',
       password: 'Secret123',
-      role: Role.SELLER,
+      role: Role.AFFILIATE,
     });
     const saved = saveSpy.mock.calls[0][0];
     expect(saved.passwordHash).toBeDefined();
     expect(saved.passwordHash).not.toBe('Secret123');
     expect(await bcrypt.compare('Secret123', saved.passwordHash)).toBe(true);
     expect((res.user as any).passwordHash).toBeUndefined(); // sanitize
-    expect(saved.isActive).toBe(false); // SELLER — tasdiqqacha nofaol
+    expect(saved).toMatchObject({ role: Role.AFFILIATE, isActive: true });
   });
 
-  it('C2.19 TC1/TC2: guest telefon uchun buyer yaratadi va qayta ishlatadi', async () => {
-    const first = await service.createGuestCustomer(
-      '+998901234567',
-      'Guest Buyer',
-    );
-    const second = await service.createGuestCustomer(
-      '+998901234567',
-      'Boshqa ism',
-    );
-
-    expect(first).toMatchObject({
-      role: Role.BUYER,
-      phone: '+998901234567',
-      isActive: true,
+  it('BE-05 TC5: rol berilmasa sotuvchi (AFFILIATE) yaratiladi, BUYER emas', async () => {
+    await service.register({
+      name: 'Akmal',
+      phone: '+998901112233',
+      password: 'Secret123',
     });
-    expect(second.id).toBe(first.id);
-    expect(saveSpy).toHaveBeenCalledTimes(1);
-    expect(first).not.toHaveProperty('passwordHash');
+    expect(saveSpy.mock.calls[0][0].role).toBe(Role.AFFILIATE);
+  });
+
+  it.each(['BUYER', 'SELLER', Role.WHOLESALER, Role.OPERATOR_LEAD, Role.ADMIN])(
+    'BE-05 TC4/TC5: ochiq ro‘yxat %s rolini rad etadi (400), foydalanuvchi yaratilmaydi',
+    async (role) => {
+      await expect(
+        service.register({
+          name: 'Akmal',
+          phone: '+998901112233',
+          password: 'Secret123',
+          role,
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(saveSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('BE-05: eski checkout mehmon xaridorni foydalanuvchi qilib yaratmaydi', () => {
+    expect(() => service.createGuestCustomer()).toThrow(
+      'Mijoz tizim foydalanuvchisi emas',
+    );
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it('admin profil parolini eski parolsiz yangilaydi va sessiyalarni bekor qiladi', async () => {
@@ -134,7 +145,7 @@ describe('AuthService (C0.4)', () => {
       name: 'Admin',
       phone: '+998901112233',
       password: 'OldSecret123',
-      role: Role.BUYER,
+      role: Role.AFFILIATE,
     });
     expect(sessionStore[0].revokedAt).toBeNull();
 
@@ -193,7 +204,7 @@ describe('AuthService (C0.4)', () => {
       name: 'A',
       phone: '+998901112233',
       password: 'Secret123',
-      role: Role.BUYER,
+      role: Role.AFFILIATE,
     });
     const res = await service.login({
       phone: '+998901112233',
@@ -201,7 +212,10 @@ describe('AuthService (C0.4)', () => {
     });
     const payload: any = jwt.verify(res.accessToken);
     expect(payload.sub).toBeDefined();
-    expect(payload.role).toBe(Role.BUYER);
+    expect(payload.role).toBe(Role.AFFILIATE);
+    // BE-05 TC3: tokenda do‘kon yo‘q (access va refresh)
+    expect(payload).not.toHaveProperty('shopId');
+    expect(jwt.decode(res.refreshToken)).not.toHaveProperty('shopId');
     expect(res.refreshToken).toBeDefined();
   });
 
@@ -210,7 +224,7 @@ describe('AuthService (C0.4)', () => {
       name: 'A',
       phone: '+998901110000',
       password: 'Secret123',
-      role: Role.BUYER,
+      role: Role.AFFILIATE,
     });
     const userId = reg.user.id;
 
@@ -234,7 +248,7 @@ describe('AuthService (C0.4)', () => {
       name: 'Admin',
       phone: '+998901110001',
       password: 'Secret123',
-      role: Role.BUYER,
+      role: Role.AFFILIATE,
     });
     const adminId = reg.user.id;
     try {
@@ -243,21 +257,6 @@ describe('AuthService (C0.4)', () => {
     } catch (e: any) {
       expect(e.getStatus()).toBe(409);
     }
-  });
-
-  it('TC2b: operator login JWT ichida shopId claim bo‘ladi (C1.38)', async () => {
-    await service.createOperator('5', {
-      name: 'Operator',
-      phone: '+998901112299',
-      password: 'Secret123',
-    });
-    const res = await service.login({
-      phone: '+998901112299',
-      password: 'Secret123',
-    });
-    const payload: any = jwt.verify(res.accessToken);
-    expect(payload.role).toBe(Role.OPERATOR);
-    expect(payload.shopId).toBe('5'); // gateway shu bo'yicha scope qiladi
   });
 
   it("TC3: noto'g'ri parol -> 401", async () => {
@@ -333,122 +332,6 @@ describe('AuthService (C0.4)', () => {
         .revokedAt,
     ).toBeNull();
   });
-
-  describe('seller registration acceptance testlari', () => {
-    const dto = {
-      name: 'Ali Valiyev',
-      phone: '+998901234567',
-      password: 'Secret123',
-      shopName: 'Ali Market',
-      shopDescription: 'Test shop',
-      address: 'Toshkent',
-    };
-
-    it('TC1 register -> inactive SELLER va PENDING shop ikkalasi yaratiladi', async () => {
-      managerQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            id: '42',
-            name: dto.name,
-            phone: dto.phone,
-            role: Role.SELLER,
-            isActive: false,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: '15',
-            name: dto.shopName,
-            slug: 'ali-market-1234567',
-            status: ShopStatus.PENDING,
-          },
-        ]);
-
-      const result = await service.registerSeller(dto);
-
-      expect(transaction).toHaveBeenCalledTimes(1);
-      expect(result.user).toMatchObject({
-        role: Role.SELLER,
-        isActive: false,
-      });
-      expect(result.shop).toMatchObject({ status: ShopStatus.PENDING });
-    });
-
-    it('TC2 shop xato -> transaction rollback bo‘ladi', async () => {
-      let rolledBack = false;
-      transaction.mockImplementationOnce(async (callback: any) => {
-        try {
-          return await callback({ query: managerQuery });
-        } catch (error) {
-          rolledBack = true;
-          throw error;
-        }
-      });
-      managerQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            id: '42',
-            name: dto.name,
-            phone: dto.phone,
-            role: Role.SELLER,
-            isActive: false,
-          },
-        ])
-        .mockRejectedValueOnce(new Error('shop insert xato'));
-
-      await expect(service.registerSeller(dto)).rejects.toThrow(
-        'shop insert xato',
-      );
-      expect(rolledBack).toBe(true);
-      expect(notificationEmit).not.toHaveBeenCalled();
-    });
-
-    it('TC3 dublikat telefon -> 409', async () => {
-      managerQuery.mockResolvedValueOnce([{ exists: 1 }]);
-
-      await expect(service.registerSeller(dto)).rejects.toMatchObject({
-        status: 409,
-      });
-      expect(managerQuery).toHaveBeenCalledTimes(1);
-      expect(notificationEmit).not.toHaveBeenCalled();
-    });
-
-    it('TC4 muvaffaqiyatli register -> admin notification eventi', async () => {
-      managerQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            id: '42',
-            name: dto.name,
-            phone: dto.phone,
-            role: Role.SELLER,
-            isActive: false,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: '15',
-            name: dto.shopName,
-            slug: 'ali-market-1234567',
-            status: ShopStatus.PENDING,
-          },
-        ]);
-
-      await service.registerSeller(dto);
-
-      expect(notificationEmit).toHaveBeenCalledWith(
-        'seller.registration.created',
-        expect.objectContaining({
-          sellerUserId: '42',
-          shopId: '15',
-          sellerName: dto.name,
-          shopName: dto.shopName,
-        }),
-      );
-    });
-  });
 });
 
 // C1.28 — countUsersByRole: faqat `this.users` ishlatadi, shu bois prototip
@@ -466,8 +349,8 @@ describe('AuthService.countUsersByRole (C1.28)', () => {
 
   it('rol bo‘yicha sanaydi (yo‘q rol = 0)', async () => {
     const qb = makeQb([
-      { role: 'SELLER', count: '12' },
-      { role: 'BUYER', count: '25' },
+      { role: 'AFFILIATE', count: '12' },
+      { role: 'OPERATOR_LEAD', count: '25' },
       { role: 'ADMIN', count: '2' },
     ]);
     const svc: any = Object.create(AuthService.prototype);
@@ -475,10 +358,13 @@ describe('AuthService.countUsersByRole (C1.28)', () => {
 
     await expect(svc.countUsersByRole()).resolves.toEqual({
       total: 39,
-      SELLER: 12,
-      BUYER: 25,
+      AFFILIATE: 12,
+      WHOLESALER: 0,
+      OPERATOR_LEAD: 25,
+      SUPERVISOR: 0,
+      WAREHOUSE: 0,
+      FINANCE: 0,
       ADMIN: 2,
-      OPERATOR: 0,
       SUPERADMIN: 0,
     });
     expect(qb.groupBy).toHaveBeenCalledWith('u.role');
@@ -491,10 +377,13 @@ describe('AuthService.countUsersByRole (C1.28)', () => {
 
     await expect(svc.countUsersByRole()).resolves.toEqual({
       total: 0,
-      SELLER: 0,
-      BUYER: 0,
+      AFFILIATE: 0,
+      WHOLESALER: 0,
+      OPERATOR_LEAD: 0,
+      SUPERVISOR: 0,
+      WAREHOUSE: 0,
+      FINANCE: 0,
       ADMIN: 0,
-      OPERATOR: 0,
       SUPERADMIN: 0,
     });
   });
@@ -511,7 +400,7 @@ describe('AuthService.adminListUsers (C1.29)', () => {
       take: jest.fn().mockReturnThis(),
       getManyAndCount: jest.fn(() =>
         Promise.resolve([
-          [{ id: '1', role: 'SELLER', name: 'Ali', passwordHash: 'h' }],
+          [{ id: '1', role: 'AFFILIATE', name: 'Ali', passwordHash: 'h' }],
           1,
         ]),
       ),
@@ -520,7 +409,7 @@ describe('AuthService.adminListUsers (C1.29)', () => {
     svc.users = { createQueryBuilder: jest.fn(() => qb) };
 
     const res = await svc.adminListUsers({
-      role: 'SELLER',
+      role: 'AFFILIATE',
       page: 1,
       limit: 20,
     });
@@ -529,7 +418,7 @@ describe('AuthService.adminListUsers (C1.29)', () => {
       hiddenRole: Role.SUPERADMIN,
     });
     expect(qb.andWhere).toHaveBeenCalledWith('u.role = :role', {
-      role: 'SELLER',
+      role: 'AFFILIATE',
     });
     expect(res).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
     expect((res.items[0] as any).passwordHash).toBeUndefined();

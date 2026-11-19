@@ -23,14 +23,14 @@ import {
 import {
   BuyerOrderDetailsDto,
   BuyerOrderRefundDto,
-  OrderActionResultDto,
-  BuyerOrderTrackingDto,
   BuyerOrdersPageDto,
   BuyerOrdersQueryDto,
+  BuyerOrderTrackingDto,
   JwtUser,
-  RmqClient,
+  LegacyRole,
+  OrderActionResultDto,
   Public,
-  Role,
+  RmqClient,
   Roles,
   sendRpc,
 } from '@app/common';
@@ -43,7 +43,7 @@ export class BuyerOrdersController {
   ) {}
 
   @Get()
-  @Roles(Role.BUYER)
+  @Roles(LegacyRole.BUYER)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xaridorning buyurtmalari' })
   @ApiOkResponse({ type: BuyerOrdersPageDto })

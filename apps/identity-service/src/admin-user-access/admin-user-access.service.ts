@@ -14,8 +14,12 @@ import { AuthSession } from '../entities/auth-session.entity';
 import { User } from '../entities/user.entity';
 
 const IMPERSONATION_TTL_SECONDS = 15 * 60;
-const MANAGEABLE_ROLES = [Role.BUYER, Role.SELLER, Role.ADMIN, Role.SUPERADMIN];
-const IMPERSONATABLE_ROLES = [Role.BUYER, Role.SELLER, Role.OPERATOR];
+/** BE-05: sakkiz rolning istalgani (eski SELLER/BUYER/OPERATOR — 400). */
+const MANAGEABLE_ROLES: readonly Role[] = Object.values(Role);
+/** Admin va superadmin nomidan kirilmaydi (avvalgi qoida); qolgan yetti rol — mumkin. */
+const IMPERSONATABLE_ROLES: readonly Role[] = MANAGEABLE_ROLES.filter(
+  (role) => role !== Role.ADMIN && role !== Role.SUPERADMIN,
+);
 
 @Injectable()
 export class AdminUserAccessService {
@@ -32,7 +36,7 @@ export class AdminUserAccessService {
   ) {
     if (!MANAGEABLE_ROLES.includes(dto?.role)) {
       throw new BadRequestException(
-        'Rol BUYER, SELLER, ADMIN yoki SUPERADMIN bo‘lishi kerak',
+        `Rol ${MANAGEABLE_ROLES.join(', ')} dan biri bo‘lishi kerak`,
       );
     }
 
@@ -64,8 +68,6 @@ export class AdminUserAccessService {
       const before = this.view(user);
       user.role = dto.role;
       user.authVersion = (user.authVersion ?? 1) + 1;
-      // OPERATOR scope'i alohida seller endpointi orqali boshqariladi.
-      user.shopId = null;
       const saved = await users.save(user);
       await manager
         .getRepository(AuthSession)
@@ -106,7 +108,6 @@ export class AdminUserAccessService {
         {
           sub: user.id,
           role: user.role,
-          shopId: user.shopId ?? undefined,
           impersonatedBy: String(actorId),
           tokenType: 'impersonation',
           authVersion: user.authVersion ?? 1,
@@ -202,7 +203,6 @@ export class AdminUserAccessService {
       phone: user.phone,
       email: user.email,
       role: user.role,
-      shopId: user.shopId,
       isActive: user.isActive,
       isBlocked: user.isBlocked,
       createdAt: user.createdAt,
@@ -215,7 +215,6 @@ export class AdminUserAccessService {
       id: String(user.id),
       name: user.name,
       role: user.role,
-      shopId: user.shopId,
     };
   }
 }

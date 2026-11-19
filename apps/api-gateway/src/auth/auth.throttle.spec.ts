@@ -40,9 +40,11 @@ describe('Rate limiting — nozik endpointlar', () => {
     expect(ttlOf(AuthController.prototype, method)).toBe(60_000);
   });
 
-  it('sellers.register ham cheklangan', () => {
-    expect(limitOf(SellersController.prototype, 'register')).toBe(5);
-    expect(ttlOf(SellersController.prototype, 'register')).toBe(60_000);
+  it('BE-05: eski sellers/register yo‘li yo‘q (sotuvchi auth/register orqali)', () => {
+    expect(
+      (SellersController.prototype as unknown as Record<string, unknown>)
+        .register,
+    ).toBeUndefined();
   });
 
   // C4.7 TC4 — limitdan oshganda javob shakli o'zgarmasligi kerak:

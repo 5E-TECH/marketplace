@@ -13,25 +13,25 @@ describe('CurrentRoleGuard (C6.5)', () => {
 
   it('role-protected route uchun joriy rol va authVersionni tekshiradi', async () => {
     const reflector = {
-      getAllAndOverride: jest.fn(() => [Role.SELLER]),
+      getAllAndOverride: jest.fn(() => [Role.AFFILIATE]),
     };
     const send = jest.fn(() => of({ authorized: true }));
     const guard = new CurrentRoleGuard(reflector as never, { send } as never);
 
     await expect(
       guard.canActivate(
-        context({ sub: '42', role: Role.SELLER, authVersion: 3 }),
+        context({ sub: '42', role: Role.AFFILIATE, authVersion: 3 }),
       ),
     ).resolves.toBe(true);
     expect(send).toHaveBeenCalledWith(
       { cmd: 'identity.user.authorize-token' },
-      { userId: '42', role: Role.SELLER, authVersion: 3 },
+      { userId: '42', role: Role.AFFILIATE, authVersion: 3 },
     );
   });
 
   it('identity eski tokenni rad etsa 401 qaytaradi', async () => {
     const reflector = {
-      getAllAndOverride: jest.fn(() => [Role.SELLER]),
+      getAllAndOverride: jest.fn(() => [Role.AFFILIATE]),
     };
     const send = jest.fn(() =>
       throwError(() => ({ status: 401, message: 'Token bekor qilingan' })),
@@ -40,7 +40,7 @@ describe('CurrentRoleGuard (C6.5)', () => {
 
     await expect(
       guard.canActivate(
-        context({ sub: '42', role: Role.SELLER, authVersion: 2 }),
+        context({ sub: '42', role: Role.AFFILIATE, authVersion: 2 }),
       ),
     ).rejects.toBeInstanceOf(HttpException);
   });

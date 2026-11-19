@@ -1,11 +1,45 @@
 // Barcha domen enum'lari — MARKETPLACE_PLAN.md §6 bilan mos.
 
+/**
+ * TZ 3-bo‘lim: sakkizta rol (BE-05). Sotuvchi va optovik — tashqi foydalanuvchilar, qolganlari — platforma xodimlari.
+ * Mijoz tizim foydalanuvchisi emas: uning ma’lumoti lid va buyurtmada (T01:140).
+ */
 export enum Role {
+  /** Sotuvchi: oqim yaratadi, reklama qiladi, sotuvdan haq oladi. Ochiq ro‘yxat faqat shu rol uchun. */
+  AFFILIATE = 'AFFILIATE',
+  /** Optovik: tovar topshiradi; ro‘yxatini admin kiritadi (BE-07). */
+  WHOLESALER = 'WHOLESALER',
+  /** Operator: lidga qo‘ng‘iroq qiladi, buyurtmani rasmiylashtiradi. */
+  OPERATOR_LEAD = 'OPERATOR_LEAD',
+  /** Nazoratchi (katta operator): navbat, o‘tkazish, qizil ro‘yxat. */
+  SUPERVISOR = 'SUPERVISOR',
+  /** Omborchi: qabul, yig‘ish, qadoq, qaytganni saralash. */
+  WAREHOUSE = 'WAREHOUSE',
+  /** Moliya: sverka, to‘lovlarni tasdiqlash. */
+  FINANCE = 'FINANCE',
+  ADMIN = 'ADMIN',
+  SUPERADMIN = 'SUPERADMIN',
+}
+
+/** Platforma xodimlari: ularni SUPERADMIN jamoa bo‘limida yaratadi (BE-05). */
+export const STAFF_ROLES: readonly Role[] = [
+  Role.OPERATOR_LEAD,
+  Role.SUPERVISOR,
+  Role.WAREHOUSE,
+  Role.FINANCE,
+  Role.ADMIN,
+  Role.SUPERADMIN,
+];
+
+/**
+ * Eski do‘kon rollari (BE-05 da bekor qilindi). Faqat BE-29 da o‘chiriladigan eski yo‘llarning `@Roles` ida qoldi:
+ * bazadagi `chk_identity_users_role` ularni qabul qilmaydi, shuning uchun bu yo‘llar hech kimga ochilmaydi
+ * (tokensiz 401, har qanday yangi rol bilan 403).
+ */
+export enum LegacyRole {
   SELLER = 'SELLER',
   OPERATOR = 'OPERATOR',
   BUYER = 'BUYER',
-  ADMIN = 'ADMIN',
-  SUPERADMIN = 'SUPERADMIN',
 }
 
 export enum ShopStatus {

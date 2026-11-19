@@ -5,7 +5,13 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import { request } from 'http';
-import { JwtAuthGuard, RolesGuard, Role, RmqClient } from '@app/common';
+import {
+  JwtAuthGuard,
+  LegacyRole,
+  RmqClient,
+  Role,
+  RolesGuard,
+} from '@app/common';
 import { PaymentsController } from './payments.controller';
 
 // Opt in where local listening sockets are allowed; no external provider used.
@@ -45,7 +51,8 @@ httpTests('Payment HTTP contract', () => {
     payment.send.mockReset();
     checkout.send.mockReset();
   });
-  const token = (role: Role) => `Bearer ${jwt.sign({ sub: '7', role })}`;
+  const token = (role: Role | LegacyRole) =>
+    `Bearer ${jwt.sign({ sub: '7', role })}`;
   const call = (
     path: string,
     body?: object | string,
@@ -110,7 +117,7 @@ httpTests('Payment HTTP contract', () => {
       { body: { amount: '125000.00', action: '0', sign_string: 'abc' } },
     );
   });
-  it.each([Role.ADMIN, Role.BUYER, Role.SELLER])(
+  it.each([Role.ADMIN, LegacyRole.BUYER, LegacyRole.SELLER])(
     'provider configuration rejects %s',
     async (role) => {
       expect(
@@ -169,7 +176,7 @@ httpTests('Payment HTTP contract', () => {
         await call(
           'payments',
           { salesOrderId: '42', provider: 'PAYME', amount: 1 },
-          token(Role.BUYER),
+          token(LegacyRole.BUYER),
         )
       ).status,
     ).toBe(400);
@@ -184,7 +191,7 @@ httpTests('Payment HTTP contract', () => {
         await call(
           'payments',
           { salesOrderId: '42', provider: 'PAYME', amount: 500 },
-          token(Role.BUYER),
+          token(LegacyRole.BUYER),
         )
       ).status,
     ).toBe(201);

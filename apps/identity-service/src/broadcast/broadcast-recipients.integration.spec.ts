@@ -1,13 +1,12 @@
 import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { User } from '../entities/user.entity';
-import { CreateUsers1722776400000 } from '../migrations/1722776400000-create-users';
-import { AddUserShopOperator1722950000000 } from '../migrations/1722950000000-add-user-shop-operator';
-import { AddUserIsBlocked1722950000001 } from '../migrations/1722950000001-add-user-is-blocked';
-import { AddUserAuthVersion1725984000000 } from '../migrations/1725984000000-add-user-auth-version';
+import { IDENTITY_DB } from '../database';
 import { BroadcastRecipientsService } from './broadcast-recipients.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+/** team/new-roles.integration.spec.ts dagi bilan bir xil: identity sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
+const IDENTITY_SCHEMA_TEST_LOCK = 2_304_003;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 
 /**
@@ -17,6 +16,7 @@ const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 describeWithPostgres('BroadcastRecipientsService PostgreSQL (C6.8)', () => {
   let dataSource: DataSource;
   let service: BroadcastRecipientsService;
+  let schemaLock: Client | undefined;
 
   beforeAll(async () => {
     const databaseUrl = new URL(testDatabaseUrl!);
@@ -25,6 +25,12 @@ describeWithPostgres('BroadcastRecipientsService PostgreSQL (C6.8)', () => {
         'TEST_DATABASE_URL faqat nomida "test" bor alohida bazaga ishora qilishi kerak',
       );
     }
+    // BE-05: identity sxemasini tashlaydigan boshqa spec bilan bir qulf
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      IDENTITY_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: testDatabaseUrl });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS identity CASCADE');
@@ -36,12 +42,8 @@ describeWithPostgres('BroadcastRecipientsService PostgreSQL (C6.8)', () => {
       url: testDatabaseUrl,
       schema: 'identity',
       entities: [User],
-      migrations: [
-        CreateUsers1722776400000,
-        AddUserShopOperator1722950000000,
-        AddUserIsBlocked1722950000001,
-        AddUserAuthVersion1725984000000,
-      ],
+      // BE-05: hamma identity migratsiyasi — yangi rollar CHECK i bilan
+      migrations: IDENTITY_DB.migrations,
       migrationsRun: true,
       synchronize: false,
       logging: false,
@@ -53,26 +55,43 @@ describeWithPostgres('BroadcastRecipientsService PostgreSQL (C6.8)', () => {
     await dataSource.query(`
       INSERT INTO identity.users
         (id,role,name,phone,email,password_hash,is_active,is_blocked,is_deleted) VALUES
-        (1,'SELLER','S1','+998900000001','s1@x.uz','h',true,false,false),
-        (2,'SELLER','S2','+998900000002',NULL,'h',true,false,false),
-        (9,'BUYER','B1','+998900000009',NULL,'h',true,false,false),
-        (10,'BUYER','B2','+998900000010',NULL,'h',true,false,false),
-        (11,'OPERATOR','O1','+998900000011',NULL,'h',true,false,false),
+        (1,'AFFILIATE','S1','+998900000001','s1@x.uz','h',true,false,false),
+        (2,'AFFILIATE','S2','+998900000002',NULL,'h',true,false,false),
+        (9,'WHOLESALER','W1','+998900000009',NULL,'h',true,false,false),
+        (10,'WHOLESALER','W2','+998900000010',NULL,'h',true,false,false),
+        (11,'OPERATOR_LEAD','O1','+998900000011',NULL,'h',true,false,false),
         (12,'ADMIN','A1','+998900000012',NULL,'h',true,false,false),
         (13,'SUPERADMIN','SA','+998900000013',NULL,'h',true,false,false),
-        (14,'SELLER','Blok','+998900000014',NULL,'h',true,true,false),
-        (15,'BUYER','Nofaol','+998900000015',NULL,'h',false,false,false),
-        (16,'BUYER','Ochirilgan','+998900000016',NULL,'h',true,false,true)`);
+        (14,'AFFILIATE','Blok','+998900000014',NULL,'h',true,true,false),
+        (15,'WHOLESALER','Nofaol','+998900000015',NULL,'h',false,false,false),
+        (16,'WHOLESALER','Ochirilgan','+998900000016',NULL,'h',true,false,true)`);
   });
 
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
-  it('auditoriya bo‘yicha son — adminlar, bloklangan, nofaol, o‘chirilgan kirmaydi', async () => {
+  it('auditoriya bo‘yicha son — xodimlar, bloklangan, nofaol, o‘chirilgan kirmaydi', async () => {
     await expect(service.count('sellers')).resolves.toEqual({ count: 2 });
-    await expect(service.count('buyers')).resolves.toEqual({ count: 2 });
-    await expect(service.count('all')).resolves.toEqual({ count: 5 });
+    // BE-05: mijoz foydalanuvchi emas — qabul qiluvchi yo‘q
+    await expect(service.count('buyers')).resolves.toEqual({ count: 0 });
+    await expect(
+      service.page({ audience: 'buyers', limit: 10 }),
+    ).resolves.toEqual({ items: [], nextAfterId: null });
+    await expect(service.count('all')).resolves.toEqual({ count: 4 });
+  });
+
+  it('BE-05: bazadagi rol CHECK i eski SELLER/BUYER ni qabul qilmaydi', async () => {
+    await expect(
+      dataSource.query(
+        `INSERT INTO identity.users (role,name,phone,password_hash) VALUES ('BUYER','X','+998900000099','h')`,
+      ),
+    ).rejects.toThrow(/chk_identity_users_role/);
+    const columns = (await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema='identity' AND table_name='users' AND column_name='shop_id'`,
+    )) as unknown[];
+    expect(columns).toEqual([]);
   });
 
   it('kursor bilan bo‘laklab — takrorsiz va hech kim tushib qolmaydi', async () => {
@@ -94,9 +113,6 @@ describeWithPostgres('BroadcastRecipientsService PostgreSQL (C6.8)', () => {
       afterId: second.nextAfterId,
       limit: 2,
     });
-    expect(third).toEqual({
-      items: [{ id: '11', phone: '+998900000011', email: null }],
-      nextAfterId: null,
-    });
+    expect(third).toEqual({ items: [], nextAfterId: null });
   });
 });

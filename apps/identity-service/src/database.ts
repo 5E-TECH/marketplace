@@ -8,6 +8,7 @@ import { CreateRecoverySupport1723100000000 } from './migrations/1723100000000-c
 import { CreatePlatformSettings1725897600000 } from './migrations/1725897600000-create-platform-settings';
 import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
+import { NewRoles1795996800000 } from './migrations/1795996800000-new-roles';
 import { User } from './entities/user.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { ActivityLog } from '@app/common';
@@ -30,5 +31,6 @@ export const IDENTITY_DB: DatabaseDefinition = {
     CreatePlatformSettings1725897600000,
     AddUserAuthVersion1725984000000,
     MoneyToBigint1795219200000,
+    NewRoles1795996800000,
   ],
 };

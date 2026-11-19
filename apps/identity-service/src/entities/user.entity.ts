@@ -2,7 +2,7 @@ import { Column, Entity } from 'typeorm';
 import { BaseEntity, Role } from '@app/common';
 
 /**
- * Marketplace foydalanuvchisi (seller/buyer/admin). schema/01-identity.sql bilan mos.
+ * Platforma foydalanuvchisi: sotuvchi, optovik yoki xodim (BE-05, TZ 3-bo‘lim). Mijoz foydalanuvchi emas.
  * Elchi pochta user'idan ALOHIDA.
  */
 @Entity('users')
@@ -39,8 +39,4 @@ export class User extends BaseEntity {
   /** Rol/parol/blok holati o‘zgarganda eski access tokenlarni bekor qiladi. */
   @Column({ name: 'auth_version', type: 'integer', default: 1 })
   authVersion: number;
-
-  /** OPERATOR uchun — qaysi do'konga (catalog.shop.id) biriktirilgan. Boshqa rollar: null. */
-  @Column({ name: 'shop_id', type: 'bigint', nullable: true })
-  shopId: string | null;
 }

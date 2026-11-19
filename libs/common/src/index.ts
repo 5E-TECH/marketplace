@@ -41,7 +41,6 @@ export * from './dto/admin-notification.dto';
 export * from './dto/admin-audit.dto';
 export * from './dto/admin-team.dto';
 export * from './dto/admin-settings.dto';
-export * from './dto/operator.dto';
 export * from './dto/payment.dto';
 export * from './dto/finance.dto';
 export * from './dto/finance-response.dto';

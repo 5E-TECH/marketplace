@@ -22,7 +22,8 @@ import {
 
 @ApiTags('admin-inventory')
 @ApiBearerAuth()
-@Roles(Role.ADMIN, Role.SUPERADMIN)
+// TZ 3: qoldiqni ko‘rish — omborchi va admin (BE-05)
+@Roles(Role.ADMIN, Role.WAREHOUSE, Role.SUPERADMIN)
 @Controller('admin/inventory')
 export class AdminInventoryController {
   constructor(

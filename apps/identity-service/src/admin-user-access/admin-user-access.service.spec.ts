@@ -22,7 +22,6 @@ describe('AdminUserAccessService (C6.5)', () => {
         isBlocked: false,
         isDeleted: false,
         authVersion: 1,
-        shopId: null,
         email: null,
         avatarUrl: null,
         passwordHash: 'hash',
@@ -31,14 +30,13 @@ describe('AdminUserAccessService (C6.5)', () => {
       },
       {
         id: '2',
-        name: 'Seller',
+        name: 'Sotuvchi',
         phone: '+998900000002',
-        role: Role.SELLER,
+        role: Role.AFFILIATE,
         isActive: true,
         isBlocked: false,
         isDeleted: false,
         authVersion: 1,
-        shopId: null,
         email: null,
         avatarUrl: null,
         passwordHash: 'hash',
@@ -54,7 +52,6 @@ describe('AdminUserAccessService (C6.5)', () => {
         isBlocked: false,
         isDeleted: false,
         authVersion: 1,
-        shopId: null,
         email: null,
         avatarUrl: null,
         passwordHash: 'hash',
@@ -126,14 +123,16 @@ describe('AdminUserAccessService (C6.5)', () => {
     const result = await service.updateRole(
       '1',
       '2',
-      { role: Role.BUYER },
+      { role: Role.OPERATOR_LEAD },
       '1.2.3.4',
     );
-    expect(result).toMatchObject({ id: '2', role: Role.BUYER });
+    expect(result).toMatchObject({ id: '2', role: Role.OPERATOR_LEAD });
     await expect(
-      service.authorizeToken('2', Role.SELLER, 1),
+      service.authorizeToken('2', Role.AFFILIATE, 1),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(service.authorizeToken('2', Role.BUYER, 2)).resolves.toEqual({
+    await expect(
+      service.authorizeToken('2', Role.OPERATOR_LEAD, 2),
+    ).resolves.toEqual({
       authorized: true,
     });
     expect(sessionUpdate).toHaveBeenCalledTimes(1);
@@ -143,8 +142,8 @@ describe('AdminUserAccessService (C6.5)', () => {
       entityType: 'User',
       entityId: '2',
       meta: expect.objectContaining({
-        before: expect.objectContaining({ role: Role.SELLER }),
-        after: expect.objectContaining({ role: Role.BUYER }),
+        before: expect.objectContaining({ role: Role.AFFILIATE }),
+        after: expect.objectContaining({ role: Role.OPERATOR_LEAD }),
         ip: '1.2.3.4',
       }),
     });
@@ -166,7 +165,7 @@ describe('AdminUserAccessService (C6.5)', () => {
 
     expect(payload).toMatchObject({
       sub: '2',
-      role: Role.SELLER,
+      role: Role.AFFILIATE,
       impersonatedBy: '1',
       tokenType: 'impersonation',
       authVersion: 1,
@@ -195,9 +194,20 @@ describe('AdminUserAccessService (C6.5)', () => {
       ForbiddenException,
     );
     await expect(
-      service.updateRole('3', '2', { role: Role.BUYER }),
+      service.updateRole('3', '2', { role: Role.OPERATOR_LEAD }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it.each(['SELLER', 'BUYER', 'OPERATOR'])(
+    'BE-05 TC4: eski %s roliga o‘tkazish rad etiladi (400)',
+    async (role) => {
+      const { service, auditRows } = setup();
+      await expect(
+        service.updateRole('1', '2', { role } as never),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(auditRows).toHaveLength(0);
+    },
+  );
 
   it('oxirgi SUPERADMINni pasaytirishni bloklaydi', async () => {
     const { service } = setup();

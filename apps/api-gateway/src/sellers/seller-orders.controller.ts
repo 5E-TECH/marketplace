@@ -20,18 +20,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  CreateShipmentDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   RmqClient,
-  Role,
   Roles,
   SellerDashboardDto,
-  CreateShipmentDto,
   SellerOrdersPageDto,
   SellerOrdersQueryDto,
+  sendRpc,
   ShippingLabelsBatchDto,
   UpdateSellerOrderStatusDto,
-  sendRpc,
 } from '@app/common';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
@@ -44,15 +44,13 @@ export class SellerOrdersController {
     private readonly checkout: ClientProxy,
   ) {}
 
-  /** Scope: OPERATOR → JWT shopId; SELLER (owner) → ownerUserId. */
+  /** Scope: do‘kon egasi (ownerUserId). Do‘kon operatori roli BE-05 da bekor (tokenda shopId yo‘q). */
   private scope(user: JwtUser): { shopId?: string; ownerUserId?: string } {
-    return user.role === Role.OPERATOR
-      ? { shopId: user.shopId }
-      : { ownerUserId: user.sub };
+    return { ownerUserId: user.sub };
   }
 
   @Get('orders')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({ summary: 'Do‘kon buyurtmalari (sotuvchi yoki operator)' })
   @ApiOkResponse({ type: SellerOrdersPageDto })
   orders(@CurrentUser() user: JwtUser, @Query() query: SellerOrdersQueryDto) {
@@ -63,7 +61,7 @@ export class SellerOrdersController {
     );
   }
 
-  @Get('orders/:id') @Roles(Role.SELLER, Role.OPERATOR) getOrder(
+  @Get('orders/:id') @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR) getOrder(
     @CurrentUser() u: JwtUser,
     @Param('id') id: string,
   ) {
@@ -73,7 +71,7 @@ export class SellerOrdersController {
       { ...this.scope(u), orderId: id },
     );
   }
-  @Get('orders/:id/items') @Roles(Role.SELLER, Role.OPERATOR) items(
+  @Get('orders/:id/items') @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR) items(
     @CurrentUser() u: JwtUser,
     @Param('id') id: string,
   ) {
@@ -85,7 +83,7 @@ export class SellerOrdersController {
   }
 
   @Get('orders/:id/label')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({
     summary: 'Buyurtmaning 100x60 mm Elchi QR yorlig‘ini olish',
   })
@@ -112,7 +110,7 @@ export class SellerOrdersController {
   }
 
   @Post('orders/labels')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({
     summary: 'Bir nechta Elchi QR yorlig‘ini bitta PDFda olish',
     description:
@@ -134,30 +132,27 @@ export class SellerOrdersController {
     return labelPdf(res, document);
   }
 
-  @Get('orders/:id/history') @Roles(Role.SELLER, Role.OPERATOR) history(
-    @CurrentUser() u: JwtUser,
-    @Param('id') id: string,
-  ) {
+  @Get('orders/:id/history')
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
+  history(@CurrentUser() u: JwtUser, @Param('id') id: string) {
     return sendRpc(
       this.checkout,
       { cmd: 'seller.orders.history' },
       { ...this.scope(u), orderId: id },
     );
   }
-  @Post('orders/:id/cancel') @Roles(Role.SELLER, Role.OPERATOR) cancel(
-    @CurrentUser() u: JwtUser,
-    @Param('id') id: string,
-  ) {
+  @Post('orders/:id/cancel')
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
+  cancel(@CurrentUser() u: JwtUser, @Param('id') id: string) {
     return sendRpc(
       this.checkout,
       { cmd: 'seller.orders.update-status' },
       { ...this.scope(u), orderId: id, status: 'CANCELLED' },
     );
   }
-  @Post('orders/:id/confirm') @Roles(Role.SELLER, Role.OPERATOR) confirm(
-    @CurrentUser() u: JwtUser,
-    @Param('id') id: string,
-  ) {
+  @Post('orders/:id/confirm')
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
+  confirm(@CurrentUser() u: JwtUser, @Param('id') id: string) {
     return sendRpc(
       this.checkout,
       { cmd: 'seller.orders.update-status' },
@@ -165,7 +160,7 @@ export class SellerOrdersController {
     );
   }
   @Post('orders/:id/shipment')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   createShipment(
     @CurrentUser() u: JwtUser,
     @Param('id') id: string,
@@ -177,7 +172,9 @@ export class SellerOrdersController {
       { ...this.scope(u), orderId: id, customerPhone: dto.customerPhone },
     );
   }
-  @Get('shipments') @Roles(Role.SELLER, Role.OPERATOR) listShipments(
+  @Get('shipments')
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
+  listShipments(
     @CurrentUser() u: JwtUser,
     @Query() query: SellerOrdersQueryDto,
   ) {
@@ -187,7 +184,7 @@ export class SellerOrdersController {
       { ...this.scope(u), query },
     );
   }
-  @Get('shipments/:id') @Roles(Role.SELLER, Role.OPERATOR) shipment(
+  @Get('shipments/:id') @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR) shipment(
     @CurrentUser() u: JwtUser,
     @Param('id') id: string,
   ) {
@@ -197,10 +194,9 @@ export class SellerOrdersController {
       { ...this.scope(u), shipmentId: id },
     );
   }
-  @Get('shipments/:id/tracking') @Roles(Role.SELLER, Role.OPERATOR) tracking(
-    @CurrentUser() u: JwtUser,
-    @Param('id') id: string,
-  ) {
+  @Get('shipments/:id/tracking')
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
+  tracking(@CurrentUser() u: JwtUser, @Param('id') id: string) {
     return sendRpc(
       this.checkout,
       { cmd: 'seller.shipments.tracking' },
@@ -209,7 +205,7 @@ export class SellerOrdersController {
   }
 
   @Patch('orders/:id')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({ summary: 'Buyurtmani tasdiqlash/holat yangilash' })
   updateOrder(
     @CurrentUser() user: JwtUser,
@@ -224,7 +220,7 @@ export class SellerOrdersController {
   }
 
   @Get('dashboard')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({ summary: 'Sotuvchi dashboard ko‘rsatkichlarini olish' })
   @ApiOkResponse({ type: SellerDashboardDto })
   dashboard(@CurrentUser() user: JwtUser) {

@@ -24,14 +24,7 @@ interface ShopCounts {
   SUSPENDED: number;
   REJECTED: number;
 }
-interface UserCounts {
-  total: number;
-  SELLER: number;
-  BUYER: number;
-  ADMIN: number;
-  OPERATOR: number;
-  SUPERADMIN: number;
-}
+type UserCounts = { total: number } & Record<Role, number>;
 interface OrderStats {
   ordersTotal: number;
   ordersToday: number;
@@ -88,10 +81,13 @@ export class AdminDashboardController {
       },
       users: {
         total: users.total,
-        sellers: users.SELLER,
-        buyers: users.BUYER,
+        sellers: users.AFFILIATE,
+        wholesalers: users.WHOLESALER,
+        operators: users.OPERATOR_LEAD,
+        supervisors: users.SUPERVISOR,
+        warehouse: users.WAREHOUSE,
+        finance: users.FINANCE,
         admins: users.ADMIN,
-        operators: users.OPERATOR,
       },
       orders: { total: orders.ordersTotal, today: orders.ordersToday },
       gmv: orders.gmv,

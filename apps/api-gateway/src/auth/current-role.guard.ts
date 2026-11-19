@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ClientProxy } from '@nestjs/microservices';
-import { JwtUser, Role, ROLES_KEY, RmqClient, sendRpc } from '@app/common';
+import { JwtUser, ROLES_KEY, RmqClient, sendRpc } from '@app/common';
 
 /**
  * C6.5 — @Roles route'larida JWT ichidagi rol/versiyani joriy DB holati bilan
@@ -20,7 +20,7 @@ export class CurrentRoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+    const required = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);

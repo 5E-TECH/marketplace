@@ -40,7 +40,7 @@ import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
 /**
  * Moliya: optovik bilan haftalik hisob-kitob va akt-sverka (BE-33; MOL-7). Aktlar har dushanba 09:00 avtomatik;
- * «To‘landi» va qo‘lda ishga tushirish — FINANCE roli BE-05 da qo‘shilguncha faqat SUPERADMIN [taklif].
+ * «To‘landi» va qo‘lda ishga tushirish — FINANCE va SUPERADMIN (BE-05); ko‘rish — ADMIN ham.
  */
 @ApiTags('admin-finance')
 @ApiBearerAuth()
@@ -51,7 +51,7 @@ export class AdminSettlementsController {
   ) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Optovik aktlari (holat, optovik, davr filtri)' })
   @ApiOkResponse({ type: WholesalerSettlementPageDto })
   list(
@@ -65,7 +65,7 @@ export class AdminSettlementsController {
   }
 
   @Get('bank-file')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
     summary:
       'Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)',
@@ -87,7 +87,7 @@ export class AdminSettlementsController {
   }
 
   @Post('run')
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Hisob-kitobni qo‘lda ishga tushirish (cron har dushanba 09:00)',
@@ -104,7 +104,7 @@ export class AdminSettlementsController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Akt va uning tovar qatorlari' })
   @ApiOkResponse({ type: WholesalerSettlementDto })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
@@ -115,7 +115,7 @@ export class AdminSettlementsController {
   }
 
   @Get(':id/act.pdf')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Akt-sverka PDF' })
   @ApiProduces('application/pdf')
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
@@ -132,7 +132,7 @@ export class AdminSettlementsController {
   }
 
   @Post(':id/paid')
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '«To‘landi»: moliya bankda o‘tkazdi',

@@ -44,7 +44,7 @@ export class AdminFinanceController {
   ) {}
 
   @Get('ledger')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Sotuvchilar ledger yozuvlari' })
   @ApiOkResponse({ type: FinanceLedgerPageDto })
   ledger(@Query() query: FinanceLedgerQueryDto) {
@@ -60,7 +60,7 @@ export class AdminFinanceController {
   }
 
   @Get(['reports', 'reports/reconciliation'])
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'COD reconciliation va netting hisoboti' })
   @ApiOkResponse({ type: FinanceReconciliationReportDto })
   reconciliation(@Query() query: FinanceReconciliationQueryDto) {

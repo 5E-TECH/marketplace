@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { Role } from '../enums';
+import { LegacyRole, Role } from '../enums';
 
 /**
  * @Roles(...) bilan belgilangan route'lar uchun rolni tekshiradi.
@@ -18,10 +18,10 @@ export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const required = this.reflector.getAllAndOverride<Array<Role | LegacyRole>>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     if (!required || required.length === 0) return true;
 
     const req = context.switchToHttp().getRequest();

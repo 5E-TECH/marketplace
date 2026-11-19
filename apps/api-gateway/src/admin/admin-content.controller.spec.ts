@@ -187,7 +187,7 @@ describe('AdminContentController (C6.9)', () => {
       }) as unknown as ExecutionContext;
 
     expect(guard.canActivate(context(Role.ADMIN))).toBe(true);
-    expect(() => guard.canActivate(context(Role.BUYER))).toThrow(
+    expect(() => guard.canActivate(context(Role.AFFILIATE))).toThrow(
       ForbiddenException,
     );
   });

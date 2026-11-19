@@ -20,6 +20,7 @@ import {
 import {
   CurrentUser,
   JwtUser,
+  LegacyRole,
   ReturnApproveDto,
   ReturnRejectDto,
   ReturnRequestDetailsDto,
@@ -27,7 +28,6 @@ import {
   ReturnRequestsQueryDto,
   ReturnReviewDto,
   RmqClient,
-  Role,
   Roles,
   sendRpc,
 } from '@app/common';
@@ -45,11 +45,9 @@ export class SellerReturnsController {
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
   ) {}
 
-  /** Scope: OPERATOR → JWT shopId; SELLER (owner) → ownerUserId. */
+  /** Scope: do‘kon egasi (ownerUserId). Do‘kon operatori roli BE-05 da bekor (tokenda shopId yo‘q). */
   private scope(user: JwtUser): { shopId?: string; ownerUserId?: string } {
-    return user.role === Role.OPERATOR
-      ? { shopId: user.shopId }
-      : { ownerUserId: user.sub };
+    return { ownerUserId: user.sub };
   }
 
   private actor(user: JwtUser) {
@@ -57,7 +55,7 @@ export class SellerReturnsController {
   }
 
   @Get()
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({ summary: 'Do‘konga kelgan qaytarish so‘rovlari' })
   @ApiOkResponse({ type: ReturnRequestsPageDto })
   list(@CurrentUser() user: JwtUser, @Query() query: ReturnRequestsQueryDto) {
@@ -69,7 +67,7 @@ export class SellerReturnsController {
   }
 
   @Get(':id')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({ summary: 'Qaytarish so‘rovi va uning tarixi' })
   @ApiOkResponse({ type: ReturnRequestDetailsDto })
   @ApiNotFoundResponse({
@@ -84,7 +82,7 @@ export class SellerReturnsController {
   }
 
   @Post(':id/review')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({
     summary: 'Ko‘rib chiqishga olish (tovar qabul qilindi, tekshirilmoqda)',
     description: 'SUBMITTED → IN_REVIEW',
@@ -109,7 +107,7 @@ export class SellerReturnsController {
   }
 
   @Post(':id/approve')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({
     summary: 'Qaytarishni tasdiqlash',
     description:
@@ -136,7 +134,7 @@ export class SellerReturnsController {
   }
 
   @Post(':id/reject')
-  @Roles(Role.SELLER, Role.OPERATOR)
+  @Roles(LegacyRole.SELLER, LegacyRole.OPERATOR)
   @ApiOperation({
     summary: 'Qaytarishni rad etish (sabab majburiy)',
     description: 'SUBMITTED/IN_REVIEW → REJECTED',

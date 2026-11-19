@@ -24,14 +24,14 @@ import {
   CreateWarehouseDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   RmqClient,
-  Role,
   Roles,
   sendRpc,
-  StockPageDto,
   StockAdjustDto,
   StockInboundDto,
   StockMutationResultDto,
+  StockPageDto,
   StockQueryDto,
   UpdateWarehouseDto,
   WarehouseDto,
@@ -39,7 +39,7 @@ import {
 
 @ApiTags('inventory')
 @ApiBearerAuth()
-@Roles(Role.SELLER)
+@Roles(LegacyRole.SELLER)
 @Controller('inventory')
 export class InventoryController {
   constructor(

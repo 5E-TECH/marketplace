@@ -33,11 +33,12 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 /**
  * Admin va nazoratchi uchun lidlar ro‘yxati (BE-25 shartnomasi, real kod BE-42).
  * Fayl Claude backend oqimining `leads/` papkasida; yo‘l `admin/leads`.
- * Rollar: ADMIN, SUPERADMIN; SUPERVISOR roli BE-05 da qo‘shilgach shu ro‘yxatga kiradi.
+ * Rollar: ro‘yxat va karta — ADMIN, SUPERVISOR, SUPERADMIN; «Rad etildi» lidni qayta ochish — faqat admin
+ * (TZ 3-bo‘lim jadvali).
  */
 @ApiTags('admin-leads')
 @ApiBearerAuth()
-@Roles(Role.ADMIN, Role.SUPERADMIN)
+@Roles(Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN)
 @Controller('admin/leads')
 export class AdminLeadsController {
   constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}
@@ -61,6 +62,7 @@ export class AdminLeadsController {
   }
 
   @Post(':id/reopen')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({
     summary: '«Rad etildi» lidni qayta ochish (faqat admin, sabab majburiy)',
     description:
