@@ -19,15 +19,14 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
-  AdminShopsQueryDto,
   AdminShopDetailDto,
+  AdminShopsQueryDto,
   AuthErrorResponseDto,
   CurrentUser,
   FeatureShopDto,
   JwtUser,
+  LegacyOnly,
   RejectShopDto,
-  Role,
-  Roles,
   RmqClient,
   sendRpc,
   UpdateShopTariffsDto,
@@ -48,6 +47,8 @@ interface ApprovedShop {
 /**
  * Admin do'kon moderatsiyasi (C1.7). Global JwtAuthGuard + RolesGuard bor —
  * shu bois faqat `@Roles(ADMIN, SUPERADMIN)` yetarli (boshqa rol → 403).
+ * BE-05: do‘kon modeli bekor — yo‘llar BE-29 da o‘chiriladi, ungacha hech kimga ochilmaydi (`@LegacyOnly`). Optovik
+ * boshqaruvi BE-07 da.
  * approve: catalog (ACTIVE + shop.approved event) → identity (user active) →
  * inventory (default ombor). Market provisioning shop.approved orqali
  * elchi-integration'da (C1.6, async).
@@ -64,7 +65,7 @@ export class AdminShopsController {
   ) {}
 
   @Get('admin/shops')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Do‘konlar ro‘yxati (status filtr + sahifalash)' })
   @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
@@ -75,7 +76,7 @@ export class AdminShopsController {
   }
 
   @Get('admin/shops/:id')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOkResponse({ type: AdminShopDetailDto })
   @ApiOperation({ summary: 'Do‘kon profili va asosiy statistikasi' })
@@ -104,7 +105,7 @@ export class AdminShopsController {
   }
 
   @Post('admin/shops/:id/suspend')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'ACTIVE do‘konni vaqtincha to‘xtatish' })
   async suspend(
@@ -122,7 +123,7 @@ export class AdminShopsController {
   }
 
   @Post('admin/shops/:id/activate')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'SUSPENDED do‘konni qayta faollashtirish' })
   async activate(
@@ -140,7 +141,7 @@ export class AdminShopsController {
   }
 
   @Post('admin/shops/:id/feature')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Do‘konni bosh sahifada ko‘rsatish/yashirish' })
   async feature(
@@ -161,7 +162,7 @@ export class AdminShopsController {
   }
 
   @Patch('admin/shops/:id/tariffs')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Do‘konning Elchi yetkazish tariflarini sozlash/sinxronlash',
@@ -201,7 +202,7 @@ export class AdminShopsController {
   }
 
   @Post('admin/shops/:id/approve')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Do‘konni tasdiqlash (active + user active + default ombor)',
@@ -258,7 +259,7 @@ export class AdminShopsController {
   }
 
   @Post('admin/shops/:id/reject')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @LegacyOnly()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Do‘konni rad etish (+ sotuvchiga xabar)' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })

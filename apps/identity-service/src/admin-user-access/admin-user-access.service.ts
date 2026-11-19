@@ -16,10 +16,11 @@ import { User } from '../entities/user.entity';
 const IMPERSONATION_TTL_SECONDS = 15 * 60;
 /** BE-05: sakkiz rolning istalgani (eski SELLER/BUYER/OPERATOR — 400). */
 const MANAGEABLE_ROLES: readonly Role[] = Object.values(Role);
-/** Admin va superadmin nomidan kirilmaydi (avvalgi qoida); qolgan yetti rol — mumkin. */
-const IMPERSONATABLE_ROLES: readonly Role[] = MANAGEABLE_ROLES.filter(
-  (role) => role !== Role.ADMIN && role !== Role.SUPERADMIN,
-);
+/**
+ * Faqat tashqi foydalanuvchilar (sotuvchi, optovik) nomidan kiriladi. Xodim nomidan emas: aks holda superadmin moliya
+ * xodimi nomidan pul yechishni tasdiqlab, ikki tasdiq qoidasini bir o‘zi bajarar edi (BE-23), auditda esa xodim qolardi.
+ */
+const IMPERSONATABLE_ROLES: readonly Role[] = [Role.AFFILIATE, Role.WHOLESALER];
 
 @Injectable()
 export class AdminUserAccessService {
@@ -95,7 +96,7 @@ export class AdminUserAccessService {
       }
       if (!IMPERSONATABLE_ROLES.includes(user.role)) {
         throw new ForbiddenException(
-          'ADMIN yoki SUPERADMIN nomidan kirish taqiqlangan',
+          'Faqat sotuvchi yoki optovik nomidan kirish mumkin',
         );
       }
       if (!user.isActive || user.isBlocked) {

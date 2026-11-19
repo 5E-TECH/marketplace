@@ -1,6 +1,11 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { of } from 'rxjs';
-import { CheckoutPaymentMethod, IS_PUBLIC_KEY, LegacyRole } from '@app/common';
+import { Observable, of, throwError } from 'rxjs';
+import {
+  CheckoutPaymentMethod,
+  IS_PUBLIC_KEY,
+  LegacyRole,
+  Role,
+} from '@app/common';
 import { CheckoutController } from './checkout.controller';
 
 describe('CheckoutController (C2.19)', () => {
@@ -31,6 +36,32 @@ describe('CheckoutController (C2.19)', () => {
       Reflect.getMetadata(IS_PUBLIC_KEY, CheckoutController.prototype.create),
     ).toBe(true);
   });
+
+  it.each([Role.AFFILIATE, Role.OPERATOR_LEAD, Role.ADMIN])(
+    'BE-05: %s tokeni buyurtmani o‘z ID si bilan yaratmaydi — mehmon yo‘li (identity mijozni foydalanuvchi qilmaydi)',
+    async (role) => {
+      const { controller, checkout, identity } = setup();
+      identity.mockImplementationOnce(
+        () =>
+          throwError(() => ({
+            status: 422,
+            message: 'Mijoz tizim foydalanuvchisi emas',
+          })) as Observable<never>,
+      );
+      await expect(
+        controller.create({ sub: '42', role }, dto, 'r', 'guest-session'),
+      ).rejects.toBeDefined();
+      expect(identity).toHaveBeenCalledWith(
+        { cmd: 'identity.customer.create' },
+        expect.anything(),
+      );
+      expect(checkout).not.toHaveBeenCalled();
+      // sessiyasiz — mehmon sifatida 400 (avval token bilan o‘tib ketardi)
+      expect(() =>
+        controller.create({ sub: '42', role }, dto, 'r', undefined),
+      ).toThrow(BadRequestException);
+    },
+  );
 
   it('TC1/TC3: guest buyer yaratib session cart bilan checkout qiladi', async () => {
     const { controller, checkout, identity } = setup();

@@ -10,6 +10,7 @@ import { AuthSession } from '../entities/auth-session.entity';
 import { AuthService } from '../auth/auth.service';
 import { AdminUserAccessService } from '../admin-user-access/admin-user-access.service';
 import { AdminTeamService } from './admin-team.service';
+import { NewRoles1795996800000 } from '../migrations/1795996800000-new-roles';
 
 const url = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = url ? describe : describe.skip;
@@ -28,6 +29,8 @@ describeWithPostgres('BE-05 yangi rollar (PostgreSQL)', () => {
   let team: AdminTeamService;
   let access: AdminUserAccessService;
   let superadminId: string;
+  let oldRowsError: Error | null = null;
+  let shopIdAfterAbort = 0;
   const jwt = new JwtService({ secret: 'be05-integration' });
   const config = {
     get: (key: string, fallback?: unknown) =>
@@ -44,6 +47,37 @@ describeWithPostgres('BE-05 yangi rollar (PostgreSQL)', () => {
     ]);
     await schemaLock.query('DROP SCHEMA IF EXISTS identity CASCADE');
     await schemaLock.query('CREATE SCHEMA identity');
+
+    // Eski bazaga o‘xshash: BE-05 dan oldingi migratsiyalar va eski BUYER qatori → yangi migratsiya to‘xtashi kerak
+    const old = await new DataSource({
+      type: 'postgres',
+      url,
+      schema: 'identity',
+      entities: IDENTITY_DB.entities as never,
+      migrations: IDENTITY_DB.migrations.filter(
+        (m) => m !== NewRoles1795996800000,
+      ),
+      migrationsRun: true,
+      synchronize: false,
+      logging: false,
+    }).initialize();
+    await old.query(
+      `INSERT INTO identity.users (role, name, phone, password_hash) VALUES ('BUYER', 'Eski', '+998900000900', 'h')`,
+    );
+    const runner = old.createQueryRunner();
+    oldRowsError = await new NewRoles1795996800000()
+      .up(runner)
+      .then(() => null)
+      .catch((error: Error) => error);
+    await runner.release();
+    shopIdAfterAbort = (
+      (await old.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = 'identity' AND table_name = 'users' AND column_name = 'shop_id'`,
+      )) as unknown[]
+    ).length;
+    await old.query(`DELETE FROM identity.users`);
+    await old.destroy();
+
     ds = await new DataSource({
       type: 'postgres',
       url,
@@ -82,6 +116,13 @@ describeWithPostgres('BE-05 yangi rollar (PostgreSQL)', () => {
       await ds.destroy();
     }
     await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
+  });
+
+  it('migratsiya eski BUYER qatori bor bazada hech narsani o‘zgartirmay to‘xtaydi (BE-40 — toza baza)', () => {
+    expect(oldRowsError?.message).toMatch(
+      /eski rollar bor \(BUYER: 1\).*BE-40/,
+    );
+    expect(shopIdAfterAbort).toBe(1);
   });
 
   it('TC1/TC3: superadmin har bir xodim rolini yaratadi, xodim login bo‘ladi; tokenda rol bor, shopId yo‘q', async () => {

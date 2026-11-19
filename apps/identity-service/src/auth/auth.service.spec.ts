@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { of } from 'rxjs';
@@ -257,6 +261,35 @@ describe('AuthService (C0.4)', () => {
     } catch (e: any) {
       expect(e.getStatus()).toBe(409);
     }
+  });
+
+  it('BE-05: admin superadmin yoki boshqa admin hisobini bloklay olmaydi; superadmin — oladi', async () => {
+    const admin: any = (
+      await service.register({
+        name: 'Admin',
+        phone: '+998901110010',
+        password: 'Secret123',
+      })
+    ).user;
+    const owner: any = (
+      await service.register({
+        name: 'Rahbar',
+        phone: '+998901110011',
+        password: 'Secret123',
+      })
+    ).user;
+    const stored = (id: string) =>
+      saveSpy.mock.calls.map((call) => call[0]).find((u) => u.id === id);
+    stored(admin.id).role = Role.ADMIN;
+    stored(owner.id).role = Role.SUPERADMIN;
+
+    await expect(
+      service.setBlocked(admin.id, owner.id, true),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(stored(owner.id).isBlocked).toBeFalsy();
+    await expect(
+      service.setBlocked(owner.id, admin.id, true),
+    ).resolves.toMatchObject({ isBlocked: true });
   });
 
   it("TC3: noto'g'ri parol -> 401", async () => {

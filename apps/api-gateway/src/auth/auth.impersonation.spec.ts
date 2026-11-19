@@ -24,4 +24,24 @@ describe('AuthController impersonation xavfsizligi (C6.5)', () => {
     ).toThrow(ForbiddenException);
     expect(send).not.toHaveBeenCalled();
   });
+
+  it('BE-05: impersonation rejimida telefonni ham o‘zgartirib bo‘lmaydi (parol tiklash orqali egallash)', () => {
+    const send = jest.fn();
+    const controller = new AuthController(
+      { send } as never,
+      new JwtService({ secret: 'test-secret' }),
+    );
+    expect(() =>
+      controller.updateProfile(
+        {
+          sub: '42',
+          role: Role.AFFILIATE,
+          impersonatedBy: '1',
+          tokenType: 'impersonation',
+        },
+        { phone: '+998901112233' },
+      ),
+    ).toThrow(ForbiddenException);
+    expect(send).not.toHaveBeenCalled();
+  });
 });

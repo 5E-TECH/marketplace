@@ -31,7 +31,9 @@ describe('BE-33: optovik aktlari endpointlari finance-service ga', () => {
     // BE-05: moliya xodimi (FINANCE) tasdiqlaydi; ko‘rish — admin ham
     expect(roles('paid')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
     expect(roles('run')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
-    for (const m of ['list', 'get', 'actPdf', 'bankFile'] as const)
+    for (const m of ['list', 'get', 'actPdf'] as const)
       expect(roles(m)).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
+    // bank fayli aktlarni muzlatadi — to‘lov qadami (BE-05 tekshiruvi)
+    expect(roles('bankFile')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
   });
 });

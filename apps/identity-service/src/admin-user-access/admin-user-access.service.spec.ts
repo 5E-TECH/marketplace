@@ -217,6 +217,26 @@ describe('AdminUserAccessService (C6.5)', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it.each([Role.FINANCE, Role.SUPERVISOR, Role.OPERATOR_LEAD, Role.WAREHOUSE])(
+    'BE-05: xodim (%s) nomidan kirib bo‘lmaydi — ikki tasdiq qoidasi va audit buzilmasin',
+    async (role) => {
+      const { service, usersStore, auditRows } = setup();
+      usersStore[1].role = role;
+      await expect(service.impersonate('1', '2')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(auditRows).toHaveLength(0);
+    },
+  );
+
+  it('BE-05: optovik nomidan kirish mumkin', async () => {
+    const { service, usersStore } = setup();
+    usersStore[1].role = Role.WHOLESALER;
+    await expect(service.impersonate('1', '2')).resolves.toMatchObject({
+      user: { id: '2', role: Role.WHOLESALER },
+    });
+  });
+
   it('admin yoki superadmin akkauntini impersonate qilishni bloklaydi', async () => {
     const { service } = setup();
 

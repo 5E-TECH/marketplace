@@ -65,7 +65,8 @@ export class AdminSettlementsController {
   }
 
   @Get('bank-file')
-  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
+  // BE-05: bank fayli davr aktlarini muzlatadi — to‘lov qadami, TZ 3: moliya
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
     summary:
       'Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)',

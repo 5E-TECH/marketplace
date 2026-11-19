@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -239,6 +240,17 @@ export class AuthService {
       where: { id: String(userId), isDeleted: false },
     });
     if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+    // BE-05: admin va superadmin hisobini faqat superadmin bloklaydi (jamoani ham faqat u boshqaradi)
+    if (user.role === Role.ADMIN || user.role === Role.SUPERADMIN) {
+      const actor = await this.users.findOne({
+        where: { id: String(actorId), isDeleted: false },
+      });
+      if (actor?.role !== Role.SUPERADMIN) {
+        throw new ForbiddenException(
+          'Admin yoki superadmin hisobini faqat superadmin bloklaydi',
+        );
+      }
+    }
 
     user.isBlocked = blocked;
     user.authVersion = (user.authVersion ?? 1) + 1;

@@ -257,6 +257,9 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
         'GET /orders',
         'POST /payments',
         'POST /guest/merge',
+        // karta: «admin/shops/* yangi rollar bilan ochilmaydi»
+        'GET /admin/shops',
+        'POST /admin/shops/:id/approve',
       ]),
     );
     for (const route of legacy)
@@ -316,12 +319,32 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
     expect(admin).not.toContain('POST /operator/leads/next');
     expect(admin).toContain('GET /operator/queue-summary');
     expect(superadmin).toContain('POST /operator/leads/next');
-    // Pul tasdiqlash — moliya va superadmin, admin emas
+    // Pul tasdiqlash va bank fayli (aktlarni muzlatadi) — moliya va superadmin, admin emas
     expect(admin).not.toContain('POST /admin/finance/withdrawals/:id/approve');
+    expect(admin).not.toContain('GET /admin/finance/settlements/bank-file');
     expect(admin).toContain('POST /admin/leads/:id/reopen');
+    expect(admin.filter((key) => key.includes(' /admin/shops'))).toEqual([]);
   });
 
-  it('bloklangan foydalanuvchi tokeni (authVersion eskirgan) har bir rolli yo‘lda darhol 401', async () => {
+  it('ADMIN va SUPERADMIN ro‘yxati qotirilgan (snapshot): yangi yo‘l yoki rol o‘zgarishi ko‘rib chiqiladi', async () => {
+    expect({
+      ADMIN: await reachable(Role.ADMIN),
+      SUPERADMIN: await reachable(Role.SUPERADMIN),
+    }).toMatchSnapshot();
+  });
+
+  it('bloklangan foydalanuvchi tokeni (authVersion eskirgan) har bir yopiq yo‘lda darhol 401 — rolsiz yo‘llarda ham', async () => {
+    for (const route of routes.filter((r) => !r.isPublic))
+      expect([
+        route.key,
+        await statusOf(route, { sub: BLOCKED, role: Role.AFFILIATE }),
+      ]).toEqual([route.key, 401]);
+    expect(routes.filter((r) => ANY_SIGNED_IN.includes(r.key)).length).toBe(
+      ANY_SIGNED_IN.length,
+    );
+  });
+
+  it('bloklangan token: sotuvchi va operator yo‘llari 401, faol token — o‘tadi', async () => {
     const affiliate = routes.find(
       (route) => route.key === 'POST /affiliate/streams',
     )!;

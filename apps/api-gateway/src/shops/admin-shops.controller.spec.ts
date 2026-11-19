@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { LegacyRole, Role, ROLES_KEY } from '@app/common';
 import { AdminShopsController } from './admin-shops.controller';
 
 function makeController(
@@ -19,7 +19,7 @@ function makeController(
 }
 
 describe('AdminShopsController (C1.7)', () => {
-  it('TC4: list/approve/reject faqat ADMIN va SUPERADMIN uchun (@Roles)', () => {
+  it('BE-05: eski do‘kon moderatsiyasi hech kimga ochilmaydi (@LegacyOnly) — optovik BE-07 da', () => {
     for (const method of [
       'list',
       'detail',
@@ -32,7 +32,7 @@ describe('AdminShopsController (C1.7)', () => {
     ] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, AdminShopsController.prototype[method]),
-      ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+      ).toEqual(Object.values(LegacyRole));
     }
   });
 

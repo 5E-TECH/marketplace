@@ -17,6 +17,7 @@ import {
   CartOwnerDto,
   CurrentUser,
   JwtUser,
+  legacyBuyer,
   Public,
   RmqClient,
   sendRpc,
@@ -126,13 +127,14 @@ export class CartController {
       this.checkout,
       { cmd: 'cart.merge' },
       {
-        customerId: user?.sub,
+        customerId: legacyBuyer(user)?.sub, // BE-05: faqat eski xaridor
         sessionId,
       },
     );
   }
 
   private owner(user?: JwtUser, sessionId?: string): CartOwnerDto {
-    return user?.sub ? { customerId: user.sub } : { sessionId };
+    const buyer = legacyBuyer(user); // BE-05: sotuvchi/xodim tokeni — mehmon
+    return buyer?.sub ? { customerId: buyer.sub } : { sessionId };
   }
 }

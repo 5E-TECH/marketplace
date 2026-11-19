@@ -27,6 +27,7 @@ import {
   BuyerOrdersQueryDto,
   BuyerOrderTrackingDto,
   JwtUser,
+  legacyBuyer,
   LegacyRole,
   OrderActionResultDto,
   Public,
@@ -146,11 +147,12 @@ export class BuyerOrdersController {
     const sessionId = Array.isArray(sessionHeader)
       ? sessionHeader[0]
       : sessionHeader;
-    if (!request.user?.sub && !sessionId?.trim()) {
+    const buyer = legacyBuyer(request.user); // BE-05: sotuvchi/xodim tokeni — mehmon
+    if (!buyer?.sub && !sessionId?.trim()) {
       throw new UnauthorizedException('Token yoki X-Session-Id talab qilinadi');
     }
     return {
-      customerId: request.user?.sub,
+      customerId: buyer?.sub,
       sessionId: sessionId?.trim(),
     };
   }

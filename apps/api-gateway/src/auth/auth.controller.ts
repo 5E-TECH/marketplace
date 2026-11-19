@@ -309,9 +309,13 @@ export class AuthController {
   })
   @ApiOkResponse({ description: 'Yangilangan profil (passwordHash qaytmaydi)' })
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
-    if (user.impersonatedBy && dto.password !== undefined) {
+    // Telefon ham: yangi telefonga parol tiklash orqali hisob egallanardi (BE-05 tekshiruvi)
+    if (
+      user.impersonatedBy &&
+      (dto.password !== undefined || dto.phone !== undefined)
+    ) {
       throw new ForbiddenException(
-        'Impersonation rejimida parolni o‘zgartirish taqiqlangan',
+        'Impersonation rejimida parol yoki telefonni o‘zgartirish taqiqlangan',
       );
     }
     return sendRpc(
