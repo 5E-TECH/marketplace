@@ -1,3 +1,4 @@
+import { FINANCE_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -9,38 +10,19 @@ import {
   shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
-import { Commission } from './entities/commission.entity';
-import { Payout } from './entities/payout.entity';
-import { SellerLedger } from './entities/seller-ledger.entity';
-import { CodReconciliation } from './entities/cod-reconciliation.entity';
-import { PayoutSchedule } from './entities/payout-schedule.entity';
-import { CreateCodReconciliation1724932800000 } from './migrations/1724932800000-create-cod-reconciliation';
-import { CreatePayoutSchedule1727568000000 } from './migrations/1727568000000-create-payout-schedule';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
 import { SellerFinanceService } from './seller-finance.service';
-import { CreateFinanceTables1724673600000 } from './migrations/1724673600000-create-finance-tables';
-import { CreateLedger1795478400000 } from './migrations/1795478400000-create-ledger';
-import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add-journal-lead-index';
-import { CreateWithdrawal1795651200000 } from './migrations/1795651200000-create-withdrawal';
 import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
-import { CreateWholesalerSettlement1795737600000 } from './migrations/1795737600000-create-wholesaler-settlement';
 import { SettlementController } from './ledger/settlement.controller';
 import { SettlementService } from './ledger/settlement.service';
-import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fee-hold';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
 import { BalanceCheckService } from './ledger/balance-check.service';
 
-const entities = [
-  SellerLedger,
-  Payout,
-  Commission,
-  CodReconciliation,
-  PayoutSchedule,
-];
+const entities = FINANCE_DB.entities;
 
 @Module({
   imports: [
@@ -52,18 +34,9 @@ const entities = [
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'finance');
         return {
-          ...typeOrmOptions(config, 'finance', entities),
+          ...typeOrmOptions(config, FINANCE_DB.schema, FINANCE_DB.entities),
           synchronize: false,
-          migrations: [
-            CreateFinanceTables1724673600000,
-            CreateCodReconciliation1724932800000,
-            CreatePayoutSchedule1727568000000,
-            CreateLedger1795478400000,
-            AddJournalLeadIndex1795564800000,
-            CreateWithdrawal1795651200000,
-            CreateWholesalerSettlement1795737600000,
-            CreateFeeHold1795824000000,
-          ],
+          migrations: FINANCE_DB.migrations,
           migrationsRun: shouldRunMigrations(config),
         };
       },

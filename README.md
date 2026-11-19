@@ -74,6 +74,20 @@ docs/               PRD, API kontrakt, DB sxema, Trello
 | Kuzatuv           | Har so'rovga `X-Request-Id`; xato javobida ham qaytadi               |
 | Migratsiya        | `DB_AUTO_MIGRATE=false` bilan nazoratli rollout qilish mumkin        |
 
+### Migratsiyalar (BE-04)
+
+Sxema faqat migratsiyadan: `synchronize` hech qayerda yo‘q, dev da ham. Entity o‘zgarsa, migratsiya yozing.
+- Servis ro‘yxati `apps/<servis>/src/database.ts` da: sxema, entity va migratsiyalar. Modul ham, CLI ham shuni ishlatadi. Yangi migratsiya shu ro‘yxatga qo‘shiladi.
+- CLI buyruqlari (ulanish servis bilan bir xil `DB_*` yoki `MIGRATE_DATABASE_URL`, servis berilmasa — hammasi):
+  - `npm run db:migrate [-- <servis>]` — yangi migratsiyalarni yurgizadi;
+  - `npm run db:migrate:show` — yurgizilmaganlarini ko‘rsatadi;
+  - `npm run db:migrate:revert -- <servis>` — oxirgisini qaytaradi;
+  - `npm run db:migrate:check` — yurgizib, sxema entity’larga yetishini tekshiradi.
+- `check` jadval, ustun, tur va NULL ni solishtiradi. Bazadagi ortiqcha CHECK, indeks va FK xato emas.
+- Prod (`DB_AUTO_MIGRATE=false`) da konteyner ichida: `node scripts/migrate.mjs run --dist` yoki `node dist/apps/<servis>/apps/<servis>/src/migrate.js run`.
+- CI toza bazada `check --dist` ni yurgizadi.
+- Integratsion testlar CI da Postgres bilan ishlaydi: `TEST_DATABASE_URL`, moliya — `FINANCE_TEST_DATABASE_URL` (`_finance_test`), to‘lov — `PAYMENT_TEST_DATABASE_URL`.
+
 Rate limiting va audit jurnalidagi IP `X-Forwarded-For` bo'yicha aniqlanadi.
 api-gateway ichki tarmoqdagi proksilarga (caddy, cloudflared, storefront)
 ishonadi va birinchi ommaviy manzilni mijozniki deb oladi — zanjir uzunligi

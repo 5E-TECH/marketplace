@@ -1,3 +1,4 @@
+import { INVENTORY_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -7,7 +8,6 @@ import {
   CommonConfigModule,
   ensureSchema,
   shouldRunMigrations,
-  OutboxEvent,
   OutboxService,
   RmqClient,
   RmqQueue,
@@ -15,17 +15,7 @@ import {
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
-import { InventoryOperation } from './entities/inventory-operation.entity';
-import { ReservationItem } from './entities/reservation-item.entity';
-import { Reservation } from './entities/reservation.entity';
-import { StockMovement } from './entities/stock-movement.entity';
-import { Stock } from './entities/stock.entity';
-import { Warehouse } from './entities/warehouse.entity';
 import { InventoryService } from './inventory.service';
-import { CreateInventoryTables1721822400000 } from './migrations/1721822400000-create-inventory-tables';
-import { CreateInventoryOperation1721822400001 } from './migrations/1721822400001-create-inventory-operation';
-import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-create-inventory-outbox';
-import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
 import { SellerInventoryController } from './seller-inventory.controller';
@@ -35,15 +25,7 @@ import { InventoryOperationsController } from './inventory-operations.controller
 import { AdminInventoryController } from './admin-inventory.controller';
 import { AdminInventoryQueryService } from './admin-inventory-query.service';
 
-const entities = [
-  Warehouse,
-  Stock,
-  StockMovement,
-  Reservation,
-  ReservationItem,
-  InventoryOperation,
-  OutboxEvent,
-];
+const entities = INVENTORY_DB.entities;
 
 @Module({
   imports: [
@@ -63,14 +45,9 @@ const entities = [
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'inventory');
         return {
-          ...typeOrmOptions(config, 'inventory', entities),
+          ...typeOrmOptions(config, INVENTORY_DB.schema, INVENTORY_DB.entities),
           synchronize: false,
-          migrations: [
-            CreateInventoryTables1721822400000,
-            CreateInventoryOperation1721822400001,
-            CreateInventoryOutbox1721822400002,
-            AddInventoryBaseColumns1721822400003,
-          ],
+          migrations: INVENTORY_DB.migrations,
           migrationsRun: shouldRunMigrations(config),
         };
       },

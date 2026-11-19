@@ -1,9 +1,9 @@
+import { IDENTITY_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule } from '@nestjs/microservices';
 import {
-  ActivityLog,
   ActivityLogService,
   CommonAuthModule,
   CommonConfigModule,
@@ -15,32 +15,20 @@ import {
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
-import { User } from './entities/user.entity';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { AuditController } from './audit/audit.controller';
 import { AdminSeeder } from './seed/admin.seeder';
-import { AuthSession } from './entities/auth-session.entity';
-import { CreateAuthSession1721908800000 } from './migrations/1721908800000-create-auth-session';
-import { CreateUsers1722776400000 } from './migrations/1722776400000-create-users';
-import { AddUserShopOperator1722950000000 } from './migrations/1722950000000-add-user-shop-operator';
-import { AddUserIsBlocked1722950000001 } from './migrations/1722950000001-add-user-is-blocked';
-import { CreateActivityLog1722950000002 } from './migrations/1722950000002-create-activity-log';
-import { CreateRecoverySupport1723100000000 } from './migrations/1723100000000-create-recovery-support';
 import { AdminTeamController } from './team/admin-team.controller';
 import { AdminTeamService } from './team/admin-team.service';
-import { PlatformSettings } from './entities/platform-settings.entity';
-import { CreatePlatformSettings1725897600000 } from './migrations/1725897600000-create-platform-settings';
 import { PlatformSettingsController } from './settings/platform-settings.controller';
 import { PlatformSettingsService } from './settings/platform-settings.service';
 import { AdminUserAccessController } from './admin-user-access/admin-user-access.controller';
 import { AdminUserAccessService } from './admin-user-access/admin-user-access.service';
-import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
-import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { BroadcastRecipientsController } from './broadcast/broadcast-recipients.controller';
 import { BroadcastRecipientsService } from './broadcast/broadcast-recipients.service';
 
-const entities = [User, AuthSession, ActivityLog, PlatformSettings];
+const entities = IDENTITY_DB.entities;
 
 @Module({
   imports: [
@@ -63,18 +51,8 @@ const entities = [User, AuthSession, ActivityLog, PlatformSettings];
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'identity'); // schema mavjud bo'lsin
         return {
-          ...typeOrmOptions(config, 'identity', entities),
-          migrations: [
-            CreateAuthSession1721908800000,
-            CreateUsers1722776400000,
-            AddUserShopOperator1722950000000,
-            AddUserIsBlocked1722950000001,
-            CreateActivityLog1722950000002,
-            CreateRecoverySupport1723100000000,
-            CreatePlatformSettings1725897600000,
-            AddUserAuthVersion1725984000000,
-            MoneyToBigint1795219200000,
-          ],
+          ...typeOrmOptions(config, IDENTITY_DB.schema, IDENTITY_DB.entities),
+          migrations: IDENTITY_DB.migrations,
           migrationsRun: shouldRunMigrations(config),
         };
       },

@@ -106,3 +106,6 @@ export * from './activity-log/activity-log.entity';
 export * from './activity-log/activity-log.service';
 // BE-39: S1 va S3 sinovi hisoboti
 export * from './dto/lead-report.dto';
+
+// BE-04: migratsiya CLI va servis bazasi ta’rifi
+export * from './database/migrate-cli';
