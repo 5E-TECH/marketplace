@@ -65,7 +65,7 @@ export const LEGACY_SELLER_TRANSITIONS: Readonly<Record<string, string[]>> = {
   SHIPMENT_CREATED: ['CONFIRMED'],
   RECEIVED: ['SHIPMENT_CREATED'],
   ON_THE_ROAD: ['SHIPMENT_CREATED', 'RECEIVED'],
-  DELIVERED: ['ON_THE_ROAD'],
+  DELIVERED: ['RECEIVED', 'ON_THE_ROAD'],
   CANCELLED: ['PENDING', 'CONFIRMED', 'SHIPMENT_CREATED'],
   RETURNED: ['ON_THE_ROAD', 'DELIVERED'],
 };
@@ -1118,6 +1118,10 @@ export class SellerOrdersService {
       )) as Array<{ status: string }>;
       if (!current) {
         throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
+      }
+      // Shu holatga qayta bosish — o‘zgarish yo‘q, avvalgidek muvaffaqiyatli (jurnalga yozilmaydi)
+      if (current.status === status) {
+        return { id: String(orderId), status };
       }
       await this.dataSource.query(
         `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status,comment) VALUES($1,$2,$3)`,

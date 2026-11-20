@@ -34,6 +34,7 @@ const CLAIM_LEASE_S = 60;
 /** Katalog yoki ombor javob bermasa: qayta urinish oralig‘i, soniya [taklif]. */
 const RETRY_DELAYS_S = [10, 30, 60, 120, 300];
 const TICK_BUDGET_MS = 8_000;
+const ALERT_AFTER_ATTEMPTS = 5;
 
 interface RequestRow {
   id: string;
@@ -165,7 +166,8 @@ export class LeadOrderService {
         );
       return this.retryLater(row, `katalog: ${messageOf(error)}`);
     }
-    const unavailable = offerProblem(snapshot);
+    const unavailable =
+      offerProblem(snapshot) ?? priceProblem(snapshot!, event.salePrice);
     if (unavailable)
       return this.fail(
         row,
@@ -192,7 +194,7 @@ export class LeadOrderService {
           OrderCreateFailedReason.OUT_OF_STOCK,
           'Qoldiq yetarli emas',
         );
-      if (isPermanent(error))
+      if (isPermanent(error, [400, 404]))
         return this.fail(
           row,
           OrderCreateFailedReason.INVALID_ORDER,
@@ -208,11 +210,10 @@ export class LeadOrderService {
     const event = row.payload;
     const quantity = event.quantity;
     const salePrice = event.salePrice;
-    // Mijozga aytilgan narx o‘zgarmaydi; tasdiqlangan narx undan oshgan bo‘lsa, farqni platforma ko‘taradi [taklif]
-    const approvedPrice = Math.min(offer.approvedPrice!, salePrice);
+    // TC11: tasdiqlangan narx va ustama alohida (sotuv ≥ tasdiqlangan — `priceProblem` tekshirgan)
+    const approvedPrice = offer.approvedPrice!;
     const markup = salePrice - approvedPrice;
-    const platformService =
-      offer.platformService - (offer.approvedPrice! - approvedPrice);
+    const platformService = offer.platformService;
     const goods = salePrice * quantity;
     const deliveryShown = offer.delivery.shown;
     const cod = orderCodAmount({
@@ -368,9 +369,10 @@ export class LeadOrderService {
   private async retryLater(row: RequestRow, message: string): Promise<void> {
     const delay =
       RETRY_DELAYS_S[Math.min(row.attempts, RETRY_DELAYS_S.length - 1)];
-    this.logger.warn(
-      `Lid ${row.leadId}: buyurtma yaratilmadi (${row.attempts + 1}-urinish), ${delay} s dan keyin qayta: ${message}`,
-    );
+    const text = `Lid ${row.leadId}: buyurtma yaratilmadi (${row.attempts + 1}-urinish), ${delay} s dan keyin qayta: ${message}`;
+    // 5 urinishdan keyin (≈ 4 daqiqa) — xato darajasida: lid tasdiqlangan, lekin buyurtmasiz turibdi
+    if (row.attempts + 1 >= ALERT_AFTER_ATTEMPTS) this.logger.error(text);
+    else this.logger.warn(text);
     await this.dataSource.query(
       `UPDATE checkout.lead_order_request
           SET attempts = attempts + 1,
@@ -387,6 +389,25 @@ export class LeadOrderService {
     reason: OrderCreateFailedReason,
     message: string,
   ): Promise<void> {
+    // Oldingi urinishda band ochilgan bo‘lishi mumkin (javob yo‘qolgan, keyin offer sotuvdan olingan): muddatsiz band
+    // abadiy qolmasin. Band yo‘q yoki allaqachon bo‘sh — ombor 4xx qaytaradi; ombor javob bermasa — keyinroq.
+    try {
+      await sendRpc(
+        this.inventory,
+        { cmd: 'inventory.release' },
+        {
+          orderRef: row.orderId,
+          idempotencyKey: `lead-order-fail:${row.id}`,
+          reason: `Buyurtma yaratilmadi: ${message}`.slice(0, 500),
+        },
+      );
+    } catch (error) {
+      if (!isPermanent(error))
+        return this.retryLater(
+          row,
+          `bandni bo‘shatib bo‘lmadi: ${messageOf(error)}`,
+        );
+    }
     this.logger.warn(`Lid ${row.leadId}: buyurtma yaratilmadi — ${message}`);
     await this.dataSource.transaction(async (manager) => {
       const updated = returnedRows(
@@ -464,6 +485,22 @@ export function invalidReason(event: LeadConfirmedEvent): string | null {
     !optionalId(event.addressConfirmedBy)
   )
     return 'tasdiqlagan operator ID si noto‘g‘ri';
+  return null;
+}
+
+/**
+ * Sahifa narxi tasdiqlangan narxdan past (lid kelgandan keyin admin narxni oshirgan) yoki platforma xizmati manfiy —
+ * buyurtma yaratilmaydi: moliya taqsimoti (BE-22) bunday buyurtmani yetkazilganda rad etadi. Lid navbatga qaytadi,
+ * operator yangi narxni aytadi [taklif].
+ */
+export function priceProblem(
+  offer: CatalogOrderSnapshot,
+  salePrice: number,
+): string | null {
+  if (salePrice < offer.approvedPrice!)
+    return `Sahifa narxi (${salePrice}) tasdiqlangan narxdan (${offer.approvedPrice}) past`;
+  if (offer.platformService < 0)
+    return `Platforma xizmati manfiy: ${offer.platformService}`;
   return null;
 }
 

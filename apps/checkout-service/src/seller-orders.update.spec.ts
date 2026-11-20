@@ -31,6 +31,26 @@ describe('SellerOrdersService.updateStatus (C1.38 — operator scope)', () => {
     expect(String(query.mock.calls[0][0])).toContain('status = ANY($4');
   });
 
+  it('BE-18: shu holatga qayta bosish — avvalgidek muvaffaqiyatli, jurnalga yozilmaydi', async () => {
+    const query = jest.fn((sql: string, _params?: unknown[]) => {
+      if (sql.includes('UPDATE')) return Promise.resolve([[], 0]);
+      if (sql.includes('SELECT status'))
+        return Promise.resolve([{ status: 'CONFIRMED' }]);
+      return Promise.resolve([]);
+    });
+    const svc = new SellerOrdersService({ query } as never);
+
+    await expect(svc.updateStatus('5', '7', 'CONFIRMED')).resolves.toEqual({
+      id: '7',
+      status: 'CONFIRMED',
+    });
+    expect(
+      query.mock.calls.some(([sql]) =>
+        String(sql).includes('sales_order_seller_history'),
+      ),
+    ).toBe(false);
+  });
+
   it('BE-18 (T9-8): ruxsatsiz o‘tish (Yetkazildi → Yo‘lda) → 409 va jurnalda, holat o‘zgarmaydi', async () => {
     const query = jest.fn((sql: string, _params?: unknown[]) => {
       if (sql.includes('UPDATE')) return Promise.resolve([[], 0]);

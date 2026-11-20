@@ -103,7 +103,7 @@ export class LeadOrder1796342400000 implements MigrationInterface {
             AND "affiliate_fee" >= 0
             AND "call_center_fee" >= 0
             AND "hidden_delivery" >= 0
-            AND "platform_service" IS NOT NULL
+            AND "platform_service" >= 0
             AND "weight_grams" > 0
             AND "quantity" > 0
           )
@@ -170,29 +170,17 @@ export class LeadOrder1796342400000 implements MigrationInterface {
   }
 
   async down(q: QueryRunner): Promise<void> {
+    // Lid buyurtmalari bor bo‘lsa qaytarilmaydi: ularda mijoz yo‘q (customer_id NOT NULL ga sig‘maydi), ularga
+    // posilka, webhook va qaytarish yozuvlari bog‘langan bo‘lishi mumkin — ma’lumot o‘chirilmaydi.
+    const [{ count }] = (await q.query(
+      `SELECT COUNT(*)::int AS count FROM "checkout"."sales_order" WHERE "source" IS NOT NULL`,
+    )) as Array<{ count: number }>;
+    if (count > 0)
+      throw new Error(
+        `LeadOrder1796342400000: ${count} ta lid buyurtmasi bor — migratsiya qaytarilmaydi`,
+      );
     await q.query(`DROP TABLE "checkout"."lead_order_request"`);
     await q.query(`DROP TABLE "checkout"."order_status_history"`);
-    // Lid buyurtmalarida mijoz yo‘q — eski sxemaga (customer_id NOT NULL) ular sig‘maydi.
-    await q.query(`
-      DELETE FROM "checkout"."sales_order_item" i
-       USING "checkout"."sales_order_seller" s, "checkout"."sales_order" o
-       WHERE i."sales_order_seller_id" = s."id" AND s."sales_order_id" = o."id"
-         AND o."source" IS NOT NULL
-    `);
-    await q.query(`
-      DELETE FROM "checkout"."sales_order_seller_history" h
-       USING "checkout"."sales_order_seller" s, "checkout"."sales_order" o
-       WHERE h."sales_order_seller_id" = s."id" AND s."sales_order_id" = o."id"
-         AND o."source" IS NOT NULL
-    `);
-    await q.query(`
-      DELETE FROM "checkout"."sales_order_seller" s
-       USING "checkout"."sales_order" o
-       WHERE s."sales_order_id" = o."id" AND o."source" IS NOT NULL
-    `);
-    await q.query(
-      `DELETE FROM "checkout"."sales_order" WHERE "source" IS NOT NULL`,
-    );
     await q.query(`
       ALTER TABLE "checkout"."sales_order_item"
         DROP CONSTRAINT "chk_checkout_sales_order_item_snapshot",

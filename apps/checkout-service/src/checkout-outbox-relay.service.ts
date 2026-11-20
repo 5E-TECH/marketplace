@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -9,7 +9,11 @@ import {
   OutboxPermanentError,
   OutboxService,
   RmqClient,
+  sendRpc,
 } from '@app/common';
+
+/** BE-18: outbox orqali yuboriladigan ombor buyruqlari (RPC, emit emas). */
+const INVENTORY_COMMANDS = new Set(['inventory.release', 'inventory.commit']);
 
 /** Broker uzilganda emit tugamaydi; relay tranzaksiyasi cheksiz ochiq qolmasin. */
 const PUBLISH_TIMEOUT_MS = 5_000;
@@ -26,11 +30,14 @@ const PUBLISH_TIMEOUT_MS = 5_000;
  */
 @Injectable()
 export class CheckoutOutboxRelayService {
+  private readonly logger = new Logger(CheckoutOutboxRelayService.name);
+
   constructor(
     private readonly outbox: OutboxService,
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
+    @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
   ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS, {
@@ -42,6 +49,8 @@ export class CheckoutOutboxRelayService {
   }
 
   private async publish(event: OutboxEvent): Promise<void> {
+    if (INVENTORY_COMMANDS.has(event.eventType))
+      return this.inventoryCommand(event);
     const targets = this.targets(event.eventType);
     if (!targets.length) {
       // Noma'lum hodisa FAILED bo'ladi va logga tushadi: jim yo'qolmaydi va
@@ -57,6 +66,28 @@ export class CheckoutOutboxRelayService {
           .pipe(timeout(PUBLISH_TIMEOUT_MS)),
         { defaultValue: undefined },
       );
+  }
+
+  /**
+   * BE-18: lid buyurtmasi holati bilan birga yozilgan ombor buyrug‘i (bekor — band bo‘shaydi, topshirish — chiqim).
+   * Idempotent kalit bilan: oldin bajarilgan bo‘lsa ombor saqlangan javobni qaytaradi. Ombor 4xx (band yo‘q yoki
+   * boshqa holatda) — qayta urinish foyda bermaydi: FAILED va logda (qo‘lda ko‘riladi).
+   */
+  private async inventoryCommand(event: OutboxEvent): Promise<void> {
+    try {
+      await sendRpc(this.inventory, { cmd: event.eventType }, event.payload);
+    } catch (error) {
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        this.logger.error(
+          `Ombor buyrug‘i bajarilmadi (${event.eventType}, buyurtma ${event.aggregateId}): ${(error as Error).message}`,
+        );
+        throw new OutboxPermanentError(
+          `${event.eventType}: ${(error as Error).message}`,
+        );
+      }
+      throw error;
+    }
   }
 
   private targets(eventType: string): ClientProxy[] {

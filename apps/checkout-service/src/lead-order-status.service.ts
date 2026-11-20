@@ -45,9 +45,10 @@ export const SYSTEM_ACTOR: LeadOrderActor = {
  * Lid buyurtmasining holatlari (BE-18, TZ BUY-2, T5): faqat ruxsat etilgan o‘tish; rad etilgani ham jurnalda.
  * Har o‘tishda `order.status.changed` outbox orqali (relay moliya, lid va Elchi integratsiyasi navbatlariga).
  *
- * Ombor bilan bog‘liq qadamlar shu yerda: bekor qilinganda band darhol bo‘shaydi (BUY-3), Elchi’ga topshirilganda
- * band chiqimga aylanadi (BE-16 «chiqim topshirishda»). Inventory chaqiruvi buyurtma qatori qulflangan
- * tranzaksiya ichida: u yiqilsa holat ham o‘zgarmaydi; idempotent kalit qayta urinishda ikki marta yozmaydi.
+ * Ombor bilan bog‘liq qadamlar: bekor qilinganda band bo‘shaydi (BUY-3), Elchi’ga topshirilganda band chiqimga
+ * aylanadi (BE-16 «chiqim topshirishda»). Ombor buyrug‘i holat bilan BITTA tranzaksiyada outbox’ga yoziladi va commit
+ * dan keyin darhol yuboriladi; ombor javob bermasa, relay qayta yuboradi (idempotent kalit — ikki marta yozilmaydi).
+ * Shunda holat va ombor bir-biridan ajralib qolmaydi: holat o‘zgargan bo‘lsa, ombor buyrug‘i albatta yetadi.
  */
 @Injectable()
 export class LeadOrderStatusService {
@@ -70,7 +71,10 @@ export class LeadOrderStatusService {
     if (to === LeadOrderStatus.CANCELLED && (reason?.length ?? 0) < MIN_REASON)
       throw new BadRequestException('Bekor qilish sababi majburiy');
 
-    const outcome: { rejected?: LeadOrderStatus } = {};
+    const outcome: {
+      rejected?: LeadOrderStatus;
+      command?: InventoryCommand;
+    } = {};
     const result = await this.dataSource.transaction(async (manager) => {
       const [order] = (await manager.query(
         `SELECT status FROM checkout.sales_order
@@ -90,27 +94,18 @@ export class LeadOrderStatusService {
         outcome.rejected = from;
         return null;
       }
-      if (to === LeadOrderStatus.CANCELLED)
-        await sendRpc(
-          this.inventory,
-          { cmd: 'inventory.release' },
+      const command = inventoryCommand(orderId, to, actor, reason);
+      if (command)
+        await this.outbox.record(
           {
-            orderRef: orderId,
-            idempotencyKey: `lead-order-cancel:${orderId}`,
-            reason: reason ?? undefined,
-            actorId: actor.id ?? undefined,
+            aggregateType: 'sales_order',
+            aggregateId: orderId,
+            eventType: command.cmd,
+            payload: command.payload,
           },
+          manager,
         );
-      if (to === LeadOrderStatus.HANDED_TO_ELCHI)
-        await sendRpc(
-          this.inventory,
-          { cmd: 'inventory.commit' },
-          {
-            orderRef: orderId,
-            idempotencyKey: `lead-order-handover:${orderId}`,
-            actorId: actor.id ?? undefined,
-          },
-        );
+      outcome.command = command ?? undefined;
       await manager.query(
         `UPDATE checkout.sales_order SET status = $2, updated_at = now() WHERE id = $1`,
         [orderId, to],
@@ -139,6 +134,13 @@ export class LeadOrderStatusService {
         `Holatni o‘zgartirib bo‘lmaydi: ${outcome.rejected} → ${to}`,
       );
     }
+    // BUY-3 «darhol»: commit dan keyin bir urinish; o‘tmasa outbox relay qayta yuboradi (≤ 10 s oralig‘ida)
+    if (outcome.command)
+      await sendRpc(
+        this.inventory,
+        { cmd: outcome.command.cmd },
+        outcome.command.payload,
+      ).catch(() => undefined);
     return result!;
   }
 
@@ -329,6 +331,40 @@ export class LeadOrderStatusService {
       role: actor?.role ? String(actor.role).slice(0, 20) : null,
     };
   }
+}
+
+export interface InventoryCommand {
+  cmd: 'inventory.release' | 'inventory.commit';
+  payload: Record<string, unknown>;
+}
+
+/** Holat o‘tishiga mos ombor buyrug‘i (idempotent kalit bilan); boshqa o‘tishlarda — yo‘q. */
+export function inventoryCommand(
+  orderId: string,
+  to: LeadOrderStatus,
+  actor: LeadOrderActor,
+  reason: string | null,
+): InventoryCommand | null {
+  if (to === LeadOrderStatus.CANCELLED)
+    return {
+      cmd: 'inventory.release',
+      payload: {
+        orderRef: orderId,
+        idempotencyKey: `lead-order-cancel:${orderId}`,
+        ...(reason ? { reason } : {}),
+        ...(actor.id ? { actorId: actor.id } : {}),
+      },
+    };
+  if (to === LeadOrderStatus.HANDED_TO_ELCHI)
+    return {
+      cmd: 'inventory.commit',
+      payload: {
+        orderRef: orderId,
+        idempotencyKey: `lead-order-handover:${orderId}`,
+        ...(actor.id ? { actorId: actor.id } : {}),
+      },
+    };
+  return null;
 }
 
 /** Odamga ko‘rinadigan lid buyurtmasi raqami (shartnoma namunasi «L-1183»). */

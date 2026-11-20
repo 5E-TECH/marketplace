@@ -22,6 +22,7 @@ import {
 import { CHECKOUT_DB } from './database';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
+import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { SellerOrdersService } from './seller-orders.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
@@ -59,6 +60,11 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
   let status: LeadOrderStatusService;
   let admin: SellerOrdersService;
   let catalogDown = false;
+  /** Ombor umuman javob bermaydi. */
+  let inventoryDown = false;
+  /** Band qilinadi, lekin javob yo‘qoladi (504). */
+  let loseReserveReply = false;
+  let relay: CheckoutOutboxRelayService;
   let offer: CatalogOrderSnapshot;
   const catalogCalls: unknown[] = [];
   const inventoryCalls: Array<{ cmd: string; data: Record<string, unknown> }> =
@@ -242,8 +248,14 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       send: (pattern: { cmd: string }, data: Record<string, unknown>) =>
         rpc(async () => {
           inventoryCalls.push({ cmd: pattern.cmd, data });
-          if (pattern.cmd === 'inventory.reserve')
-            return inventory.reserveAvailable(data as never);
+          if (inventoryDown)
+            throw new HttpException('ombor javob bermadi', 504);
+          if (pattern.cmd === 'inventory.reserve') {
+            const reserved = await inventory.reserveAvailable(data as never);
+            if (loseReserveReply)
+              throw new HttpException('javob yo‘qoldi', 504);
+            return reserved;
+          }
           if (pattern.cmd === 'inventory.release')
             return inventory.release(data as never);
           if (pattern.cmd === 'inventory.commit')
@@ -265,13 +277,29 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       inventoryClient as never,
     );
     admin = new SellerOrdersService(checkoutDs);
+    const quiet = { emit: () => from([undefined]) };
+    relay = new CheckoutOutboxRelayService(
+      outbox,
+      quiet as never,
+      quiet as never,
+      quiet as never,
+      inventoryClient as never,
+    );
     await inbound(10, 'in-1');
   });
 
   beforeEach(() => {
     offer = baseOffer();
     catalogDown = false;
+    inventoryDown = false;
+    loseReserveReply = false;
   });
+
+  const makeDue = (leadId: string) =>
+    checkoutDs.query(
+      `UPDATE checkout.lead_order_request SET next_attempt_at = now() - interval '1 second' WHERE lead_id = $1`,
+      [leadId],
+    );
 
   afterAll(async () => {
     for (const [ds, schema] of [
@@ -675,6 +703,74 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     expect(invalid.payload).toMatchObject({ reason: 'INVALID_ORDER' });
     expect(await orderOfLead('5008')).toBeUndefined();
     expect(await orderOfLead('5009')).toBeUndefined();
+  });
+
+  it('band qilindi, javob yo‘qoldi, keyin offer sotuvdan olindi → so‘rov rad etiladi va band bo‘shaydi (abadiy qolmaydi)', async () => {
+    await inbound(5, 'in-3');
+    loseReserveReply = true;
+    await orders.onLeadConfirmed(confirmed({ leadId: '5011' }));
+    const [request] = (await checkoutDs.query(
+      `SELECT status, order_id::text AS "orderId" FROM checkout.lead_order_request WHERE lead_id = 5011`,
+    )) as Array<{ status: string; orderId: string }>;
+    expect(request.status).toBe('PENDING');
+    await expect(reservationOf(request.orderId)).resolves.toMatchObject({
+      status: 'HELD',
+    });
+
+    loseReserveReply = false;
+    offer = { ...baseOffer(), withdrawn: true };
+    await makeDue('5011');
+    await orders.processDue();
+    const [failed] = (await checkoutDs.query(
+      `SELECT status, failure_reason AS reason FROM checkout.lead_order_request WHERE lead_id = 5011`,
+    )) as Array<Record<string, unknown>>;
+    expect(failed).toEqual({ status: 'FAILED', reason: 'OFFER_UNAVAILABLE' });
+    await expect(reservationOf(request.orderId)).resolves.toMatchObject({
+      status: 'RELEASED',
+    });
+    expect(await orderOfLead('5011')).toBeUndefined();
+  });
+
+  it('bekor qilishda ombor javob bermasa — buyurtma bekor, band outbox orqali keyin bo‘shaydi (holat va ombor ajralmaydi)', async () => {
+    await orders.onLeadConfirmed(confirmed({ leadId: '5012' }));
+    const order = await orderOfLead('5012');
+    const id = String(order.id);
+    inventoryDown = true;
+    await expect(
+      status.cancel({ orderId: id, reason: 'Mijoz rad etdi', actor: ACTOR }),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    await expect(reservationOf(id)).resolves.toMatchObject({ status: 'HELD' });
+    const [command] = await outboxOf('inventory.release', id);
+    expect(command).toMatchObject({
+      status: 'PENDING',
+      payload: { orderRef: id, idempotencyKey: `lead-order-cancel:${id}` },
+    });
+
+    inventoryDown = false;
+    // relay har 10 s da; bir o‘tishda har buyurtmaning faqat birinchi kutilayotgan yozuvi (tartib saqlanadi)
+    for (let tick = 0; tick < 5; tick++) await relay.relayPending();
+    await expect(reservationOf(id)).resolves.toMatchObject({
+      status: 'RELEASED',
+    });
+    const [sent] = await outboxOf('inventory.release', id);
+    expect(sent.status).toBe('PROCESSED');
+  });
+
+  it('sahifa narxi tasdiqlangan narxdan past (lid kelgandan keyin narx oshgan) — buyurtma yo‘q, band yo‘q, lid navbatga', async () => {
+    offer = { ...baseOffer(), approvedPrice: 280_000, platformService: 54_000 };
+    await orders.onLeadConfirmed(confirmed({ leadId: '5013' }));
+    expect(await orderOfLead('5013')).toBeUndefined();
+    const [failed] = await outboxOf('order.create-failed', '5013');
+    expect(failed.payload).toMatchObject({ reason: 'OFFER_UNAVAILABLE' });
+    const [request] = (await checkoutDs.query(
+      `SELECT id::text AS id FROM checkout.lead_order_request WHERE lead_id = 5013`,
+    )) as Array<{ id: string }>;
+    const reserves = inventoryCalls.filter(
+      (call) =>
+        call.cmd === 'inventory.reserve' &&
+        call.data.idempotencyKey === `lead-order:${request.id}`,
+    );
+    expect(reserves).toHaveLength(0);
   });
 
   it('admin ro‘yxati va kartasi: manba, lid, niqoblangan telefon, narx nusxasi va holat jurnali', async () => {

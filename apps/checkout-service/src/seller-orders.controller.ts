@@ -4,11 +4,13 @@ import {
   Inject,
   NotFoundException,
   UseFilters,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   LeadOrderActorType,
   RmqClient,
+  Role,
   RpcHttpExceptionFilter,
   SellerOrdersQueryDto,
 } from '@app/common';
@@ -336,6 +338,11 @@ export class SellerOrdersController {
         idempotent: result.idempotent,
       };
     }
+    // Eski buyurtmani (to‘lovi bilan) faqat admin va superadmin bekor qiladi — nazoratchi faqat lid buyurtmasini
+    if (data?.actorRole === Role.SUPERVISOR)
+      throw new ForbiddenException(
+        'Nazoratchi faqat liddan kelgan buyurtmani bekor qila oladi',
+      );
     return this.orders.adminCancelOrder(data);
   }
 
