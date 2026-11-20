@@ -335,9 +335,59 @@ export class PricingService {
    */
   async quote(productId: string, quantity: number, whereDeliver: string) {
     const product = await this.product(productId);
+    return this.quoteFor(product, await this.context(), quantity, whereDeliver);
+  }
+
+  /**
+   * BE-18: buyurtma narx nusxasi (NRX-10) — tasdiqlangan narxdagi to‘rt qator taqsimoti (TZ 2.2) va `quantity` dona
+   * uchun yetkazish (BUY-4). Tasdiq joriy bo‘lmasa (`offerPricing` qoidasi) — `approvedPrice` null, taqsimot tavsiya
+   * narxda (buyurtma yaratilmaydi).
+   */
+  async orderPricing(product: Product, quantity: number, whereDeliver: string) {
+    const ctx = await this.context();
+    const params = this.paramsFor(product, ctx);
+    const calculation = calculatePrice(
+      params,
+      ctx.tariff,
+      this.inputs(product),
+    );
+    const approvedPrice = this.isApprovalCurrent(product, params, ctx)
+      ? product.approvedPrice
+      : null;
+    const { split } = evaluatePrice(
+      params,
+      calculation,
+      approvedPrice ?? calculation.recommended,
+    );
+    const delivery = this.quoteFor(product, ctx, quantity, whereDeliver);
+    return {
+      basePrice: calculation.basePrice,
+      recommendedPrice: calculation.recommended,
+      approvedPrice,
+      affiliateFee: split.affiliate,
+      callCenterFee: split.callCenter,
+      hiddenDelivery: split.hiddenDelivery,
+      platformService: split.platformService,
+      delivery: {
+        mode: params.deliveryMode,
+        shown: delivery.deliveryFee,
+        elchiTariff: delivery.elchiTariff,
+      },
+    };
+  }
+
+  private quoteFor(
+    product: Product,
+    ctx: PricingContext,
+    quantity: number,
+    whereDeliver: string,
+  ) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000)
       throw new BadRequestException('Miqdor 1 dan 1000 gacha butun son');
-    const ctx = await this.context();
+    if (product.weightGrams == null || product.basePrice == null)
+      throw new BadRequestException(
+        'Narx hisoblash uchun bazaviy narx va og‘irlik kerak (BE-07)',
+      );
     const params = this.paramsFor(product, ctx);
     const unit = deliveryView(params, ctx.tariff, product.weightGrams!);
     const kind =

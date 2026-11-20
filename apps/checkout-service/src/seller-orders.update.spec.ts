@@ -20,9 +20,57 @@ describe('SellerOrdersService.updateStatus (C1.38 — operator scope)', () => {
     const res = await svc.updateStatus('5', '7', 'SHIPMENT_CREATED');
 
     expect(res).toEqual({ id: '7', status: 'SHIPMENT_CREATED' });
-    // scope: parametrlarda shop_id ('5') bor
-    expect(query.mock.calls[0][1]).toEqual(['SHIPMENT_CREATED', '7', '5']);
+    // scope: parametrlarda shop_id ('5') bor; BE-18: faqat ruxsat etilgan oldingi holatdan
+    expect(query.mock.calls[0][1]).toEqual([
+      'SHIPMENT_CREATED',
+      '7',
+      '5',
+      ['CONFIRMED'],
+    ]);
     expect(String(query.mock.calls[0][0])).toContain('shop_id = $3');
+    expect(String(query.mock.calls[0][0])).toContain('status = ANY($4');
+  });
+
+  it('BE-18: shu holatga qayta bosish — avvalgidek muvaffaqiyatli, jurnalga yozilmaydi', async () => {
+    const query = jest.fn((sql: string, _params?: unknown[]) => {
+      if (sql.includes('UPDATE')) return Promise.resolve([[], 0]);
+      if (sql.includes('SELECT status'))
+        return Promise.resolve([{ status: 'CONFIRMED' }]);
+      return Promise.resolve([]);
+    });
+    const svc = new SellerOrdersService({ query } as never);
+
+    await expect(svc.updateStatus('5', '7', 'CONFIRMED')).resolves.toEqual({
+      id: '7',
+      status: 'CONFIRMED',
+    });
+    expect(
+      query.mock.calls.some(([sql]) =>
+        String(sql).includes('sales_order_seller_history'),
+      ),
+    ).toBe(false);
+  });
+
+  it('BE-18 (T9-8): ruxsatsiz o‘tish (Yetkazildi → Yo‘lda) → 409 va jurnalda, holat o‘zgarmaydi', async () => {
+    const query = jest.fn((sql: string, _params?: unknown[]) => {
+      if (sql.includes('UPDATE')) return Promise.resolve([[], 0]);
+      if (sql.includes('SELECT status'))
+        return Promise.resolve([{ status: 'DELIVERED' }]);
+      return Promise.resolve([]);
+    });
+    const svc = new SellerOrdersService({ query } as never);
+
+    await expect(
+      svc.updateStatus('5', '7', 'ON_THE_ROAD'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const history = query.mock.calls.find(([sql]) =>
+      String(sql).includes('sales_order_seller_history'),
+    );
+    expect(history?.[1]).toEqual([
+      '7',
+      'DELIVERED',
+      'Rad etildi: DELIVERED → ON_THE_ROAD',
+    ]);
   });
 
   it('TC4: boshqa do‘kon buyurtmasi -> 404 (topilmadi/ruxsat yo‘q)', async () => {

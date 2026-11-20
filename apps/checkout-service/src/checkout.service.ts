@@ -9,6 +9,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import {
   CheckoutDeliveryDestination,
   CheckoutPaymentMethod,
+  orderCodAmount,
   CheckoutResultDto,
   CreateCheckoutDto,
   DeliveryPreviewResultDto,
@@ -356,9 +357,12 @@ export class CheckoutService {
         shopId,
         subtotal,
         deliveryFee,
-        paymentMethod === CheckoutPaymentMethod.COD
-          ? subtotal + deliveryFee
-          : 0,
+        // T9-5 (BE-18): yagona COD hisobi
+        orderCodAmount({
+          items: [{ unitPrice: subtotal, quantity: 1 }],
+          deliveryFee,
+          prepaid: paymentMethod !== CheckoutPaymentMethod.COD,
+        }),
       ],
     )) as [{ id: string; deliveryFee: string }];
 

@@ -115,7 +115,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   ),
   // Optovik kabineti BE-30 da; hozircha faqat umumiy yo‘llar.
   [Role.WHOLESALER]: [],
-  // Lidni bron qilish va natija kiritish.
+  // Lidni bron qilish va natija kiritish; buyurtmani topshirilgunga qadar bekor qilish (BE-18, BUY-3).
   [Role.OPERATOR_LEAD]: [
     'GET /operator/leads',
     'GET /operator/leads/:id',
@@ -124,12 +124,18 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/:id/quote',
     'POST /operator/leads/:id/result',
     'POST /operator/leads/next',
+    'POST /operator/orders/:id/cancel',
     'PUT /operator/state',
   ],
   // Operator ishi + navbat xulosasi, o‘tkazish va qizil ro‘yxat, lidlar ro‘yxati (qayta ochish — faqat admin).
+  // BE-18: buyurtmalar ro‘yxati va kartasi (TC12, FE-26), bekor qilish (BUY-3).
   [Role.SUPERVISOR]: [
     'GET /admin/leads',
     'GET /admin/leads/:id',
+    'GET /admin/orders',
+    'GET /admin/orders/:id',
+    'POST /admin/orders/:id/cancel',
+    'POST /operator/orders/:id/cancel',
     'GET /operator/leads',
     'GET /operator/leads/:id',
     'GET /operator/queue-summary',
@@ -258,7 +264,6 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
         'POST /products',
         'GET /orders',
         'POST /payments',
-        'POST /guest/merge',
         // karta: «admin/shops/* yangi rollar bilan ochilmaydi»
         'GET /admin/shops',
         'POST /admin/shops/:id/approve',
@@ -271,6 +276,24 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
           role,
           await statusOf(route, { sub: '7', role }),
         ]).toEqual([route.key, role, 403]);
+  });
+
+  it('BE-18 TC7/TC10: eski ochiq mijoz yo‘llari va ochiq storefront API ro‘yxatdan o‘chirilgan (404)', () => {
+    const keys = new Set(routes.map((route) => route.key));
+    const closed = [
+      'POST /checkout',
+      'POST /checkout/delivery-preview',
+      'POST /checkout/:orderId/confirm',
+      'POST /orders/:orderId/refund',
+      'POST /cart/merge',
+      'POST /guest/merge',
+      'GET /products',
+    ];
+    for (const key of closed)
+      expect([key, keys.has(key)]).toEqual([key, false]);
+    expect([...keys].filter((key) => / \/storefront(\/|$)/.test(key))).toEqual(
+      [],
+    );
   });
 
   it.each(Object.keys(EXPECTED) as Role[])(

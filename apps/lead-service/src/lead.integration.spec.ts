@@ -1483,6 +1483,31 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       const card = await cards().forOperator('41', l.id);
       expect(card.stockShortage).toBe(true);
     });
+    it('BE-18: order.create-failed boshqa sabab bilan (offer sotuvda emas) → navbatga qaytadi, «qoldiq yo‘q» belgisisiz', async () => {
+      const [l] = await seed(1, {
+        status: LeadStatus.CONFIRMED,
+        operatorId: '41',
+        confirmedAt: new Date(),
+        confirmedBy: '41',
+      });
+      await queue().onOrderCreateFailed({
+        eventId: 'e-offer',
+        leadId: l.id,
+        reason: 'OFFER_UNAVAILABLE' as never,
+        at: new Date().toISOString(),
+      });
+      const row = await reload(l.id);
+      expect(row).toMatchObject({
+        status: LeadStatus.CALLBACK,
+        operatorId: null,
+        stockShortageAt: null,
+      });
+      const [history] = (await db.query(
+        `SELECT note AS comment FROM lead.lead_history WHERE lead_id = $1 ORDER BY id DESC LIMIT 1`,
+        [l.id],
+      )) as Array<{ comment: string }>;
+      expect(history.comment).toContain('mahsulot sotuvda emas');
+    });
     it('karta: faqat o‘z operatoriga; raqam niqoblangan, variant yo‘q; narx bitta dona — sahifadagi yetkazish', async () => {
       const [l] = await seed(1, { variant: LeadVariant.S3 });
       await online('41');

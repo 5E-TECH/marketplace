@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -16,13 +17,32 @@ import {
 import { MAX_MONEY } from '../database/money.transformer';
 import { SalesOrderStatus } from '../enums';
 import { CheckoutPaymentMethod } from './cart.dto';
+import { LeadSource } from './lead.dto';
+import { LeadOrderStatus } from './order-events.dto';
+
+/** BE-18: eski buyurtma holatlari va lid buyurtmasi holatlari (TZ T5) — bitta filtrda. */
+export const ADMIN_ORDER_STATUSES = [
+  ...new Set<string>([
+    ...Object.values(SalesOrderStatus),
+    ...Object.values(LeadOrderStatus),
+  ]),
+];
 
 /** C1.30 — `GET /admin/orders` — status/to'lov/do'kon/sana filtri + sahifalash. */
 export class AdminOrdersQueryDto {
-  @ApiPropertyOptional({ enum: SalesOrderStatus })
+  @ApiPropertyOptional({ enum: ADMIN_ORDER_STATUSES })
   @IsOptional()
-  @IsEnum(SalesOrderStatus)
-  status?: SalesOrderStatus;
+  @IsIn(ADMIN_ORDER_STATUSES)
+  status?: SalesOrderStatus | LeadOrderStatus;
+
+  @ApiPropertyOptional({
+    enum: LeadSource,
+    description:
+      'BE-18: liddan buyurtma manbasi (sotuvchi sahifasi, asosiy sayt, API)',
+  })
+  @IsOptional()
+  @IsEnum(LeadSource)
+  source?: LeadSource;
 
   @ApiPropertyOptional({ enum: CheckoutPaymentMethod })
   @IsOptional()

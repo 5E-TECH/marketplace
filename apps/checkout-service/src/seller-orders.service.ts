@@ -51,6 +51,25 @@ interface LabelLookupCache {
   districts: Map<string, Promise<Map<string, string>>>;
 }
 
+/** Ro‘yxatda telefon: «+998 90 *** ** 67» (lead-service `maskPhone` bilan bir xil). */
+export const maskPhone = (p: string) =>
+  `+998 ${p.slice(4, 6)} *** ** ${p.slice(-2)}`;
+
+/**
+ * Eski do‘kon buyurtmasi (sales_order_seller): yangi holat → qaysi holatlardan o‘tish mumkin (BE-18, T9-8) [taklif].
+ * Orqaga va yakuniy holatlardan (CANCELLED, RETURNED) o‘tish yo‘q.
+ */
+export const LEGACY_SELLER_TRANSITIONS: Readonly<Record<string, string[]>> = {
+  PENDING: [],
+  CONFIRMED: ['PENDING'],
+  SHIPMENT_CREATED: ['CONFIRMED'],
+  RECEIVED: ['SHIPMENT_CREATED'],
+  ON_THE_ROAD: ['SHIPMENT_CREATED', 'RECEIVED'],
+  DELIVERED: ['RECEIVED', 'ON_THE_ROAD'],
+  CANCELLED: ['PENDING', 'CONFIRMED', 'SHIPMENT_CREATED'],
+  RETURNED: ['ON_THE_ROAD', 'DELIVERED'],
+};
+
 @Injectable()
 export class SellerOrdersService {
   private readonly logger = new Logger(SellerOrdersService.name);
@@ -496,6 +515,7 @@ export class SellerOrdersService {
    */
   async adminListOrders(query: {
     status?: string;
+    source?: string;
     paymentMethod?: string;
     shopId?: string;
     dateFrom?: string;
@@ -511,6 +531,10 @@ export class SellerOrdersService {
     if (query?.status) {
       params.push(query.status);
       conditions.push(`so.status = $${params.length}`);
+    }
+    if (query?.source) {
+      params.push(query.source);
+      conditions.push(`so.source = $${params.length}`);
     }
     if (query?.paymentMethod) {
       params.push(query.paymentMethod);
@@ -550,6 +574,9 @@ export class SellerOrdersService {
               so.total_amount AS "totalAmount",
               so.delivery_fee AS "deliveryFee",
               so.created_at AS "createdAt",
+              so.source, so.lead_id::text AS "leadId",
+              so.affiliate_id::text AS "affiliateId",
+              so.customer_phone AS "customerPhone",
               (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
                  WHERE s.sales_order_id = so.id) AS "sellersCount",
               (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
@@ -575,6 +602,13 @@ export class SellerOrdersService {
         // jadvali shunga qarab chop etish belgisini o'chiradi (C1.45).
         shipmentsCount: Number(r.shipmentsCount ?? 0),
         createdAt: r.createdAt,
+        // BE-18: liddan buyurtma — manba, lid, sotuvchi; ro‘yxatda telefon niqoblangan (FE-26)
+        source: (r.source as string) ?? null,
+        leadId: (r.leadId as string) ?? null,
+        affiliateId: (r.affiliateId as string) ?? null,
+        phoneMasked: r.customerPhone
+          ? maskPhone(String(r.customerPhone))
+          : null,
       })),
       total,
       page,
@@ -599,7 +633,17 @@ export class SellerOrdersService {
               so.delivery_fee AS "deliveryFee",
               so.delivery_address AS "deliveryAddress",
               so.created_at AS "createdAt",
-              so.updated_at AS "updatedAt"
+              so.updated_at AS "updatedAt",
+              so.source, so.lead_id::text AS "leadId", so.stream_id::text AS "streamId",
+              so.affiliate_id::text AS "affiliateId", so.wholesaler_id::text AS "wholesalerId",
+              so.customer_phone AS "customerPhone", so.region_soato AS "regionSoato",
+              so.district_soato AS "districtSoato", so.where_deliver AS "whereDeliver",
+              so.delivery_mode AS "deliveryMode", so.delivery_shown::text AS "deliveryShown",
+              so.delivery_cost::text AS "deliveryCost",
+              so.delivery_embedded::text AS "deliveryEmbedded",
+              so.weight_grams AS "weightGrams", so.cod_amount::text AS "codAmount",
+              so.confirmed_by::text AS "confirmedBy",
+              so.address_confirmed_by::text AS "addressConfirmedBy"
          FROM checkout.sales_order so WHERE so.id = $1`,
       [orderId],
     );
@@ -630,7 +674,16 @@ export class SellerOrdersService {
                 i.variant_id AS "variantId",
                 i.quantity,
                 i.unit_price AS "unitPrice",
-                i.line_total AS "lineTotal"
+                i.line_total AS "lineTotal",
+                i.sku, i.weight_grams AS "weightGrams",
+                i.base_price::text AS "basePrice",
+                i.recommended_price::text AS "recommendedPrice",
+                i.approved_price::text AS "approvedPrice",
+                i.markup::text AS markup,
+                i.affiliate_fee::text AS "affiliateFee",
+                i.call_center_fee::text AS "callCenterFee",
+                i.hidden_delivery::text AS "hiddenDelivery",
+                i.platform_service::text AS "platformService"
            FROM checkout.sales_order_item i
            JOIN checkout.sales_order_seller sos ON sos.id = i.sales_order_seller_id
           WHERE sos.sales_order_id = $1 ORDER BY i.id`,
@@ -649,14 +702,44 @@ export class SellerOrdersService {
         quantity: Number(it.quantity),
         unitPrice: Number(it.unitPrice),
         lineTotal: Number(it.lineTotal),
+        // BE-18: narx nusxasi (bir dona) — faqat lid buyurtmasida
+        priceSnapshot:
+          it.approvedPrice == null
+            ? null
+            : {
+                sku: (it.sku as string) ?? null,
+                weightGrams: Number(it.weightGrams),
+                basePrice: Number(it.basePrice),
+                recommendedPrice: Number(it.recommendedPrice),
+                approvedPrice: Number(it.approvedPrice),
+                markup: Number(it.markup),
+                affiliateFee: Number(it.affiliateFee),
+                callCenterFee: Number(it.callCenterFee),
+                hiddenDelivery: Number(it.hiddenDelivery),
+                platformService: Number(it.platformService),
+              },
       });
       itemsBySeller.set(key, list);
     }
 
+    // BE-18: lid buyurtmasining holat jurnali (rad etilgan o‘tishlar ham)
+    const history = order.source
+      ? ((await this.dataSource.query(
+          `SELECT from_status AS "fromStatus", to_status AS "toStatus", accepted,
+                  actor_type AS "actorType", actor_id::text AS "actorId",
+                  actor_role AS "actorRole", reason, created_at AS "createdAt"
+             FROM checkout.order_status_history
+            WHERE order_id = $1 ORDER BY id`,
+          [orderId],
+        )) as Array<Record<string, unknown>>)
+      : [];
+    const money = (v: unknown) => (v == null ? null : Number(v));
+
     return {
       id: String(order.id),
       buyerName: order.buyerName ?? null,
-      customerId: String(order.customerId),
+      // lid buyurtmasida mijoz foydalanuvchi emas (T01:140)
+      customerId: order.customerId == null ? null : String(order.customerId),
       status: order.status,
       paymentMethod: order.paymentMethod,
       totalAmount: Number(order.totalAmount),
@@ -676,6 +759,28 @@ export class SellerOrdersService {
         hasQrToken: Boolean(s.hasQrToken),
         items: itemsBySeller.get(String(s.id)) ?? [],
       })),
+      lead: order.source
+        ? {
+            source: order.source,
+            leadId: order.leadId,
+            streamId: order.streamId ?? null,
+            affiliateId: order.affiliateId ?? null,
+            wholesalerId: order.wholesalerId,
+            customerPhone: order.customerPhone,
+            regionSoato: order.regionSoato,
+            districtSoato: order.districtSoato,
+            whereDeliver: order.whereDeliver,
+            deliveryMode: order.deliveryMode,
+            deliveryShown: money(order.deliveryShown),
+            deliveryCost: money(order.deliveryCost),
+            deliveryEmbedded: money(order.deliveryEmbedded),
+            weightGrams: money(order.weightGrams),
+            codAmount: money(order.codAmount),
+            confirmedBy: order.confirmedBy ?? null,
+            addressConfirmedBy: order.addressConfirmedBy ?? null,
+            statusHistory: history,
+          }
+        : null,
     };
   }
 
@@ -976,23 +1081,18 @@ export class SellerOrdersService {
   /**
    * Buyurtma (sales_order_seller) holatini yangilaydi — do'kon bo'yicha scope
    * (shop_id). Boshqa do'kon buyurtmasi topilmaydi (403/404). Operator/owner.
+   *
+   * BE-18 (T9-8): istalgan holatga emas — faqat ruxsat etilgan o‘tish
+   * (`LEGACY_SELLER_TRANSITIONS`, [taklif]); rad etilgani 409 va jurnalda.
+   * Eski do‘kon modeli (LegacyRole) — BE-29 da o‘chiriladi.
    */
   async updateStatus(
     shopId: string,
     orderId: string,
     status: string,
   ): Promise<{ id: string; status: string }> {
-    const ALLOWED = [
-      'PENDING',
-      'CONFIRMED',
-      'SHIPMENT_CREATED',
-      'RECEIVED',
-      'ON_THE_ROAD',
-      'DELIVERED',
-      'CANCELLED',
-      'RETURNED',
-    ];
-    if (!ALLOWED.includes(status)) {
+    const from = LEGACY_SELLER_TRANSITIONS[status];
+    if (!from) {
       throw new BadRequestException('status noto‘g‘ri');
     }
     // Postgres drayveri `UPDATE ... RETURNING` uchun `[qatorlar, soni]`
@@ -1003,16 +1103,33 @@ export class SellerOrdersService {
     const result = (await this.dataSource.query(
       `UPDATE checkout.sales_order_seller
          SET status = $1, updated_at = now()
-       WHERE id = $2 AND shop_id = $3
+       WHERE id = $2 AND shop_id = $3 AND status = ANY($4::text[])
        RETURNING id, status`,
-      [status, String(orderId), String(shopId)],
+      [status, String(orderId), String(shopId), from],
     )) as unknown[];
     const rows = (Array.isArray(result[0]) ? result[0] : result) as Array<{
       id: string;
       status: string;
     }>;
     if (!rows.length) {
-      throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
+      const [current] = (await this.dataSource.query(
+        `SELECT status FROM checkout.sales_order_seller WHERE id = $1 AND shop_id = $2`,
+        [String(orderId), String(shopId)],
+      )) as Array<{ status: string }>;
+      if (!current) {
+        throw new NotFoundException('Buyurtma topilmadi yoki ruxsat yo‘q');
+      }
+      // Shu holatga qayta bosish — o‘zgarish yo‘q, avvalgidek muvaffaqiyatli (jurnalga yozilmaydi)
+      if (current.status === status) {
+        return { id: String(orderId), status };
+      }
+      await this.dataSource.query(
+        `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status,comment) VALUES($1,$2,$3)`,
+        [orderId, current.status, `Rad etildi: ${current.status} → ${status}`],
+      );
+      throw new ConflictException(
+        `Holatni o‘zgartirib bo‘lmaydi: ${current.status} → ${status}`,
+      );
     }
     await this.dataSource.query(
       `INSERT INTO checkout.sales_order_seller_history(sales_order_seller_id,status) VALUES($1,$2)`,

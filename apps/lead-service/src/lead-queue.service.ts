@@ -27,6 +27,7 @@ import {
   OperatorStateDto,
   OperatorWorkState,
   OrderCreateFailedEvent,
+  OrderCreateFailedReason,
   OutboxEvent,
   SubmitLeadResultDto,
 } from '@app/common';
@@ -438,8 +439,13 @@ export class LeadQueueService {
       )
         return;
       const now = new Date();
+      // BE-18: «qoldiq yo‘q» belgisi faqat qoldiq sababida; boshqa sabab (offer sotuvdan olingan, ma’lumot xato) —
+      // lid shunchaki navbatga qaytadi [taklif]
+      const outOfStock =
+        (event.reason ?? OrderCreateFailedReason.OUT_OF_STOCK) ===
+        OrderCreateFailedReason.OUT_OF_STOCK;
       lead.status = LeadStatus.CALLBACK;
-      lead.stockShortageAt = now;
+      if (outOfStock) lead.stockShortageAt = now;
       lead.operatorId = null;
       lead.confirmedAt = null; // BE-28: buyurtma yaratilmadi — «Tasdiqlangan» ga kirmaydi
       lead.confirmedBy = null;
@@ -452,7 +458,13 @@ export class LeadQueueService {
         lead,
         LeadStatus.CONFIRMED,
         null,
-        'Buyurtma yaratilmadi: qoldiq yo‘q — navbatga qaytdi',
+        outOfStock
+          ? 'Buyurtma yaratilmadi: qoldiq yo‘q — navbatga qaytdi'
+          : event.reason === OrderCreateFailedReason.OFFER_UNAVAILABLE
+            ? 'Buyurtma yaratilmadi: mahsulot sotuvda emas — navbatga qaytdi'
+            : event.reason === OrderCreateFailedReason.PRICE_CHANGED
+              ? 'Buyurtma yaratilmadi: narx oshgan (sahifa narxi tasdiqlangan narxdan past) — navbatga qaytdi'
+              : 'Buyurtma yaratilmadi: buyurtma ma’lumoti xato — navbatga qaytdi',
       );
     });
   }

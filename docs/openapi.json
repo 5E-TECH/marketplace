@@ -895,111 +895,6 @@
         "tags": [
           "products"
         ]
-      },
-      "get": {
-        "operationId": "PublicProductsController_all",
-        "parameters": [
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "categoryId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "7",
-              "type": "string"
-            }
-          },
-          {
-            "name": "minPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 100000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 15000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sort",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": "createdAt:desc",
-              "type": "string",
-              "enum": [
-                "createdAt:asc",
-                "createdAt:desc",
-                "price:asc",
-                "price:desc",
-                "name:asc",
-                "name:desc"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorefrontProductsPageDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Uzum uslubidagi barcha faol mahsulotlar",
-        "tags": [
-          "products"
-        ]
       }
     },
     "/api/v1/products/my": {
@@ -2416,545 +2311,6 @@
         ]
       }
     },
-    "/api/v1/storefront/products": {
-      "get": {
-        "operationId": "StorefrontController_listProducts",
-        "parameters": [
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "categoryId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "7",
-              "type": "string"
-            }
-          },
-          {
-            "name": "minPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 100000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 15000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sort",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": "createdAt:desc",
-              "type": "string",
-              "enum": [
-                "createdAt:asc",
-                "createdAt:desc",
-                "price:asc",
-                "price:desc",
-                "name:asc",
-                "name:desc"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorefrontProductsPageDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Faol mahsulotlar ochiq katalogi",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/products/{id}": {
-      "get": {
-        "operationId": "StorefrontController_getProduct",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorefrontProductDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Faol mahsulot tafsiloti",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/banners": {
-      "get": {
-        "description": "Nofaol yoki muddati tugagan banner javobga tushmaydi. `sortOrder` bo‘yicha tartiblangan.",
-        "operationId": "StorefrontController_banners",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/StorefrontBannerDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Bosh sahifa bannerlari (faol va muddati o‘tmaganlari)",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/shops/featured": {
-      "get": {
-        "operationId": "StorefrontController_featuredShops",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FeaturedShopDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Bosh sahifa uchun tavsiya etilgan faol do‘konlar",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/shops/{shopId}/products": {
-      "get": {
-        "operationId": "StorefrontController_getShopProducts",
-        "parameters": [
-          {
-            "name": "shopId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "categoryId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "7",
-              "type": "string"
-            }
-          },
-          {
-            "name": "minPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 100000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 15000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sort",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": "createdAt:desc",
-              "type": "string",
-              "enum": [
-                "createdAt:asc",
-                "createdAt:desc",
-                "price:asc",
-                "price:desc",
-                "name:asc",
-                "name:desc"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorefrontProductsPageDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Faol do‘kon mahsulotlarini ID bo‘yicha olish",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/shops/{slug}": {
-      "get": {
-        "operationId": "StorefrontController_getShop",
-        "parameters": [
-          {
-            "name": "slug",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "categoryId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "7",
-              "type": "string"
-            }
-          },
-          {
-            "name": "minPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 100000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 15000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sort",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": "createdAt:desc",
-              "type": "string",
-              "enum": [
-                "createdAt:asc",
-                "createdAt:desc",
-                "price:asc",
-                "price:desc",
-                "name:asc",
-                "name:desc"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorefrontShopPageDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Faol do‘kon sahifasi va mahsulotlari",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
-    "/api/v1/storefront/search": {
-      "get": {
-        "operationId": "SearchController_products",
-        "parameters": [
-          {
-            "name": "q",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "example": "telefon",
-              "type": "string"
-            }
-          },
-          {
-            "name": "categoryId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "7",
-              "type": "string"
-            }
-          },
-          {
-            "name": "minPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 100000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxPrice",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "example": 5000000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchProductsPageDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Mahsulotlarni relevantlik va facetlar bilan qidirish",
-        "tags": [
-          "storefront"
-        ]
-      }
-    },
     "/api/v1/admin/shops": {
       "get": {
         "operationId": "AdminShopsController_list",
@@ -3638,7 +2994,32 @@
                 "PARTIALLY_FULFILLED",
                 "FULFILLED",
                 "CANCELLED",
-                "REFUNDED"
+                "REFUNDED",
+                "PICKING",
+                "PACKED",
+                "HANDED_TO_ELCHI",
+                "IN_TRANSIT",
+                "DELIVERED",
+                "REMITTED",
+                "RETURN_REQUESTED",
+                "SETTLED",
+                "REFUSED",
+                "RETURNING",
+                "RETURNED_GRADED"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "BE-18: liddan buyurtma manbasi (sotuvchi sahifasi, asosiy sayt, API)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LANDING",
+                "SITE",
+                "API"
               ]
             }
           },
@@ -3919,7 +3300,7 @@
     },
     "/api/v1/admin/orders/{id}/cancel": {
       "post": {
-        "description": "Faqat DRAFT/PENDING_PAYMENT buyurtma. Rezerv bo‘shatiladi va yakunlanmagan online to‘lov yozuvlari CANCELLED ga o‘tadi. Idempotent: allaqachon CANCELLED bo‘lsa `idempotent: true` qaytadi.",
+        "description": "Liddan buyurtma (BE-18): Elchi’ga topshirilgunga qadar (CONFIRMED, PICKING, PACKED), sabab bilan; band tovar darhol bo‘shaydi, boshqa holatda 409 va jurnalda. Eski buyurtma: faqat DRAFT/PENDING_PAYMENT, rezerv va yakunlanmagan online to‘lov bekor qilinadi. Idempotent: allaqachon CANCELLED bo‘lsa `idempotent: true` qaytadi.",
         "operationId": "AdminOrdersController_cancel",
         "parameters": [
           {
@@ -4060,305 +3441,6 @@
         "summary": "To‘langan buyurtmani to‘liq qaytarish",
         "tags": [
           "admin-orders"
-        ]
-      }
-    },
-    "/api/v1/cart": {
-      "get": {
-        "operationId": "CartController_get",
-        "parameters": [
-          {
-            "name": "x-session-id",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "cart"
-        ]
-      },
-      "delete": {
-        "description": "Idempotent: faol savat bo‘lmasa ham 200 va bo‘sh savat qaytaradi.",
-        "operationId": "CartController_clear",
-        "parameters": [
-          {
-            "name": "x-session-id",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Savatni bo‘shatish",
-        "tags": [
-          "cart"
-        ]
-      }
-    },
-    "/api/v1/cart/items": {
-      "post": {
-        "operationId": "CartController_add",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddCartItemDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Savatga mahsulot qo‘shish; joriy narx snapshot qilinadi",
-        "tags": [
-          "cart"
-        ]
-      }
-    },
-    "/api/v1/cart/items/{id}": {
-      "patch": {
-        "operationId": "CartController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateCartItemDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "cart"
-        ]
-      },
-      "delete": {
-        "operationId": "CartController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "cart"
-        ]
-      }
-    },
-    "/api/v1/cart/merge": {
-      "post": {
-        "operationId": "CartController_merge",
-        "parameters": [
-          {
-            "name": "x-session-id",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CartDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Anon savatni login qilgan user savatiga qo‘shish",
-        "tags": [
-          "cart"
-        ]
-      }
-    },
-    "/api/v1/checkout/delivery-preview": {
-      "post": {
-        "description": "`cartItemIds` berilsa faqat shu qatorlar hisoblanadi — `POST /checkout` ga aynan shu tanlov yuboriladi.",
-        "operationId": "CheckoutController_preview",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeliveryPreviewDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Savatdagi har bir posilka uchun dostavka narxi",
-        "tags": [
-          "checkout"
-        ]
-      }
-    },
-    "/api/v1/checkout": {
-      "post": {
-        "description": "`cartItemIds` berilsa faqat shu savat qatorlari buyurtmaga o‘tadi va savatdan o‘chadi, qolganlari savatda qoladi. Berilmasa — butun savat. Savatda yo‘q id → 404. Idempotency-Key bitta tanlovga tegishli: tanlov o‘zgarsa yangi kalit yuboring.",
-        "operationId": "CheckoutController_create",
-        "parameters": [
-          {
-            "name": "idempotency-key",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-session-id",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateCheckoutDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Savatni do‘konlar bo‘yicha ajratib buyurtma yaratish",
-        "tags": [
-          "checkout"
-        ]
-      }
-    },
-    "/api/v1/checkout/{orderId}/confirm": {
-      "post": {
-        "operationId": "CheckoutController_confirm",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Session-Id",
-            "in": "header",
-            "description": "Guest checkoutda ishlatilgan session identifikatori",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {}
-        ],
-        "summary": "Buyer yoki guest uchun COD buyurtmani tasdiqlash",
-        "tags": [
-          "checkout"
         ]
       }
     },
@@ -4675,177 +3757,6 @@
         ],
         "tags": [
           "support"
-        ]
-      }
-    },
-    "/api/v1/favorites": {
-      "get": {
-        "operationId": "FavoritesController_list",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FavoritesPageDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Joriy userning sevimli mahsulotlari",
-        "tags": [
-          "favorites"
-        ]
-      }
-    },
-    "/api/v1/favorites/{productId}/check": {
-      "get": {
-        "operationId": "FavoritesController_check",
-        "parameters": [
-          {
-            "name": "productId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Mahsulot sevimlilarga qo‘shilganini tekshirish",
-        "tags": [
-          "favorites"
-        ]
-      }
-    },
-    "/api/v1/favorites/{productId}": {
-      "post": {
-        "operationId": "FavoritesController_add",
-        "parameters": [
-          {
-            "name": "productId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Mahsulotni sevimlilarga qo‘shish",
-        "tags": [
-          "favorites"
-        ]
-      },
-      "delete": {
-        "operationId": "FavoritesController_remove",
-        "parameters": [
-          {
-            "name": "productId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Mahsulotni sevimlilardan olib tashlash",
-        "tags": [
-          "favorites"
-        ]
-      }
-    },
-    "/api/v1/guest/merge": {
-      "post": {
-        "operationId": "GuestController_merge",
-        "parameters": [
-          {
-            "name": "x-session-id",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Anonim savat va sevimlilarni joriy userga birlashtirish",
-        "tags": [
-          "guest"
         ]
       }
     },
@@ -5369,96 +4280,6 @@
         ],
         "tags": [
           "admin-finance"
-        ]
-      }
-    },
-    "/api/v1/storefront/products/{productId}/reviews": {
-      "get": {
-        "operationId": "ReviewsController_list",
-        "parameters": [
-          {
-            "name": "productId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Mahsulot sharhlari va o‘rtacha reytingi",
-        "tags": [
-          "reviews"
-        ]
-      },
-      "post": {
-        "operationId": "ReviewsController_create",
-        "parameters": [
-          {
-            "name": "productId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateReviewDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Sharh yaratildi"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Yetkazilgan mahsulotga sharh qoldirish",
-        "tags": [
-          "reviews"
         ]
       }
     },
@@ -8115,66 +6936,6 @@
           {}
         ],
         "summary": "Xaridor yoki guest buyurtmasi va posilkalarini kuzatish",
-        "tags": [
-          "orders"
-        ]
-      }
-    },
-    "/api/v1/orders/{orderId}/refund": {
-      "post": {
-        "description": "To‘lanmagan buyurtma bekor qilinadi va rezerv bo‘shaydi; to‘langan, lekin posilka hali chiqmagan buyurtma to‘liq refund qilinadi. Posilka yo‘lga chiqqan bo‘lsa 400 qaytadi.",
-        "operationId": "BuyerOrdersController_refund",
-        "parameters": [
-          {
-            "name": "orderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Session-Id",
-            "in": "header",
-            "description": "Guest checkoutda ishlatilgan session identifikatori",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BuyerOrderRefundDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrderActionResultDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Buyurtma holati o‘z-o‘ziga qaytarishga yo‘l qo‘ymaydi"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {}
-        ],
-        "summary": "Xaridor buyurtmasini qaytarish (to‘lanmagan bo‘lsa — bekor)",
         "tags": [
           "orders"
         ]
@@ -11507,6 +10268,61 @@
         ]
       }
     },
+    "/api/v1/operator/orders/{id}/cancel": {
+      "post": {
+        "operationId": "OperatorOrdersController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminOrderActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderActionResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sabab yo‘q"
+          },
+          "404": {
+            "description": "Buyurtma topilmadi"
+          },
+          "409": {
+            "description": "errorCode INVALID_STATE — buyurtma Elchi’ga topshirilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buyurtmani bekor qilish (sabab bilan)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
     "/api/v1/admin/leads": {
       "get": {
         "description": "Telefon niqoblangan (BE-42).",
@@ -13336,38 +12152,55 @@
           }
         }
       },
-      "StorefrontCategoryDto": {
+      "CreateProductVariantDto": {
         "type": "object",
         "properties": {
-          "id": {
+          "sku": {
             "type": "string",
-            "example": "7"
+            "example": "IPHONE-16-BLACK-256"
           },
           "name": {
-            "type": "string",
-            "example": "Smartfonlar"
-          },
-          "slug": {
-            "type": "string",
-            "example": "smartfonlar"
-          },
-          "parentId": {
             "type": "object",
-            "example": "2",
+            "example": "Qora-256 Gb",
             "nullable": true
           },
-          "iconUrl": {
+          "attributes": {
             "type": "object",
-            "example": null,
+            "example": {
+              "color": "Qora",
+              "storage": "256 Gb"
+            }
+          },
+          "price": {
+            "type": "object",
+            "example": 16000000,
+            "minimum": 0,
             "nullable": true
+          },
+          "oldPrice": {
+            "type": "object",
+            "example": 17000000,
+            "minimum": 0,
+            "nullable": true
+          },
+          "barcode": {
+            "type": "object",
+            "example": "4780012345678",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": "https://cdn.example.com/products/iphone-black.jpg",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true,
+            "default": true
           }
         },
         "required": [
-          "id",
-          "name",
-          "slug",
-          "parentId",
-          "iconUrl"
+          "sku"
         ]
       },
       "ProductVariantDto": {
@@ -13433,305 +12266,6 @@
           "barcode",
           "imageUrl",
           "isActive"
-        ]
-      },
-      "StorefrontProductDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "12"
-          },
-          "shopId": {
-            "type": "string",
-            "example": "5"
-          },
-          "ownerUserId": {
-            "type": "string",
-            "example": "42",
-            "nullable": true
-          },
-          "categoryId": {
-            "type": "object",
-            "example": "1",
-            "nullable": true
-          },
-          "name": {
-            "type": "string",
-            "example": "iPhone 16 Pro"
-          },
-          "slug": {
-            "type": "string",
-            "example": "iphone-16-pro"
-          },
-          "description": {
-            "type": "object",
-            "example": "Titanium, 256 GB",
-            "nullable": true
-          },
-          "price": {
-            "type": "number",
-            "example": 14999000
-          },
-          "oldPrice": {
-            "type": "object",
-            "example": 15999000,
-            "nullable": true
-          },
-          "imageUrl": {
-            "type": "object",
-            "example": null,
-            "nullable": true
-          },
-          "images": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "attributes": {
-            "type": "object",
-            "example": {
-              "brand": "Apple"
-            }
-          },
-          "hasVariants": {
-            "type": "boolean",
-            "example": false
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "PENDING_REVIEW",
-              "ACTIVE",
-              "REJECTED",
-              "ARCHIVED",
-              "OUT_OF_STOCK"
-            ]
-          },
-          "moderationNote": {
-            "type": "string",
-            "example": null,
-            "nullable": true
-          },
-          "basePrice": {
-            "type": "number",
-            "example": 140000,
-            "nullable": true
-          },
-          "affiliateFee": {
-            "type": "number",
-            "example": 65000,
-            "nullable": true
-          },
-          "weightGrams": {
-            "type": "number",
-            "example": 450,
-            "nullable": true
-          },
-          "lengthMm": {
-            "type": "number",
-            "example": 200,
-            "nullable": true
-          },
-          "widthMm": {
-            "type": "number",
-            "example": 120,
-            "nullable": true
-          },
-          "heightMm": {
-            "type": "number",
-            "example": 80,
-            "nullable": true
-          },
-          "approvedPrice": {
-            "type": "number",
-            "example": 262000,
-            "nullable": true,
-            "description": "BE-09: tasdiqlangan narx"
-          },
-          "priceStatus": {
-            "type": "string",
-            "example": "GREEN",
-            "nullable": true,
-            "description": "BE-09: oxirgi narx qarori holati"
-          },
-          "marketTotal": {
-            "type": "number",
-            "example": null,
-            "nullable": true,
-            "description": "BE-09: raqobatchida mijoz jami (NRX-5)"
-          },
-          "cpaEnabled": {
-            "type": "boolean",
-            "example": true
-          },
-          "isBad": {
-            "type": "boolean",
-            "example": false
-          },
-          "isBlocked": {
-            "type": "boolean",
-            "example": false
-          },
-          "rating": {
-            "type": "number",
-            "example": 4.75
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "example": "2026-08-14T10:00:00.000Z"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string",
-            "example": "2026-08-14T10:00:00.000Z"
-          },
-          "shop": {
-            "description": "Product qaysi marketga tegishli ekanini bildiradi",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SellerShopDto"
-              }
-            ]
-          },
-          "category": {
-            "nullable": true,
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StorefrontCategoryDto"
-              }
-            ]
-          },
-          "variants": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProductVariantDto"
-            }
-          }
-        },
-        "required": [
-          "id",
-          "shopId",
-          "ownerUserId",
-          "categoryId",
-          "name",
-          "slug",
-          "description",
-          "price",
-          "oldPrice",
-          "imageUrl",
-          "images",
-          "attributes",
-          "hasVariants",
-          "status",
-          "moderationNote",
-          "basePrice",
-          "affiliateFee",
-          "weightGrams",
-          "lengthMm",
-          "widthMm",
-          "heightMm",
-          "approvedPrice",
-          "priceStatus",
-          "marketTotal",
-          "cpaEnabled",
-          "isBad",
-          "isBlocked",
-          "rating",
-          "createdAt",
-          "updatedAt",
-          "shop",
-          "category",
-          "variants"
-        ]
-      },
-      "StorefrontProductsPageDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StorefrontProductDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "example": 25
-          },
-          "page": {
-            "type": "number",
-            "example": 1
-          },
-          "limit": {
-            "type": "number",
-            "example": 20
-          },
-          "totalPages": {
-            "type": "number",
-            "example": 2
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalPages"
-        ]
-      },
-      "CreateProductVariantDto": {
-        "type": "object",
-        "properties": {
-          "sku": {
-            "type": "string",
-            "example": "IPHONE-16-BLACK-256"
-          },
-          "name": {
-            "type": "object",
-            "example": "Qora-256 Gb",
-            "nullable": true
-          },
-          "attributes": {
-            "type": "object",
-            "example": {
-              "color": "Qora",
-              "storage": "256 Gb"
-            }
-          },
-          "price": {
-            "type": "object",
-            "example": 16000000,
-            "minimum": 0,
-            "nullable": true
-          },
-          "oldPrice": {
-            "type": "object",
-            "example": 17000000,
-            "minimum": 0,
-            "nullable": true
-          },
-          "barcode": {
-            "type": "object",
-            "example": "4780012345678",
-            "nullable": true
-          },
-          "imageUrl": {
-            "type": "object",
-            "example": "https://cdn.example.com/products/iphone-black.jpg",
-            "nullable": true
-          },
-          "isActive": {
-            "type": "boolean",
-            "example": true,
-            "default": true
-          }
-        },
-        "required": [
-          "sku"
         ]
       },
       "UpdateProductVariantDto": {
@@ -14118,275 +12652,6 @@
           "limit"
         ]
       },
-      "StorefrontBannerDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "3"
-          },
-          "title": {
-            "type": "string",
-            "example": "50% chegirma"
-          },
-          "imageUrl": {
-            "type": "string",
-            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg"
-          },
-          "linkUrl": {
-            "type": "string",
-            "example": "/katalog/telefon",
-            "nullable": true
-          },
-          "sortOrder": {
-            "type": "number",
-            "example": 10
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "imageUrl",
-          "linkUrl",
-          "sortOrder"
-        ]
-      },
-      "FeaturedShopDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "15"
-          },
-          "ownerUserId": {
-            "type": "string",
-            "example": "42",
-            "nullable": true
-          },
-          "name": {
-            "type": "string",
-            "example": "Ali Market"
-          },
-          "slug": {
-            "type": "string",
-            "example": "ali-market-1234567"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "SUSPENDED",
-              "REJECTED"
-            ],
-            "example": "PENDING"
-          },
-          "description": {
-            "type": "object",
-            "example": "Maishiy texnika do‘koni",
-            "nullable": true
-          },
-          "logoUrl": {
-            "type": "string",
-            "example": null,
-            "nullable": true
-          },
-          "bannerUrl": {
-            "type": "string",
-            "example": null,
-            "nullable": true
-          },
-          "phone": {
-            "type": "object",
-            "example": "+998901234567",
-            "nullable": true
-          },
-          "regionId": {
-            "type": "object",
-            "example": "1",
-            "nullable": true
-          },
-          "districtId": {
-            "type": "object",
-            "example": "10",
-            "nullable": true
-          },
-          "address": {
-            "type": "object",
-            "example": "Toshkent shahri",
-            "nullable": true
-          },
-          "rating": {
-            "type": "number",
-            "example": 0
-          },
-          "ordersCount": {
-            "type": "number",
-            "example": 0
-          },
-          "isFeatured": {
-            "type": "boolean",
-            "example": true
-          }
-        },
-        "required": [
-          "id",
-          "ownerUserId",
-          "name",
-          "slug",
-          "status",
-          "description",
-          "logoUrl",
-          "bannerUrl",
-          "phone",
-          "regionId",
-          "districtId",
-          "address",
-          "rating",
-          "ordersCount",
-          "isFeatured"
-        ]
-      },
-      "StorefrontShopPageDto": {
-        "type": "object",
-        "properties": {
-          "shop": {
-            "$ref": "#/components/schemas/SellerShopDto"
-          },
-          "products": {
-            "$ref": "#/components/schemas/StorefrontProductsPageDto"
-          }
-        },
-        "required": [
-          "shop",
-          "products"
-        ]
-      },
-      "SearchProductItemDto": {
-        "type": "object",
-        "properties": {
-          "productId": {
-            "type": "string",
-            "example": "12"
-          },
-          "slug": {
-            "type": "string",
-            "example": "iphone-16-pro"
-          },
-          "title": {
-            "type": "string",
-            "example": "iPhone 16 Pro"
-          },
-          "categoryId": {
-            "type": "object",
-            "example": "7",
-            "nullable": true
-          },
-          "price": {
-            "type": "number",
-            "example": 14999000
-          },
-          "imageUrl": {
-            "type": "object",
-            "example": null,
-            "nullable": true
-          },
-          "attributes": {
-            "type": "object",
-            "example": {
-              "brand": "Apple"
-            }
-          },
-          "relevance": {
-            "type": "number",
-            "example": 0.42
-          }
-        },
-        "required": [
-          "productId",
-          "slug",
-          "title",
-          "categoryId",
-          "price",
-          "imageUrl",
-          "attributes",
-          "relevance"
-        ]
-      },
-      "SearchFacetDto": {
-        "type": "object",
-        "properties": {
-          "categories": {
-            "example": [
-              {
-                "categoryId": "7",
-                "count": 12
-              },
-              {
-                "categoryId": "8",
-                "count": 4
-              }
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "minPrice": {
-            "type": "object",
-            "example": 100000,
-            "nullable": true
-          },
-          "maxPrice": {
-            "type": "object",
-            "example": 15000000,
-            "nullable": true
-          }
-        },
-        "required": [
-          "categories",
-          "minPrice",
-          "maxPrice"
-        ]
-      },
-      "SearchProductsPageDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SearchProductItemDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "example": 16
-          },
-          "page": {
-            "type": "number",
-            "example": 1
-          },
-          "limit": {
-            "type": "number",
-            "example": 20
-          },
-          "totalPages": {
-            "type": "number",
-            "example": 1
-          },
-          "facets": {
-            "$ref": "#/components/schemas/SearchFacetDto"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalPages",
-          "facets"
-        ]
-      },
       "AdminShopDetailStatsDto": {
         "type": "object",
         "properties": {
@@ -14755,232 +13020,6 @@
           "reason"
         ]
       },
-      "CartItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "10"
-          },
-          "productId": {
-            "type": "string",
-            "example": "35"
-          },
-          "variantId": {
-            "type": "string",
-            "example": "42"
-          },
-          "shopId": {
-            "type": "string",
-            "example": "7"
-          },
-          "quantity": {
-            "type": "number",
-            "example": 2
-          },
-          "unitPriceSnapshot": {
-            "type": "number",
-            "example": 125000
-          },
-          "lineTotal": {
-            "type": "number",
-            "example": 250000
-          },
-          "productName": {
-            "type": "string",
-            "example": "Smartfon X 128GB",
-            "description": "Savatga qo‘shilgan paytdagi nom (narx kabi surat) — buyurtmaga ham shu nom o‘tadi"
-          },
-          "imageUrl": {
-            "type": "string",
-            "example": "https://api.elchimarket.uz/media/products/35/main.webp",
-            "nullable": true,
-            "description": "Variant rasmi, u bo‘lmasa mahsulotning asosiy rasmi. Katalogdan jonli olinadi"
-          }
-        },
-        "required": [
-          "id",
-          "productId",
-          "variantId",
-          "shopId",
-          "quantity",
-          "unitPriceSnapshot",
-          "lineTotal",
-          "productName",
-          "imageUrl"
-        ]
-      },
-      "CartDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "object",
-            "example": "5",
-            "nullable": true
-          },
-          "customerId": {
-            "type": "object",
-            "example": "9",
-            "nullable": true
-          },
-          "sessionId": {
-            "type": "object",
-            "example": "browser-session",
-            "nullable": true
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CartItemDto"
-            }
-          },
-          "totalAmount": {
-            "type": "number",
-            "example": 250000
-          },
-          "totalQuantity": {
-            "type": "number",
-            "example": 2
-          }
-        },
-        "required": [
-          "id",
-          "customerId",
-          "sessionId",
-          "items",
-          "totalAmount",
-          "totalQuantity"
-        ]
-      },
-      "AddCartItemDto": {
-        "type": "object",
-        "properties": {
-          "productId": {
-            "type": "string",
-            "example": "35"
-          },
-          "variantId": {
-            "type": "string",
-            "example": "42"
-          },
-          "quantity": {
-            "type": "object",
-            "example": 1,
-            "default": 1,
-            "minimum": 1
-          }
-        },
-        "required": [
-          "productId",
-          "variantId"
-        ]
-      },
-      "UpdateCartItemDto": {
-        "type": "object",
-        "properties": {
-          "quantity": {
-            "type": "number",
-            "example": 2,
-            "minimum": 1
-          }
-        },
-        "required": [
-          "quantity"
-        ]
-      },
-      "CheckoutAddressDto": {
-        "type": "object",
-        "properties": {
-          "recipientName": {
-            "type": "string",
-            "example": "Dilshodbek Aliyev"
-          },
-          "phone": {
-            "type": "string",
-            "example": "+998901234567"
-          },
-          "address": {
-            "type": "string",
-            "example": "Toshkent shahri, Amir Temur ko‘chasi 1"
-          },
-          "regionId": {
-            "type": "string",
-            "example": "10"
-          },
-          "districtId": {
-            "type": "string",
-            "example": "101"
-          },
-          "whereDeliver": {
-            "type": "string",
-            "enum": [
-              "ADDRESS",
-              "CENTER"
-            ],
-            "default": "ADDRESS",
-            "description": "ADDRESS — uyga, CENTER — Elchi markaziga yetkazish"
-          }
-        },
-        "required": [
-          "recipientName",
-          "phone",
-          "address"
-        ]
-      },
-      "DeliveryPreviewDto": {
-        "type": "object",
-        "properties": {
-          "address": {
-            "$ref": "#/components/schemas/CheckoutAddressDto"
-          },
-          "cartItemIds": {
-            "example": [
-              "10",
-              "12"
-            ],
-            "maxItems": 100,
-            "description": "Faqat shu savat qatorlari (`GET /cart` → `items[].id`). Berilmasa — butun savat. Buyurtmadan keyin tanlangan qatorlar savatdan o‘chadi, qolganlari savatda qoladi.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "address"
-        ]
-      },
-      "CreateCheckoutDto": {
-        "type": "object",
-        "properties": {
-          "address": {
-            "$ref": "#/components/schemas/CheckoutAddressDto"
-          },
-          "cartItemIds": {
-            "example": [
-              "10",
-              "12"
-            ],
-            "maxItems": 100,
-            "description": "Faqat shu savat qatorlari (`GET /cart` → `items[].id`). Berilmasa — butun savat. Buyurtmadan keyin tanlangan qatorlar savatdan o‘chadi, qolganlari savatda qoladi.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "paymentMethod": {
-            "type": "string",
-            "enum": [
-              "online",
-              "cod"
-            ]
-          }
-        },
-        "required": [
-          "address",
-          "paymentMethod"
-        ]
-      },
       "CreatePaymentDto": {
         "type": "object",
         "properties": {
@@ -15118,79 +13157,6 @@
         },
         "required": [
           "message"
-        ]
-      },
-      "FavoriteDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "12"
-          },
-          "userId": {
-            "type": "object",
-            "example": "42",
-            "nullable": true
-          },
-          "sessionId": {
-            "type": "object",
-            "example": "guest-session-uuid",
-            "nullable": true
-          },
-          "productId": {
-            "type": "string",
-            "example": "85"
-          },
-          "product": {
-            "$ref": "#/components/schemas/StorefrontProductDto"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "example": "2026-08-25T10:00:00.000Z"
-          }
-        },
-        "required": [
-          "id",
-          "userId",
-          "sessionId",
-          "productId",
-          "product",
-          "createdAt"
-        ]
-      },
-      "FavoritesPageDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FavoriteDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "example": 12
-          },
-          "page": {
-            "type": "number",
-            "example": 1
-          },
-          "limit": {
-            "type": "number",
-            "example": 20
-          },
-          "totalPages": {
-            "type": "number",
-            "example": 1
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalPages"
         ]
       },
       "ElchiWebhookDto": {
@@ -15581,30 +13547,6 @@
             "example": 10
           }
         }
-      },
-      "CreateReviewDto": {
-        "type": "object",
-        "properties": {
-          "orderItemId": {
-            "type": "string",
-            "example": "31",
-            "description": "sales_order_item ID"
-          },
-          "rating": {
-            "type": "number",
-            "example": 5,
-            "minimum": 1,
-            "maximum": 5
-          },
-          "comment": {
-            "type": "string",
-            "example": "Mahsulot juda yaxshi ekan"
-          }
-        },
-        "required": [
-          "orderItemId",
-          "rating"
-        ]
       },
       "AdminCreateProductDto": {
         "type": "object",
@@ -17700,16 +15642,6 @@
           "updatedAt",
           "shipments"
         ]
-      },
-      "BuyerOrderRefundDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "example": "Fikrimdan qaytdim",
-            "description": "Bo‘sh qoldirilsa standart sabab yoziladi."
-          }
-        }
       },
       "AdminStockInboundDto": {
         "type": "object",

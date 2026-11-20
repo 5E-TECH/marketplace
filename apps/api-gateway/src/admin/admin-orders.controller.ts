@@ -55,7 +55,8 @@ export class AdminOrdersController {
   ) {}
 
   @Get('admin/orders')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  // BE-18 (TC12, FE-26): nazoratchi ham o‘qiydi
+  @Roles(Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary:
@@ -73,7 +74,7 @@ export class AdminOrdersController {
   }
 
   @Get('admin/orders/:id')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Buyurtma to‘liq (sub-order + item + shipment + to‘lov)',
@@ -188,13 +189,15 @@ export class AdminOrdersController {
   }
 
   @Post('admin/orders/:id/cancel')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  // BE-18 (BUY-3): nazoratchi ham bekor qiladi
+  @Roles(Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Buyurtmani majburiy bekor qilish',
     description:
-      'Faqat DRAFT/PENDING_PAYMENT buyurtma. Rezerv bo‘shatiladi va ' +
-      'yakunlanmagan online to‘lov yozuvlari CANCELLED ga o‘tadi. ' +
+      'Liddan buyurtma (BE-18): Elchi’ga topshirilgunga qadar (CONFIRMED, PICKING, PACKED), sabab bilan; ' +
+      'band tovar darhol bo‘shaydi, boshqa holatda 409 va jurnalda. ' +
+      'Eski buyurtma: faqat DRAFT/PENDING_PAYMENT, rezerv va yakunlanmagan online to‘lov bekor qilinadi. ' +
       'Idempotent: allaqachon CANCELLED bo‘lsa `idempotent: true` qaytadi.',
   })
   @ApiResponse({ status: 201, type: OrderActionResultDto })
@@ -217,6 +220,7 @@ export class AdminOrdersController {
         orderId: id,
         reason: dto.reason,
         actorId: admin.sub,
+        actorRole: admin.role,
       },
     );
     this.audit(admin.sub, 'order.cancel', id, ip, dto);

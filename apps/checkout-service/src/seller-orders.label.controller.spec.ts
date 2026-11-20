@@ -28,6 +28,7 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
       { getShippingLabelData } as unknown as SellerOrdersService,
       { send: jest.fn(() => of({ id: '4' })) } as never,
       { generate } as unknown as ShippingLabelService,
+      {} as never,
     );
 
     await expect(
@@ -52,6 +53,7 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
       orders as unknown as SellerOrdersService,
       { send: jest.fn(() => of({ id: '4' })) } as never,
       { generateBatch } as unknown as ShippingLabelService,
+      {} as never,
     );
     return { controller, generateBatch };
   }

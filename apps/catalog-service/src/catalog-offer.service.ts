@@ -6,6 +6,7 @@ import { Brackets, In, Repository } from 'typeorm';
 import {
   CatalogOfferListQuery,
   CatalogOfferSnapshot,
+  CatalogOrderSnapshot,
   ProductStatus,
   RmqClient,
   ShopStatus,
@@ -157,6 +158,46 @@ export class CatalogOfferService {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * BE-18: liddan buyurtma uchun narx nusxasi (NRX-10). Mahsulot yo‘q bo‘lsa — null. Faol variant — CPA da bitta
+   * (BE-07); bir nechta bo‘lsa eng kichik ID li. Tasdiqlanmagan narx — `approvedPrice: null`.
+   */
+  async orderSnapshot(
+    productId: string,
+    quantity: number,
+    whereDeliver: string,
+  ): Promise<CatalogOrderSnapshot | null> {
+    if (!/^\d+$/.test(String(productId ?? ''))) return null;
+    const product = await this.base()
+      .where('product.id = :id', { id: String(productId) })
+      .getOne();
+    if (!product) return null;
+    const variant = await this.variants.findOne({
+      where: {
+        productId: String(product.id),
+        isActive: true,
+        isDeleted: false,
+      },
+      order: { id: 'ASC' },
+    });
+    const pricing = await this.pricing.orderPricing(
+      product,
+      quantity,
+      whereDeliver,
+    );
+    return {
+      productId: String(product.id),
+      productName: product.name,
+      variantId: variant ? String(variant.id) : null,
+      sku: variant?.sku ?? null,
+      wholesalerId: String(product.shopId),
+      weightGrams: product.weightGrams!,
+      cpaAvailable: isCpaAvailable(product),
+      withdrawn: isWithdrawn(product),
+      ...pricing,
+    };
   }
 
   private base() {

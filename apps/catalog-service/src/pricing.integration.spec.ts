@@ -250,6 +250,52 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     });
   });
 
+  it('BE-18: buyurtma narx nusxasi — tasdiqlangan narxdagi taqsimot, variant, optovik; TC5: 4,2 kg → Elchi 48 000', async () => {
+    const snapshot = await offers.orderSnapshot(productId, 1, 'CENTER');
+    expect(snapshot).toMatchObject({
+      productId,
+      productName: 'Simsiz quloqchin',
+      variantId: expect.any(String),
+      wholesalerId: expect.any(String),
+      weightGrams: 450,
+      cpaAvailable: true,
+      withdrawn: false,
+      basePrice: 140_000,
+      approvedPrice: 262_000,
+      affiliateFee: 65_000,
+      hiddenDelivery: 11_000,
+      delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+    });
+    // to‘rt qator + yashirilgan yetkazish = tasdiqlangan narx (TZ 2.2; platforma xizmati — qoldiq)
+    const s = snapshot!;
+    expect(
+      s.basePrice +
+        s.affiliateFee +
+        s.callCenterFee +
+        s.hiddenDelivery +
+        s.platformService,
+    ).toBe(262_000);
+
+    await ds
+      .getRepository(Product)
+      .update({ id: productId }, { weightGrams: 4_200 });
+    try {
+      await expect(
+        offers.orderSnapshot(productId, 1, 'CENTER'),
+      ).resolves.toMatchObject({
+        weightGrams: 4_200,
+        delivery: { elchiTariff: 48_000 },
+      });
+    } finally {
+      await ds
+        .getRepository(Product)
+        .update({ id: productId }, { weightGrams: 450 });
+    }
+    await expect(offers.orderSnapshot('999999', 1, 'CENTER')).resolves.toBe(
+      null,
+    );
+  });
+
   it('yashil → sariq (M oshdi, hech kim zarar ko‘rmaydi) — tasdiq saqlanadi; soliq + to‘lov ≥ 50% — 400', async () => {
     await pricing.setPolicy(
       PricePolicyScope.PRODUCT,

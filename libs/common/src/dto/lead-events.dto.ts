@@ -73,7 +73,14 @@ export interface LeadConfirmedEvent {
 }
 
 export enum OrderCreateFailedReason {
+  /** Tovar band qilinmadi: qoldiq yo‘q yoki oxirgi dona boshqa buyurtmaga ketdi (TC9). */
   OUT_OF_STOCK = 'OUT_OF_STOCK',
+  /** Offer sotuvdan olingan yoki narxi tasdiqlanmagan (BE-18) [taklif]. */
+  OFFER_UNAVAILABLE = 'OFFER_UNAVAILABLE',
+  /** Sahifa narxi tasdiqlangan narxdan past — lid kelgandan keyin narx oshgan (BE-18) [taklif]. */
+  PRICE_CHANGED = 'PRICE_CHANGED',
+  /** Hodisa ma’lumoti to‘liq emas yoki noto‘g‘ri (BE-18) [taklif]. */
+  INVALID_ORDER = 'INVALID_ORDER',
 }
 
 /** order.create-failed — lid «qoldiq yo‘q» belgisi bilan navbatga qaytadi (BE-13 TC8). */

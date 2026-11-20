@@ -6,7 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ElchiShipmentResult, RmqClient, sendRpc } from '@app/common';
+import {
+  ElchiShipmentResult,
+  orderCodAmount,
+  RmqClient,
+  sendRpc,
+} from '@app/common';
 import { firstValueFrom } from 'rxjs';
 import { DataSource } from 'typeorm';
 
@@ -28,6 +33,7 @@ interface SellerOrderRow {
   id: string;
   shop_id: string;
   subtotal: string;
+  delivery_fee: string;
   elchi_shipment_id: string | null;
 }
 
@@ -128,7 +134,7 @@ export class ConfirmSalesOrderService {
       }
 
       const sellers = (await manager.query(
-        `SELECT id::text, shop_id::text, subtotal::text,
+        `SELECT id::text, shop_id::text, subtotal::text, delivery_fee::text,
                 elchi_shipment_id::text
          FROM checkout.sales_order_seller
          WHERE sales_order_id=$1 ORDER BY id`,
@@ -199,7 +205,12 @@ export class ConfirmSalesOrderService {
               name: item.product_name || `product-${item.product_id}`,
               quantity: item.quantity,
             })),
-            cod_amount: options.prepaid ? 0 : Number(seller.subtotal),
+            // T9-5 (BE-18): yagona COD hisobi — tovarlar + yetkazish (avval yetkazishsiz yuborilardi)
+            cod_amount: orderCodAmount({
+              items: [{ unitPrice: Number(seller.subtotal), quantity: 1 }],
+              deliveryFee: Number(seller.delivery_fee ?? 0),
+              prepaid: options.prepaid,
+            }),
           },
         );
         // `qr_code_token` va `to_be_paid` shu yerda ham saqlanishi SHART:

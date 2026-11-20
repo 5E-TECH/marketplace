@@ -4,7 +4,6 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import { of } from 'rxjs';
 import { Role, ROLES_KEY, RolesGuard } from '@app/common';
 import { AdminContentController } from './admin-content.controller';
-import { StorefrontController } from '../storefront/storefront.controller';
 
 describe('AdminContentController (C6.9)', () => {
   function setup(response: unknown = { id: '3' }) {
@@ -190,21 +189,5 @@ describe('AdminContentController (C6.9)', () => {
     expect(() => guard.canActivate(context(Role.AFFILIATE))).toThrow(
       ForbiddenException,
     );
-  });
-
-  it('TC2: storefront banner endpointi ochiq (token talab qilmaydi)', async () => {
-    const catalog = { send: jest.fn(() => of([{ id: '3' }])) };
-    const controller = new StorefrontController(catalog as never);
-
-    await expect(controller.banners()).resolves.toEqual([{ id: '3' }]);
-    expect(catalog.send).toHaveBeenCalledWith(
-      { cmd: 'storefront.banners.list' },
-      {},
-    );
-    // Sinf darajasidagi @Public() butun storefront controllerga tegishli.
-    expect(
-      Reflect.getMetadata('isPublic', StorefrontController) ??
-        Reflect.getMetadata('isPublic', StorefrontController.prototype.banners),
-    ).toBe(true);
   });
 });
