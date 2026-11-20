@@ -8,19 +8,20 @@ const rabbitUrl = process.env.RABBITMQ_MANAGEMENT_URL;
 const intervalMs = positiveInt(process.env.MONITOR_INTERVAL_MS, 30_000);
 const threshold = positiveInt(process.env.MONITOR_FAILURE_THRESHOLD, 3);
 const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+// BE-02: `_v2` — DLQ argumentlari bilan yangi navbatlar (libs/common/src/messaging/rmq.util.ts RmqQueue bilan bir xil)
 const requiredQueues = [
-  'echo_queue',
-  'identity_queue',
-  'catalog_queue',
-  'inventory_queue',
-  'checkout_queue',
-  'payment_queue',
-  'finance_queue',
-  'integration_queue',
-  'notification_queue',
-  'search_queue',
-  'file_queue',
-  'lead_queue',
+  'echo_queue_v2',
+  'identity_queue_v2',
+  'catalog_queue_v2',
+  'inventory_queue_v2',
+  'checkout_queue_v2',
+  'payment_queue_v2',
+  'finance_queue_v2',
+  'integration_queue_v2',
+  'notification_queue_v2',
+  'search_queue_v2',
+  'file_queue_v2',
+  'lead_queue_v2',
 ];
 
 let failures = 0;
@@ -55,6 +56,11 @@ async function checkRabbitMq() {
   );
   const down = requiredQueues.filter((name) => !consumers.get(name));
   if (down.length) throw new Error(`consumer yo'q: ${down.join(', ')}`);
+  // BE-02: ishlanmagan xabar DLQ ga tushadi — ko'rib chiqilmaguncha ogohlantirish
+  const dead = queues
+    .filter((queue) => queue.name.endsWith('.dlq') && queue.messages > 0)
+    .map((queue) => `${queue.name} (${queue.messages})`);
+  if (dead.length) throw new Error(`DLQ da xabar bor: ${dead.join(', ')}`);
 }
 
 async function notify(status, detail) {

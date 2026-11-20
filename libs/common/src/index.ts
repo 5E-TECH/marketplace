@@ -91,7 +91,7 @@ export * from './security/crypto.util';
 export * from './security/ssrf.util';
 
 // Messaging
-export * from './messaging/execute-and-ack';
+export * from './messaging/reliable-rmq.server';
 export * from './messaging/rmq.util';
 export * from './messaging/rpc.util';
 export * from './health/service-health.module';
