@@ -161,7 +161,8 @@ export class FulfillmentService {
       if (task.status !== FulfillmentTaskStatus.TO_PICK)
         throw this.taskState(task, 'skanerlash');
       // OMB-2: shtrix-kod bo‘lsa — faqat u; bo‘lmasa SKU. Aniq solishtirish (katalogda SKU katta-kichik harfga sezgir)
-      const expected = (task.barcode ?? task.sku ?? '').trim();
+      // bo‘sh shtrix-kod ('' yoki bo‘shliq) — yo‘q hisoblanadi, SKU ishlaydi
+      const expected = task.barcode?.trim() || task.sku?.trim() || '';
       const matches = expected !== '' && expected === scanned;
       await manager.query(
         `INSERT INTO checkout.fulfillment_scan (task_id, code, matched, actor_id)
@@ -344,24 +345,28 @@ export class FulfillmentService {
   }> {
     const labels: ShippingLabelData[] = [];
     const skipped: Array<{ orderId: string; reason: string }> = [];
-    for (const orderId of orderIds) {
-      try {
-        labels.push(await this.labelData(orderId));
-      } catch (error) {
-        const response =
-          error instanceof ConflictException ||
-          error instanceof NotFoundException
-            ? (error.getResponse() as { message?: string } | string)
-            : null;
-        skipped.push({
-          orderId,
-          reason:
-            typeof response === 'object' && response?.message
-              ? String(response.message)
-              : (error as Error).message,
-        });
+    // parallel: Elchi geo javob bermasa ham partiya bitta kutish (3 s) bilan tugaydi
+    const results = await Promise.allSettled(
+      orderIds.map((orderId) => this.labelData(orderId)),
+    );
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        labels.push(result.value);
+        return;
       }
-    }
+      const error = result.reason as Error;
+      const response =
+        error instanceof ConflictException || error instanceof NotFoundException
+          ? (error.getResponse() as { message?: string } | string)
+          : null;
+      skipped.push({
+        orderId: orderIds[index],
+        reason:
+          typeof response === 'object' && response?.message
+            ? String(response.message)
+            : error.message,
+      });
+    });
     return { labels, skipped };
   }
 

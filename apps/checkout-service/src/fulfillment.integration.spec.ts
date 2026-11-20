@@ -600,5 +600,19 @@ describeWithPostgres(
         status: 400,
       });
     });
+
+    it('bo‘sh shtrix-kod — SKU bilan yig‘iladi (vazifa qotib qolmaydi)', async () => {
+      const saved = offer.barcode;
+      offer.barcode = '  ';
+      try {
+        await orders.onLeadConfirmed(confirmed('7006', '2026-12-16T05:00:00Z'));
+      } finally {
+        offer.barcode = saved;
+      }
+      const order = await orderOf('7006');
+      await expect(
+        fulfillment.scan(order.taskId, 'Q-1', WAREHOUSE),
+      ).resolves.toMatchObject({ status: 'PICKED' });
+    });
   },
 );

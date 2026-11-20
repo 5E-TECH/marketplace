@@ -175,7 +175,7 @@ export class SellerOrdersController {
     const { targets, missing } = legacyIds.length
       ? await this.orders.adminShippingLabelTargets(legacyIds)
       : { targets: [], missing: [] };
-    return this.batchLabels(targets, missing, lead);
+    return this.batchLabels(targets, missing, lead, orderIds);
   }
 
   /** Admin: bitta posilka (buyurtma tafsilotidagi do'kon bo'limi). */
@@ -213,11 +213,21 @@ export class SellerOrdersController {
       labels: [],
       skipped: [],
     },
+    requested?: string[],
   ) {
     const collected = targets.length
       ? await this.orders.collectShippingLabels(targets)
       : { labels: [], skipped: [] };
     const labels = [...lead.labels, ...collected.labels];
+    // admin so‘ragan tartibda (lid va eski buyurtmalar aralash bo‘lsa ham); bir buyurtma posilkalari o‘z tartibida
+    if (requested?.length) {
+      const position = new Map(requested.map((id, index) => [id, index]));
+      labels.sort(
+        (a, b) =>
+          (position.get(String(a.salesOrderId)) ?? Infinity) -
+          (position.get(String(b.salesOrderId)) ?? Infinity),
+      );
+    }
     const skipped = [...lead.skipped, ...collected.skipped];
     const all = [...missing, ...skipped];
     if (!labels.length) {

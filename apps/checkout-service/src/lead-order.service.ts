@@ -303,7 +303,7 @@ export class LeadOrderService {
           offer.callCenterFee,
           offer.hiddenDelivery,
           platformService,
-          offer.barcode ?? null,
+          offer.barcode?.trim() || null,
         ],
       );
       // BE-19: yig‘ish vazifasi; kun — operator tasdiqlagan vaqtdan (14:00 chegarasi, OMB-4)
