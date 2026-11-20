@@ -4,7 +4,8 @@ import { Client } from 'pg';
 
 /**
  * Servis uchun TypeORM sozlamalari (schema-per-service).
- * dev'da synchronize=true (jadvallarni avtomat yaratadi); prod'da migratsiya ishlatiladi.
+ * Sxema faqat migratsiyadan (BE-04): dev ham, prod ham. CI bo‘sh bazada `db:migrate:check` bilan farqni tekshiradi;
+ * lokal tekshiruv uchun ham bo‘sh baza oling — eski dev bazasida `synchronize` yaratgan ustunlar farqni yashiradi.
  */
 export function typeOrmOptions(
   config: ConfigService,
@@ -20,7 +21,8 @@ export function typeOrmOptions(
     database: config.get<string>('DB_NAME'),
     schema,
     entities,
-    synchronize: config.get<string>('NODE_ENV') !== 'production',
+    // BE-04: hech qayerda synchronize yo‘q — sxema faqat migratsiyadan (dev ham), entity o‘zgarsa sxema o‘zi o‘zgarmaydi.
+    synchronize: false,
     logging: false,
   };
 }

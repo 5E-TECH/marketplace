@@ -1,3 +1,4 @@
+import { PAYMENT_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
@@ -5,7 +6,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule } from '@nestjs/microservices';
 import {
   CommonConfigModule,
-  OutboxEvent,
   ensureSchema,
   shouldRunMigrations,
   RmqClient,
@@ -14,11 +14,6 @@ import {
   rmqOptions,
   typeOrmOptions,
 } from '@app/common';
-import { Payment } from './entities/payment.entity';
-import { PaymentTransaction } from './entities/payment-transaction.entity';
-import { ProviderConfig } from './entities/provider-config.entity';
-import { CreatePaymentTables1724241600000 } from './migrations/1724241600000-create-payment-tables';
-import { AddPaymeTransactionState1724328000000 } from './migrations/1724328000000-add-payme-transaction-state';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { PaymeService } from './payme.service';
@@ -27,17 +22,8 @@ import { PaymentEventsService } from './payment-events.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { PaymentQueryService } from './payment-query.service';
 import { PaymentOutboxRelayService } from './payment-outbox-relay.service';
-import { HardenPaymentCallbacks1724414400000 } from './migrations/1724414400000-harden-payment-callbacks';
-import { CreatePaymentRefund1727481600000 } from './migrations/1727481600000-create-payment-refund';
-import { PaymentRefund } from './entities/payment-refund.entity';
 
-const entities = [
-  Payment,
-  PaymentTransaction,
-  PaymentRefund,
-  ProviderConfig,
-  OutboxEvent,
-];
+const entities = PAYMENT_DB.entities;
 
 @Module({
   imports: [
@@ -57,14 +43,9 @@ const entities = [
       useFactory: async (config: ConfigService) => {
         await ensureSchema(config, 'payment');
         return {
-          ...typeOrmOptions(config, 'payment', entities),
+          ...typeOrmOptions(config, PAYMENT_DB.schema, PAYMENT_DB.entities),
           synchronize: false,
-          migrations: [
-            CreatePaymentTables1724241600000,
-            AddPaymeTransactionState1724328000000,
-            HardenPaymentCallbacks1724414400000,
-            CreatePaymentRefund1727481600000,
-          ],
+          migrations: PAYMENT_DB.migrations,
           migrationsRun: shouldRunMigrations(config),
         };
       },
