@@ -8,23 +8,27 @@ const rabbitUrl = process.env.RABBITMQ_MANAGEMENT_URL;
 const intervalMs = positiveInt(process.env.MONITOR_INTERVAL_MS, 30_000);
 const threshold = positiveInt(process.env.MONITOR_FAILURE_THRESHOLD, 3);
 const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+// BE-02: `_v2` — DLQ argumentlari bilan yangi navbatlar (libs/common/src/messaging/rmq.util.ts RmqQueue bilan bir xil)
 const requiredQueues = [
-  'echo_queue',
-  'identity_queue',
-  'catalog_queue',
-  'inventory_queue',
-  'checkout_queue',
-  'payment_queue',
-  'finance_queue',
-  'integration_queue',
-  'notification_queue',
-  'search_queue',
-  'file_queue',
-  'lead_queue',
+  'echo_queue_v2',
+  'identity_queue_v2',
+  'catalog_queue_v2',
+  'inventory_queue_v2',
+  'checkout_queue_v2',
+  'payment_queue_v2',
+  'finance_queue_v2',
+  'integration_queue_v2',
+  'notification_queue_v2',
+  'search_queue_v2',
+  'file_queue_v2',
+  'lead_queue_v2',
 ];
 
 let failures = 0;
 let alertOpen = false;
+// BE-02: DLQ ogohlantirishi alohida — u ochiq turganda API yoki consumer uzilishi ogohlantirishi bosilmasin
+let deadLetterAlertOpen = false;
+let deadLetterDetail = '';
 
 function positiveInt(value, fallback) {
   const number = Number(value);
@@ -42,7 +46,7 @@ async function fetchOk(url, options = {}) {
 }
 
 async function checkRabbitMq() {
-  if (!rabbitUrl) return;
+  if (!rabbitUrl) return [];
   const user = process.env.RABBITMQ_USER ?? 'guest';
   const password = process.env.RABBITMQ_PASSWORD ?? 'guest';
   const auth = Buffer.from(`${user}:${password}`).toString('base64');
@@ -55,6 +59,10 @@ async function checkRabbitMq() {
   );
   const down = requiredQueues.filter((name) => !consumers.get(name));
   if (down.length) throw new Error(`consumer yo'q: ${down.join(', ')}`);
+  // BE-02: ishlanmagan xabar DLQ ga tushadi — sog'liqdan alohida qaytariladi
+  return queues
+    .filter((queue) => queue.name.endsWith('.dlq') && queue.messages > 0)
+    .map((queue) => `${queue.name} (${queue.messages})`);
 }
 
 async function notify(status, detail) {
@@ -66,7 +74,8 @@ async function notify(status, detail) {
   };
   console.log(
     JSON.stringify({
-      level: status === 'resolved' ? 'info' : 'error',
+      level:
+        status === 'resolved' || status === 'dlq_resolved' ? 'info' : 'error',
       ...payload,
     }),
   );
@@ -86,18 +95,50 @@ async function notify(status, detail) {
   );
 }
 
+/** API va consumerlar sog'ligi; yiqilsa xato. Natija — xabari bor DLQ lar (alohida ogohlantirish). */
 export async function checkOnce() {
   await fetchOk(apiUrl);
-  await checkRabbitMq();
+  return checkRabbitMq();
+}
+
+/** BE-02: DLQ da xabar paydo bo'lsa — `dlq_firing`, bo'shasa — `dlq_resolved` (asosiy ogohlantirishdan mustaqil). */
+async function checkDeadLetters(deadLetters) {
+  const detail = deadLetters.length
+    ? `DLQ da xabar bor: ${deadLetters.join(', ')}`
+    : '';
+  // Takror ogohlantirish faqat DLQ lar ro'yxati o'zgarsa (xabar soni o'sishi emas)
+  const key = deadLetters.map((entry) => entry.split(' (')[0]).join(',');
+  const status = detail ? 'dlq_firing' : 'dlq_resolved';
+  if (
+    detail
+      ? deadLetterAlertOpen && key === deadLetterDetail
+      : !deadLetterAlertOpen
+  )
+    return;
+  try {
+    await notify(status, detail || "DLQ lar bo'sh");
+    deadLetterAlertOpen = Boolean(detail);
+    deadLetterDetail = key;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        status: 'alert_failed',
+        detail: String(error),
+      }),
+    );
+  }
 }
 
 export async function tick() {
   let healthError;
+  let deadLetters = null;
   try {
-    await checkOnce();
+    deadLetters = await checkOnce();
   } catch (error) {
     healthError = error;
   }
+  if (deadLetters) await checkDeadLetters(deadLetters);
   if (healthError) {
     failures += 1;
     const detail =

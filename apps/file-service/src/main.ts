@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { RmqQueue, rmqOptions } from '@app/common';
+import { RmqQueue, rmqServer } from '@app/common';
 import { FileServiceModule } from './file-service.module';
 
 async function bootstrap() {
@@ -9,7 +9,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   app.connectMicroservice(
-    rmqOptions([config.getOrThrow<string>('RABBITMQ_URL')], RmqQueue.FILE),
+    rmqServer([config.getOrThrow<string>('RABBITMQ_URL')], RmqQueue.FILE),
   );
   await app.startAllMicroservices();
   // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da

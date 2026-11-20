@@ -53,8 +53,8 @@ interface RequestRow {
  * Liddan buyurtma (BE-18, TZ BUY-1, T5 «lead.confirmed → checkout»).
  *
  * `lead.confirmed` avval `lead_order_request` ga yoziladi, keyin darhol ishlanadi; xato bo‘lsa so‘rov qoladi va har
- * 10 soniyada qayta uriniladi. Sabab: RabbitMQ hali `noAck` (BE-02) — ishlov yiqilsa hodisa qayta kelmaydi va lid
- * yo‘qolardi (YOL-04). Takroriy hodisa ikkinchi buyurtma ochmaydi (TC6): hodisa ID si unikal, bitta lidga bitta faol
+ * 10 soniyada qayta uriniladi — katalog yoki ombor uzoq ishlamasa ham (RabbitMQ qayta urinishi 3 marta bilan
+ * cheklangan, BE-02), lid yo‘qolmaydi (YOL-04). Takroriy hodisa ikkinchi buyurtma ochmaydi (TC6): hodisa ID si unikal, bitta lidga bitta faol
  * so‘rov, bitta buyurtma.
  *
  * Buyurtma ID si so‘rov yozilganda olinadi: band qilish shu ID bilan va so‘rov kaliti bilan — qayta urinish ikkinchi
@@ -72,7 +72,10 @@ export class LeadOrderService {
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
   ) {}
 
-  /** `lead.confirmed` qabul qiluvchisi. Xato tashlamaydi (navbat `noAck`): muammo so‘rov qatorida qoladi. */
+  /**
+   * `lead.confirmed` qabul qiluvchisi. So‘rov yozilgach xato tashlamaydi — muammo so‘rov qatorida qoladi va o‘z
+   * qayta urinishi bilan ishlanadi. So‘rovni yozib bo‘lmasa (baza) — xato RabbitMQ qayta urinishiga (BE-02).
+   */
   async onLeadConfirmed(
     event: LeadConfirmedEvent,
   ): Promise<{ accepted: boolean; requestId?: string }> {

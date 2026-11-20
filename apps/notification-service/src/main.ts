@@ -1,16 +1,18 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { RmqQueue, rmqOptions } from '@app/common';
+import { RmqQueue, rmqServer } from '@app/common';
 import { NotificationModule } from './notification.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(NotificationModule);
   const config = app.get(ConfigService);
   app.connectMicroservice(
-    rmqOptions(
+    rmqServer(
       [config.getOrThrow<string>('RABBITMQ_URL')],
       RmqQueue.NOTIFICATION,
+      // BE-02: bildirishnoma qayta urinishda SMS/email takror ketishi mumkin — avtomatik qayta urinish yo‘q, DLQ dan qo‘lda
+      { maxAttempts: 1 },
     ),
   );
   await app.startAllMicroservices();

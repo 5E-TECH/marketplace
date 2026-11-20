@@ -42,6 +42,8 @@
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
     "contract:export": "node scripts/export-openapi.mjs",
     "ops:monitor": "node scripts/health-monitor.mjs",
+    "ops:rmq-migrate-v2": "node scripts/rmq-migrate-v2.mjs",
+    "ops:rmq-dlq-replay": "node scripts/rmq-dlq-replay.mjs",
     "ops:backup": "sh scripts/db-backup.sh",
     "ops:restore-test": "sh scripts/db-restore-test.sh",
     "ops:env-audit": "sh scripts/validate-production-env.sh",
