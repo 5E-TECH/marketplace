@@ -79,6 +79,14 @@ export enum StockMovementType {
   COMMIT = 'COMMIT',
   ADJUST = 'ADJUST',
   TRANSFER = 'TRANSFER',
+  /** BE-16: mijoz qaytargan / yetkazilmay qaytgan tovar omborga. */
+  RETURN = 'RETURN',
+  /** BE-16: brak (qabulda yoki qaytganni saralashda). */
+  DEFECT = 'DEFECT',
+  /** BE-16: hisobdan chiqarish. */
+  WRITE_OFF = 'WRITE_OFF',
+  /** BE-16: optovikka qaytarish. */
+  RETURN_TO_SUPPLIER = 'RETURN_TO_SUPPLIER',
 }
 
 export enum ReservationStatus {

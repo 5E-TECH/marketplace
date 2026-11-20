@@ -68,6 +68,13 @@ const entities = CATALOG_DB.entities;
           ),
       },
       {
+        // BE-16: offer qoldig‘i (`inventory.available`)
+        name: RmqClient.INVENTORY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.INVENTORY),
+      },
+      {
         name: RmqClient.INTEGRATION,
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>

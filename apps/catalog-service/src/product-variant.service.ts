@@ -224,19 +224,21 @@ export class ProductVariantService {
     return { id: variantId, deleted: true };
   }
 
-  async getInventoryDetails(shopId: string, variantIds: string[]) {
+  /** BE-16: ombor bitta (HQ) — optovik (`shopId`) berilmasa hamma variant, javobda mahsulot optovigi. */
+  async getInventoryDetails(shopId: string | null, variantIds: string[]) {
     if (variantIds.length === 0) return [];
 
-    const variants = await this.productVariants
+    const qb = this.productVariants
       .createQueryBuilder('variant')
       .innerJoinAndSelect('variant.product', 'product')
       .where('variant.id IN (:...variantIds)', { variantIds })
       .andWhere('variant.is_deleted = FALSE')
-      .andWhere('product.is_deleted = FALSE')
-      .andWhere('product.shop_id = :shopId', { shopId })
-      .getMany();
+      .andWhere('product.is_deleted = FALSE');
+    if (shopId) qb.andWhere('product.shop_id = :shopId', { shopId });
+    const variants = await qb.getMany();
 
     return variants.map((variant) => ({
+      wholesalerId: String(variant.product.shopId),
       variantId: variant.id,
       productId: variant.productId,
       productName: variant.product.name,
@@ -256,6 +258,8 @@ export class ProductVariantService {
   async searchVariantIdsForAdmin(input: {
     search?: string;
     productId?: string;
+    /** BE-16: optovik bo‘yicha (ombor bitta, egalik mahsulot orqali). */
+    wholesalerId?: string;
   }): Promise<{ variantIds: string[]; truncated: boolean }> {
     const qb = this.productVariants
       .createQueryBuilder('variant')
@@ -266,6 +270,11 @@ export class ProductVariantService {
     if (input.productId) {
       qb.andWhere('variant.product_id = :productId', {
         productId: input.productId,
+      });
+    }
+    if (input.wholesalerId) {
+      qb.andWhere('product.shop_id = :wholesalerId', {
+        wholesalerId: input.wholesalerId,
       });
     }
     const search = input.search?.trim();

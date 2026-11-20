@@ -65,7 +65,9 @@ class AdminVariantInfoDto {
 }
 
 export class AdminStockItemDto extends AdminVariantInfoDto {
-  @ApiProperty({ example: '15' }) shopId: string;
+  /** BE-16: mahsulot optovigi (qoldiq egasi); ombor bitta — HQ. */
+  @ApiProperty({ example: '15', nullable: true, type: String })
+  shopId: string | null;
   @ApiProperty({ example: '3' }) warehouseId: string;
   @ApiProperty({ example: 'Asosiy ombor' }) warehouseName: string;
   @ApiProperty({ example: true }) warehouseActive: boolean;
@@ -77,7 +79,8 @@ export class AdminStockItemDto extends AdminVariantInfoDto {
 
 /** Katalog so'rovi yiqilgan do'kon — uning qatorlari nomsiz qaytadi. */
 export class AdminCatalogWarningDto {
-  @ApiProperty({ example: '15' }) shopId: string;
+  @ApiProperty({ example: null, nullable: true, type: String })
+  shopId: string | null;
   @ApiProperty({ example: 'Mikroservis belgilangan vaqtda javob bermadi' })
   reason: string;
 }
@@ -233,7 +236,8 @@ export class AdminWebhooksQueryDto extends AdminPageQueryDto {
 
 export class AdminStockMovementItemDto extends AdminVariantInfoDto {
   @ApiProperty() id: string;
-  @ApiProperty() shopId: string;
+  /** BE-16: mahsulot optovigi. */
+  @ApiProperty({ nullable: true, type: String }) shopId: string | null;
   @ApiProperty() warehouseId: string;
   @ApiProperty() warehouseName: string;
   @ApiProperty() warehouseActive: boolean;

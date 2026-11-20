@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
+import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { PriceStatus } from '@app/common';
 import { CATALOG_DB } from './database';
@@ -72,7 +73,12 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       ds.getRepository(PriceDecision),
       emitter,
     );
-    offers = new CatalogOfferService(ds.getRepository(Product), pricing);
+    offers = new CatalogOfferService(
+      ds.getRepository(Product),
+      pricing,
+      ds.getRepository(ProductVariant),
+      { send: () => of({}) } as never, // qoldiq — BE-16 testida
+    );
     const wholesalers = new WholesalerService(ds.getRepository(Shop));
     const products = new ProductService(
       ds.getRepository(Product),

@@ -77,7 +77,7 @@ export class AdminShopsController {
   @ApiOkResponse({ type: AdminShopDetailDto })
   @ApiOperation({ summary: 'Do‘kon profili va asosiy statistikasi' })
   async detail(@Param('id') id: string) {
-    const [catalog, orders, warehouses] = await Promise.all([
+    const [catalog, orders] = await Promise.all([
       sendRpc<{ shop: Omit<AdminShopDetailDto, 'stats'>; products: number }>(
         this.catalog,
         { cmd: 'catalog.shop.admin-detail' },
@@ -88,15 +88,11 @@ export class AdminShopsController {
         { cmd: 'checkout.orders.count-by-shop' },
         { shopId: id },
       ),
-      sendRpc<number>(
-        this.inventory,
-        { cmd: 'inventory.warehouse.count-by-shop' },
-        { shopId: id },
-      ),
     ]);
     return {
       ...catalog.shop,
-      stats: { products: catalog.products, orders, warehouses },
+      // BE-16: bitta HQ ombor — do‘kon ombori yo‘q
+      stats: { products: catalog.products, orders, warehouses: 0 },
     };
   }
 
@@ -181,17 +177,7 @@ export class AdminShopsController {
       { cmd: 'identity.user.set-active' },
       { userId: shop.ownerUserId, isActive: true },
     );
-    // 3) inventory: default ombor (idempotent)
-    await sendRpc(
-      this.inventory,
-      { cmd: 'inventory.warehouse.ensure-default' },
-      {
-        shopId: shop.id,
-        name: `${shop.name} ombori`,
-        regionId: shop.regionId ?? null,
-        districtId: shop.districtId ?? null,
-      },
-    );
+    // 3) BE-16: bitta HQ ombor — do‘kon uchun ombor yaratilmaydi
     // 4) EMIT OXIRIDA: user faol + ombor tayyor bo'lgach `shop.approved`
     //    (notification + elchi-integration provisioning). Consumer'lar idempotent,
     //    shu bois yarim-bajarilgan approve qayta chaqirilsa xavfsiz.

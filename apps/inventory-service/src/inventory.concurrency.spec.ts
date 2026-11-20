@@ -14,6 +14,9 @@ import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-c
 import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+/** hq-warehouse.integration.spec.ts bilan bir xil: inventory sxemasini DROP/CREATE qiladigan spec’lar ketma-ket (BE-16). */
+const INVENTORY_SCHEMA_TEST_LOCK = 2_304_005;
+let schemaLock: Client | undefined;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 
 describeWithPostgres('InventoryService PostgreSQL concurrency', () => {
@@ -28,6 +31,11 @@ describeWithPostgres('InventoryService PostgreSQL concurrency', () => {
       );
     }
 
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      INVENTORY_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: testDatabaseUrl });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS inventory CASCADE');
@@ -64,6 +72,7 @@ describeWithPostgres('InventoryService PostgreSQL concurrency', () => {
 
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {

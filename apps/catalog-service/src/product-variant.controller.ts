@@ -84,12 +84,24 @@ export class ProductVariantController {
   }
 
   @MessagePattern({ cmd: 'inventory.variant-details' })
-  inventoryDetails(@Payload() data: { shopId: string; variantIds: string[] }) {
-    return this.variants.getInventoryDetails(data.shopId, data.variantIds);
+  inventoryDetails(
+    @Payload() data: { shopId?: string | null; variantIds: string[] },
+  ) {
+    return this.variants.getInventoryDetails(
+      data.shopId ?? null,
+      data.variantIds,
+    );
   }
 
   @MessagePattern({ cmd: 'catalog.admin.variant-search' })
-  adminVariantSearch(@Payload() data: { search?: string; productId?: string }) {
+  adminVariantSearch(
+    @Payload()
+    data: {
+      search?: string;
+      productId?: string;
+      wholesalerId?: string;
+    },
+  ) {
     return this.variants.searchVariantIdsForAdmin(data ?? {});
   }
 

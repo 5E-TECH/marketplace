@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import {
   CatalogOfferListQuery,
   CatalogOfferSnapshot,
   ProductStatus,
+  RmqClient,
+  sendRpc,
   ShopStatus,
 } from '@app/common';
+import { ProductVariant } from './entities/product-variant.entity';
 import { Product } from './entities/product.entity';
 import {
   OfferPricing,
@@ -20,15 +24,51 @@ const LIST_LIMIT = 500;
 /**
  * lead-service uchun katalog offer ma’lumoti (`LEAD_CATALOG_RPC`, BE-11 shartnomasi). BE-07 maydonlari:
  * mahsulot, og‘irlik, BAD, sotuvchi haqi, sotuvchilarga ochiqligi va sotuvdan olinganligi.
- * Narx (tasdiqlangan, eng katta) va ko‘rinadigan yetkazish — BE-09. Keyingi kartalar to‘ldiradi: qoldiq — BE-16/BE-17;
- * kreativlar va video — BE-08/BE-27. Narx tasdiqlanmagan offerni lead-service ochmaydi.
+ * Narx (tasdiqlangan, eng katta) va ko‘rinadigan yetkazish — BE-09; qoldiq — BE-16 (HQ ombor). Keyingi kartalar
+ * to‘ldiradi: kreativlar va video — BE-08/BE-27. Narx tasdiqlanmagan offerni lead-service ochmaydi.
  */
 @Injectable()
 export class CatalogOfferService {
+  private readonly logger = new Logger(CatalogOfferService.name);
+
   constructor(
     @InjectRepository(Product) private readonly products: Repository<Product>,
     private readonly pricing: PricingService,
+    @InjectRepository(ProductVariant)
+    private readonly variants: Repository<ProductVariant>,
+    @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
   ) {}
+
+  /**
+   * BE-16: bo‘sh qoldiq HQ omborda — mahsulotning faol varianti(lari) bo‘yicha (CPA da bitta). Inventory javob
+   * bermasa — 0 (sotuvchi yangi sahifa ocholmaydi; yolg‘on qoldiq ko‘rsatilmaydi).
+   */
+  private async stockOf(productIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>(productIds.map((id) => [id, 0]));
+    if (!productIds.length) return result;
+    const variants = await this.variants.find({
+      where: { productId: In(productIds), isActive: true, isDeleted: false },
+      select: { id: true, productId: true },
+    });
+    if (!variants.length) return result;
+    try {
+      const available = await sendRpc<Record<string, number>>(
+        this.inventory,
+        { cmd: 'inventory.available' },
+        { variantIds: variants.map((v) => String(v.id)) },
+      );
+      for (const v of variants) {
+        const key = String(v.productId);
+        result.set(
+          key,
+          (result.get(key) ?? 0) + (available[String(v.id)] ?? 0),
+        );
+      }
+    } catch (error) {
+      this.logger.warn(`Qoldiq olinmadi: ${(error as Error).message}`);
+    }
+    return result;
+  }
 
   async get(productId: string): Promise<CatalogOfferSnapshot | null> {
     if (!/^\d+$/.test(String(productId ?? ''))) return null;
@@ -36,9 +76,11 @@ export class CatalogOfferService {
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
+    const stock = await this.stockOf([String(product.id)]);
     return toSnapshot(
       product,
       this.pricingOf(product, await this.pricing.context()),
+      stock.get(String(product.id)) ?? 0,
     );
   }
 
@@ -86,7 +128,10 @@ export class CatalogOfferService {
       .getMany();
     if (!rows.length) return [];
     const ctx = await this.pricing.context();
-    return rows.map((row) => toSnapshot(row, this.pricingOf(row, ctx)));
+    const stock = await this.stockOf(rows.map((row) => String(row.id)));
+    return rows.map((row) =>
+      toSnapshot(row, this.pricingOf(row, ctx), stock.get(String(row.id)) ?? 0),
+    );
   }
 
   /** Narx sozlamasi buzilgan bo‘lsa ham offer qaytadi — narxsiz (lead-service uni ochmaydi). */
@@ -138,6 +183,7 @@ export function isWithdrawn(product: Product): boolean {
 export function toSnapshot(
   product: Product,
   pricing?: OfferPricing,
+  stock = 0,
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
@@ -168,7 +214,7 @@ export function toSnapshot(
     affiliateFee: product.affiliateFee,
     centerDeliveryFee: pricing?.centerDeliveryFee ?? 0,
     addressDeliveryFee: pricing?.addressDeliveryFee ?? 0,
-    stock: 0, // BE-16/BE-17: band qilinmagan qoldiq
+    stock, // BE-16: HQ ombordagi bo‘sh (band qilinmagan) qoldiq
     creatives: [], // BE-08
     createdAt: new Date(product.createdAt).toISOString(),
   };

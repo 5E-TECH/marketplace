@@ -122,6 +122,12 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
         ds.getRepository(PriceDecision),
         emitter,
       ),
+      ds.getRepository(ProductVariant),
+      // BE-16: inventory — har bir faol variantda 5 dona bo‘sh qoldiq
+      {
+        send: (_p: unknown, d: { variantIds: string[] }) =>
+          of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
+      } as never,
     );
     const rows = (await ds.query(
       `SELECT id::text, slug, cpa_enabled FROM catalog.product WHERE id >= 9000 ORDER BY id`,
@@ -218,6 +224,7 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       affiliateFee: 65000,
       isBad: false,
       approvedPrice: null, // BE-09
+      stock: 5, // BE-16: faol variant qoldig‘i inventory dan
     });
     expect(
       (await offers.list({ productIds: [productId, 'x'] })).map(

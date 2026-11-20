@@ -18,6 +18,8 @@ import { Stock } from './entities/stock.entity';
 import { StockMovement } from './entities/stock-movement.entity';
 
 interface VariantInventoryDetails {
+  /** BE-16: mahsulot optovigi (qoldiq egasi). */
+  wholesalerId: string;
   variantId: string;
   productId: string;
   productName: string;
@@ -55,11 +57,16 @@ export class AdminInventoryQueryService {
     const search = query.search?.trim();
     let variantIds: string[] | undefined;
     let searchTruncated = false;
-    if (search || query.productId) {
+    // BE-16: bitta HQ ombor — optovik (shopId) bo‘yicha filtr mahsulot egaligi orqali (katalog)
+    if (search || query.productId || query.shopId) {
       const found = await sendRpc<{ variantIds: string[]; truncated: boolean }>(
         this.catalog,
         { cmd: 'catalog.admin.variant-search' },
-        { search: search || undefined, productId: query.productId },
+        {
+          search: search || undefined,
+          productId: query.productId,
+          wholesalerId: query.shopId,
+        },
       );
       if (!found.variantIds.length) {
         return {
@@ -76,7 +83,7 @@ export class AdminInventoryQueryService {
       .createQueryBuilder('stock')
       .innerJoinAndSelect('stock.warehouse', 'warehouse')
       .where('warehouse.owner_type = :ownerType', {
-        ownerType: WarehouseOwnerType.SHOP,
+        ownerType: WarehouseOwnerType.HQ,
       });
     this.warehouseFilters(builder, query);
     if (query.warehouseId)
@@ -97,22 +104,17 @@ export class AdminInventoryQueryService {
     // stock → warehouse ko'pdan-birga: JOIN qatorlarni ko'paytirmaydi, shuning
     // uchun oddiy OFFSET/LIMIT to'g'ri sahifalaydi.
     const [rows, total] = await builder
-      .orderBy('warehouse.ownerId', 'ASC')
-      .addOrderBy('stock.updatedAt', 'DESC')
+      .orderBy('stock.updatedAt', 'DESC')
       .addOrderBy('stock.id', 'ASC')
       .offset((page - 1) * limit)
       .limit(limit)
       .getManyAndCount();
 
     const { info, warnings } = await this.variantInfo(
-      rows.map((row) => ({
-        shopId: row.warehouse.ownerId,
-        variantId: row.variantId,
-      })),
+      rows.map((row) => row.variantId),
     );
     const items = rows.map<AdminStockItemDto>((row) => ({
-      shopId: row.warehouse.ownerId,
-      ...info(row.warehouse.ownerId, row.variantId),
+      ...info(row.variantId),
       warehouseId: row.warehouseId,
       warehouseName: row.warehouse.name,
       warehouseActive: row.warehouse.isActive,
@@ -131,12 +133,26 @@ export class AdminInventoryQueryService {
   async movementList(
     query: AdminStockMovementsQueryDto,
   ): Promise<AdminStockMovementsPageDto> {
+    let variantIds: string[] | undefined;
+    if (query.shopId) {
+      const found = await sendRpc<{ variantIds: string[] }>(
+        this.catalog,
+        { cmd: 'catalog.admin.variant-search' },
+        { wholesalerId: query.shopId },
+      );
+      if (!found.variantIds.length)
+        return {
+          ...this.page([], 0, query.page ?? 1, query.limit ?? 20),
+          warnings: [],
+        };
+      variantIds = found.variantIds;
+    }
     const builder = this.movements
       .createQueryBuilder('movement')
       .innerJoinAndSelect('movement.stock', 'stock')
       .innerJoinAndSelect('stock.warehouse', 'warehouse')
       .where('warehouse.owner_type = :ownerType', {
-        ownerType: WarehouseOwnerType.SHOP,
+        ownerType: WarehouseOwnerType.HQ,
       });
     this.warehouseFilters(builder, query);
     if (query.warehouseId)
@@ -146,6 +162,10 @@ export class AdminInventoryQueryService {
     if (query.variantId)
       builder.andWhere('movement.variant_id = :variantId', {
         variantId: query.variantId,
+      });
+    if (variantIds)
+      builder.andWhere('movement.variant_id IN (:...variantIds)', {
+        variantIds,
       });
     if (query.type)
       builder.andWhere('movement.type = :type', { type: query.type });
@@ -167,15 +187,11 @@ export class AdminInventoryQueryService {
       .take(limit)
       .getManyAndCount();
     const { info, warnings } = await this.variantInfo(
-      rows.map((row) => ({
-        shopId: row.stock.warehouse.ownerId,
-        variantId: row.variantId,
-      })),
+      rows.map((row) => row.variantId),
     );
     const items = rows.map<AdminStockMovementItemDto>((row) => ({
       id: row.id,
-      shopId: row.stock.warehouse.ownerId,
-      ...info(row.stock.warehouse.ownerId, row.variantId),
+      ...info(row.variantId),
       warehouseId: row.warehouseId,
       warehouseName: row.stock.warehouse.name,
       warehouseActive: row.stock.warehouse.isActive,
@@ -192,15 +208,11 @@ export class AdminInventoryQueryService {
     return { ...this.page(items, total, page, limit), warnings };
   }
 
-  /** Qoldiq va harakatlar uchun BIR XIL ombor filtri (do'kon + faollik). */
+  /** Qoldiq va harakatlar uchun bir xil ombor filtri (faollik). Optovik filtri — katalog orqali (BE-16). */
   private warehouseFilters(
     builder: SelectQueryBuilder<Stock> | SelectQueryBuilder<StockMovement>,
-    query: { shopId?: string; warehouseActive?: boolean },
+    query: { warehouseActive?: boolean },
   ): void {
-    if (query.shopId)
-      builder.andWhere('warehouse.owner_id = :shopId', {
-        shopId: query.shopId,
-      });
     if (query.warehouseActive !== undefined)
       builder.andWhere('warehouse.is_active = :warehouseActive', {
         warehouseActive: query.warehouseActive,
@@ -208,60 +220,43 @@ export class AdminInventoryQueryService {
   }
 
   /**
-   * Sahifa qatorlari uchun katalog ma'lumoti, do'kon bo'yicha bitta RPC.
-   *
-   * Qatorlar HECH QACHON tushib qolmaydi: avval katalog variantni qaytarmasa
-   * qator jimgina yo'qolardi, bitta do'kon katalogi yiqilsa esa butun
-   * endpoint yiqilardi (`Promise.all`). Endi yiqilgan do'kon `warnings` da,
-   * topilmagan variant esa `catalogMissing: true` bilan qaytadi.
+   * Sahifa qatorlari uchun katalog ma’lumoti bitta RPC bilan; optovik (`shopId`) — mahsulot egasi (BE-16: ombor
+   * bitta). Qator tushib qolmaydi: katalog javob bermasa — `warnings`, variant topilmasa — `catalogMissing: true`.
    */
-  private async variantInfo(
-    rows: Array<{ shopId: string; variantId: string }>,
-  ): Promise<{
-    info: (shopId: string, variantId: string) => VariantInfo;
+  private async variantInfo(variantIds: string[]): Promise<{
+    info: (variantId: string) => VariantInfo & { shopId: string | null };
     warnings: AdminCatalogWarningDto[];
   }> {
-    const byShop = new Map<string, Set<string>>();
-    for (const row of rows) {
-      const ids = byShop.get(row.shopId) ?? new Set<string>();
-      ids.add(row.variantId);
-      byShop.set(row.shopId, ids);
-    }
-    const shops = [...byShop.keys()];
-    const results = await Promise.allSettled(
-      shops.map((shopId) =>
-        sendRpc<VariantInventoryDetails[]>(
+    const details = new Map<string, VariantInventoryDetails>();
+    const warnings: AdminCatalogWarningDto[] = [];
+    let failed = false;
+    const ids = [...new Set(variantIds)];
+    if (ids.length)
+      try {
+        const rows = await sendRpc<VariantInventoryDetails[]>(
           this.catalog,
           { cmd: 'inventory.variant-details' },
-          { shopId, variantIds: [...byShop.get(shopId)!] },
-        ),
-      ),
-    );
-    const details = new Map<string, VariantInventoryDetails>();
-    const failed = new Set<string>();
-    const warnings: AdminCatalogWarningDto[] = [];
-    results.forEach((result, index) => {
-      const shopId = shops[index];
-      if (result.status === 'rejected') {
-        failed.add(shopId);
-        warnings.push({ shopId, reason: this.errorMessage(result.reason) });
-        return;
+          { variantIds: ids },
+        );
+        for (const variant of rows)
+          details.set(String(variant.variantId), variant);
+      } catch (error) {
+        failed = true;
+        warnings.push({ shopId: null, reason: this.errorMessage(error) });
       }
-      for (const variant of result.value)
-        details.set(`${shopId}:${variant.variantId}`, variant);
-    });
     return {
       warnings,
-      info: (shopId, variantId) => {
-        const variant = details.get(`${shopId}:${variantId}`);
+      info: (variantId) => {
+        const variant = details.get(String(variantId));
         return {
+          shopId: variant?.wholesalerId ?? null,
           variantId,
           productId: variant?.productId ?? null,
           productName: variant?.productName ?? null,
           variantName: variant?.variantName ?? null,
           sku: variant?.sku ?? null,
-          // Katalog javob bermagan do'konda "topilmadi" deb bo'lmaydi.
-          catalogMissing: !variant && !failed.has(shopId),
+          // Katalog javob bermaganda "topilmadi" deb bo‘lmaydi.
+          catalogMissing: !variant && !failed,
         };
       },
     };

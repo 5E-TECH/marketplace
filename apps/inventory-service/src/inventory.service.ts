@@ -3,8 +3,10 @@ import {
   BusinessException,
   ReservationStatus,
   StockMovementType,
+  WarehouseOwnerType,
 } from '@app/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
+import { Warehouse } from './entities/warehouse.entity';
 import { ReservationItem } from './entities/reservation-item.entity';
 import { Reservation } from './entities/reservation.entity';
 import { Stock } from './entities/stock.entity';
@@ -116,36 +118,55 @@ export class InventoryService {
     );
   }
 
-  /** Checkout uchun variantni qoldig‘i mavjud omborga bog‘lab, atomik reserve qiladi. */
+  /** BE-16 (TZ 6.6): platformaning bitta HQ ombori. Yo‘q bo‘lsa — sozlash xatosi (migratsiya yaratadi). */
+  async hqWarehouseId(): Promise<string> {
+    const hq = await this.dataSource.getRepository(Warehouse).findOne({
+      where: {
+        ownerType: WarehouseOwnerType.HQ,
+        isDeleted: false,
+        isActive: true,
+      },
+    });
+    if (!hq) throw BusinessException.invalidState('HQ ombor topilmadi');
+    return String(hq.id);
+  }
+
+  /**
+   * Buyurtma uchun band qilish (tasdiqda): har tovar HQ ombordan. Qoldiq yetmasa — rad; ikki parallel band oxirgi
+   * dona uchun — qator qulfi (`lockStock`) bilan bittasi rad (TC4).
+   */
   async reserveAvailable(input: {
     orderRef: string;
     items: Array<{ variantId: string; quantity: number }>;
     ttlMs?: number;
     idempotencyKey: string;
   }): Promise<InventoryResult> {
-    const resolved = [] as ReserveInput['items'];
-    for (const item of input.items) {
-      const stock = await this.dataSource
-        .getRepository(Stock)
-        .createQueryBuilder('stock')
-        .where('stock.variantId = :variantId', { variantId: item.variantId })
-        .andWhere(
-          '(stock.quantityOnHand - stock.quantityReserved) >= :quantity',
-          {
-            quantity: item.quantity,
-          },
-        )
-        .orderBy('(stock.quantityOnHand - stock.quantityReserved)', 'DESC')
-        .addOrderBy('stock.id', 'ASC')
-        .getOne();
-      if (!stock) {
-        throw BusinessException.insufficientStock(
-          `Variant ${item.variantId} uchun qoldiq yetarli emas`,
-        );
-      }
-      resolved.push({ ...item, warehouseId: stock.warehouseId });
-    }
-    return this.reserve({ ...input, items: resolved });
+    const warehouseId = await this.hqWarehouseId();
+    return this.reserve({
+      ...input,
+      items: input.items.map((item) => ({ ...item, warehouseId })),
+    });
+  }
+
+  /** Sotuvchilar uchun bo‘sh qoldiq (band qilinmagan) HQ omborda, variant bo‘yicha (SOT-2: qoldig‘i 0 offerga oqim yo‘q). */
+  async available(variantIds: string[]): Promise<Record<string, number>> {
+    const ids = [...new Set(variantIds.map(String))].filter((id) =>
+      /^\d+$/.test(id),
+    );
+    const result: Record<string, number> = Object.fromEntries(
+      ids.map((id) => [id, 0]),
+    );
+    if (!ids.length) return result;
+    const warehouseId = await this.hqWarehouseId();
+    const rows = await this.dataSource.getRepository(Stock).find({
+      where: { variantId: In(ids), warehouseId, isDeleted: false },
+    });
+    for (const row of rows)
+      result[String(row.variantId)] = Math.max(
+        0,
+        row.quantityOnHand - row.quantityReserved,
+      );
+    return result;
   }
 
   commit(input: ReservationActionInput): Promise<InventoryResult> {
@@ -290,7 +311,7 @@ export class InventoryService {
             await saveMovement(
               manager,
               stock,
-              StockMovementType.INBOUND,
+              StockMovementType.RETURN, // BE-16: qaytish alohida tur
               quantity,
               input.reason,
               undefined,
@@ -307,7 +328,7 @@ export class InventoryService {
         }
 
         return {
-          operation: StockMovementType.INBOUND,
+          operation: StockMovementType.RETURN,
           orderRef: input.orderRef,
           reservationId: reservation.id,
         };

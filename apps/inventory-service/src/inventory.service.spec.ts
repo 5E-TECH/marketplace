@@ -359,12 +359,12 @@ describe('InventoryService', () => {
     });
 
     expect(result).toMatchObject({
-      operation: StockMovementType.INBOUND,
+      operation: StockMovementType.RETURN,
       orderRef: '301',
     });
     expect(db.stocks[0].quantityOnHand).toBe(8);
     expect(db.movements.at(-1)).toMatchObject({
-      type: StockMovementType.INBOUND,
+      type: StockMovementType.RETURN,
       quantity: 3,
       reason: 'Elchi returned: evt_1',
       referenceType: 'RESERVATION',
@@ -391,7 +391,7 @@ describe('InventoryService', () => {
     expect(second).toEqual(first);
     expect(db.stocks[0].quantityOnHand).toBe(5);
     expect(
-      db.movements.filter((item) => item.type === StockMovementType.INBOUND),
+      db.movements.filter((item) => item.type === StockMovementType.RETURN),
     ).toHaveLength(1);
   });
 
