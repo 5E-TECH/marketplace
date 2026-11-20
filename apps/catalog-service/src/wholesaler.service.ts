@@ -92,6 +92,14 @@ export class WholesalerService {
 
   async update(id: string, dto: UpdateWholesalerDto): Promise<WholesalerDto> {
     const shop = await this.find(id);
+    // Holat faqat faol ↔ to‘xtatilgan: eski PENDING/REJECTED do‘kon bu yo‘l bilan faollashmaydi
+    if (
+      dto.status !== undefined &&
+      ![ShopStatus.ACTIVE, ShopStatus.SUSPENDED].includes(shop.status)
+    )
+      throw new ConflictException(
+        `${shop.status} holatidagi yozuvni bu yerda o‘zgartirib bo‘lmaydi`,
+      );
     const fields = [
       'name',
       'legalType',
@@ -130,11 +138,14 @@ export class WholesalerService {
     try {
       return await repo.save(shop);
     } catch (error) {
-      if (
-        error instanceof QueryFailedError &&
-        (error.driverError as { code?: string })?.code === '23505'
-      )
-        throw new ConflictException('Bu STIR bilan optovik allaqachon bor');
+      const driver = (error as QueryFailedError).driverError as
+        { code?: string; constraint?: string } | undefined;
+      if (error instanceof QueryFailedError && driver?.code === '23505')
+        throw new ConflictException(
+          driver.constraint === 'uq_catalog_shop_tin'
+            ? 'Bu STIR bilan optovik allaqachon bor'
+            : 'Bunday optovik allaqachon bor',
+        );
       throw error;
     }
   }

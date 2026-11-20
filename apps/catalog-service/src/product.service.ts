@@ -355,6 +355,8 @@ export class ProductService {
     }
     if (dto.categoryId !== undefined) product.categoryId = dto.categoryId;
     if (dto.description !== undefined) product.description = dto.description;
+    if (dto.price === null)
+      throw new BadRequestException('Narx bo‘sh bo‘lishi mumkin emas');
     if (dto.price !== undefined) product.price = dto.price;
     if (dto.oldPrice !== undefined) product.oldPrice = dto.oldPrice;
     if (dto.imageUrl !== undefined) product.imageUrl = dto.imageUrl;
@@ -429,9 +431,14 @@ export class ProductService {
   }
 
   private async getShop(ownerUserId: string): Promise<Shop> {
-    const shop = await this.shops.findOne({
-      where: { ownerUserId, isDeleted: false },
-    });
+    // shartnoma maydonlari `select: false` — OPT-1 tekshiruvi uchun o‘qiladi
+    const shop = await this.shops
+      .createQueryBuilder('shop')
+      .addSelect(['shop.contractNumber', 'shop.contractDate'])
+      .where('shop.owner_user_id = :ownerUserId AND shop.is_deleted = FALSE', {
+        ownerUserId: String(ownerUserId),
+      })
+      .getOne();
     if (!shop) throw new NotFoundException('Sotuvchining do‘koni topilmadi');
     return shop;
   }
