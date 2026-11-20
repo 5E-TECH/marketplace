@@ -33,6 +33,8 @@ describeWithMinio(
       secretKey,
     });
 
+    const proxyAgent = new http.Agent({ keepAlive: false });
+
     /** Caddy `handle_path /media/*` kabi: prefiksni olib tashlaydi, Host sarlavhasini o‘zgartirmaydi. */
     const startProxy = () =>
       new Promise<void>((resolve) => {
@@ -45,6 +47,8 @@ describeWithMinio(
             {
               host: endpoint,
               port,
+              // o‘z agenti: minio klienti bilan bitta keep-alive soketlar to‘plamini bo‘lishmasin
+              agent: proxyAgent,
               method: req.method,
               path: req.url.slice('/media'.length),
               headers: req.headers,
@@ -101,12 +105,19 @@ describeWithMinio(
       return buffer;
     };
 
+    const exists = (key: string) =>
+      admin.statObject(bucket, key).then(
+        () => true,
+        () => false,
+      );
+
     beforeAll(async () => {
       await startProxy();
       publicUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/media`;
       // bucket va ochiq o‘qish siyosati (creatives/ ham) — file-service ishga tushganda qiladigan ish
       await new FileServiceService(config()).onModuleInit();
       creatives = new CreativeFileService(config());
+      await creatives.onApplicationBootstrap();
     });
 
     afterAll(async () => {
@@ -118,11 +129,12 @@ describeWithMinio(
         stream.on('error', reject);
       }).catch(() => undefined);
       if (names.length) await admin.removeObjects(bucket, names);
+      await admin.removeBucketLifecycle(bucket).catch(() => undefined);
       await admin.removeBucket(bucket).catch(() => undefined);
       await new Promise((resolve) => proxy?.close(resolve));
     });
 
-    it('TC1: 80 MB mp4 imzolangan POST bilan /media orqali yuklandi, tekshiruvdan o‘tdi va ochiq havola bilan o‘qiladi', async () => {
+    it('TC1: 80 MB mp4 /media orqali yuklandi (yuklama ochiq emas), tekshiruvdan keyin ochiq havola bilan o‘qiladi; imzoni qayta ishlatish ochiq faylni almashtirmaydi', async () => {
       const size = 80 * MB;
       const policy = await creatives.uploadPolicy({
         productId: '12',
@@ -131,24 +143,39 @@ describeWithMinio(
         size,
       });
       expect(policy.url).toBe(`${publicUrl}/${bucket}`);
-      const response = await post(policy, mp4(size), 'video/mp4');
-      expect([200, 201, 204]).toContain(response.status);
+      expect([200, 201, 204]).toContain(
+        (await post(policy, mp4(size), 'video/mp4')).status,
+      );
+      // tasdiqlanmagan yuklama — tokensiz o‘qilmaydi
+      expect(
+        (await fetch(`${publicUrl}/${bucket}/${policy.objectKey}`)).status,
+      ).toBe(403);
 
       const file = await creatives.verify({
         productId: '12',
         objectKey: policy.objectKey,
       });
       expect(file).toMatchObject({
+        objectKey: policy.objectKey.replace('creative-uploads/', 'creatives/'),
         type: CreativeType.VIDEO,
         mimeType: 'video/mp4',
         size,
-        url: `${publicUrl}/${bucket}/${policy.objectKey}`,
+        url: `${publicUrl}/${bucket}/${policy.objectKey.replace('creative-uploads/', 'creatives/')}`,
       });
+      expect(await exists(policy.objectKey)).toBe(false);
       // ochiq havola — tokensiz
       const head = await fetch(file.url, { method: 'HEAD' });
       expect(head.status).toBe(200);
       expect(head.headers.get('content-type')).toBe('video/mp4');
       expect(Number(head.headers.get('content-length'))).toBe(size);
+
+      // o‘sha imzo bilan HTML qayta yuklandi — faqat yopiq yuklama papkasiga tushadi
+      const html = Buffer.from('<html><script>alert(1)</script></html>');
+      expect([200, 201, 204]).toContain(
+        (await post(policy, html, 'video/mp4')).status,
+      );
+      const after = await fetch(file.url, { method: 'HEAD' });
+      expect(Number(after.headers.get('content-length'))).toBe(size);
     }, 60_000);
 
     it('TC3: rasm yuklandi va ochiq havola bilan o‘qiladi', async () => {
@@ -174,6 +201,10 @@ describeWithMinio(
       expect(Buffer.from(await get.arrayBuffer()).subarray(0, 8)).toEqual(
         png.subarray(0, 8),
       );
+      // javob yetib kelmagan qayta tasdiq — o‘sha fayl
+      await expect(
+        creatives.verify({ productId: '12', objectKey: policy.objectKey }),
+      ).resolves.toEqual(file);
     });
 
     it('TC2: imzodan boshqa tur yoki chegaradan katta fayl — MinIO o‘zi rad etadi', async () => {
@@ -190,12 +221,10 @@ describeWithMinio(
       // rasm chegarasi 10 MB — 11 MB lik fayl
       const tooBig = await post(image, Buffer.alloc(11 * MB), 'image/png');
       expect(tooBig.status).toBeGreaterThanOrEqual(400);
-      await expect(
-        admin.statObject(bucket, image.objectKey),
-      ).rejects.toBeDefined();
+      expect(await exists(image.objectKey)).toBe(false);
     });
 
-    it('«video/mp4» deb yuklangan HTML — tekshiruvda rad etiladi va fayl o‘chiriladi', async () => {
+    it('«video/mp4» deb yuklangan HTML — tekshiruvda rad etiladi, yuklama o‘chiriladi, ochiq papkaga tushmaydi', async () => {
       const html = Buffer.from('<html><script>alert(1)</script></html>');
       const policy = await creatives.uploadPolicy({
         productId: '12',
@@ -209,9 +238,27 @@ describeWithMinio(
       await expect(
         creatives.verify({ productId: '12', objectKey: policy.objectKey }),
       ).rejects.toThrow('mos emas');
-      await expect(
-        admin.statObject(bucket, policy.objectKey),
-      ).rejects.toBeDefined();
+      expect(await exists(policy.objectKey)).toBe(false);
+      expect(
+        await exists(
+          policy.objectKey.replace('creative-uploads/', 'creatives/'),
+        ),
+      ).toBe(false);
+    });
+
+    it('yuklama papkasida 1 kunlik muddat qoidasi bor', async () => {
+      // qayta ishga tushganda (qoida bor, klient uni obyekt qilib beradi) xatosiz o‘tadi va qoidani takrorlamaydi
+      await creatives.onApplicationBootstrap();
+      const lifecycle = await admin.getBucketLifecycle(bucket);
+      expect([lifecycle?.Rule].flat()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ID: 'elchi-creative-uploads-expire',
+            Status: 'Enabled',
+            Expiration: expect.objectContaining({ Days: 1 }),
+          }),
+        ]),
+      );
     });
   },
 );

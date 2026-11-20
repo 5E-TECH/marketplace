@@ -486,6 +486,19 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       ],
     });
     await expect(creatives.list(productId)).resolves.toHaveLength(2);
+    // gateway tasdiqdan oldin so‘raydi: bor — o‘sha kreativ, yo‘q — null
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(1, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toMatchObject({ creative: { id: video.id } });
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(7, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toEqual({ creative: null });
 
     await expect(
       creatives.delete({ productId, creativeId: image.id }),
@@ -493,6 +506,13 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       id: image.id,
       objectKey: file(2, CreativeType.IMAGE).objectKey,
     });
+    // o‘chirilgan kreativ fayli qayta tasdiqlanmaydi
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(2, CreativeType.IMAGE).objectKey,
+      }),
+    ).rejects.toThrow('o‘chirilgan');
     const after = await offers.list({ productIds: [productId] } as never);
     expect(after.find((o) => o.productId === productId)?.creatives).toEqual([
       { id: video.id, type: 'VIDEO', url: video.url },

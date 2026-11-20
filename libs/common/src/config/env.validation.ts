@@ -54,11 +54,19 @@ export const envValidationSchema = Joi.object({
   MINIO_PUBLIC_URL: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .required(),
-  // BE-08: kreativlar sozlamasi (fayl turi va hajm) [taklif]
-  CREATIVE_VIDEO_TYPES: Joi.string().default('video/mp4,video/webm'),
+  // BE-08: kreativlar sozlamasi (fayl turi va hajm) [taklif]. Tur faqat ma’lum ro‘yxatdan — noma’lum tur jim
+  // tushib qolib, ro‘yxat bo‘sh qolmasin.
+  CREATIVE_VIDEO_TYPES: Joi.string()
+    .pattern(/^\s*video\/(mp4|webm)\s*(,\s*video\/(mp4|webm)\s*)*$/i)
+    .default('video/mp4,video/webm'),
   CREATIVE_VIDEO_MAX_MB: Joi.number().integer().min(1).max(2048).default(100),
-  CREATIVE_IMAGE_TYPES: Joi.string().default('image/jpeg,image/png,image/webp'),
+  CREATIVE_IMAGE_TYPES: Joi.string()
+    .pattern(/^\s*image\/(jpeg|png|webp)\s*(,\s*image\/(jpeg|png|webp)\s*)*$/i)
+    .default('image/jpeg,image/png,image/webp'),
   CREATIVE_IMAGE_MAX_MB: Joi.number().integer().min(1).max(100).default(10),
+  // Yuklash policy sini imzolovchi alohida MinIO kaliti (faqat `creative-uploads/*` ga yozish); bo‘sh — asosiy kalit
+  CREATIVE_UPLOAD_ACCESS_KEY: Joi.string().allow('').optional(),
+  CREATIVE_UPLOAD_SECRET_KEY: Joi.string().allow('').optional(),
 
   // Auth (JWT)
   JWT_SECRET: Joi.string().min(16).required(),

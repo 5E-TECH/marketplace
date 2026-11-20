@@ -4707,6 +4707,9 @@
           },
           "404": {
             "description": "Mahsulot topilmadi"
+          },
+          "409": {
+            "description": "Kreativlar chegarasi"
           }
         },
         "security": [
@@ -4722,7 +4725,7 @@
     },
     "/api/v1/admin/products/{id}/creatives": {
       "post": {
-        "description": "Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Bir mahsulotga 20 tagacha kreativ.",
+        "description": "Yuklash javobidagi `objectKey` yuboriladi. Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Mos kelsa ochiq papkaga ko‘chiriladi. Takroriy tasdiq o‘sha kreativni qaytaradi. Bir mahsulotga 20 tagacha kreativ.",
         "operationId": "AdminCreativesController_confirm",
         "parameters": [
           {
@@ -14233,7 +14236,8 @@
           },
           "objectKey": {
             "type": "string",
-            "example": "creatives/12/7b0c…mp4"
+            "example": "creative-uploads/12/7b0c…mp4",
+            "description": "Tasdiqlashda shu kalit yuboriladi"
           },
           "expiresAt": {
             "type": "string",
@@ -14258,7 +14262,8 @@
         "properties": {
           "objectKey": {
             "type": "string",
-            "example": "creatives/12/7b0c3e1a-….mp4"
+            "example": "creative-uploads/12/7b0c3e1a-….mp4",
+            "description": "Yuklash javobidagi `objectKey`"
           }
         },
         "required": [

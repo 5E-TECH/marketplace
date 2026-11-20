@@ -1,12 +1,16 @@
 import {
+  BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Inject,
   Ip,
+  Logger,
   Param,
   Post,
 } from '@nestjs/common';
@@ -24,11 +28,13 @@ import {
 import {
   CREATIVE_RPC,
   CreativeConfirmDto,
+  creativeKeyFromUpload,
   CreativeDto,
   CreativeUploadPolicyDto,
   CreativeUploadRequestDto,
   CurrentUser,
   JwtUser,
+  MAX_CREATIVES_PER_PRODUCT,
   RmqClient,
   Role,
   Roles,
@@ -47,6 +53,8 @@ import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 @Roles(Role.ADMIN, Role.SUPERADMIN)
 @Controller('admin/products/:id/creatives')
 export class AdminCreativesController {
+  private readonly logger = new Logger(AdminCreativesController.name);
+
   constructor(
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.FILE) private readonly files: ClientProxy,
@@ -65,12 +73,21 @@ export class AdminCreativesController {
     description: 'Fayl turi yoki hajmi ruxsat etilmagan',
   })
   @ApiNotFoundResponse({ description: 'Mahsulot topilmadi' })
+  @ApiConflictResponse({ description: 'Kreativlar chegarasi' })
   async uploadPolicy(
     @Param('id', ParseLeadIdPipe) productId: string,
     @Body() dto: CreativeUploadRequestDto,
   ): Promise<CreativeUploadPolicyDto> {
-    // mahsulot bor-yo‘qligi (yo‘q mahsulotga fayl yuklanmasin)
-    await sendRpc(this.catalog, { cmd: CREATIVE_RPC.LIST }, { productId });
+    // mahsulot bor-yo‘qligi va chegara — 100 MB yuklangandan keyin emas, oldin aytilsin
+    const existing = await sendRpc<CreativeDto[]>(
+      this.catalog,
+      { cmd: CREATIVE_RPC.LIST },
+      { productId },
+    );
+    if (existing.length >= MAX_CREATIVES_PER_PRODUCT)
+      throw new ConflictException(
+        `Bir mahsulotga ${MAX_CREATIVES_PER_PRODUCT} tadan ortiq kreativ bo‘lmaydi`,
+      );
     return sendRpc(
       this.files,
       { cmd: CREATIVE_RPC.UPLOAD_POLICY },
@@ -87,7 +104,7 @@ export class AdminCreativesController {
   @ApiOperation({
     summary: 'Yuklangan faylni kreativ qilib saqlash',
     description:
-      'Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Bir mahsulotga 20 tagacha kreativ.',
+      'Yuklash javobidagi `objectKey` yuboriladi. Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Mos kelsa ochiq papkaga ko‘chiriladi. Takroriy tasdiq o‘sha kreativni qaytaradi. Bir mahsulotga 20 tagacha kreativ.',
   })
   @ApiCreatedResponse({ type: CreativeDto })
   @ApiBadRequestResponse({ description: 'Fayl yo‘q yoki mos emas' })
@@ -98,6 +115,17 @@ export class AdminCreativesController {
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ): Promise<CreativeDto> {
+    const finalKey = creativeKeyFromUpload(dto.objectKey);
+    if (!finalKey) throw new BadRequestException('objectKey noto‘g‘ri');
+    // takroriy tasdiq (oldingi javob yetib kelmagan): fayl qayta tekshirilmaydi va o‘chirilmaydi
+    const { creative: already } = await sendRpc<{
+      creative: CreativeDto | null;
+    }>(
+      this.catalog,
+      { cmd: CREATIVE_RPC.FIND },
+      { productId, objectKey: finalKey },
+    );
+    if (already) return already;
     const file = await sendRpc<VerifiedCreativeFile>(
       this.files,
       { cmd: CREATIVE_RPC.VERIFY },
@@ -111,8 +139,10 @@ export class AdminCreativesController {
         { productId, file, actorId: admin.sub },
       );
     } catch (error) {
-      // kreativ yozilmadi (chegara, mahsulot o‘chirilgan) — fayl ochiq papkada qolib ketmasin
-      await this.removeFile(file.objectKey);
+      // aniq yozilmadi (chegara, mahsulot o‘chirilgan) — fayl ochiq papkada qolmasin. Javob kelmagan (504) yoki
+      // ichki xato (5xx) bo‘lsa kreativ yozilgan bo‘lishi mumkin — fayl qoladi, qayta tasdiq o‘sha kreativni beradi.
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      if (status >= 400 && status < 500) await this.removeFile(file.objectKey);
       throw error;
     }
     this.audit(admin.sub, 'creative.create', creative.id, ip, {
@@ -158,7 +188,12 @@ export class AdminCreativesController {
       this.files,
       { cmd: CREATIVE_RPC.REMOVE },
       { objectKey },
-    ).catch(() => undefined);
+    ).catch((error) =>
+      // kreativ yozuvida kalit qoladi — qo‘lda tozalash uchun logda
+      this.logger.warn(
+        `Kreativ fayli o‘chirilmadi (${objectKey}): ${(error as Error)?.message}`,
+      ),
+    );
   }
 
   private audit(

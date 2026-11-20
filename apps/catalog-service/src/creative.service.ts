@@ -41,7 +41,6 @@ export class CreativeService {
       !String(file.objectKey ?? '').startsWith(`creatives/${productId}/`)
     )
       throw new BadRequestException('Kreativ fayli noto‘g‘ri');
-    await this.requireProduct(productId);
     return this.creatives.manager.transaction(async (manager) => {
       const repo = manager.getRepository(Creative);
       // bir mahsulotga parallel qo‘shishda chegara buzilmasin
@@ -51,9 +50,11 @@ export class CreativeService {
       const existing = await repo.findOne({
         where: { objectKey: file.objectKey },
       });
-      if (existing && !existing.isDeleted) return this.toDto(existing); // takroriy tasdiq
+      // takroriy tasdiq (oldingi javob yetib kelmagan) — mahsulot holatidan qat’i nazar o‘sha kreativ
+      if (existing && !existing.isDeleted) return this.toDto(existing);
       if (existing)
         throw new ConflictException('Bu fayl o‘chirilgan kreativga tegishli');
+      await this.requireProduct(productId);
       const count = await repo.count({
         where: { productId, isDeleted: false },
       });
@@ -83,6 +84,28 @@ export class CreativeService {
       );
       return this.toDto(saved);
     });
+  }
+
+  /**
+   * Fayl allaqachon kreativmi (gateway tasdiqdan oldin so‘raydi): bor — o‘sha kreativ, yo‘q — `null` (RMQ javobi
+   * bo‘sh qolmasin — obyekt ichida), o‘chirilgan — 409.
+   * Shunda qayta tasdiqda fayl qayta tekshirilmaydi va o‘chirilmaydi.
+   */
+  async find(input: {
+    productId: string;
+    objectKey: string;
+  }): Promise<{ creative: CreativeDto | null }> {
+    const productId = this.productIdOf(input?.productId);
+    const objectKey = String(input?.objectKey ?? '');
+    if (!objectKey.startsWith(`creatives/${productId}/`))
+      return { creative: null };
+    const row = await this.creatives.findOne({
+      where: { objectKey, productId },
+    });
+    if (!row) return { creative: null };
+    if (row.isDeleted)
+      throw new ConflictException('Bu fayl o‘chirilgan kreativga tegishli');
+    return { creative: this.toDto(row) };
   }
 
   async list(productId: string): Promise<CreativeDto[]> {

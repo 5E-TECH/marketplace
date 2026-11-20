@@ -1,22 +1,38 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client } from 'minio';
+import { Client, CopyConditions, LifecycleRule } from 'minio';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
   CREATIVE_FOLDER,
+  CREATIVE_UPLOAD_FOLDER,
+  CREATIVE_UPLOAD_KEY,
   CreativeType,
   CreativeUploadPolicyDto,
+  creativeKeyFromUpload,
   VerifiedCreativeFile,
 } from '@app/common';
 
 /** Yuklash imzosining amal qilish muddati [taklif]: 80 MB sekin internetda ham sig‘sin. */
 const POLICY_TTL_MS = 15 * 60 * 1000;
+/** Tasdiqlanmagan yuklamalar shuncha kundan keyin o‘chadi (MinIO lifecycle) [taklif]. */
+const UPLOAD_EXPIRY_DAYS = 1;
+const UPLOAD_EXPIRY_RULE_ID = 'elchi-creative-uploads-expire';
 const MB = 1024 * 1024;
 const ID = /^[1-9]\d{0,18}$/;
+const FINAL_KEY = new RegExp(
+  `^${CREATIVE_FOLDER}/\\d{1,19}/[0-9a-f-]{36}\\.(?:mp4|webm|jpg|png|webp)$`,
+);
 
 /** Ruxsat etilgan fayl turi → kengaytma (sozlamadagi tur shu ro‘yxatda bo‘lishi kerak). */
-const EXTENSIONS: Record<string, string> = {
+export const CREATIVE_EXTENSIONS: Record<string, string> = {
   'video/mp4': '.mp4',
   'video/webm': '.webm',
   'image/jpeg': '.jpg',
@@ -29,6 +45,12 @@ interface TypeSettings {
   maxBytes: number;
 }
 
+interface ObjectStat {
+  size: number;
+  etag: string;
+  metaData: Record<string, unknown>;
+}
+
 /**
  * Kreativ fayllari (BE-08): imzolangan POST policy bilan to‘g‘ridan-to‘g‘ri MinIO ga yuklash va yuklangandan keyin
  * tekshirish.
@@ -36,25 +58,43 @@ interface TypeSettings {
  * POST policy (PUT emas): imzo faqat qoidalar hujjati ustidan — bucket, kalit, fayl turi, hajm oralig‘i. Yo‘l ustidan
  * emas, shuning uchun prodda `https://api…/media/<bucket>` orqali (Caddy `/media` prefiksini olib tashlaydi) ham
  * ishlaydi. Hajm chegarasi va fayl turini MinIO o‘zi tekshiradi.
+ *
+ * Fayl yopiq `creative-uploads/` ga yuklanadi; tekshiruvdan o‘tgan aynan o‘sha versiya (ETag) ochiq `creatives/` ga
+ * server tomonida ko‘chiriladi.
  */
 @Injectable()
-export class CreativeFileService {
+export class CreativeFileService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CreativeFileService.name);
   private readonly client: Client;
+  /** Policy imzolovchi: alohida kalit berilgan bo‘lsa (faqat `creative-uploads/*` ga yozish), aks holda asosiy. */
+  private readonly signer: Client;
   private readonly bucket: string;
   private readonly publicBaseUrl: string;
   private readonly settings: Record<CreativeType, TypeSettings>;
 
   constructor(config: ConfigService) {
-    this.client = new Client({
+    const connection = {
       endPoint: config.getOrThrow<string>('MINIO_ENDPOINT'),
       port: Number(config.getOrThrow<number>('MINIO_PORT')),
       useSSL: config.get<boolean>('MINIO_USE_SSL', false),
-      accessKey: config.getOrThrow<string>('MINIO_ACCESS_KEY'),
-      secretKey: config.getOrThrow<string>('MINIO_SECRET_KEY'),
       // imzo hisobi uchun mintaqa — tarmoq orqali so‘ralmasin
       region: config.get<string>('MINIO_REGION', 'us-east-1'),
+    };
+    this.client = new Client({
+      ...connection,
+      accessKey: config.getOrThrow<string>('MINIO_ACCESS_KEY'),
+      secretKey: config.getOrThrow<string>('MINIO_SECRET_KEY'),
     });
+    const uploadAccessKey = config.get<string>('CREATIVE_UPLOAD_ACCESS_KEY');
+    const uploadSecretKey = config.get<string>('CREATIVE_UPLOAD_SECRET_KEY');
+    this.signer =
+      uploadAccessKey && uploadSecretKey
+        ? new Client({
+            ...connection,
+            accessKey: uploadAccessKey,
+            secretKey: uploadSecretKey,
+          })
+        : this.client;
     this.bucket = config.getOrThrow<string>('MINIO_BUCKET');
     this.publicBaseUrl = config
       .getOrThrow<string>('MINIO_PUBLIC_URL')
@@ -63,7 +103,7 @@ export class CreativeFileService {
       (value ?? fallback)
         .split(',')
         .map((type) => type.trim().toLowerCase())
-        .filter((type) => EXTENSIONS[type]);
+        .filter((type) => CREATIVE_EXTENSIONS[type]);
     this.settings = {
       [CreativeType.VIDEO]: {
         types: list(
@@ -82,9 +122,20 @@ export class CreativeFileService {
     };
   }
 
+  /** Bucket file-service `onModuleInit` da yaratilgan — keyin yuklama papkasiga muddat qo‘yiladi. */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      await this.ensureUploadExpiry();
+    } catch (error) {
+      this.logger.warn(
+        `Yuklama papkasi uchun lifecycle qo‘yilmadi: ${(error as Error).message}`,
+      );
+    }
+  }
+
   /**
    * Yuklash uchun imzolangan POST policy (TC1, TC3). Sozlamada yo‘q tur yoki chegaradan katta hajm — 400 (TC2).
-   * Kalit — `creatives/<mahsulot>/<uuid>.<kengaytma>`: tasdiqlashda shu mahsulotga tegishliligi tekshiriladi.
+   * Kalit — `creative-uploads/<mahsulot>/<uuid>.<kengaytma>`: tasdiqlashda shu mahsulotga tegishliligi tekshiriladi.
    */
   async uploadPolicy(input: {
     productId: string;
@@ -102,22 +153,22 @@ export class CreativeFileService {
       .toLowerCase();
     if (!settings.types.includes(contentType))
       throw new BadRequestException(
-        `Bu fayl turi ruxsat etilmagan: ${contentType || '—'}. Ruxsat: ${settings.types.join(', ')}`,
+        `Bu fayl turi ruxsat etilmagan: ${contentType || '—'}. Ruxsat: ${settings.types.join(', ') || '—'}`,
       );
     const size = Number(input?.size);
     if (!Number.isSafeInteger(size) || size < 1 || size > settings.maxBytes)
       throw new BadRequestException(
         `Fayl hajmi ${Math.round(settings.maxBytes / MB)} MB dan oshmasligi kerak`,
       );
-    const objectKey = `${CREATIVE_FOLDER}/${productId}/${randomUUID()}${EXTENSIONS[contentType]}`;
+    const objectKey = `${CREATIVE_UPLOAD_FOLDER}/${productId}/${randomUUID()}${CREATIVE_EXTENSIONS[contentType]}`;
     const expiresAt = new Date(Date.now() + POLICY_TTL_MS);
-    const policy = this.client.newPostPolicy();
+    const policy = this.signer.newPostPolicy();
     policy.setBucket(this.bucket);
     policy.setKey(objectKey);
     policy.setContentType(contentType);
     policy.setContentLengthRange(1, settings.maxBytes);
     policy.setExpires(expiresAt);
-    const { formData } = await this.client.presignedPostPolicy(policy);
+    const { formData } = await this.signer.presignedPostPolicy(policy);
     return {
       // ichki manzil emas — ochiq manzil (prodda API domeni `/media` orqali)
       url: `${this.publicBaseUrl}/${this.bucket}`,
@@ -130,65 +181,147 @@ export class CreativeFileService {
 
   /**
    * Yuklangan faylni tekshiradi: shu mahsulot kaliti, bor, hajmi va turi sozlamada, birinchi baytlari turiga mos
-   * (masalan, «video/mp4» deb yuklangan HTML ochiq havolada tarqalmasin). Mos kelmasa fayl o‘chiriladi va 400.
+   * (masalan, «video/mp4» deb yuklangan HTML ochiq havolada tarqalmasin). Mos kelmasa yuklama o‘chiriladi va 400.
+   * Mos kelsa aynan tekshirilgan versiya `creatives/` ga ko‘chiriladi va yakuniy kalit qaytadi.
+   *
+   * Qayta tasdiq (oldingi javob yetib kelmagan): yuklama allaqachon ko‘chirilgan bo‘lsa, yakuniy fayl qaytadi.
    */
   async verify(input: {
     productId: string;
     objectKey: string;
   }): Promise<VerifiedCreativeFile> {
     const productId = String(input?.productId ?? '');
-    const objectKey = String(input?.objectKey ?? '');
-    if (!ID.test(productId) || !this.isProductKey(productId, objectKey))
+    const uploadKey = String(input?.objectKey ?? '');
+    const match = CREATIVE_UPLOAD_KEY.exec(uploadKey);
+    const finalKey = creativeKeyFromUpload(uploadKey);
+    if (!ID.test(productId) || !match || match[1] !== productId || !finalKey)
       throw new BadRequestException('Fayl kaliti bu mahsulotga tegishli emas');
-    let stat: { size: number; metaData: Record<string, unknown> };
+    const upload = await this.statOrNull(uploadKey);
+    if (!upload) return this.alreadyCopied(finalKey);
+    const mimeType = this.mimeTypeOf(upload);
+    const type = this.typeOf(mimeType);
+    let signatureOk: boolean;
     try {
-      stat = await this.client.statObject(this.bucket, objectKey);
-    } catch {
-      throw new BadRequestException('Fayl topilmadi — avval yuklang');
+      signatureOk =
+        !!type && (await this.signatureMatches(uploadKey, mimeType));
+    } catch (error) {
+      // parallel tasdiq yuklamani ko‘chirib o‘chirib ulgurgan
+      if (this.isMissing(error)) return this.alreadyCopied(finalKey);
+      throw this.unavailable('o‘qish', error);
     }
-    const mimeType = String(
-      stat.metaData?.['content-type'] ?? stat.metaData?.['Content-Type'] ?? '',
-    ).toLowerCase();
-    const type = (Object.keys(this.settings) as CreativeType[]).find((key) =>
-      this.settings[key].types.includes(mimeType),
-    );
     const problem = !type
       ? `fayl turi ruxsat etilmagan: ${mimeType || '—'}`
-      : stat.size < 1 || stat.size > this.settings[type].maxBytes
-        ? `fayl hajmi chegaradan tashqarida: ${stat.size}`
-        : !(await this.signatureMatches(objectKey, mimeType))
+      : upload.size < 1 || upload.size > this.settings[type].maxBytes
+        ? `fayl hajmi chegaradan tashqarida: ${upload.size}`
+        : !signatureOk
           ? 'fayl tarkibi ko‘rsatilgan turga mos emas'
           : null;
     if (problem) {
-      await this.removeQuietly(objectKey);
+      await this.removeQuietly(uploadKey);
       throw new BadRequestException(`Kreativ qabul qilinmadi: ${problem}`);
     }
-    return {
-      objectKey,
-      url: `${this.publicBaseUrl}/${this.bucket}/${objectKey}`,
-      type: type!,
-      mimeType,
-      size: stat.size,
-    };
+    // aynan tekshirilgan versiya ko‘chirilsin: tekshiruv paytida imzo bilan qayta yuklangan bo‘lsa — ko‘chmaydi
+    const conditions = new CopyConditions();
+    conditions.setMatchETag(upload.etag);
+    try {
+      await this.client.copyObject(
+        this.bucket,
+        finalKey,
+        `/${this.bucket}/${uploadKey}`,
+        conditions,
+      );
+    } catch (error) {
+      if (this.errorCode(error) === 'PreconditionFailed')
+        throw new ConflictException(
+          'Fayl tekshiruv paytida o‘zgardi — qayta tasdiqlang',
+        );
+      if (this.isMissing(error)) return this.alreadyCopied(finalKey);
+      throw this.unavailable('ko‘chirish', error);
+    }
+    await this.removeQuietly(uploadKey);
+    return this.result(finalKey, type!, mimeType, upload.size);
   }
 
-  /** Kreativ o‘chirilganda fayl ham o‘chiriladi (topilmasa — jim). */
+  /** Kreativ o‘chirilganda (yoki yozilmaganda) fayl ham o‘chiriladi (topilmasa — jim). */
   async remove(input: { objectKey: string }): Promise<{ removed: boolean }> {
     const objectKey = String(input?.objectKey ?? '');
-    if (
-      !new RegExp(
-        `^${CREATIVE_FOLDER}/\\d+/[0-9a-f-]{36}\\.[a-z0-9]{2,5}$`,
-      ).test(objectKey)
-    )
+    if (!FINAL_KEY.test(objectKey) && !CREATIVE_UPLOAD_KEY.test(objectKey))
       throw new BadRequestException('Fayl kaliti noto‘g‘ri');
-    await this.removeQuietly(objectKey);
+    await this.client.removeObject(this.bucket, objectKey).catch((error) => {
+      throw this.unavailable('o‘chirish', error);
+    });
     return { removed: true };
   }
 
-  private isProductKey(productId: string, objectKey: string): boolean {
-    return new RegExp(
-      `^${CREATIVE_FOLDER}/${productId}/[0-9a-f-]{36}\\.(mp4|webm|jpg|png|webp)$`,
-    ).test(objectKey);
+  private result(
+    objectKey: string,
+    type: CreativeType,
+    mimeType: string,
+    size: number,
+  ): VerifiedCreativeFile {
+    return {
+      objectKey,
+      url: `${this.publicBaseUrl}/${this.bucket}/${objectKey}`,
+      type,
+      mimeType,
+      size,
+    };
+  }
+
+  /** Yuklama yo‘q: oldingi (yoki parallel) tasdiqda ko‘chirilgan bo‘lsa — yakuniy fayl (u yerga faqat tekshirilgani tushadi). */
+  private async alreadyCopied(finalKey: string): Promise<VerifiedCreativeFile> {
+    const copied = await this.statOrNull(finalKey);
+    const mimeType = copied ? this.mimeTypeOf(copied) : '';
+    const type = this.typeOf(mimeType);
+    if (!copied || !type)
+      throw new BadRequestException('Fayl topilmadi — avval yuklang');
+    return this.result(finalKey, type, mimeType, copied.size);
+  }
+
+  private isMissing(error: unknown): boolean {
+    const code = this.errorCode(error);
+    return code === 'NotFound' || code === 'NoSuchKey';
+  }
+
+  private mimeTypeOf(stat: ObjectStat): string {
+    return String(
+      stat.metaData?.['content-type'] ?? stat.metaData?.['Content-Type'] ?? '',
+    ).toLowerCase();
+  }
+
+  private typeOf(mimeType: string): CreativeType | undefined {
+    return (Object.keys(this.settings) as CreativeType[]).find((key) =>
+      this.settings[key].types.includes(mimeType),
+    );
+  }
+
+  /** Fayl yo‘q — null; MinIO ishlamasa yoki ruxsat yo‘q — 503 (400 «topilmadi» emas). */
+  private async statOrNull(objectKey: string): Promise<ObjectStat | null> {
+    try {
+      return (await this.client.statObject(
+        this.bucket,
+        objectKey,
+      )) as ObjectStat;
+    } catch (error) {
+      if (this.isMissing(error)) return null;
+      throw this.unavailable('tekshirish', error);
+    }
+  }
+
+  private errorCode(error: unknown): string | undefined {
+    return (error as { code?: string })?.code;
+  }
+
+  private unavailable(
+    action: string,
+    error: unknown,
+  ): ServiceUnavailableException {
+    this.logger.error(
+      `Kreativ faylini ${action}da MinIO xatosi: ${(error as Error)?.message}`,
+    );
+    return new ServiceUnavailableException(
+      'Fayl ombori vaqtincha ishlamayapti — birozdan so‘ng qayta urinib ko‘ring',
+    );
   }
 
   private async removeQuietly(objectKey: string): Promise<void> {
@@ -199,6 +332,38 @@ export class CreativeFileService {
         `Kreativ fayli o‘chirilmadi (${objectKey}): ${(error as Error).message}`,
       );
     }
+  }
+
+  /** `creative-uploads/` dagi tasdiqlanmagan fayllar 1 kunda o‘chadi; bucketdagi boshqa qoidalar saqlanadi. */
+  private async ensureUploadExpiry(): Promise<void> {
+    const current = await this.client
+      .getBucketLifecycle(this.bucket)
+      .catch((error) => {
+        if (this.errorCode(error) === 'NoSuchLifecycleConfiguration')
+          return null;
+        throw error;
+      });
+    // minio klienti bitta qoidani massiv emas, obyekt qilib qaytaradi
+    const rules = ([] as LifecycleRule[]).concat(current?.Rule ?? []);
+    const others = rules.filter((rule) => rule.ID !== UPLOAD_EXPIRY_RULE_ID);
+    const mine = rules.find((rule) => rule.ID === UPLOAD_EXPIRY_RULE_ID);
+    if (
+      mine?.Status === 'Enabled' &&
+      mine.Filter?.Prefix === `${CREATIVE_UPLOAD_FOLDER}/` &&
+      Number(mine.Expiration?.Days) === UPLOAD_EXPIRY_DAYS
+    )
+      return;
+    await this.client.setBucketLifecycle(this.bucket, {
+      Rule: [
+        ...others,
+        {
+          ID: UPLOAD_EXPIRY_RULE_ID,
+          Status: 'Enabled',
+          Filter: { Prefix: `${CREATIVE_UPLOAD_FOLDER}/` },
+          Expiration: { Days: UPLOAD_EXPIRY_DAYS },
+        },
+      ],
+    });
   }
 
   /** Faylning birinchi baytlari turiga mos (mp4 — `ftyp`, webm — EBML, rasm — imzosi). */

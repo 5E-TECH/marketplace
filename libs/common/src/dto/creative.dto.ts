@@ -22,6 +22,23 @@ export enum CreativeType {
 /** MinIO dagi papka (ochiq o‘qish siyosatida; `PUBLIC_MEDIA_FOLDERS` dan alohida — banner manzili tekshiruviga kirmaydi). */
 export const CREATIVE_FOLDER = 'creatives';
 
+/**
+ * Yuklash papkasi: ochiq emas, fayllar 1 kundan keyin o‘chadi (MinIO lifecycle) [taklif]. Brauzer faylni shu yerga
+ * yuklaydi; tekshiruvdan o‘tgani server tomonida `creatives/` ga ko‘chiriladi. Shuning uchun imzo qayta ishlatilsa
+ * ham tekshirilgan fayl almashtirilmaydi, tasdiqlanmagan fayl ochiq havolada turmaydi.
+ */
+export const CREATIVE_UPLOAD_FOLDER = 'creative-uploads';
+
+/** Yuklash kaliti: `creative-uploads/<mahsulot>/<uuid>.<kengaytma>`. */
+export const CREATIVE_UPLOAD_KEY =
+  /^creative-uploads\/(\d{1,19})\/([0-9a-f-]{36}\.(?:mp4|webm|jpg|png|webp))$/;
+
+/** Yuklash kalitidan yakuniy (ochiq) kalit: `creatives/<mahsulot>/<uuid>.<kengaytma>`; noto‘g‘ri kalit — null. */
+export function creativeKeyFromUpload(uploadKey: string): string | null {
+  const match = CREATIVE_UPLOAD_KEY.exec(String(uploadKey ?? ''));
+  return match ? `${CREATIVE_FOLDER}/${match[1]}/${match[2]}` : null;
+}
+
 /** Bir mahsulotga kreativlar chegarasi [taklif]. */
 export const MAX_CREATIVES_PER_PRODUCT = 20;
 
@@ -35,6 +52,8 @@ export const CREATIVE_RPC = {
   REMOVE: 'file.creative.remove',
   /** gateway → catalog. */
   CREATE: 'catalog.creative.create',
+  /** gateway → catalog: shu fayl allaqachon kreativmi (takroriy tasdiq). */
+  FIND: 'catalog.creative.find',
   LIST: 'catalog.creative.list',
   DELETE: 'catalog.creative.delete',
 } as const;
@@ -70,7 +89,10 @@ export class CreativeUploadPolicyDto {
   })
   fields: Record<string, string>;
 
-  @ApiProperty({ example: 'creatives/12/7b0c…mp4' })
+  @ApiProperty({
+    example: 'creative-uploads/12/7b0c…mp4',
+    description: 'Tasdiqlashda shu kalit yuboriladi',
+  })
   objectKey: string;
 
   @ApiProperty({ example: '2026-11-21T10:15:00.000Z' })
@@ -84,17 +106,18 @@ export class CreativeUploadPolicyDto {
 }
 
 export class CreativeConfirmDto {
-  @ApiProperty({ example: 'creatives/12/7b0c3e1a-….mp4' })
+  @ApiProperty({
+    example: 'creative-uploads/12/7b0c3e1a-….mp4',
+    description: 'Yuklash javobidagi `objectKey`',
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(300)
-  @Matches(/^creatives\/\d+\/[0-9a-f-]{36}\.[a-z0-9]{2,5}$/, {
-    message: 'objectKey noto‘g‘ri',
-  })
+  @Matches(CREATIVE_UPLOAD_KEY, { message: 'objectKey noto‘g‘ri' })
   objectKey: string;
 }
 
-/** file-service tekshiruvi natijasi. */
+/** file-service tekshiruvi natijasi: fayl `creatives/` ga ko‘chirilgan, `objectKey` — yakuniy kalit. */
 export interface VerifiedCreativeFile {
   objectKey: string;
   url: string;

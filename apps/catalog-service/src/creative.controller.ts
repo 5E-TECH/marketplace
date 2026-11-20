@@ -25,6 +25,11 @@ export class CreativeController {
     return this.creatives.create(data);
   }
 
+  @MessagePattern({ cmd: CREATIVE_RPC.FIND })
+  find(@Payload() data: { productId: string; objectKey: string }) {
+    return this.creatives.find(data);
+  }
+
   @MessagePattern({ cmd: CREATIVE_RPC.LIST })
   list(@Payload() data: { productId: string }) {
     return this.creatives.list(data?.productId);
