@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -9,8 +10,8 @@ import { randomUUID } from 'crypto';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
-  BusinessException,
   CheckoutDeliveryDestination,
+  ErrorCode,
   isLeadOrderTransitionAllowed,
   LeadOrderActor,
   LeadOrderActorType,
@@ -29,6 +30,25 @@ export const INVENTORY_COMMAND_AGGREGATE = 'inventory_command';
 const IMMEDIATE_INVENTORY_TIMEOUT_MS = 2_000;
 /** Bekor qilish sababi (BUY-3) — bo‘sh yoki «.» emas. */
 const MIN_REASON = 3;
+
+/** Ruxsatsiz o‘tish (BUY-2): 409; jurnalga tranzaksiyadan keyin yoziladi. */
+export class TransitionRejected extends ConflictException {
+  constructor(
+    readonly orderId: string,
+    readonly from: LeadOrderStatus,
+    readonly to: LeadOrderStatus,
+  ) {
+    super({
+      message: `Holatni o‘zgartirib bo‘lmaydi: ${from} → ${to}`,
+      errorCode: ErrorCode.INVALID_STATE,
+    });
+  }
+}
+
+export interface AppliedTransition {
+  result: LeadOrderTransitionResult;
+  command: InventoryCommand | null;
+}
 
 export interface LeadOrderTransitionResult {
   id: string;
@@ -64,6 +84,128 @@ export class LeadOrderStatusService {
   async transition(
     input: LeadOrderTransitionInput,
   ): Promise<LeadOrderTransitionResult> {
+    const { orderId, to, actor, reason } = this.validate(input);
+    let applied: AppliedTransition;
+    try {
+      applied = await this.dataSource.transaction((manager) =>
+        this.applyTransition(manager, { orderId, to, actor, reason }),
+      );
+    } catch (error) {
+      if (error instanceof TransitionRejected)
+        await this.recordRejected(error, actor, reason);
+      throw error;
+    }
+    await this.sendInventoryNow(applied.command);
+    return applied.result;
+  }
+
+  /**
+   * O‘tish chaqiruvchining tranzaksiyasida (BE-19: skaner, qadoq va topshirish akti buyurtma holati bilan birga).
+   * Ruxsatsiz o‘tish — `TransitionRejected` (tranzaksiya qaytadi; jurnalga `recordRejected` bilan alohida yoziladi).
+   * Ombor buyrug‘i outbox’ga yoziladi; commit dan keyin `sendInventoryNow` bilan darhol yuborish chaqiruvchida.
+   */
+  async applyTransition(
+    manager: EntityManager,
+    input: {
+      orderId: string;
+      to: LeadOrderStatus;
+      actor: LeadOrderActor;
+      reason: string | null;
+    },
+  ): Promise<AppliedTransition> {
+    const { orderId, to, actor, reason } = input;
+    const [order] = (await manager.query(
+      `SELECT status FROM checkout.sales_order
+        WHERE id = $1 AND source IS NOT NULL FOR UPDATE`,
+      [orderId],
+    )) as Array<{ status: LeadOrderStatus }>;
+    if (!order) throw new NotFoundException('Buyurtma topilmadi');
+    const from = order.status;
+    if (from === to)
+      return {
+        result: {
+          id: orderId,
+          status: to,
+          previousStatus: from,
+          idempotent: true,
+        },
+        command: null,
+      };
+    if (!isLeadOrderTransitionAllowed(from, to))
+      throw new TransitionRejected(orderId, from, to);
+    const command = inventoryCommand(orderId, to, actor, reason);
+    if (command)
+      await this.outbox.record(
+        {
+          // o‘z oqimi: ombor ishlamasa ham holat hodisasi (Elchi posilkasini bekor qilish) to‘xtab qolmasin
+          aggregateType: INVENTORY_COMMAND_AGGREGATE,
+          aggregateId: orderId,
+          eventType: command.cmd,
+          payload: command.payload,
+        },
+        manager,
+      );
+    await manager.query(
+      `UPDATE checkout.sales_order SET status = $2, updated_at = now() WHERE id = $1`,
+      [orderId, to],
+    );
+    // BE-19: bekor qilingan buyurtma yig‘ish ro‘yxatidan chiqadi
+    if (to === LeadOrderStatus.CANCELLED)
+      await manager.query(
+        `UPDATE checkout.fulfillment_task SET status = 'CANCELLED', updated_at = now()
+          WHERE order_id = $1 AND status <> 'HANDED_OVER'`,
+        [orderId],
+      );
+    await this.journal(manager, orderId, from, to, true, actor, reason);
+    await this.emit(manager, orderId, from, to);
+    return {
+      result: {
+        id: orderId,
+        status: to,
+        previousStatus: from,
+        idempotent: false,
+      },
+      command,
+    };
+  }
+
+  /** BUY-2: rad etilgan o‘tish jurnalga — asosiy tranzaksiya qaytgandan keyin, alohida. */
+  async recordRejected(
+    rejected: TransitionRejected,
+    actor: LeadOrderActor,
+    reason: string | null,
+  ): Promise<void> {
+    await this.journal(
+      this.dataSource.manager,
+      rejected.orderId,
+      rejected.from,
+      rejected.to,
+      false,
+      actor,
+      reason,
+    );
+  }
+
+  /**
+   * BUY-3 «darhol»: commit dan keyin bitta qisqa urinish; o‘tmasa outbox relay qayta yuboradi (≤ 10 s oralig‘ida).
+   * Qisqa kutish: gateway javobi (10 s) ombor ortidan kechikmasin — holat allaqachon saqlangan.
+   */
+  async sendInventoryNow(command: InventoryCommand | null): Promise<void> {
+    if (!command) return;
+    await firstValueFrom(
+      this.inventory
+        .send({ cmd: command.cmd }, command.payload)
+        .pipe(timeout(IMMEDIATE_INVENTORY_TIMEOUT_MS)),
+    ).catch(() => undefined);
+  }
+
+  /** Kirishni tekshiradi: buyurtma ID, holat, aktor; bekor qilishda sabab majburiy. */
+  validate(input: LeadOrderTransitionInput): {
+    orderId: string;
+    to: LeadOrderStatus;
+    actor: LeadOrderActor;
+    reason: string | null;
+  } {
     const orderId = String(input?.orderId ?? '');
     if (!ID.test(orderId)) throw new NotFoundException('Buyurtma topilmadi');
     const to = input?.to;
@@ -73,80 +215,7 @@ export class LeadOrderStatusService {
     const reason = input?.reason?.trim() || null;
     if (to === LeadOrderStatus.CANCELLED && (reason?.length ?? 0) < MIN_REASON)
       throw new BadRequestException('Bekor qilish sababi majburiy');
-
-    const outcome: {
-      rejected?: LeadOrderStatus;
-      command?: InventoryCommand;
-    } = {};
-    const result = await this.dataSource.transaction(async (manager) => {
-      const [order] = (await manager.query(
-        `SELECT status FROM checkout.sales_order
-          WHERE id = $1 AND source IS NOT NULL FOR UPDATE`,
-        [orderId],
-      )) as Array<{ status: LeadOrderStatus }>;
-      if (!order) throw new NotFoundException('Buyurtma topilmadi');
-      const from = order.status;
-      if (from === to)
-        return {
-          id: orderId,
-          status: to,
-          previousStatus: from,
-          idempotent: true,
-        };
-      if (!isLeadOrderTransitionAllowed(from, to)) {
-        outcome.rejected = from;
-        return null;
-      }
-      const command = inventoryCommand(orderId, to, actor, reason);
-      if (command)
-        await this.outbox.record(
-          {
-            // o‘z oqimi: ombor ishlamasa ham holat hodisasi (Elchi posilkasini bekor qilish) to‘xtab qolmasin
-            aggregateType: INVENTORY_COMMAND_AGGREGATE,
-            aggregateId: orderId,
-            eventType: command.cmd,
-            payload: command.payload,
-          },
-          manager,
-        );
-      outcome.command = command ?? undefined;
-      await manager.query(
-        `UPDATE checkout.sales_order SET status = $2, updated_at = now() WHERE id = $1`,
-        [orderId, to],
-      );
-      await this.journal(manager, orderId, from, to, true, actor, reason);
-      await this.emit(manager, orderId, from, to);
-      return {
-        id: orderId,
-        status: to,
-        previousStatus: from,
-        idempotent: false,
-      };
-    });
-    if (outcome.rejected) {
-      // BUY-2: rad etilgan o‘tish ham jurnalda — asosiy tranzaksiya qaytgani uchun alohida yoziladi
-      await this.journal(
-        this.dataSource.manager,
-        orderId,
-        outcome.rejected,
-        to,
-        false,
-        actor,
-        reason,
-      );
-      throw BusinessException.invalidState(
-        `Holatni o‘zgartirib bo‘lmaydi: ${outcome.rejected} → ${to}`,
-      );
-    }
-    // BUY-3 «darhol»: commit dan keyin bitta qisqa urinish; o‘tmasa outbox relay qayta yuboradi (≤ 10 s oralig‘ida).
-    // Qisqa kutish: gateway javobi (10 s) ombor ortidan kechikmasin — holat allaqachon saqlangan.
-    if (outcome.command)
-      await firstValueFrom(
-        this.inventory
-          .send({ cmd: outcome.command.cmd }, outcome.command.payload)
-          .pipe(timeout(IMMEDIATE_INVENTORY_TIMEOUT_MS)),
-      ).catch(() => undefined);
-    return result!;
+    return { orderId, to, actor, reason };
   }
 
   /** BUY-3: Elchi’ga topshirilgunga qadar, sabab bilan; band tovar darhol bo‘shaydi. */
@@ -251,14 +320,14 @@ export class LeadOrderStatusService {
               i.call_center_fee::text AS "callCenterFee", i.hidden_delivery::text AS "hiddenDelivery",
               i.platform_service::text AS "platformService"
          FROM checkout.sales_order_item i
-         JOIN checkout.sales_order_seller s ON s.id = i.sales_order_seller_id
+         JOIN checkout.parcel s ON s.id = i.sales_order_seller_id
         WHERE s.sales_order_id = $1
         ORDER BY i.id`,
       [orderId],
     )) as Array<Record<string, string | number | null>>;
     const [parcel] = (await manager.query(
       `SELECT elchi_shipment_id::text AS "shipmentId", tracking_url AS "trackingUrl"
-         FROM checkout.sales_order_seller
+         FROM checkout.parcel
         WHERE sales_order_id = $1 AND elchi_shipment_id IS NOT NULL
         ORDER BY id LIMIT 1`,
       [orderId],

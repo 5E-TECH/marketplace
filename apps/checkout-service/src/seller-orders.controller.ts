@@ -23,6 +23,7 @@ import {
   SkippedShippingLabel,
 } from './shipping-label.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
+import { FulfillmentService } from './fulfillment.service';
 import {
   resolveSellerShopId,
   SellerScope,
@@ -37,6 +38,7 @@ export class SellerOrdersController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     private readonly labels: ShippingLabelService,
     private readonly leadOrders: LeadOrderStatusService,
+    private readonly fulfillment: FulfillmentService,
   ) {}
 
   @MessagePattern({ cmd: 'seller.orders.list' })
@@ -152,6 +154,9 @@ export class SellerOrdersController {
   /** Admin: `orderId` = sales_order.id — buyurtmaning barcha posilkalari. */
   @MessagePattern({ cmd: 'checkout.admin.order-label' })
   async adminLabel(@Payload() data: { orderId: string }) {
+    // BE-19: lid buyurtmasi — telefon, SOATO va posilka `parcel` da (eski yorliq ularni manzil matnidan o‘qirdi)
+    if (await this.leadOrders.isLeadOrder(String(data?.orderId ?? '')))
+      return this.fulfillment.label(String(data.orderId));
     const { targets, missing } = await this.orders.adminShippingLabelTargets([
       String(data.orderId),
     ]);

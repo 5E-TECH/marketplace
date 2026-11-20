@@ -96,6 +96,8 @@ export interface CatalogOrderSnapshot {
   /** CPA mahsulotida bitta faol variant (BE-07). */
   variantId: string | null;
   sku: string | null;
+  /** Variant shtrix-kodi (BE-19 skaneri; OMB-2); yo‘q bo‘lsa — SKU skanerlanadi. */
+  barcode: string | null;
   /** Mahsulot optovigi (`catalog.shop`, BE-07). */
   wholesalerId: string;
   weightGrams: number;

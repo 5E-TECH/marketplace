@@ -25,6 +25,7 @@ describe('checkout.admin.order-cancel (BE-18)', () => {
       {} as never,
       {} as never,
       leadOrders as never,
+      {} as never,
     );
     return { controller, orders, leadOrders };
   };

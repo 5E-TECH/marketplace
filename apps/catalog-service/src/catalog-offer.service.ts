@@ -192,6 +192,7 @@ export class CatalogOfferService {
       productName: product.name,
       variantId: variant ? String(variant.id) : null,
       sku: variant?.sku ?? null,
+      barcode: variant?.barcode ?? null,
       wholesalerId: String(product.shopId),
       weightGrams: product.weightGrams!,
       cpaAvailable: isCpaAvailable(product),

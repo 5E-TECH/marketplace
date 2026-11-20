@@ -10323,6 +10323,231 @@
         ]
       }
     },
+    "/api/v1/warehouse/pick-list": {
+      "get": {
+        "description": "14:00 gacha (Toshkent) tasdiqlangan buyurtma — o‘sha kuni, keyin — ertasi kuni (OMB-4). Oldingi kunlardan qolganlar `overdue` bilan.",
+        "operationId": "WarehouseController_pickList",
+        "parameters": [
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "Yig‘ish kuni (Toshkent); berilmasa — bugun. Oldingi kunlardan qolganlar ham chiqadi.",
+            "schema": {
+              "example": "2026-12-15",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kunlik yig‘ish ro‘yxati",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/tasks/{id}/scan": {
+      "post": {
+        "description": "Buyurtmadagi tovar emas — 409 `WRONG_ITEM` (jurnalda). Birinchi to‘g‘ri skaner — buyurtma «Yig‘ilmoqda», hamma dona — vazifa «Yig‘ildi».",
+        "operationId": "WarehouseController_scan",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarehouseScanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "WRONG_ITEM — boshqa tovar; INVALID_STATE — vazifa holati"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tovarni skanerlash (shtrix-kod yoki SKU)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/tasks/{id}/pack": {
+      "post": {
+        "operationId": "WarehouseController_pack",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "409": {
+            "description": "INVALID_STATE — hali yig‘ilmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qadoqlandi (hamma dona to‘g‘ri skanerlangandan keyin)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/orders/{id}/label": {
+      "get": {
+        "operationId": "WarehouseController_label",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Buyurtma topilmadi"
+          },
+          "409": {
+            "description": "Elchi posilkasi hali yaratilmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Posilka yorlig‘i (100×60 mm): Elchi raqami, QR, tasdiqlangan manzil",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/handover-acts": {
+      "post": {
+        "description": "Har posilka qadoqlangan va Elchi posilkasi yaratilgan bo‘lishi kerak — bittasi ham tayyor bo‘lmasa butun akt rad (409, sabablar bilan). Aktdagi son = topshirilgan posilkalar (OMB-5).",
+        "operationId": "WarehouseController_handover",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarehouseHandoverDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Akt: raqam, sana, posilkalar"
+          },
+          "409": {
+            "description": "Akt tuzilmadi: qaysi posilka va nima uchun"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi’ga topshirish akti (skanerlangan QR lar)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/handover-acts/{id}": {
+      "get": {
+        "operationId": "WarehouseController_act",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Topshirish akti",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/handover-acts/{id}/pdf": {
+      "get": {
+        "operationId": "WarehouseController_actPdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Topshirish akti PDF (imzo uchun)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
     "/api/v1/admin/leads": {
       "get": {
         "description": "Telefon niqoblangan (BE-42).",
@@ -19455,6 +19680,34 @@
           "approveRate",
           "saleRate",
           "firstCallMedianMinutes"
+        ]
+      },
+      "WarehouseScanDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "4780012345678",
+            "description": "Tovar shtrix-kodi yoki SKU"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "WarehouseHandoverDto": {
+        "type": "object",
+        "properties": {
+          "qrTokens": {
+            "description": "Skanerlangan posilka QR tokenlari (yorliqdagi QR)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "qrTokens"
         ]
       },
       "AdminLeadListItemDto": {
