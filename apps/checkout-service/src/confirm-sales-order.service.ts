@@ -166,7 +166,9 @@ export class ConfirmSalesOrderService {
             `Do‘kon ${seller.shop_id} Elchi bilan bog‘lanmagan`,
           );
         }
-        sellerUserIds.push(String(shop.ownerUserId));
+        // BE-07: admin kiritgan optovikda foydalanuvchi yo‘q — qabul qiluvchi qo‘shilmaydi
+        if (shop.ownerUserId != null)
+          sellerUserIds.push(String(shop.ownerUserId));
 
         const items = (await manager.query(
           `SELECT product_id::text, product_name, quantity

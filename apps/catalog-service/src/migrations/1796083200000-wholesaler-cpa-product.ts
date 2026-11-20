@@ -37,6 +37,9 @@ export class WholesalerCpaProduct1796083200000 implements MigrationInterface {
       ADD CONSTRAINT "chk_catalog_shop_tin" CHECK ("tin" IS NULL OR "tin" ~ '^[0-9]{9}$'),
       ADD CONSTRAINT "chk_catalog_shop_bank_account" CHECK ("bank_account" IS NULL OR "bank_account" ~ '^[0-9]{20}$'),
       ADD CONSTRAINT "chk_catalog_shop_bank_mfo" CHECK ("bank_mfo" IS NULL OR "bank_mfo" ~ '^[0-9]{5}$')`);
+    // Bitta STIR — bitta optovik (o‘chirilganlardan tashqari)
+    await q.query(`CREATE UNIQUE INDEX "uq_catalog_shop_tin" ON "catalog"."shop" ("tin")
+      WHERE "tin" IS NOT NULL AND "is_deleted" = FALSE`);
     await q.query(`ALTER TABLE "catalog"."shop"
       DROP COLUMN IF EXISTS "tariff_home",
       DROP COLUMN IF EXISTS "tariff_center"`);
@@ -62,7 +65,7 @@ export class WholesalerCpaProduct1796083200000 implements MigrationInterface {
       ADD COLUMN "length_mm" INTEGER,
       ADD COLUMN "width_mm" INTEGER,
       ADD COLUMN "height_mm" INTEGER,
-      ADD COLUMN "cpa_enabled" BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN "cpa_enabled" BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN "is_bad" BOOLEAN NOT NULL DEFAULT FALSE,
       ADD CONSTRAINT "chk_catalog_product_base_price" CHECK ("base_price" IS NULL OR "base_price" >= 0),
       ADD CONSTRAINT "chk_catalog_product_affiliate_fee" CHECK ("affiliate_fee" IS NULL OR "affiliate_fee" >= 0),
@@ -70,8 +73,16 @@ export class WholesalerCpaProduct1796083200000 implements MigrationInterface {
       ADD CONSTRAINT "chk_catalog_product_dimensions" CHECK (
         ("length_mm" IS NULL OR "length_mm" > 0) AND ("width_mm" IS NULL OR "width_mm" > 0) AND ("height_mm" IS NULL OR "height_mm" > 0))`);
 
-    // Slug global unikal: takrorlarda eng kichik id o‘z slugini saqlaydi, qolganlariga `-<id>` qo‘shiladi
-    await q.query(`UPDATE "catalog"."product" p SET "slug" = p."slug" || '-' || p."id"
+    // Eski mahsulotlar CPA offeriga avtomatik aylanmaydi (og‘irlik, narx, shartnoma yo‘q): ular uchun FALSE,
+    // yangi mahsulot sukuti — TRUE (admin tasdig‘idan keyin sotuvchilarga ochiladi)
+    await q.query(
+      `ALTER TABLE "catalog"."product" ALTER COLUMN "cpa_enabled" SET DEFAULT TRUE`,
+    );
+
+    // Slug global unikal: takrorlarda eng kichik id o‘z slugini saqlaydi, qolganlariga `--<id>` qo‘shiladi.
+    // `toSlug` hech qachon `--` hosil qilmaydi, shuning uchun mavjud `iphone-15` bilan to‘qnashmaydi; 255 belgiga sig‘adi.
+    await q.query(`UPDATE "catalog"."product" p
+      SET "slug" = LEFT(p."slug", 255 - LENGTH('--' || p."id")) || '--' || p."id"
       WHERE EXISTS (SELECT 1 FROM "catalog"."product" o WHERE o."slug" = p."slug" AND o."id" < p."id")`);
     await q.query(
       `ALTER TABLE "catalog"."product" DROP CONSTRAINT IF EXISTS "uq_catalog_product_shop_slug"`,
@@ -119,6 +130,7 @@ export class WholesalerCpaProduct1796083200000 implements MigrationInterface {
     await q.query(`ALTER TABLE "catalog"."shop"
       ADD COLUMN IF NOT EXISTS "tariff_home" BIGINT NOT NULL DEFAULT 25000,
       ADD COLUMN IF NOT EXISTS "tariff_center" BIGINT NOT NULL DEFAULT 15000`);
+    await q.query(`DROP INDEX IF EXISTS "catalog"."uq_catalog_shop_tin"`);
     await q.query(`ALTER TABLE "catalog"."shop"
       DROP CONSTRAINT IF EXISTS "chk_catalog_shop_legal_type",
       DROP CONSTRAINT IF EXISTS "chk_catalog_shop_tin",

@@ -292,11 +292,13 @@ describe('ElchiIntegrationService (C1.6)', () => {
     });
   });
 
-  it('C6.7 TC5: do‘konni joriy catalog ma’lumoti bilan qayta provision qiladi', async () => {
+  it('C6.7 TC5: do‘konni joriy catalog ma’lumoti va saqlangan tarif bilan qayta provision qiladi (BE-07)', async () => {
     const record: any = {
       shopId: '9',
       status: 'done',
       elchiMarketId: '500',
+      tariffHome: 15000,
+      tariffCenter: 10000,
       retryCount: 0,
       lastError: null,
     };
@@ -322,14 +324,14 @@ describe('ElchiIntegrationService (C1.6)', () => {
     );
   });
 
-  it('C1.46 TC2: eski DONE marketlarni catalog tariflari bilan backfill qiladi', async () => {
+  it('C1.46 TC2: eski DONE marketlarni saqlangan tariflar bilan qayta provision qiladi (BE-07: catalogda tarif yo‘q)', async () => {
     const records = [
       {
         shopId: '4',
         status: 'done',
         elchiMarketId: '142',
-        tariffHome: 0,
-        tariffCenter: 0,
+        tariffHome: 25000,
+        tariffCenter: 15000,
         retryCount: 0,
         lastError: null,
       },
@@ -337,8 +339,8 @@ describe('ElchiIntegrationService (C1.6)', () => {
         shopId: '5',
         status: 'done',
         elchiMarketId: '152',
-        tariffHome: 0,
-        tariffCenter: 0,
+        tariffHome: 25000,
+        tariffCenter: 15000,
         retryCount: 0,
         lastError: null,
       },
@@ -351,8 +353,6 @@ describe('ElchiIntegrationService (C1.6)', () => {
           phone: '+998901234567',
           regionId: '1',
           districtId: '10',
-          tariffHome: 25000,
-          tariffCenter: 15000,
           elchiMarketId: input.shopId === '4' ? '142' : '152',
         }),
     );

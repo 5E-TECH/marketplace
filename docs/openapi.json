@@ -16457,6 +16457,14 @@
           "description": {
             "type": "string",
             "example": "Maishiy texnika optovigi"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ],
+            "description": "To‘xtatilgan optovik offerlari sotuvdan olinadi"
           }
         }
       },

@@ -4,7 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, QueryFailedError, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import {
+  Brackets,
+  QueryFailedError,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import {
   AdminWholesalersQueryDto,
   CreateWholesalerDto,
@@ -13,7 +19,7 @@ import {
   WholesalerDto,
   WholesalerPageDto,
 } from '@app/common';
-import { Shop } from './entities/shop.entity';
+import { Shop, WHOLESALER_PRIVATE_COLUMNS } from './entities/shop.entity';
 
 /**
  * BE-07: optovik (TZ 6.9, OPT-1). Ishga tushishda admin kiritadi (FE-25) — foydalanuvchisiz, rekvizitlar va
@@ -29,8 +35,8 @@ export class WholesalerService {
     const shop = this.shops.create({
       ownerUserId: null,
       name: dto.name,
-      // Nom + STIR: bir xil optovikni ikki marta kiritish 409 beradi (uq_catalog_shop_slug)
-      slug: `${slugify(dto.name)}-${dto.tin}`,
+      // Vaqtinchalik; ID ma’lum bo‘lgach `<nom>-<id>` (STIR slugga yozilmaydi — u ochiq sahifa manzilida ko‘rinardi)
+      slug: `optovik-${randomUUID()}`,
       description: dto.description ?? null,
       status: ShopStatus.ACTIVE, // admin kiritdi — tasdiq shu
       phone: dto.phone ?? null,
@@ -43,15 +49,20 @@ export class WholesalerService {
       contractNumber: dto.contractNumber,
       contractDate: dto.contractDate,
     });
-    return this.view(await this.save(shop));
+    return this.shops.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(Shop);
+      const saved = await this.save(shop, repo);
+      saved.slug = `${slugify(saved.name)}-${saved.id}`;
+      return this.view(await this.save(saved, repo));
+    });
   }
 
   async list(query: AdminWholesalersQueryDto): Promise<WholesalerPageDto> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const qb = this.shops
-      .createQueryBuilder('shop')
-      .where('shop.is_deleted = FALSE');
+    const qb = this.withPrivate(this.shops.createQueryBuilder('shop')).where(
+      'shop.is_deleted = FALSE',
+    );
     const search = query.search?.trim();
     if (search)
       qb.andWhere(
@@ -93,6 +104,7 @@ export class WholesalerService {
       'phone',
       'address',
       'description',
+      'status',
     ] as const;
     for (const field of fields)
       if (dto[field] !== undefined)
@@ -101,22 +113,28 @@ export class WholesalerService {
   }
 
   private async find(id: string): Promise<Shop> {
-    const shop = await this.shops.findOne({
-      where: { id: String(id), isDeleted: false },
-    });
+    if (!/^\d+$/.test(String(id ?? '')))
+      throw new NotFoundException('Optovik topilmadi');
+    const shop = await this.withPrivate(this.shops.createQueryBuilder('shop'))
+      .where('shop.id = :id AND shop.is_deleted = FALSE', { id: String(id) })
+      .getOne();
     if (!shop) throw new NotFoundException('Optovik topilmadi');
     return shop;
   }
 
-  private async save(shop: Shop): Promise<Shop> {
+  private withPrivate(qb: SelectQueryBuilder<Shop>) {
+    return qb.addSelect(WHOLESALER_PRIVATE_COLUMNS.map((c) => `shop.${c}`));
+  }
+
+  private async save(shop: Shop, repo = this.shops): Promise<Shop> {
     try {
-      return await this.shops.save(shop);
+      return await repo.save(shop);
     } catch (error) {
       if (
         error instanceof QueryFailedError &&
         (error.driverError as { code?: string })?.code === '23505'
       )
-        throw new ConflictException('Bunday optovik allaqachon bor');
+        throw new ConflictException('Bu STIR bilan optovik allaqachon bor');
       throw error;
     }
   }

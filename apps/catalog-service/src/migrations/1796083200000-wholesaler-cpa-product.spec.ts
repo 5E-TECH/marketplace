@@ -30,9 +30,8 @@ describe('WholesalerCpaProduct1796083200000 (BE-07)', () => {
     for (const status of Object.values(ProductStatus))
       expect(sql).toContain(`'${status}'`);
     expect(sql).toContain(`ALTER COLUMN "status" SET DEFAULT 'PENDING_REVIEW'`);
-    expect(sql).toMatch(
-      /SET "slug" = p\."slug" \|\| '-' \|\| p\."id".*o\."id" < p\."id"/,
-    );
+    expect(sql).toContain(`|| '--' || p."id"`);
+    expect(sql).toContain('o."id" < p."id"');
     expect(sql.indexOf('SET "slug"')).toBeLessThan(
       sql.indexOf('ADD CONSTRAINT "uq_catalog_product_slug" UNIQUE ("slug")'),
     );
@@ -40,6 +39,10 @@ describe('WholesalerCpaProduct1796083200000 (BE-07)', () => {
       'DROP CONSTRAINT IF EXISTS "uq_catalog_product_shop_slug"',
     );
     expect(sql).toContain('"weight_grams" IS NULL OR "weight_grams" > 0');
+    // eski mahsulotlar CPA offeriga avtomatik aylanmaydi
+    expect(sql).toContain('"cpa_enabled" BOOLEAN NOT NULL DEFAULT FALSE');
+    expect(sql).toContain('ALTER COLUMN "cpa_enabled" SET DEFAULT TRUE');
+    expect(sql).toContain('CREATE UNIQUE INDEX "uq_catalog_shop_tin"');
   });
 
   it('rollback eski CHECK, unikal (shop_id, slug) va tariflarni qaytaradi', async () => {

@@ -177,7 +177,8 @@ export class AdminCreateProductDto extends IntersectionType(
 
 /** `PATCH /admin/products/:id` — admin tahriri (BE-07). */
 export class AdminUpdateProductDto extends IntersectionType(
-  PartialType(CreateProductDto),
+  // `null` qabul qilinmaydi: og‘irlik, o‘lcham yoki bazaviy narxni o‘chirib bo‘lmaydi (BE-07)
+  PartialType(CreateProductDto, { skipNullProperties: false }),
   AdminProductFlagsDto,
 ) {}
 
@@ -201,7 +202,9 @@ export class HideProductDto {
   reason: string;
 }
 
-export class UpdateProductDto extends PartialType(CreateProductDto) {}
+export class UpdateProductDto extends PartialType(CreateProductDto, {
+  skipNullProperties: false,
+}) {}
 
 export class MyProductsQueryDto {
   @ApiPropertyOptional({ example: 'iphone' })

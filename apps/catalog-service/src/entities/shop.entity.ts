@@ -48,23 +48,49 @@ export class Shop extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   address: string | null;
 
+  // BE-07: rekvizitlar (STIR, bank, shartnoma) sukut bo‘yicha o‘qilmaydi (`select: false`) — ochiq storefront va
+  // boshqa javoblarga chiqmasin; ularni faqat `WHOLESALER_PRIVATE_COLUMNS` bilan admin API o‘qiydi.
   /** OPT-1: yuridik shaxs yoki YaTT. */
-  @Column({ name: 'legal_type', type: 'varchar', length: 20, nullable: true })
+  @Column({
+    name: 'legal_type',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    select: false,
+  })
   legalType: WholesalerLegalType | null;
 
   /** OPT-1: STIR (9 raqam). */
-  @Column({ type: 'varchar', length: 9, nullable: true })
+  @Column({ type: 'varchar', length: 9, nullable: true, select: false })
   tin: string | null;
 
-  @Column({ name: 'bank_name', type: 'varchar', length: 255, nullable: true })
+  @Column({
+    name: 'bank_name',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    select: false,
+  })
   bankName: string | null;
 
   /** Hisob raqami (20 raqam). */
-  @Column({ name: 'bank_account', type: 'varchar', length: 20, nullable: true })
+  @Column({
+    name: 'bank_account',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    select: false,
+  })
   bankAccount: string | null;
 
   /** Bank MFO kodi (5 raqam). */
-  @Column({ name: 'bank_mfo', type: 'varchar', length: 5, nullable: true })
+  @Column({
+    name: 'bank_mfo',
+    type: 'varchar',
+    length: 5,
+    nullable: true,
+    select: false,
+  })
   bankMfo: string | null;
 
   /** OPT-1: komissiya shartnomasi. Shartnomasiz mahsulot qo‘shib bo‘lmaydi. */
@@ -73,10 +99,16 @@ export class Shop extends BaseEntity {
     type: 'varchar',
     length: 64,
     nullable: true,
+    select: false,
   })
   contractNumber: string | null;
 
-  @Column({ name: 'contract_date', type: 'date', nullable: true })
+  @Column({
+    name: 'contract_date',
+    type: 'date',
+    nullable: true,
+    select: false,
+  })
   contractDate: string | null;
 
   @Column({
@@ -100,3 +132,14 @@ export class Shop extends BaseEntity {
   @OneToMany(() => Product, (product) => product.shop)
   products: Product[];
 }
+
+/** Optovik rekvizitlari ustunlari (`select: false`): admin API va shartnoma tekshiruvi `addSelect` bilan o‘qiydi. */
+export const WHOLESALER_PRIVATE_COLUMNS = [
+  'legalType',
+  'tin',
+  'bankName',
+  'bankAccount',
+  'bankMfo',
+  'contractNumber',
+  'contractDate',
+] as const;

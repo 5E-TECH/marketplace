@@ -15,7 +15,7 @@ describe('ProductService', () => {
     save: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
-  let shopRepo: { findOne: jest.Mock };
+  let shopRepo: { findOne: jest.Mock; createQueryBuilder: jest.Mock };
   let categoryRepo: { findOne: jest.Mock };
   let variantRepo: { create: jest.Mock; save: jest.Mock };
   let service: ProductService;
@@ -29,7 +29,15 @@ describe('ProductService', () => {
       save: jest.fn(async (value) => ({ id: value.id ?? '10', ...value })),
       createQueryBuilder: jest.fn(),
     };
-    shopRepo = { findOne: jest.fn() };
+    shopRepo = { findOne: jest.fn(), createQueryBuilder: jest.fn() };
+    // Optovik rekvizitlari `select: false` — servis ularni query builder bilan o‘qiydi; mock findOne natijasini beradi
+    shopRepo.createQueryBuilder.mockImplementation(() => {
+      const qb: Record<string, unknown> = {};
+      qb.addSelect = () => qb;
+      qb.where = () => qb;
+      qb.getOne = () => shopRepo.findOne();
+      return qb;
+    });
     categoryRepo = { findOne: jest.fn() };
     variantRepo = {
       create: jest.fn((value) => value),
@@ -263,9 +271,6 @@ describe('ProductService', () => {
       ...PHYS,
     });
 
-    expect(shopRepo.findOne).toHaveBeenCalledWith({
-      where: { id: '9', isDeleted: false },
-    });
     expect(productRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         shopId: '9',
@@ -299,6 +304,7 @@ describe('ProductService', () => {
         name: 'Gadget Trade',
         status: ShopStatus.ACTIVE,
         isDeleted: false,
+        ...CONTRACT,
       });
       (variantRepo as any).count = jest.fn(async () => 1);
     });
@@ -313,6 +319,29 @@ describe('ProductService', () => {
       expect(searchClient.emit).toHaveBeenCalledWith(
         'catalog.product.changed',
         expect.objectContaining({ productId: '10', active: true }),
+      );
+    });
+
+    it('OPT-1: to‘xtatilgan yoki shartnomasiz optovik mahsuloti tasdiqlanmaydi — 409', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.SUSPENDED,
+        isDeleted: false,
+        ...CONTRACT,
+      });
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        contractNumber: null,
+        contractDate: null,
+      });
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        ConflictException,
       );
     });
 

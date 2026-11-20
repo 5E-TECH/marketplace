@@ -39,7 +39,8 @@ export class ReturnNotifierService {
       const userIds: string[] = [];
       if (to.customerId) userIds.push(String(to.customerId));
       if (to.shopId && this.catalog) {
-        userIds.push(await shopOwnerUserId(this.catalog, to.shopId));
+        const owner = await shopOwnerUserId(this.catalog, to.shopId);
+        if (owner) userIds.push(owner); // BE-07: egasiz optovik
       }
       const recipients = [...new Set(userIds)].map((userId) => ({ userId }));
       if (!recipients.length) return;

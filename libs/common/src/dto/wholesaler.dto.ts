@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -100,7 +101,18 @@ export class CreateWholesalerDto {
   description?: string;
 }
 
-export class UpdateWholesalerDto extends PartialType(CreateWholesalerDto) {}
+/** `null` qabul qilinmaydi (`skipNullProperties: false`): shartnoma yoki nomni bo‘sh qilib bo‘lmaydi. */
+export class UpdateWholesalerDto extends PartialType(CreateWholesalerDto, {
+  skipNullProperties: false,
+}) {
+  @ApiPropertyOptional({
+    enum: [ShopStatus.ACTIVE, ShopStatus.SUSPENDED],
+    description: 'To‘xtatilgan optovik offerlari sotuvdan olinadi',
+  })
+  @IsOptional()
+  @IsIn([ShopStatus.ACTIVE, ShopStatus.SUSPENDED])
+  status?: ShopStatus.ACTIVE | ShopStatus.SUSPENDED;
+}
 
 export class AdminWholesalersQueryDto {
   @ApiPropertyOptional({

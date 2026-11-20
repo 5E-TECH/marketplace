@@ -12,6 +12,7 @@ import { CatalogOfferService } from './catalog-offer.service';
 import { ProductService } from './product.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
+import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
 
 const url = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = url ? describe : describe.skip;
@@ -50,6 +51,8 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
   let offers: CatalogOfferService;
   let wholesalerId: string;
   let productId: string;
+  let oldSlugs: Record<string, string>;
+  let oldCpa: boolean[];
 
   beforeAll(async () => {
     if (!new URL(url!).pathname.toLowerCase().includes('test'))
@@ -59,6 +62,27 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     await lock.query('SELECT pg_advisory_lock($1)', [CATALOG_SCHEMA_TEST_LOCK]);
     await lock.query('DROP SCHEMA IF EXISTS catalog CASCADE');
     await lock.query('CREATE SCHEMA catalog');
+
+    // Eski bazaga o‘xshash: BE-07 dan oldingi migratsiyalar, slug takrorlari (shu jumladan `iphone-15` bilan
+    // to‘qnashishi mumkin bo‘lgan) va faol eski mahsulot — keyin BE-07 migratsiyasi
+    const old = await new DataSource({
+      type: 'postgres',
+      url,
+      schema: 'catalog',
+      migrations: CATALOG_DB.migrations.filter(
+        (m) => m !== WholesalerCpaProduct1796083200000,
+      ),
+      migrationsRun: true,
+      synchronize: false,
+      logging: false,
+    }).initialize();
+    await old.query(`INSERT INTO catalog.shop (id, owner_user_id, name, slug, status) VALUES
+      (901, 42, 'Eski do‘kon A', 'eski-a', 'ACTIVE'), (902, 43, 'Eski do‘kon B', 'eski-b', 'ACTIVE')`);
+    await old.query(`INSERT INTO catalog.product (id, shop_id, owner_user_id, name, slug, price, status) VALUES
+      (9001, 901, 42, 'iPhone', 'iphone', 100, 'ACTIVE'),
+      (9015, 902, 43, 'iPhone', 'iphone', 100, 'ACTIVE'),
+      (9007, 902, 43, 'iPhone 15', 'iphone-9015', 100, 'ACTIVE')`);
+    await old.destroy();
     ds = await new DataSource({
       type: 'postgres',
       url,
@@ -84,6 +108,11 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       ds.getRepository(ProductVariant),
     );
     offers = new CatalogOfferService(ds.getRepository(Product));
+    const rows = (await ds.query(
+      `SELECT id::text, slug, cpa_enabled FROM catalog.product WHERE id >= 9000 ORDER BY id`,
+    )) as Array<{ id: string; slug: string; cpa_enabled: boolean }>;
+    oldSlugs = Object.fromEntries(rows.map((r) => [r.id, r.slug]));
+    oldCpa = rows.map((r) => r.cpa_enabled);
   });
 
   afterAll(async () => {
@@ -92,6 +121,17 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       await ds.destroy();
     }
     await lock?.end(); // sessiya yopilsa qulf bo‘shaydi
+  });
+
+  it('migratsiya: slug takrorlari `--<id>` bilan ajratildi (mavjud `iphone-9015` bilan to‘qnashmadi); eski mahsulotlar CPA ga ochilmadi', async () => {
+    expect(oldSlugs).toEqual({
+      '9001': 'iphone',
+      '9007': 'iphone-9015',
+      '9015': 'iphone--9015',
+    });
+    expect(oldCpa).toEqual([false, false, false]);
+    const listed = (await offers.list()).map((o) => o.productId);
+    expect(listed).not.toContain('9001');
   });
 
   it('TC5: admin optovikni foydalanuvchisiz, STIR, bank rekvizitlari va shartnoma bilan yaratadi; takror — 409', async () => {
@@ -106,9 +146,24 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       tin: '305123456',
       contractDate: '2026-11-20',
     });
-    await expect(wholesalers.create(WHOLESALER)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    // slugda STIR yo‘q (ochiq manzil); bitta STIR — bitta optovik
+    expect(created.slug).toBe(`gadget-trade-mchj-${created.id}`);
+    await expect(
+      wholesalers.create({ ...WHOLESALER, name: 'Boshqa nom' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    // rekvizitlar oddiy o‘qishda (storefront, mahsulot join) chiqmaydi
+    const plain = await ds
+      .getRepository(Shop)
+      .findOneByOrFail({ id: created.id });
+    expect(plain).not.toHaveProperty('tin');
+    expect(plain).not.toHaveProperty('bankAccount');
+    expect(plain).not.toHaveProperty('contractNumber');
+    const withProduct = await ds
+      .getRepository(Product)
+      .createQueryBuilder('p')
+      .innerJoinAndSelect('p.shop', 'shop')
+      .getOne();
+    expect(withProduct?.shop).not.toHaveProperty('bankAccount');
     await expect(
       wholesalers.list({ search: '305123456' }),
     ).resolves.toMatchObject({ total: 1 });
@@ -193,16 +248,19 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
 
   it('TC6: CPA mahsulotiga ikkinchi faol variant — 400', async () => {
     // BE-30 dagi optovik foydalanuvchisi kabi: mahsulot va optovikka egasi biriktirilgan
-    await ds.query(`UPDATE catalog.shop SET owner_user_id = 42 WHERE id = $1`, [
-      wholesalerId,
-    ]);
     await ds.query(
-      `UPDATE catalog.product SET owner_user_id = 42 WHERE id = $1`,
+      `UPDATE catalog.shop SET owner_user_id = 4242 WHERE id = $1`,
+      [wholesalerId],
+    );
+    await ds.query(
+      `UPDATE catalog.product SET owner_user_id = 4242 WHERE id = $1`,
       [productId],
     );
-    await variants.createVariant('42', productId, { sku: 'Q-BLACK' } as never);
+    await variants.createVariant('4242', productId, {
+      sku: 'Q-BLACK',
+    } as never);
     await expect(
-      variants.createVariant('42', productId, { sku: 'Q-WHITE' } as never),
+      variants.createVariant('4242', productId, { sku: 'Q-WHITE' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       ds.getRepository(ProductVariant).count({
@@ -241,7 +299,34 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('rad etilgan yoki CPA o‘chirilgan offer — sotuvdan olingan', async () => {
+  it('to‘xtatilgan optovik offeri sotuvdan olinadi; qayta faollashtirish — qaytadi', async () => {
+    await wholesalers.update(wholesalerId, { status: 'SUSPENDED' as never });
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      cpaAvailable: false,
+      withdrawn: true,
+    });
+    await wholesalers.update(wholesalerId, { status: 'ACTIVE' as never });
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      cpaAvailable: true,
+    });
+  });
+
+  it('rad etilgan offer — sotuvdan olingan', async () => {
+    const extra = await products.adminCreate(wholesalerId, {
+      wholesalerId,
+      name: 'Rad etiladigan',
+      imageUrl: 'https://cdn.example.com/r.jpg',
+      ...PHYS,
+    });
+    await products.adminApprove(String(extra.id));
+    await products.adminReject(String(extra.id), 'Sertifikat yo‘q');
+    await expect(offers.get(String(extra.id))).resolves.toMatchObject({
+      cpaAvailable: false,
+      withdrawn: true,
+    });
+  });
+
+  it('CPA o‘chirilgan offer — sotuvdan olingan', async () => {
     await products.adminUpdate(productId, { cpaEnabled: false });
     await expect(offers.get(productId)).resolves.toMatchObject({
       cpaAvailable: false,

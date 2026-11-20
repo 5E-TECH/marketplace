@@ -91,7 +91,8 @@ export class ProductVariantService {
 
     try {
       const createdVariant = await this.productVariants.save(variant);
-      if (defaultVariant?.isActive) {
+      // BE-07: nofaol variant qo‘shilsa sukutdagisi faol qoladi (aks holda faol variant qolmasdi)
+      if (defaultVariant?.isActive && createdVariant.isActive) {
         defaultVariant.isActive = false;
         await this.productVariants.save(defaultVariant);
       }

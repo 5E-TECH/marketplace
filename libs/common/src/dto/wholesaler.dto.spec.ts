@@ -1,6 +1,6 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { AdminCreateProductDto } from './product.dto';
-import { CreateWholesalerDto } from './wholesaler.dto';
+import { AdminCreateProductDto, AdminUpdateProductDto } from './product.dto';
+import { CreateWholesalerDto, UpdateWholesalerDto } from './wholesaler.dto';
 
 describe('BE-07 DTO: optovik va mahsulot', () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true });
@@ -71,5 +71,28 @@ describe('BE-07 DTO: optovik va mahsulot', () => {
     })) as Record<string, unknown>;
     expect(parsed).not.toHaveProperty('status');
     expect(parsed.isBad).toBe(true);
+  });
+
+  it.each(['weightGrams', 'lengthMm', 'basePrice', 'name'])(
+    'PATCH bilan %s ni null qilib bo‘lmaydi — 400',
+    async (field) => {
+      await expect(
+        check(AdminUpdateProductDto, { [field]: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+
+  it('optovik: shartnoma yoki nomni null qilib bo‘lmaydi; holat faqat ACTIVE yoki SUSPENDED', async () => {
+    for (const body of [
+      { contractNumber: null },
+      { name: null },
+      { status: 'REJECTED' },
+    ])
+      await expect(check(UpdateWholesalerDto, body)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    await expect(
+      check(UpdateWholesalerDto, { status: 'SUSPENDED' }),
+    ).resolves.toMatchObject({ status: 'SUSPENDED' });
   });
 });

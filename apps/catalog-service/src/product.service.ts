@@ -304,6 +304,12 @@ export class ProductService {
       throw new BadRequestException(
         'Tasdiqdan oldin bazaviy narx, og‘irlik va o‘lchamlarni kiriting',
       );
+    // OPT-1: shartnomasiz yoki to‘xtatilgan optovikning mahsuloti sotuvga chiqmaydi
+    const shop = await this.getShopById(product.shopId);
+    if (!hasContract(shop) || shop.status !== ShopStatus.ACTIVE)
+      throw new ConflictException(
+        'Optovik faol emas yoki shartnomasi kiritilmagan — tasdiqlab bo‘lmaydi',
+      );
     if (product.cpaEnabled) await this.assertSingleActiveVariant(product.id);
     product.status = ProductStatus.ACTIVE;
     product.moderationNote = null;
@@ -430,11 +436,18 @@ export class ProductService {
     return shop;
   }
 
+  /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
   private async getShopById(shopId: string): Promise<Shop> {
-    const shop = await this.shops.findOne({
-      where: { id: shopId, isDeleted: false },
-    });
-    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
+    const shop = /^\d+$/.test(String(shopId ?? ''))
+      ? await this.shops
+          .createQueryBuilder('shop')
+          .addSelect(['shop.contractNumber', 'shop.contractDate'])
+          .where('shop.id = :id AND shop.is_deleted = FALSE', {
+            id: String(shopId),
+          })
+          .getOne()
+      : null;
+    if (!shop) throw new NotFoundException('Optovik topilmadi');
     return shop;
   }
 
@@ -559,6 +572,7 @@ export class ProductService {
     product: Product,
     reason: string,
   ): Promise<void> {
+    if (!product.ownerUserId) return; // BE-07: egasiz optovik mahsuloti — xabar oluvchi yo‘q
     try {
       await firstValueFrom(
         this.notifications.emit('product.hidden', {
