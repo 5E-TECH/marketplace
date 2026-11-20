@@ -4,7 +4,6 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
-  IsIn,
   IsOptional,
   IsString,
   Max,
@@ -13,17 +12,11 @@ import {
 } from 'class-validator';
 import { Role } from '../enums';
 
-const ADMIN_MANAGEABLE_ROLES = [
-  Role.BUYER,
-  Role.SELLER,
-  Role.ADMIN,
-  Role.SUPERADMIN,
-] as const;
-
+/** BE-05: SUPERADMIN foydalanuvchi rolini sakkiz roldan biriga almashtiradi (eski SELLER/BUYER — 400). */
 export class UpdateUserRoleDto {
-  @ApiProperty({ enum: ADMIN_MANAGEABLE_ROLES, example: Role.SELLER })
-  @IsIn(ADMIN_MANAGEABLE_ROLES)
-  role: Role.BUYER | Role.SELLER | Role.ADMIN | Role.SUPERADMIN;
+  @ApiProperty({ enum: Role, example: Role.OPERATOR_LEAD })
+  @IsEnum(Role)
+  role: Role;
 }
 
 export class ImpersonatedUserDto {
@@ -33,11 +26,8 @@ export class ImpersonatedUserDto {
   @ApiProperty({ example: 'Ali Valiyev' })
   name: string;
 
-  @ApiProperty({ enum: Role, example: Role.SELLER })
+  @ApiProperty({ enum: Role, example: Role.AFFILIATE })
   role: Role;
-
-  @ApiProperty({ example: '15', nullable: true })
-  shopId: string | null;
 }
 
 export class ImpersonationResultDto {
@@ -58,7 +48,7 @@ export class ImpersonationResultDto {
 
 /** C1.29 — `GET /admin/users` — rol/blok/qidiruv filtri + sahifalash. */
 export class AdminUsersQueryDto {
-  @ApiPropertyOptional({ enum: Role, example: Role.SELLER })
+  @ApiPropertyOptional({ enum: Role, example: Role.AFFILIATE })
   @IsOptional()
   @IsEnum(Role)
   role?: Role;

@@ -1,9 +1,9 @@
 import { of } from 'rxjs';
-import { ReturnReason, Role, ROLES_KEY } from '@app/common';
+import { LegacyRole, ReturnReason, ROLES_KEY } from '@app/common';
 import { BuyerReturnsController } from './buyer-returns.controller';
 
 describe('BuyerReturnsController (C4.2)', () => {
-  const user = { sub: '5', role: Role.BUYER };
+  const user = { sub: '5', role: LegacyRole.BUYER };
 
   it('faqat BUYER roli', () => {
     for (const method of ['create', 'list', 'get'] as const) {
@@ -12,7 +12,7 @@ describe('BuyerReturnsController (C4.2)', () => {
           ROLES_KEY,
           BuyerReturnsController.prototype[method],
         ),
-      ).toEqual([Role.BUYER]);
+      ).toEqual([LegacyRole.BUYER]);
     }
   });
 

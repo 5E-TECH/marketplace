@@ -28,10 +28,10 @@ import {
   AuthErrorResponseDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   ProductImageUploadResultDto,
-  Role,
-  Roles,
   RmqClient,
+  Roles,
   sendRpc,
   UploadedFileDto,
   UploadProductImageDto,
@@ -42,7 +42,7 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 @ApiTags('files')
 @ApiBearerAuth()
-@Roles(Role.SELLER)
+@Roles(LegacyRole.SELLER)
 @Controller('files')
 export class FilesController {
   constructor(

@@ -21,9 +21,9 @@ import {
   FinanceLedgerPageDto,
   FinancePayoutPageDto,
   JwtUser,
+  LegacyRole,
   PayoutScheduleDto,
   RmqClient,
-  Role,
   Roles,
   SellerFinanceLedgerQueryDto,
   SellerFinancePayoutQueryDto,
@@ -60,7 +60,7 @@ export class SellerFinanceController {
   }
 
   @Get('ledger')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({
     summary: 'Do‘kon ledger yozuvlari (sotuv, komissiya, payout, refund)',
   })
@@ -78,7 +78,7 @@ export class SellerFinanceController {
   }
 
   @Get('payouts')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({ summary: 'Do‘kon payout’lari' })
   @ApiOkResponse({ type: FinancePayoutPageDto })
   async payouts(
@@ -94,7 +94,7 @@ export class SellerFinanceController {
   }
 
   @Get('summary')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({
     summary: 'Moliya jamlanmasi: balans, payout’lar, COD reconciliation',
     description:
@@ -115,7 +115,7 @@ export class SellerFinanceController {
   }
 
   @Get('payout-schedule')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({ summary: 'Payout chastotasi va keyingi to‘lov kuni' })
   @ApiOkResponse({ type: PayoutScheduleDto })
   async getPayoutSchedule(@CurrentUser() user: JwtUser) {
@@ -128,7 +128,7 @@ export class SellerFinanceController {
   }
 
   @Put('payout-schedule')
-  @Roles(Role.SELLER)
+  @Roles(LegacyRole.SELLER)
   @ApiOperation({
     summary: 'Payout chastotasini tanlash (DAILY | WEEKLY | MONTHLY)',
   })

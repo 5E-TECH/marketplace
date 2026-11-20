@@ -7,9 +7,11 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Role } from '../enums';
+import { Role, STAFF_ROLES } from '../enums';
 
-const ADMIN_ROLES = [Role.ADMIN, Role.SUPERADMIN] as const;
+/** BE-05: jamoa — platforma xodimlari (operator, nazoratchi, omborchi, moliya, admin, superadmin). */
+const TEAM_ROLES = STAFF_ROLES;
+type TeamRole = (typeof STAFF_ROLES)[number];
 
 export class CreateAdminTeamMemberDto {
   @ApiProperty({ example: 'Admin Operator' })
@@ -24,9 +26,9 @@ export class CreateAdminTeamMemberDto {
   })
   phone: string;
 
-  @ApiProperty({ enum: ADMIN_ROLES, example: Role.ADMIN })
-  @IsIn(ADMIN_ROLES)
-  role: Role.ADMIN | Role.SUPERADMIN;
+  @ApiProperty({ enum: TEAM_ROLES, example: Role.OPERATOR_LEAD })
+  @IsIn(TEAM_ROLES)
+  role: TeamRole;
 
   @ApiPropertyOptional({
     minLength: 8,
@@ -40,9 +42,9 @@ export class CreateAdminTeamMemberDto {
 }
 
 export class UpdateAdminTeamRoleDto {
-  @ApiProperty({ enum: ADMIN_ROLES, example: Role.ADMIN })
-  @IsIn(ADMIN_ROLES)
-  role: Role.ADMIN | Role.SUPERADMIN;
+  @ApiProperty({ enum: TEAM_ROLES, example: Role.OPERATOR_LEAD })
+  @IsIn(TEAM_ROLES)
+  role: TeamRole;
 }
 
 export class AdminTeamMemberDto {
@@ -55,8 +57,8 @@ export class AdminTeamMemberDto {
   @ApiProperty({ example: '+998901112233' })
   phone: string;
 
-  @ApiProperty({ enum: ADMIN_ROLES })
-  role: Role.ADMIN | Role.SUPERADMIN;
+  @ApiProperty({ enum: TEAM_ROLES })
+  role: TeamRole;
 
   @ApiProperty({ example: true })
   isActive: boolean;

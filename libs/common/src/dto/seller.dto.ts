@@ -5,7 +5,6 @@ import {
   ArrayUnique,
   IsArray,
   IsDateString,
-  IsEmail,
   IsEnum,
   IsInt,
   IsOptional,
@@ -17,70 +16,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Role, SalesOrderSellerStatus, ShopStatus } from '../enums';
-
-export class SellerRegisterDto {
-  @ApiProperty({ example: 'Ali Valiyev' })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  name: string;
-
-  @ApiProperty({ example: '+998901234567' })
-  @Matches(/^\+998\d{9}$/, {
-    message: "phone +998XXXXXXXXX formatida bo'lishi kerak",
-  })
-  phone: string;
-
-  @ApiProperty({ example: 'Secret123', minLength: 8 })
-  @IsString()
-  @MinLength(8)
-  password: string;
-
-  @ApiPropertyOptional({ example: 'seller@example.com' })
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @ApiProperty({ example: 'Ali Market' })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  shopName: string;
-
-  @ApiPropertyOptional({ example: 'Maishiy texnika do‘koni' })
-  @IsOptional()
-  @IsString()
-  shopDescription?: string;
-
-  @ApiPropertyOptional({ example: 'Toshkent shahri, Chilonzor tumani' })
-  @IsOptional()
-  @IsString()
-  address?: string;
-}
-
-export class SellerRegisterResponseDto {
-  @ApiProperty({ example: 201 }) statusCode: number;
-  @ApiProperty({ example: 'OK' }) message: string;
-  @ApiProperty({
-    example: {
-      user: {
-        id: '42',
-        name: 'Ali Valiyev',
-        phone: '+998901234567',
-        role: Role.SELLER,
-        isActive: false,
-      },
-      shop: {
-        id: '15',
-        name: 'Ali Market',
-        slug: 'ali-market-1234567',
-        status: ShopStatus.PENDING,
-      },
-    },
-  })
-  data: object;
-}
+import { SalesOrderSellerStatus, ShopStatus } from '../enums';
 
 export class UpdateSellerShopDto {
   @ApiPropertyOptional({ example: 'Ali Market' })

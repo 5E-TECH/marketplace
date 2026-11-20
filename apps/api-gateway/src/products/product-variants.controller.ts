@@ -27,17 +27,17 @@ import {
   CreateProductVariantDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   ProductVariantDto,
-  Role,
-  Roles,
   RmqClient,
+  Roles,
   sendRpc,
   UpdateProductVariantDto,
 } from '@app/common';
 
 @ApiTags('product variants')
 @ApiBearerAuth()
-@Roles(Role.SELLER)
+@Roles(LegacyRole.SELLER)
 @Controller('products/:productId/variants')
 export class ProductVariantsController {
   constructor(

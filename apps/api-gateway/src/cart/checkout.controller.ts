@@ -22,6 +22,7 @@ import {
   CurrentUser,
   DeliveryPreviewDto,
   JwtUser,
+  legacyBuyer,
   Public,
   RmqClient,
   sendRpc,
@@ -44,10 +45,11 @@ export class CheckoutController {
       'aynan shu tanlov yuboriladi.',
   })
   preview(
-    @CurrentUser() user: JwtUser | undefined,
+    @CurrentUser() tokenUser: JwtUser | undefined,
     @Headers('x-session-id') sessionId: string | undefined,
     @Body() dto: DeliveryPreviewDto,
   ) {
+    const user = legacyBuyer(tokenUser); // BE-05: sotuvchi/xodim tokeni — mehmon
     if (!user?.sub && !sessionId?.trim()) {
       throw new BadRequestException('Preview uchun x-session-id majburiy');
     }
@@ -74,11 +76,13 @@ export class CheckoutController {
       'o‘zgarsa yangi kalit yuboring.',
   })
   create(
-    @CurrentUser() user: JwtUser | undefined,
+    @CurrentUser() tokenUser: JwtUser | undefined,
     @Body() dto: CreateCheckoutDto,
     @Headers('idempotency-key') idempotencyKey?: string,
     @Headers('x-session-id') sessionId?: string,
   ) {
+    // BE-05: sotuvchi yoki xodim tokeni buyurtmani o‘z ID si bilan yaratmaydi — mehmon yo‘li (identity uni rad etadi)
+    const user = legacyBuyer(tokenUser);
     if (!user?.sub && !sessionId?.trim()) {
       throw new BadRequestException(
         'Guest checkout uchun x-session-id majburiy',
@@ -134,7 +138,8 @@ export class CheckoutController {
     const sessionId = Array.isArray(sessionHeader)
       ? sessionHeader[0]
       : sessionHeader;
-    if (!request.user?.sub && !sessionId?.trim()) {
+    const buyer = legacyBuyer(request.user); // BE-05: sotuvchi/xodim tokeni — mehmon
+    if (!buyer?.sub && !sessionId?.trim()) {
       throw new UnauthorizedException(
         'Token yoki X-Session-Id berilishi kerak',
       );
@@ -144,7 +149,7 @@ export class CheckoutController {
       { cmd: 'checkout.confirm-cod' },
       {
         orderId,
-        customerId: request.user?.sub,
+        customerId: buyer?.sub,
         sessionId: sessionId?.trim(),
       },
     );

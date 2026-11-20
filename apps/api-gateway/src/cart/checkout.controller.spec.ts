@@ -1,6 +1,11 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { of } from 'rxjs';
-import { CheckoutPaymentMethod, IS_PUBLIC_KEY, Role } from '@app/common';
+import { Observable, of, throwError } from 'rxjs';
+import {
+  CheckoutPaymentMethod,
+  IS_PUBLIC_KEY,
+  LegacyRole,
+  Role,
+} from '@app/common';
 import { CheckoutController } from './checkout.controller';
 
 describe('CheckoutController (C2.19)', () => {
@@ -32,6 +37,32 @@ describe('CheckoutController (C2.19)', () => {
     ).toBe(true);
   });
 
+  it.each([Role.AFFILIATE, Role.OPERATOR_LEAD, Role.ADMIN])(
+    'BE-05: %s tokeni buyurtmani o‘z ID si bilan yaratmaydi — mehmon yo‘li (identity mijozni foydalanuvchi qilmaydi)',
+    async (role) => {
+      const { controller, checkout, identity } = setup();
+      identity.mockImplementationOnce(
+        () =>
+          throwError(() => ({
+            status: 422,
+            message: 'Mijoz tizim foydalanuvchisi emas',
+          })) as Observable<never>,
+      );
+      await expect(
+        controller.create({ sub: '42', role }, dto, 'r', 'guest-session'),
+      ).rejects.toBeDefined();
+      expect(identity).toHaveBeenCalledWith(
+        { cmd: 'identity.customer.create' },
+        expect.anything(),
+      );
+      expect(checkout).not.toHaveBeenCalled();
+      // sessiyasiz — mehmon sifatida 400 (avval token bilan o‘tib ketardi)
+      expect(() =>
+        controller.create({ sub: '42', role }, dto, 'r', undefined),
+      ).toThrow(BadRequestException);
+    },
+  );
+
   it('TC1/TC3: guest buyer yaratib session cart bilan checkout qiladi', async () => {
     const { controller, checkout, identity } = setup();
 
@@ -54,7 +85,7 @@ describe('CheckoutController (C2.19)', () => {
   it('login user uchun eski checkout oqimini saqlaydi', async () => {
     const { controller, checkout, identity } = setup();
     await controller.create(
-      { sub: '42', role: Role.BUYER },
+      { sub: '42', role: LegacyRole.BUYER } as never,
       dto,
       undefined,
       'ignored-session',
@@ -106,7 +137,7 @@ describe('CheckoutController (C2.19)', () => {
     const { controller, checkout } = setup();
 
     await controller.confirm(
-      { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+      { user: { sub: '9', role: LegacyRole.BUYER }, headers: {} } as never,
       '42',
     );
 

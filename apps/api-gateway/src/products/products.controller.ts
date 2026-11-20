@@ -27,19 +27,19 @@ import {
   CreateProductDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   MyProductsPageDto,
   MyProductsQueryDto,
   ProductDto,
-  Role,
-  Roles,
   RmqClient,
+  Roles,
   sendRpc,
   UpdateProductDto,
 } from '@app/common';
 
 @ApiTags('products')
 @ApiBearerAuth()
-@Roles(Role.SELLER)
+@Roles(LegacyRole.SELLER)
 @Controller('products')
 export class ProductsController {
   constructor(

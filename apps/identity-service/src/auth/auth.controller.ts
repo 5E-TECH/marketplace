@@ -7,7 +7,6 @@ import {
   RegisterDto,
   ResetPasswordDto,
   RpcHttpExceptionFilter,
-  SellerRegisterDto,
   UpdateProfileDto,
   VerifyPhoneDto,
 } from '@app/common';
@@ -32,8 +31,8 @@ export class AuthController {
   }
 
   @MessagePattern({ cmd: 'identity.customer.create' })
-  createGuestCustomer(@Payload() data: { phone: string; name: string }) {
-    return this.authService.createGuestCustomer(data.phone, data.name);
+  createGuestCustomer() {
+    return this.authService.createGuestCustomer();
   }
   @MessagePattern({ cmd: 'auth.refresh' }) refresh(
     @Payload() d: { refreshToken: string },
@@ -101,11 +100,6 @@ export class AuthController {
     return this.authService.getById(data.userId);
   }
 
-  @MessagePattern({ cmd: 'seller.register' })
-  registerSeller(@Payload() dto: SellerRegisterDto) {
-    return this.authService.registerSeller(dto);
-  }
-
   @MessagePattern({ cmd: 'identity.user.set-active' })
   setActive(@Payload() data: { userId: string; isActive: boolean }) {
     return this.authService.setActive(
@@ -153,52 +147,6 @@ export class AuthController {
       String(data.actorId),
       String(data.userId),
       Boolean(data.blocked),
-    );
-  }
-
-  // --- Market operatorlari (C1.38) ---
-  @MessagePattern({ cmd: 'identity.operator.create' })
-  createOperator(
-    @Payload()
-    data: {
-      shopId: string;
-      dto: { name: string; phone: string; password: string };
-    },
-  ) {
-    return this.authService.createOperator(String(data.shopId), data.dto);
-  }
-
-  @MessagePattern({ cmd: 'identity.operator.list' })
-  listOperators(@Payload() data: { shopId: string }) {
-    return this.authService.listOperators(String(data.shopId));
-  }
-
-  @MessagePattern({ cmd: 'identity.operator.update' })
-  updateOperator(
-    @Payload()
-    data: {
-      shopId: string;
-      operatorId: string;
-      dto: {
-        name?: string;
-        phone?: string;
-        password?: string;
-        isActive?: boolean;
-      };
-    },
-  ) {
-    return this.authService.updateOperator(
-      String(data.shopId),
-      String(data.operatorId),
-      data.dto,
-    );
-  }
-
-  @MessagePattern({ cmd: 'identity.operator.remove' })
-  removeOperator(@Payload() data: { shopId: string; operatorId: string }) {
-    return this.authService.removeOperator(
-      String(data.shopId),
-      String(data.operatorId),
     );
   }
 }

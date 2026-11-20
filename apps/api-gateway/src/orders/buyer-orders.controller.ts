@@ -23,14 +23,15 @@ import {
 import {
   BuyerOrderDetailsDto,
   BuyerOrderRefundDto,
-  OrderActionResultDto,
-  BuyerOrderTrackingDto,
   BuyerOrdersPageDto,
   BuyerOrdersQueryDto,
+  BuyerOrderTrackingDto,
   JwtUser,
-  RmqClient,
+  legacyBuyer,
+  LegacyRole,
+  OrderActionResultDto,
   Public,
-  Role,
+  RmqClient,
   Roles,
   sendRpc,
 } from '@app/common';
@@ -43,7 +44,7 @@ export class BuyerOrdersController {
   ) {}
 
   @Get()
-  @Roles(Role.BUYER)
+  @Roles(LegacyRole.BUYER)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xaridorning buyurtmalari' })
   @ApiOkResponse({ type: BuyerOrdersPageDto })
@@ -146,11 +147,12 @@ export class BuyerOrdersController {
     const sessionId = Array.isArray(sessionHeader)
       ? sessionHeader[0]
       : sessionHeader;
-    if (!request.user?.sub && !sessionId?.trim()) {
+    const buyer = legacyBuyer(request.user); // BE-05: sotuvchi/xodim tokeni — mehmon
+    if (!buyer?.sub && !sessionId?.trim()) {
       throw new UnauthorizedException('Token yoki X-Session-Id talab qilinadi');
     }
     return {
-      customerId: request.user?.sub,
+      customerId: buyer?.sub,
       sessionId: sessionId?.trim(),
     };
   }

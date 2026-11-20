@@ -21,6 +21,7 @@ import {
   FavoritesPageDto,
   FavoritesQueryDto,
   JwtUser,
+  legacyBuyer,
   Public,
   RmqClient,
   sendRpc,
@@ -93,6 +94,7 @@ export class FavoritesController {
   }
 
   private owner(user?: JwtUser, sessionId?: string): FavoriteOwnerDto {
-    return user?.sub ? { userId: user.sub } : { sessionId };
+    const buyer = legacyBuyer(user); // BE-05: sotuvchi/xodim tokeni — mehmon
+    return buyer?.sub ? { userId: buyer.sub } : { sessionId };
   }
 }

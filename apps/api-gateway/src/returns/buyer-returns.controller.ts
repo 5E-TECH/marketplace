@@ -25,11 +25,11 @@ import {
   CreateReturnRequestsResultDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   ReturnRequestDetailsDto,
   ReturnRequestsPageDto,
   ReturnRequestsQueryDto,
   RmqClient,
-  Role,
   Roles,
   sendRpc,
 } from '@app/common';
@@ -47,7 +47,7 @@ export class BuyerReturnsController {
   ) {}
 
   @Post('orders/:orderId/returns')
-  @Roles(Role.BUYER)
+  @Roles(LegacyRole.BUYER)
   @ApiOperation({
     summary: 'Yetkazilgan tovarni qaytarish so‘rovi',
     description:
@@ -77,7 +77,7 @@ export class BuyerReturnsController {
   }
 
   @Get('returns')
-  @Roles(Role.BUYER)
+  @Roles(LegacyRole.BUYER)
   @ApiOperation({ summary: 'Xaridorning qaytarish so‘rovlari' })
   @ApiOkResponse({ type: ReturnRequestsPageDto })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
@@ -90,7 +90,7 @@ export class BuyerReturnsController {
   }
 
   @Get('returns/:id')
-  @Roles(Role.BUYER)
+  @Roles(LegacyRole.BUYER)
   @ApiOperation({ summary: 'Qaytarish so‘rovi va uning tarixi' })
   @ApiOkResponse({ type: ReturnRequestDetailsDto })
   @ApiNotFoundResponse({ description: 'So‘rov topilmadi yoki boshqaniki' })

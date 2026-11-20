@@ -18,9 +18,11 @@ import {
   CreateReviewDto,
   CurrentUser,
   JwtUser,
+  LegacyRole,
   Public,
   ReviewsQueryDto,
   RmqClient,
+  Roles,
   sendRpc,
 } from '@app/common';
 
@@ -39,6 +41,8 @@ export class ReviewsController {
   }
 
   @Post()
+  // BE-05: mijoz foydalanuvchi emas — eski xaridor yo‘li hech kimga ochilmaydi (BE-29 da o‘chiriladi)
+  @Roles(LegacyRole.BUYER)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Yetkazilgan mahsulotga sharh qoldirish' })
   @ApiCreatedResponse({ description: 'Sharh yaratildi' })

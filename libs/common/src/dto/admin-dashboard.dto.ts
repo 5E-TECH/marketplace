@@ -12,12 +12,22 @@ export class AdminDashboardShopsDto {
   @ApiProperty({ example: 0 }) rejected: number;
 }
 
+/** BE-05: TZ 3-bo‘lim rollari bo‘yicha (mijoz foydalanuvchi emas — `buyers` yo‘q). `total` superadminni ham sanaydi. */
 export class AdminDashboardUsersDto {
   @ApiProperty({ example: 40 }) total: number;
-  @ApiProperty({ example: 12 }) sellers: number;
-  @ApiProperty({ example: 25 }) buyers: number;
+  @ApiProperty({ example: 25, description: 'Sotuvchilar (AFFILIATE)' })
+  sellers: number;
+  @ApiProperty({ example: 3, description: 'Optoviklar (WHOLESALER)' })
+  wholesalers: number;
+  @ApiProperty({ example: 6, description: 'Operatorlar (OPERATOR_LEAD)' })
+  operators: number;
+  @ApiProperty({ example: 1, description: 'Nazoratchilar (SUPERVISOR)' })
+  supervisors: number;
+  @ApiProperty({ example: 2, description: 'Omborchilar (WAREHOUSE)' })
+  warehouse: number;
+  @ApiProperty({ example: 1, description: 'Moliya xodimlari (FINANCE)' })
+  finance: number;
   @ApiProperty({ example: 2 }) admins: number;
-  @ApiProperty({ example: 1 }) operators: number;
 }
 
 export class AdminDashboardOrdersDto {

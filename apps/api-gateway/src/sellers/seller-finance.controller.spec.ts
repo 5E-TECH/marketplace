@@ -1,10 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { LegacyRole, ROLES_KEY } from '@app/common';
 import { SellerFinanceController } from './seller-finance.controller';
 
 describe('SellerFinanceController', () => {
-  const owner = { sub: '70', role: Role.SELLER };
+  const owner = { sub: '70', role: LegacyRole.SELLER };
 
   function setup(shop: { id: string } | null = { id: '7' }) {
     const finance = jest.fn(() => of({ ok: true }));
@@ -29,7 +29,7 @@ describe('SellerFinanceController', () => {
           ROLES_KEY,
           SellerFinanceController.prototype[method],
         ),
-      ).toEqual([Role.SELLER]);
+      ).toEqual([LegacyRole.SELLER]);
     }
   });
 

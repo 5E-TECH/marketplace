@@ -9,7 +9,7 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
   const reflector = { getAllAndOverride: () => false } as any;
   const jwt = {
     verify: (t: string) => {
-      if (t === 'good') return { sub: '1', role: Role.SELLER };
+      if (t === 'good') return { sub: '1', role: Role.AFFILIATE };
       throw new Error('bad');
     },
   } as any;
@@ -40,7 +40,7 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
       getClass: () => ({}),
     } as any;
     expect(new JwtAuthGuard(jwt, reflector).canActivate(context)).toBe(true);
-    expect(req.user).toEqual({ sub: '1', role: Role.SELLER });
+    expect(req.user).toEqual({ sub: '1', role: Role.AFFILIATE });
   });
 
   it('@Public() -> auth talab qilinmaydi', () => {
@@ -53,7 +53,7 @@ describe('JwtAuthGuard (TC3 — 401)', () => {
 describe('JwtAuthGuard — HttpOnly accessToken cookie', () => {
   const jwt = {
     verify: (t: string) => {
-      if (t === 'good') return { sub: '1', role: Role.BUYER };
+      if (t === 'good') return { sub: '1', role: Role.WHOLESALER };
       throw new Error('bad');
     },
   } as any;
@@ -71,7 +71,7 @@ describe('JwtAuthGuard — HttpOnly accessToken cookie', () => {
   it('GET so‘rovda cookie’dagi token bilan req.user to‘ladi', () => {
     const req: any = { method: 'GET', headers: { cookie: 'accessToken=good' } };
     expect(run(req)).toBe(true);
-    expect(req.user).toEqual({ sub: '1', role: Role.BUYER });
+    expect(req.user).toEqual({ sub: '1', role: Role.WHOLESALER });
   });
 
   it('cookie bilan POST X-Requested-With’siz -> 403 (CSRF)', () => {
@@ -92,7 +92,7 @@ describe('JwtAuthGuard — HttpOnly accessToken cookie', () => {
       },
     };
     expect(run(req)).toBe(true);
-    expect(req.user).toEqual({ sub: '1', role: Role.BUYER });
+    expect(req.user).toEqual({ sub: '1', role: Role.WHOLESALER });
   });
 
   it('@Public() route’da CSRF sarlavhasisiz cookie e’tiborsiz — anonim', () => {
@@ -143,7 +143,7 @@ describe('RolesGuard (TC3 — 403)', () => {
   it("noto'g'ri rol -> ForbiddenException (403)", () => {
     const reflector = { getAllAndOverride: () => [Role.ADMIN] } as any;
     expect(() =>
-      new RolesGuard(reflector).canActivate(ctx(Role.SELLER)),
+      new RolesGuard(reflector).canActivate(ctx(Role.AFFILIATE)),
     ).toThrow(ForbiddenException);
   });
 
@@ -154,7 +154,9 @@ describe('RolesGuard (TC3 — 403)', () => {
 
   it('rol talab qilinmasa -> true', () => {
     const reflector = { getAllAndOverride: () => undefined } as any;
-    expect(new RolesGuard(reflector).canActivate(ctx(Role.BUYER))).toBe(true);
+    expect(new RolesGuard(reflector).canActivate(ctx(Role.WHOLESALER))).toBe(
+      true,
+    );
   });
 });
 
@@ -163,7 +165,7 @@ describe('SelfGuard (shop ownership — 403)', () => {
     ({
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { sub: userId, role: Role.SELLER },
+          user: { sub: userId, role: Role.AFFILIATE },
           params: targetId ? { id: targetId } : {},
         }),
       }),

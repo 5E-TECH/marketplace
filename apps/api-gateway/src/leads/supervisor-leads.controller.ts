@@ -31,12 +31,11 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 
 /**
  * Nazoratchi paneli (OPR-8; BE-35): qizil ro‘yxat va lidni boshqa operatorga o‘tkazish.
- * TZ 3: «Lidni boshqa operatorga o‘tkazish» — nazoratchi va admin. SUPERVISOR roli BE-05 da qo‘shilgach shu
- * ro‘yxatga kiradi; ungacha ADMIN va SUPERADMIN (BE-42 bilan bir xil).
+ * TZ 3: «Lidni boshqa operatorga o‘tkazish» — nazoratchi va admin (superadmin — hamma amal).
  */
 @ApiTags('supervisor')
 @ApiBearerAuth()
-@Roles(Role.ADMIN, Role.SUPERADMIN)
+@Roles(Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN)
 @Controller('supervisor')
 export class SupervisorLeadsController {
   constructor(@Inject(RmqClient.LEAD) private readonly lead: ClientProxy) {}

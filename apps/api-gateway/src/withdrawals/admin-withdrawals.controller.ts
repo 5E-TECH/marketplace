@@ -37,7 +37,7 @@ import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 
 /**
  * Moliya: pul yechish so‘rovlari (BE-23; MOL-5, FE-20). Tasdiq, rad va «To‘landi» — moliya xodimi (T01:170);
- * FINANCE roli BE-05 da qo‘shilguncha faqat SUPERADMIN [taklif]. Ro‘yxatni ADMIN ham ko‘radi (eski payout kabi).
+ * FINANCE va SUPERADMIN (BE-05). Ro‘yxatni ADMIN ham ko‘radi (eski payout kabi).
  */
 @ApiTags('admin-finance')
 @ApiBearerAuth()
@@ -48,7 +48,7 @@ export class AdminWithdrawalsController {
   ) {}
 
   @Get('withdrawals')
-  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Pul yechish so‘rovlari (holat, sotuvchi filtri)' })
   @ApiOkResponse({ type: WithdrawalPageDto })
   list(@Query() query: AdminWithdrawalQueryDto): Promise<WithdrawalPageDto> {
@@ -61,7 +61,7 @@ export class AdminWithdrawalsController {
 
   @Post('withdrawals/:id/approve')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
     summary: 'Tasdiqlash',
     description:
@@ -85,7 +85,7 @@ export class AdminWithdrawalsController {
 
   @Post('withdrawals/:id/reject')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Rad etish (sabab bilan); band summa bo‘shaydi' })
   @ApiOkResponse({ type: WithdrawalDto })
   @ApiNotFoundResponse({ description: 'So‘rov topilmadi' })
@@ -106,7 +106,7 @@ export class AdminWithdrawalsController {
 
   @Post('withdrawals/:id/paid')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
     summary: '«To‘landi»: moliya kartaga qo‘lda o‘tkazdi',
     description:
@@ -130,7 +130,7 @@ export class AdminWithdrawalsController {
   }
 
   @Put('affiliates/:id/self-employed')
-  @Roles(Role.SUPERADMIN)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
     summary: 'O‘zini o‘zi band qilganlik belgisi (moliya tekshirgach qo‘lda)',
     description: 'Belgisiz sotuvchining so‘rovi rad etiladi (T01:471).',

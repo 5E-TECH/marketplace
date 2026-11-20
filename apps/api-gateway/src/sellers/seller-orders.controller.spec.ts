@@ -1,4 +1,4 @@
-import { Role, ROLES_KEY } from '@app/common';
+import { LegacyRole, ROLES_KEY } from '@app/common';
 import { of } from 'rxjs';
 import { SellerOrdersController } from './seller-orders.controller';
 
@@ -6,26 +6,26 @@ describe('SellerOrdersController', () => {
   it('orders/updateOrder SELLER+OPERATOR, dashboard faqat SELLER', () => {
     expect(
       Reflect.getMetadata(ROLES_KEY, SellerOrdersController.prototype.orders),
-    ).toEqual([Role.SELLER, Role.OPERATOR]);
+    ).toEqual([LegacyRole.SELLER, LegacyRole.OPERATOR]);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         SellerOrdersController.prototype.updateOrder,
       ),
-    ).toEqual([Role.SELLER, Role.OPERATOR]);
+    ).toEqual([LegacyRole.SELLER, LegacyRole.OPERATOR]);
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         SellerOrdersController.prototype.dashboard,
       ),
-    ).toEqual([Role.SELLER]);
+    ).toEqual([LegacyRole.SELLER]);
   });
 
   it('JWT actor ID sini orders RPC payloadga uzatadi', () => {
     const send = jest.fn(() => of({}));
     const controller = new SellerOrdersController({ send } as never);
 
-    controller.orders({ sub: '401', role: Role.SELLER } as never, {
+    controller.orders({ sub: '401', role: LegacyRole.SELLER } as never, {
       page: 1,
       limit: 20,
     });
@@ -40,7 +40,7 @@ describe('SellerOrdersController', () => {
     const send = jest.fn(() => of({}));
     const controller = new SellerOrdersController({ send } as never);
 
-    controller.dashboard({ sub: '401', role: Role.SELLER } as never);
+    controller.dashboard({ sub: '401', role: LegacyRole.SELLER } as never);
 
     expect(send).toHaveBeenCalledWith(
       { cmd: 'seller.dashboard.get' },
@@ -60,7 +60,7 @@ describe('SellerOrdersController', () => {
     const controller = new SellerOrdersController({ send } as never);
 
     const result = await controller.label(
-      { sub: '401', role: Role.SELLER } as never,
+      { sub: '401', role: LegacyRole.SELLER } as never,
       '9',
       { setHeader: jest.fn() } as never,
     );

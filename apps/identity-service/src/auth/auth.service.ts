@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -9,10 +10,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
-import { firstValueFrom } from 'rxjs';
 import {
   BusinessException,
   CreateSupportTicketDto,
@@ -22,8 +22,6 @@ import {
   ResetPasswordDto,
   Role,
   RmqClient,
-  SellerRegisterDto,
-  ShopStatus,
   UpdateProfileDto,
   VerifyPhoneDto,
 } from '@app/common';
@@ -54,10 +52,11 @@ export class AuthService {
         "Bu telefon raqam allaqachon ro'yxatdan o'tgan",
       );
     }
-    const role = dto.role ?? Role.BUYER;
-    if (![Role.BUYER, Role.SELLER].includes(role)) {
+    // BE-05: ochiq ro‘yxat faqat sotuvchi uchun; mijoz foydalanuvchi emas (T01:140). DTO ham shuni tekshiradi.
+    const role = dto.role ?? Role.AFFILIATE;
+    if (role !== Role.AFFILIATE) {
       throw new BadRequestException(
-        'Public ro‘yxatdan o‘tishda faqat BUYER yoki SELLER roli mumkin',
+        'Ochiq ro‘yxatdan faqat sotuvchi (AFFILIATE) o‘tadi',
       );
     }
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -68,55 +67,21 @@ export class AuthService {
         email: dto.email ?? null,
         passwordHash,
         role,
-        // SELLER admin tasdig'igacha nofaol; BUYER darrov faol
-        isActive: role !== Role.SELLER,
+        // SMS kod va oferta tasdig‘i — BE-06; ungacha sotuvchi darrov faol [taklif]
+        isActive: true,
       }),
     );
     return this.buildAuthResult(user);
   }
 
-  /** C2.19 — guest checkout uchun telefon bo'yicha idempotent lightweight buyer. */
-  async createGuestCustomer(phone: string, name: string) {
-    const existing = await this.users.findOne({ where: { phone } });
-    if (existing) {
-      if (existing.role !== Role.BUYER || existing.isDeleted) {
-        throw BusinessException.conflict(
-          'Bu telefon boshqa turdagi hisobga tegishli',
-        );
-      }
-      if (existing.isBlocked) {
-        throw BusinessException.invalidState('Xaridor hisobi bloklangan');
-      }
-      return this.sanitize(existing);
-    }
-
-    // Guest parolni bilmaydi. Keyinchalik telefon tasdiqlash/reset-password
-    // orqali o'z parolini o'rnatib, shu hisobga kirishi mumkin.
-    const passwordHash = await bcrypt.hash(randomUUID(), BCRYPT_ROUNDS);
-    try {
-      const created = await this.users.save(
-        this.users.create({
-          name: name.trim(),
-          phone,
-          email: null,
-          passwordHash,
-          role: Role.BUYER,
-          isActive: true,
-        }),
-      );
-      return this.sanitize(created);
-    } catch (error) {
-      if (
-        error instanceof QueryFailedError &&
-        (error.driverError as { code?: string })?.code === '23505'
-      ) {
-        const concurrent = await this.users.findOne({ where: { phone } });
-        if (concurrent?.role === Role.BUYER && !concurrent.isDeleted) {
-          return this.sanitize(concurrent);
-        }
-      }
-      throw error;
-    }
+  /**
+   * C2.19 eski checkout mehmon xaridorni BUYER foydalanuvchi qilib yaratardi. BE-05: mijoz foydalanuvchi emas
+   * (T01:140) — uning ma’lumoti lid va buyurtmada; eski checkout yo‘li BE-18 da yopiladi. Shu vaqtgacha aniq rad.
+   */
+  createGuestCustomer(): never {
+    throw BusinessException.invalidState(
+      'Mijoz tizim foydalanuvchisi emas: buyurtma lid orqali rasmiylashtiriladi',
+    );
   }
 
   async login(dto: LoginDto) {
@@ -149,18 +114,8 @@ export class AuthService {
     return this.sanitize(saved);
   }
 
-  /**
-   * C1.28 — foydalanuvchilar sonini rol bo'yicha (admin dashboard uchun). Yangi
-   * platformada barcha son 0.
-   */
-  async countUsersByRole(): Promise<{
-    total: number;
-    SELLER: number;
-    BUYER: number;
-    ADMIN: number;
-    OPERATOR: number;
-    SUPERADMIN: number;
-  }> {
+  /** C1.28 — foydalanuvchilar soni rol bo'yicha (admin dashboard). BE-05: sakkiz rol, yo‘q rol — 0. */
+  async countUsersByRole(): Promise<{ total: number } & Record<Role, number>> {
     const rows = await this.users
       .createQueryBuilder('u')
       .select('u.role', 'role')
@@ -169,14 +124,14 @@ export class AuthService {
       .groupBy('u.role')
       .getRawMany<{ role: string; count: string }>();
 
-    const base = { SELLER: 0, BUYER: 0, ADMIN: 0, OPERATOR: 0, SUPERADMIN: 0 };
+    const base = Object.fromEntries(
+      Object.values(Role).map((role) => [role, 0]),
+    ) as Record<Role, number>;
     let total = 0;
     for (const row of rows) {
       const n = Number(row.count);
       total += n;
-      if (row.role in base) {
-        base[row.role as keyof typeof base] = n;
-      }
+      if (row.role in base) base[row.role as Role] = n;
     }
     return { total, ...base };
   }
@@ -285,6 +240,17 @@ export class AuthService {
       where: { id: String(userId), isDeleted: false },
     });
     if (!user) throw BusinessException.conflict('Foydalanuvchi topilmadi');
+    // BE-05: admin va superadmin hisobini faqat superadmin bloklaydi (jamoani ham faqat u boshqaradi)
+    if (user.role === Role.ADMIN || user.role === Role.SUPERADMIN) {
+      const actor = await this.users.findOne({
+        where: { id: String(actorId), isDeleted: false },
+      });
+      if (actor?.role !== Role.SUPERADMIN) {
+        throw new ForbiddenException(
+          'Admin yoki superadmin hisobini faqat superadmin bloklaydi',
+        );
+      }
+    }
 
     user.isBlocked = blocked;
     user.authVersion = (user.authVersion ?? 1) + 1;
@@ -294,115 +260,6 @@ export class AuthService {
       `admin ${actorId} ${blocked ? 'blocked' : 'unblocked'} user ${userId}`,
     );
     return this.sanitize(saved);
-  }
-
-  // ===== Market operatorlari (C1.38) — do'kon xodimlari =====
-
-  /** Sotuvchi o'z do'koniga operator qo'shadi (role=OPERATOR, shop_id, faol). */
-  async createOperator(
-    shopId: string,
-    dto: { name: string; phone: string; password: string },
-  ) {
-    if (!shopId) throw BusinessException.invalidState('shopId majburiy');
-    if (!dto?.name?.trim() || !dto?.phone?.trim() || !dto?.password) {
-      throw BusinessException.invalidState('name, phone, password majburiy');
-    }
-    const exists = await this.users.findOne({ where: { phone: dto.phone } });
-    if (exists) {
-      throw BusinessException.conflict(
-        'Bu telefon allaqachon ro‘yxatdan o‘tgan',
-      );
-    }
-    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const saved = await this.users.save(
-      this.users.create({
-        name: dto.name.trim(),
-        phone: dto.phone.trim(),
-        email: null,
-        passwordHash,
-        role: Role.OPERATOR,
-        shopId: String(shopId),
-        isActive: true,
-      }),
-    );
-    return this.sanitize(saved);
-  }
-
-  /** Do'kon operatorlari ro'yxati. */
-  async listOperators(shopId: string) {
-    const ops = await this.users.find({
-      where: { role: Role.OPERATOR, shopId: String(shopId), isDeleted: false },
-      order: { createdAt: 'DESC' },
-    });
-    return ops.map((u) => this.sanitize(u));
-  }
-
-  /** Faqat shu do‘konga tegishli operator profilini yangilaydi. */
-  async updateOperator(
-    shopId: string,
-    operatorId: string,
-    dto: {
-      name?: string;
-      phone?: string;
-      password?: string;
-      isActive?: boolean;
-    },
-  ) {
-    const operator = await this.users.findOne({
-      where: {
-        id: String(operatorId),
-        role: Role.OPERATOR,
-        shopId: String(shopId),
-        isDeleted: false,
-      },
-    });
-    if (!operator) throw BusinessException.conflict('Operator topilmadi');
-    if (!dto || Object.values(dto).every((value) => value === undefined)) {
-      throw BusinessException.invalidState(
-        'Kamida bitta o‘zgartiriladigan maydon kerak',
-      );
-    }
-
-    if (dto.phone !== undefined && dto.phone.trim() !== operator.phone) {
-      const phoneOwner = await this.users.findOne({
-        where: { phone: dto.phone.trim() },
-      });
-      if (phoneOwner) {
-        throw BusinessException.conflict(
-          'Bu telefon allaqachon ro‘yxatdan o‘tgan',
-        );
-      }
-      operator.phone = dto.phone.trim();
-    }
-    if (dto.name !== undefined) operator.name = dto.name.trim();
-    if (dto.password !== undefined) {
-      operator.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-      operator.authVersion = (operator.authVersion ?? 1) + 1;
-      await this.sessions.update(
-        { userId: operator.id, revokedAt: IsNull() },
-        { revokedAt: new Date() },
-      );
-    }
-    if (dto.isActive !== undefined) operator.isActive = dto.isActive;
-
-    return this.sanitize(await this.users.save(operator));
-  }
-
-  /** Operatorni o'chiradi — faqat SHU do'konning operatori bo'lsa. */
-  async removeOperator(shopId: string, operatorId: string) {
-    const op = await this.users.findOne({
-      where: {
-        id: String(operatorId),
-        role: Role.OPERATOR,
-        shopId: String(shopId),
-        isDeleted: false,
-      },
-    });
-    if (!op) throw BusinessException.conflict('Operator topilmadi');
-    op.isDeleted = true;
-    op.isActive = false;
-    await this.users.save(op);
-    return { id: String(operatorId), removed: true };
   }
 
   async logout(userId: string): Promise<null> {
@@ -416,7 +273,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     if (!refreshToken)
       throw new UnauthorizedException('Refresh token topilmadi');
-    let payload: { sub: string; jti: string; role: Role; shopId?: string };
+    let payload: { sub: string; jti: string; role: Role };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
@@ -596,91 +453,11 @@ export class AuthService {
     return row;
   }
 
-  async registerSeller(dto: SellerRegisterDto) {
-    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const slug = `${
-      dto.shopName
-        .normalize('NFKD')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
-        .slice(0, 220) || 'shop'
-    }-${dto.phone.replace(/\D/g, '').slice(-7)}`;
-
-    let result: any;
-    try {
-      result = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await manager.query(
-          `SELECT 1 FROM "identity"."users" WHERE "phone"=$1 LIMIT 1`,
-          [dto.phone],
-        );
-        if (duplicate.length) {
-          throw BusinessException.conflict(
-            "Bu telefon raqam allaqachon ro'yxatdan o'tgan",
-          );
-        }
-        const [user] = await manager.query(
-          `INSERT INTO "identity"."users"
-           ("role","name","phone","email","password_hash","avatar_url","is_active","is_deleted")
-           VALUES ($1,$2,$3,$4,$5,NULL,FALSE,FALSE)
-           RETURNING "id","name","phone","role","is_active" AS "isActive"`,
-          [Role.SELLER, dto.name, dto.phone, dto.email ?? null, passwordHash],
-        );
-        const [shop] = await manager.query(
-          `INSERT INTO "catalog"."shop"
-           ("owner_user_id","name","slug","description","status","phone","address","rating","orders_count","is_deleted")
-           VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,FALSE)
-           RETURNING "id","name","slug","status"`,
-          [
-            user.id,
-            dto.shopName,
-            slug,
-            dto.shopDescription ?? null,
-            ShopStatus.PENDING,
-            dto.phone,
-            dto.address ?? null,
-          ],
-        );
-        return { user, shop };
-      });
-    } catch (error) {
-      if (error instanceof BusinessException) throw error;
-      if (
-        error instanceof QueryFailedError &&
-        (error as any).driverError?.code === '23505'
-      ) {
-        throw BusinessException.conflict(
-          "Telefon yoki do'kon allaqachon mavjud",
-        );
-      }
-      throw error;
-    }
-
-    try {
-      await firstValueFrom(
-        this.notifications.emit('seller.registration.created', {
-          sellerUserId: result.user.id,
-          shopId: result.shop.id,
-          sellerName: result.user.name,
-          shopName: result.shop.name,
-          email: dto.email ?? null,
-          phone: dto.phone,
-        }),
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Admin notification yuborilmadi: ${(error as Error).message}`,
-      );
-    }
-    return result;
-  }
-
   private async buildAuthResult(user: User) {
-    // OPERATOR uchun shopId ham JWT'ga — gateway shu bo'yicha scope qiladi.
+    // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
     const payload = {
       sub: user.id,
       role: user.role,
-      shopId: user.shopId ?? undefined,
       authVersion: user.authVersion ?? 1,
     };
     const accessToken = this.jwt.sign(payload, {

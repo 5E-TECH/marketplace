@@ -29,7 +29,7 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     );
   });
 
-  it('moliya: xodim ID si tokendan; tasdiq, rad, «To‘landi» va maqom — faqat SUPERADMIN (FINANCE BE-05 da)', async () => {
+  it('moliya: xodim ID si tokendan; tasdiq, rad, «To‘landi» va maqom — FINANCE va SUPERADMIN (BE-05)', async () => {
     const { send, client } = make();
     const c = new AdminWithdrawalsController(client);
     await c.approve('12', '7');
@@ -55,7 +55,7 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     const roles = (m: keyof AdminWithdrawalsController) =>
       Reflect.getMetadata(ROLES_KEY, AdminWithdrawalsController.prototype[m]);
     for (const m of ['approve', 'reject', 'paid', 'setSelfEmployed'] as const)
-      expect(roles(m)).toEqual([Role.SUPERADMIN]);
-    expect(roles('list')).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+      expect(roles(m)).toEqual([Role.FINANCE, Role.SUPERADMIN]);
+    expect(roles('list')).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
   });
 });

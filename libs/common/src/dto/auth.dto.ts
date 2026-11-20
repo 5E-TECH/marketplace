@@ -35,17 +35,18 @@ export class RegisterDto {
   @IsEmail()
   email?: string;
 
-  // register orqali faqat SELLER/BUYER; ADMIN'lar seed/boshqa admin tomonidan
-  @ApiPropertyOptional({ enum: [Role.BUYER, Role.SELLER], default: Role.BUYER })
+  // BE-05: ochiq ro‘yxat faqat sotuvchi uchun (T01:140 — mijoz foydalanuvchi emas). Optovikni admin kiritadi
+  // (BE-07), xodimlarni SUPERADMIN jamoa bo‘limida yaratadi. Boshqa rol berilsa — 400.
+  @ApiPropertyOptional({ enum: [Role.AFFILIATE], default: Role.AFFILIATE })
   @IsOptional()
-  @IsIn([Role.BUYER, Role.SELLER])
-  role?: Role.BUYER | Role.SELLER;
+  @IsIn([Role.AFFILIATE])
+  role?: Role.AFFILIATE;
 }
 
 export class LoginDto {
   @ApiProperty({
     example: '+998900000000',
-    description: 'Development SELLER telefon raqami',
+    description: 'Ro‘yxatdan o‘tgan telefon raqami',
   })
   @Matches(PHONE_REGEX, PHONE_MSG)
   phone: string;
@@ -124,7 +125,7 @@ export class AuthUserDto {
   @ApiProperty({ example: '42' })
   id: string;
 
-  @ApiProperty({ enum: Role, example: Role.BUYER })
+  @ApiProperty({ enum: Role, example: Role.AFFILIATE })
   role: Role;
 
   @ApiProperty({ example: 'Akmal' })

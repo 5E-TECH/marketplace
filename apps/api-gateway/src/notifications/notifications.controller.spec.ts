@@ -7,7 +7,7 @@ describe('NotificationsController', () => {
     const send = jest.fn(() => of({}));
     const controller = new NotificationsController({ send } as never);
 
-    controller.list({ sub: '401', role: Role.SELLER } as never, {
+    controller.list({ sub: '401', role: Role.AFFILIATE } as never, {
       page: 1,
       limit: 20,
       unreadOnly: 'true',
@@ -26,7 +26,7 @@ describe('NotificationsController', () => {
     const send = jest.fn(() => of({}));
     const controller = new NotificationsController({ send } as never);
 
-    controller.markRead({ sub: '401', role: Role.BUYER } as never, '77');
+    controller.markRead({ sub: '401', role: Role.WHOLESALER } as never, '77');
 
     expect(send).toHaveBeenCalledWith(
       { cmd: 'notifications.mark-read' },

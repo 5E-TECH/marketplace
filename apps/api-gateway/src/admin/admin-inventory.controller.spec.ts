@@ -4,8 +4,10 @@ import { AdminInventoryController } from './admin-inventory.controller';
 
 describe('AdminInventoryController (C6.7)', () => {
   it('TC1/TC2: ADMIN/SUPERADMIN global stock va movement RPCni chaqiradi', async () => {
+    // BE-05: qoldiqni omborchi ham ko‘radi (TZ 3-bo‘lim)
     expect(Reflect.getMetadata(ROLES_KEY, AdminInventoryController)).toEqual([
       Role.ADMIN,
+      Role.WAREHOUSE,
       Role.SUPERADMIN,
     ]);
     const send = jest.fn(() => of({ items: [], total: 0 }));

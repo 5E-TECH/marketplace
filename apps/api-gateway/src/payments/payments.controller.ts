@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import {
   CreatePaymentDto,
+  LegacyRole,
   PaymentProvider,
   PaymentResultDto,
   ProviderCallback,
@@ -44,6 +45,8 @@ export class PaymentsController {
   ) {}
 
   @Post('payments')
+  // BE-05: mijoz foydalanuvchi emas — eski xaridor yo‘li hech kimga ochilmaydi (BE-29 da o‘chiriladi)
+  @Roles(LegacyRole.BUYER)
   @ApiOperation({ summary: 'Online to‘lov yozuvini yaratish' })
   @ApiCreatedResponse({ type: PaymentResultDto })
   async create(

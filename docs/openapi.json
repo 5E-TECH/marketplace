@@ -415,58 +415,6 @@
         ]
       }
     },
-    "/api/v1/sellers/register": {
-      "post": {
-        "operationId": "SellersController_register",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SellerRegisterDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SellerRegisterResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Telefon yoki shop mavjud",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Inactive SELLER va PENDING shopni atomik yaratish",
-        "tags": [
-          "sellers"
-        ]
-      }
-    },
     "/api/v1/sellers/me": {
       "get": {
         "operationId": "SellersController_getMyShop",
@@ -3912,12 +3860,15 @@
             "required": false,
             "in": "query",
             "schema": {
-              "example": "SELLER",
+              "example": "AFFILIATE",
               "type": "string",
               "enum": [
-                "SELLER",
-                "OPERATOR",
-                "BUYER",
+                "AFFILIATE",
+                "WHOLESALER",
+                "OPERATOR_LEAD",
+                "SUPERVISOR",
+                "WAREHOUSE",
+                "FINANCE",
                 "ADMIN",
                 "SUPERADMIN"
               ]
@@ -4650,120 +4601,6 @@
         "summary": "To‘langan buyurtmani to‘liq qaytarish",
         "tags": [
           "admin-orders"
-        ]
-      }
-    },
-    "/api/v1/sellers/operators": {
-      "post": {
-        "operationId": "SellerOperatorsController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateOperatorDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Do‘konga operator qo‘shish",
-        "tags": [
-          "seller"
-        ]
-      },
-      "get": {
-        "operationId": "SellerOperatorsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Do‘kon operatorlari ro‘yxati",
-        "tags": [
-          "seller"
-        ]
-      }
-    },
-    "/api/v1/sellers/operators/{id}": {
-      "patch": {
-        "operationId": "SellerOperatorsController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateOperatorDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Do‘kon operatorini yangilash",
-        "tags": [
-          "seller"
-        ]
-      },
-      "delete": {
-        "operationId": "SellerOperatorsController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Operatorni o‘chirish",
-        "tags": [
-          "seller"
         ]
       }
     },
@@ -12268,10 +12105,9 @@
           "role": {
             "type": "string",
             "enum": [
-              "BUYER",
-              "SELLER"
+              "AFFILIATE"
             ],
-            "default": "BUYER"
+            "default": "AFFILIATE"
           }
         },
         "required": [
@@ -12290,13 +12126,16 @@
           "role": {
             "type": "string",
             "enum": [
-              "SELLER",
-              "OPERATOR",
-              "BUYER",
+              "AFFILIATE",
+              "WHOLESALER",
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ],
-            "example": "BUYER"
+            "example": "AFFILIATE"
           },
           "name": {
             "type": "string",
@@ -12454,7 +12293,7 @@
           "phone": {
             "type": "string",
             "example": "+998900000000",
-            "description": "Development SELLER telefon raqami"
+            "description": "Ro‘yxatdan o‘tgan telefon raqami"
           },
           "password": {
             "type": "string",
@@ -12577,82 +12416,6 @@
             "properties": {},
             "example": null,
             "nullable": true
-          }
-        },
-        "required": [
-          "statusCode",
-          "message",
-          "data"
-        ]
-      },
-      "SellerRegisterDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Ali Valiyev"
-          },
-          "phone": {
-            "type": "string",
-            "example": "+998901234567"
-          },
-          "password": {
-            "type": "string",
-            "example": "Secret123",
-            "minLength": 8
-          },
-          "email": {
-            "type": "string",
-            "example": "seller@example.com"
-          },
-          "shopName": {
-            "type": "string",
-            "example": "Ali Market"
-          },
-          "shopDescription": {
-            "type": "string",
-            "example": "Maishiy texnika do‘koni"
-          },
-          "address": {
-            "type": "string",
-            "example": "Toshkent shahri, Chilonzor tumani"
-          }
-        },
-        "required": [
-          "name",
-          "phone",
-          "password",
-          "shopName"
-        ]
-      },
-      "SellerRegisterResponseDto": {
-        "type": "object",
-        "properties": {
-          "statusCode": {
-            "type": "number",
-            "example": 201
-          },
-          "message": {
-            "type": "string",
-            "example": "OK"
-          },
-          "data": {
-            "type": "object",
-            "example": {
-              "user": {
-                "id": "42",
-                "name": "Ali Valiyev",
-                "phone": "+998901234567",
-                "role": "SELLER",
-                "isActive": false
-              },
-              "shop": {
-                "id": "15",
-                "name": "Ali Market",
-                "slug": "ali-market-1234567",
-                "status": "PENDING"
-              }
-            }
           }
         },
         "required": [
@@ -14726,27 +14489,48 @@
           },
           "sellers": {
             "type": "number",
-            "example": 12
+            "example": 25,
+            "description": "Sotuvchilar (AFFILIATE)"
           },
-          "buyers": {
+          "wholesalers": {
             "type": "number",
-            "example": 25
+            "example": 3,
+            "description": "Optoviklar (WHOLESALER)"
+          },
+          "operators": {
+            "type": "number",
+            "example": 6,
+            "description": "Operatorlar (OPERATOR_LEAD)"
+          },
+          "supervisors": {
+            "type": "number",
+            "example": 1,
+            "description": "Nazoratchilar (SUPERVISOR)"
+          },
+          "warehouse": {
+            "type": "number",
+            "example": 2,
+            "description": "Omborchilar (WAREHOUSE)"
+          },
+          "finance": {
+            "type": "number",
+            "example": 1,
+            "description": "Moliya xodimlari (FINANCE)"
           },
           "admins": {
             "type": "number",
             "example": 2
-          },
-          "operators": {
-            "type": "number",
-            "example": 1
           }
         },
         "required": [
           "total",
           "sellers",
-          "buyers",
-          "admins",
-          "operators"
+          "wholesalers",
+          "operators",
+          "supervisors",
+          "warehouse",
+          "finance",
+          "admins"
         ]
       },
       "AdminDashboardOrdersDto": {
@@ -14801,12 +14585,16 @@
           "role": {
             "type": "string",
             "enum": [
-              "BUYER",
-              "SELLER",
+              "AFFILIATE",
+              "WHOLESALER",
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ],
-            "example": "SELLER"
+            "example": "OPERATOR_LEAD"
           }
         },
         "required": [
@@ -14827,25 +14615,22 @@
           "role": {
             "type": "string",
             "enum": [
-              "SELLER",
-              "OPERATOR",
-              "BUYER",
+              "AFFILIATE",
+              "WHOLESALER",
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ],
-            "example": "SELLER"
-          },
-          "shopId": {
-            "type": "object",
-            "example": "15",
-            "nullable": true
+            "example": "AFFILIATE"
           }
         },
         "required": [
           "id",
           "name",
-          "role",
-          "shopId"
+          "role"
         ]
       },
       "ImpersonationResultDto": {
@@ -14950,51 +14735,6 @@
         "required": [
           "reason"
         ]
-      },
-      "CreateOperatorDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Operator Ismi"
-          },
-          "phone": {
-            "type": "string",
-            "example": "+998901234567"
-          },
-          "password": {
-            "type": "string",
-            "example": "1234",
-            "minLength": 4
-          }
-        },
-        "required": [
-          "name",
-          "phone",
-          "password"
-        ]
-      },
-      "UpdateOperatorDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Yangi operator ismi"
-          },
-          "phone": {
-            "type": "string",
-            "example": "+998901234567"
-          },
-          "password": {
-            "type": "string",
-            "example": "1234",
-            "minLength": 4
-          },
-          "isActive": {
-            "type": "boolean",
-            "example": true
-          }
-        }
       },
       "CartItemDto": {
         "type": "object",
@@ -16266,6 +16006,10 @@
           "role": {
             "type": "string",
             "enum": [
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ]
@@ -16307,10 +16051,14 @@
           "role": {
             "type": "string",
             "enum": [
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ],
-            "example": "ADMIN"
+            "example": "OPERATOR_LEAD"
           },
           "password": {
             "type": "string",
@@ -16342,6 +16090,10 @@
           "role": {
             "type": "string",
             "enum": [
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ]
@@ -16379,10 +16131,14 @@
           "role": {
             "type": "string",
             "enum": [
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
               "ADMIN",
               "SUPERADMIN"
             ],
-            "example": "ADMIN"
+            "example": "OPERATOR_LEAD"
           }
         },
         "required": [

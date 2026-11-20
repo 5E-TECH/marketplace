@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { LegacyRole, ROLES_KEY } from '@app/common';
 import { SellerReturnsController } from './seller-returns.controller';
 
 describe('SellerReturnsController (C4.2)', () => {
@@ -16,15 +16,15 @@ describe('SellerReturnsController (C4.2)', () => {
           ROLES_KEY,
           SellerReturnsController.prototype[method],
         ),
-      ).toEqual([Role.SELLER, Role.OPERATOR]);
+      ).toEqual([LegacyRole.SELLER, LegacyRole.OPERATOR]);
     }
   });
 
-  it('operator JWT shopId, owner esa ownerUserId bilan scope qilinadi', async () => {
+  it('BE-05: tokendagi shopId e’tiborsiz — scope faqat ownerUserId', async () => {
     const send = jest.fn(() => of({ id: '3' }));
     const controller = new SellerReturnsController({ send } as never);
-    const operator = { sub: '71', role: Role.OPERATOR, shopId: '7' };
-    const owner = { sub: '70', role: Role.SELLER };
+    const operator = { sub: '71', role: LegacyRole.OPERATOR, shopId: '7' };
+    const owner = { sub: '70', role: LegacyRole.SELLER };
 
     await controller.approve(operator as never, '3', { comment: 'OK' });
     await controller.reject(owner as never, '3', { reason: 'Ishlatilgan' });
@@ -33,9 +33,9 @@ describe('SellerReturnsController (C4.2)', () => {
       1,
       { cmd: 'seller.returns.approve' },
       {
-        shopId: '7',
+        ownerUserId: '71',
         returnId: '3',
-        actor: { id: '71', role: Role.OPERATOR },
+        actor: { id: '71', role: LegacyRole.OPERATOR },
         comment: 'OK',
       },
     );
@@ -45,7 +45,7 @@ describe('SellerReturnsController (C4.2)', () => {
       {
         ownerUserId: '70',
         returnId: '3',
-        actor: { id: '70', role: Role.SELLER },
+        actor: { id: '70', role: LegacyRole.SELLER },
         comment: 'Ishlatilgan',
       },
     );

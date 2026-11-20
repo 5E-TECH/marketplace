@@ -23,14 +23,14 @@ import {
 import {
   AffiliateApiKeyCreatedDto,
   AffiliateApiKeyDto,
-  AffiliateLeadsPageDto,
   AffiliateCapiDeliveriesPageDto,
-  AffiliatePostbacksPageDto,
-  AffiliatePostbacksQueryDto,
+  AffiliateLeadsPageDto,
   AffiliateLeadsQueryDto,
   AffiliateOffersPageDto,
   AffiliateOffersQueryDto,
   AffiliatePageQueryDto,
+  AffiliatePostbacksPageDto,
+  AffiliatePostbacksQueryDto,
   AffiliateStatsDto,
   AffiliateStatsQueryDto,
   AffiliateStreamDto,
@@ -38,6 +38,8 @@ import {
   CreateAffiliateStreamDto,
   CurrentUser,
   RmqClient,
+  Role,
+  Roles,
   sendRpc,
   UpdateAffiliateStreamDto,
 } from '@app/common';
@@ -46,9 +48,11 @@ import { ParseLeadIdPipe } from './lead-id.pipe';
 /**
  * Sotuvchi (AFFILIATE) kabineti API si (BE-25 shartnomasi).
  * Real kod: BE-11 (offer va sahifa), BE-28 (statistika va lidlar ro‘yxati).
- * Rol cheklovi `@Roles(Role.AFFILIATE)` BE-05 dan keyin qo‘shiladi (rollar OpenAPI ga chiqmaydi).
+ * Faqat sotuvchi (BE-05). Shaxsiy kabinet: superadmin ham bu yerda emas — u sotuvchi ma’lumotini admin yo‘llarida
+ * ko‘radi (sotuvchi ID si tokendan, `sub`).
  */
 @ApiTags('affiliate')
+@Roles(Role.AFFILIATE)
 @ApiBearerAuth()
 @Controller('affiliate')
 export class AffiliateStreamsController {

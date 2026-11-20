@@ -1,7 +1,14 @@
 import { Controller, Headers, Inject, Post } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, JwtUser, RmqClient, sendRpc } from '@app/common';
+import {
+  CurrentUser,
+  JwtUser,
+  LegacyRole,
+  Roles,
+  RmqClient,
+  sendRpc,
+} from '@app/common';
 
 @ApiTags('guest')
 @ApiBearerAuth()
@@ -13,6 +20,8 @@ export class GuestController {
   ) {}
 
   @Post('merge')
+  // BE-05: mijoz foydalanuvchi emas — eski xaridor yo‘li hech kimga ochilmaydi (BE-29 da o‘chiriladi)
+  @Roles(LegacyRole.BUYER)
   @ApiOperation({
     summary: 'Anonim savat va sevimlilarni joriy userga birlashtirish',
   })

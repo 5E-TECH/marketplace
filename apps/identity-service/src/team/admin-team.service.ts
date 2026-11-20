@@ -9,6 +9,7 @@ import {
   ActivityLog,
   CreateAdminTeamMemberDto,
   Role,
+  STAFF_ROLES,
   UpdateAdminTeamRoleDto,
 } from '@app/common';
 import * as bcrypt from 'bcryptjs';
@@ -18,7 +19,8 @@ import { AuthSession } from '../entities/auth-session.entity';
 import { User } from '../entities/user.entity';
 
 const BCRYPT_ROUNDS = 10;
-const TEAM_ROLES = [Role.ADMIN, Role.SUPERADMIN];
+/** BE-05: jamoa — platforma xodimlari (TZ 3-bo‘lim): operator, nazoratchi, omborchi, moliya, admin, superadmin. */
+const TEAM_ROLES = STAFF_ROLES;
 
 @Injectable()
 export class AdminTeamService {
@@ -58,7 +60,6 @@ export class AdminTeamService {
           isActive: true,
           isBlocked: false,
           isDeleted: false,
-          shopId: null,
         }),
       );
       await this.audit(manager, actorId, 'admin.team.create', saved.id, {
@@ -171,7 +172,7 @@ export class AdminTeamService {
   private assertTeamRole(role: Role) {
     if (!TEAM_ROLES.includes(role)) {
       throw new BadRequestException(
-        'Jamoa roli ADMIN yoki SUPERADMIN bo‘lishi kerak',
+        `Jamoa roli ${TEAM_ROLES.join(', ')} dan biri bo‘lishi kerak`,
       );
     }
   }
@@ -212,7 +213,7 @@ export class AdminTeamService {
       id: String(user.id),
       name: user.name,
       phone: user.phone,
-      role: user.role as Role.ADMIN | Role.SUPERADMIN,
+      role: user.role,
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

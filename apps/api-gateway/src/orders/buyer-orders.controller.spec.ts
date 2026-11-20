@@ -1,6 +1,6 @@
 import { of } from 'rxjs';
 import { UnauthorizedException } from '@nestjs/common';
-import { IS_PUBLIC_KEY, Role } from '@app/common';
+import { IS_PUBLIC_KEY, LegacyRole } from '@app/common';
 import { BuyerOrdersController } from './buyer-orders.controller';
 
 describe('BuyerOrdersController', () => {
@@ -8,10 +8,13 @@ describe('BuyerOrdersController', () => {
     const send = jest.fn(() => of({ items: [], total: 0 }));
     const controller = new BuyerOrdersController({ send } as never);
 
-    await controller.list({ user: { sub: '9', role: Role.BUYER } } as never, {
-      page: 2,
-      limit: 10,
-    });
+    await controller.list(
+      { user: { sub: '9', role: LegacyRole.BUYER } } as never,
+      {
+        page: 2,
+        limit: 10,
+      },
+    );
 
     expect(send).toHaveBeenCalledWith(
       { cmd: 'checkout.orders.list-by-buyer' },
@@ -25,7 +28,7 @@ describe('BuyerOrdersController', () => {
 
     await expect(
       controller.tracking(
-        { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+        { user: { sub: '9', role: LegacyRole.BUYER }, headers: {} } as never,
         '42',
       ),
     ).resolves.toMatchObject({ orderId: '42' });
@@ -56,7 +59,7 @@ describe('BuyerOrdersController', () => {
 
     await expect(
       controller.details(
-        { user: { sub: '9', role: Role.BUYER }, headers: {} } as never,
+        { user: { sub: '9', role: LegacyRole.BUYER }, headers: {} } as never,
         '42',
       ),
     ).resolves.toMatchObject({ id: '42' });

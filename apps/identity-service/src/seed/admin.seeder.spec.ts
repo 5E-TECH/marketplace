@@ -3,7 +3,7 @@ import { AdminSeeder } from './admin.seeder';
 
 describe('AdminSeeder (C4.7)', () => {
   it('TC2: mavjud telefonni faol SUPERADMIN ga aylantiradi', async () => {
-    const user = { role: Role.SELLER, isActive: false };
+    const user = { role: Role.AFFILIATE, isActive: false };
     const repository = {
       findOne: jest.fn().mockResolvedValue(user),
       save: jest.fn(async (value) => value),

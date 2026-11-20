@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
+import { AllowStaleToken } from './current-role.guard';
 import type { Request, Response } from 'express';
 import {
   ApiBadRequestResponse,
@@ -309,9 +310,13 @@ export class AuthController {
   })
   @ApiOkResponse({ description: 'Yangilangan profil (passwordHash qaytmaydi)' })
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
-    if (user.impersonatedBy && dto.password !== undefined) {
+    // Telefon ham: yangi telefonga parol tiklash orqali hisob egallanardi (BE-05 tekshiruvi)
+    if (
+      user.impersonatedBy &&
+      (dto.password !== undefined || dto.phone !== undefined)
+    ) {
       throw new ForbiddenException(
-        'Impersonation rejimida parolni o‘zgartirish taqiqlangan',
+        'Impersonation rejimida parol yoki telefonni o‘zgartirish taqiqlangan',
       );
     }
     return sendRpc(
@@ -323,6 +328,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Post('logout')
+  @AllowStaleToken() // BE-05: bloklangan foydalanuvchi ham chiqib, cookie'larini tozalaydi
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh tokenni bekor qilib tizimdan chiqish' })
   @ApiOkResponse({
