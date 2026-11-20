@@ -43,6 +43,27 @@ export function deadLetterQueue(queue: string): string {
   return `${queue}.dlq`;
 }
 
+/** BE-02: kechiktirilgan qayta urinish navbati — TTL tugagach xabar asosiy navbatga qaytadi. */
+export function retryQueue(queue: string): string {
+  return `${queue}.retry`;
+}
+
+/** DLQ da xabar 14 kun turadi [taklif]: ko‘rib chiqish uchun yetarli, shaxsiy ma’lumot cheksiz saqlanmaydi. */
+export const RMQ_DLQ_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+export function rmqDeadLetterQueueOptions() {
+  return { durable: true, messageTtl: RMQ_DLQ_TTL_MS };
+}
+
+export function rmqRetryQueueOptions(queue: string, delayMs: number) {
+  return {
+    durable: true,
+    messageTtl: delayMs,
+    deadLetterExchange: '',
+    deadLetterRoutingKey: queue,
+  };
+}
+
 /**
  * Navbat argumentlari — client ham, server ham AYNAN shuni e’lon qiladi (argumentlar farq qilsa RabbitMQ
  * PRECONDITION_FAILED beradi): doimiy navbat; rad etilgan xabar standart exchange orqali `<navbat>.dlq` ga.
@@ -55,8 +76,12 @@ export function rmqQueueOptions(queue: string) {
   };
 }
 
-/** Bir iste’molchiga bir vaqtda tasdiqlanmagan xabarlar soni [taklif]. */
-export const RMQ_PREFETCH_COUNT = 20;
+/**
+ * Bir iste’molchiga bir vaqtda tasdiqlanmagan xabarlar soni [taklif]. Avval cheklovsiz edi (noAck); servislar bir-
+ * birini RPC bilan chaqiradi (catalog↔checkout va b.) — kichik chegara ikki tomonni ham to‘ldirib, kutishga olib
+ * kelardi. Shuning uchun katta.
+ */
+export const RMQ_PREFETCH_COUNT = 200;
 
 /**
  * RMQ client sozlamalari (gateway va servislararo `ClientsModule`). Xabarlar doimiy (persistent): RabbitMQ qayta

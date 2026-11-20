@@ -11,6 +11,8 @@ async function bootstrap() {
     rmqServer(
       [config.getOrThrow<string>('RABBITMQ_URL')],
       RmqQueue.NOTIFICATION,
+      // BE-02: bildirishnoma qayta urinishda SMS/email takror ketishi mumkin — avtomatik qayta urinish yo‘q, DLQ dan qo‘lda
+      { maxAttempts: 1 },
     ),
   );
   await app.startAllMicroservices();
