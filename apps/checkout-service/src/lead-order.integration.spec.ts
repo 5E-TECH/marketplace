@@ -746,8 +746,24 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       payload: { orderRef: id, idempotencyKey: `lead-order-cancel:${id}` },
     });
 
+    // ombor ishlamayotganda ham «Bekor qilindi» hodisasi ketadi (Elchi posilkasi bekor qilinsin) — buyruq o‘z oqimida
+    for (let tick = 0; tick < 5; tick++) await relay.relayPending();
+    const statusEvents = await outboxOf('order.status.changed', id);
+    expect(
+      statusEvents.map((event) => [
+        (event.payload as unknown as OrderStatusChangedEvent).status,
+        event.status,
+      ]),
+    ).toEqual([
+      ['CONFIRMED', 'PROCESSED'],
+      ['CANCELLED', 'PROCESSED'],
+    ]);
+    await expect(outboxOf('inventory.release', id)).resolves.toMatchObject([
+      { status: 'PENDING' },
+    ]);
+
     inventoryDown = false;
-    // relay har 10 s da; bir o‘tishda har buyurtmaning faqat birinchi kutilayotgan yozuvi (tartib saqlanadi)
+    // relay har 10 s da; bir o‘tishda har oqimning faqat birinchi kutilayotgan yozuvi (tartib saqlanadi)
     for (let tick = 0; tick < 5; tick++) await relay.relayPending();
     await expect(reservationOf(id)).resolves.toMatchObject({
       status: 'RELEASED',
@@ -761,7 +777,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     await orders.onLeadConfirmed(confirmed({ leadId: '5013' }));
     expect(await orderOfLead('5013')).toBeUndefined();
     const [failed] = await outboxOf('order.create-failed', '5013');
-    expect(failed.payload).toMatchObject({ reason: 'OFFER_UNAVAILABLE' });
+    expect(failed.payload).toMatchObject({ reason: 'PRICE_CHANGED' });
     const [request] = (await checkoutDs.query(
       `SELECT id::text AS id FROM checkout.lead_order_request WHERE lead_id = 5013`,
     )) as Array<{ id: string }>;

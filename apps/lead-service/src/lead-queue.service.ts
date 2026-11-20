@@ -462,7 +462,9 @@ export class LeadQueueService {
           ? 'Buyurtma yaratilmadi: qoldiq yo‘q — navbatga qaytdi'
           : event.reason === OrderCreateFailedReason.OFFER_UNAVAILABLE
             ? 'Buyurtma yaratilmadi: mahsulot sotuvda emas — navbatga qaytdi'
-            : 'Buyurtma yaratilmadi: buyurtma ma’lumoti xato — navbatga qaytdi',
+            : event.reason === OrderCreateFailedReason.PRICE_CHANGED
+              ? 'Buyurtma yaratilmadi: narx oshgan (sahifa narxi tasdiqlangan narxdan past) — navbatga qaytdi'
+              : 'Buyurtma yaratilmadi: buyurtma ma’lumoti xato — navbatga qaytdi',
       );
     });
   }

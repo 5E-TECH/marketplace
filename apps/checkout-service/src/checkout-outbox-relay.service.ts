@@ -1,4 +1,4 @@
-import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -9,7 +9,6 @@ import {
   OutboxPermanentError,
   OutboxService,
   RmqClient,
-  sendRpc,
 } from '@app/common';
 
 /** BE-18: outbox orqali yuboriladigan ombor buyruqlari (RPC, emit emas). */
@@ -75,16 +74,26 @@ export class CheckoutOutboxRelayService {
    */
   private async inventoryCommand(event: OutboxEvent): Promise<void> {
     try {
-      await sendRpc(this.inventory, { cmd: event.eventType }, event.payload);
+      // qisqa kutish: ombor ishlamasa relay tranzaksiyasi boshqa hodisalarni uzoq ushlab turmasin
+      await firstValueFrom(
+        this.inventory
+          .send({ cmd: event.eventType }, event.payload)
+          .pipe(timeout(PUBLISH_TIMEOUT_MS)),
+      );
     } catch (error) {
-      const status = error instanceof HttpException ? error.getStatus() : 500;
+      const e = error as {
+        statusCode?: unknown;
+        status?: unknown;
+        message?: unknown;
+      };
+      const raw = e?.statusCode ?? e?.status;
+      const status = typeof raw === 'number' ? raw : 500;
+      const message = String(e?.message ?? error);
       if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
         this.logger.error(
-          `Ombor buyrug‘i bajarilmadi (${event.eventType}, buyurtma ${event.aggregateId}): ${(error as Error).message}`,
+          `Ombor buyrug‘i bajarilmadi (${event.eventType}, buyurtma ${event.aggregateId}): ${message}`,
         );
-        throw new OutboxPermanentError(
-          `${event.eventType}: ${(error as Error).message}`,
-        );
+        throw new OutboxPermanentError(`${event.eventType}: ${message}`);
       }
       throw error;
     }

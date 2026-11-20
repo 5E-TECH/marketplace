@@ -29,8 +29,11 @@ import {
 const ID = /^[1-9]\d{0,18}$/;
 const PHONE = /^\+998\d{9}$/;
 const SOATO = /^\d{2,20}$/;
-/** Ishlov paytida qator boshqa ishchiga berilmaydi (katalog va ombor so‘rovlari 10 s gacha). */
-const CLAIM_LEASE_S = 60;
+/**
+ * Ishlov paytida qator boshqa ishchiga berilmaydi. Katalog va ombor so‘rovi 10 s dan, bir urinish ≈ 30 s dan oshmaydi;
+ * zaxira bilan — ikkinchi ishchi birinchisi tugamasdan so‘rovni olmasin.
+ */
+const CLAIM_LEASE_S = 120;
 /** Katalog yoki ombor javob bermasa: qayta urinish oralig‘i, soniya [taklif]. */
 const RETRY_DELAYS_S = [10, 30, 60, 120, 300];
 const TICK_BUDGET_MS = 8_000;
@@ -166,13 +169,19 @@ export class LeadOrderService {
         );
       return this.retryLater(row, `katalog: ${messageOf(error)}`);
     }
-    const unavailable =
-      offerProblem(snapshot) ?? priceProblem(snapshot!, event.salePrice);
+    const unavailable = offerProblem(snapshot);
     if (unavailable)
       return this.fail(
         row,
         OrderCreateFailedReason.OFFER_UNAVAILABLE,
         unavailable,
+      );
+    const priceChanged = priceProblem(snapshot!, event.salePrice);
+    if (priceChanged)
+      return this.fail(
+        row,
+        OrderCreateFailedReason.PRICE_CHANGED,
+        priceChanged,
       );
     const offer = snapshot!;
 

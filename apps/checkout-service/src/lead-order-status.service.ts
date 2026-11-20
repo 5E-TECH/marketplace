@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   BusinessException,
@@ -19,11 +20,13 @@ import {
   OrderStatusChangedEvent,
   OutboxService,
   RmqClient,
-  sendRpc,
 } from '@app/common';
 
 const ID = /^[1-9]\d{0,18}$/;
 const STATUSES = new Set<string>(Object.values(LeadOrderStatus));
+/** Ombor buyrug‘ining outbox oqimi (holat hodisalaridan alohida). */
+export const INVENTORY_COMMAND_AGGREGATE = 'inventory_command';
+const IMMEDIATE_INVENTORY_TIMEOUT_MS = 2_000;
 /** Bekor qilish sababi (BUY-3) — bo‘sh yoki «.» emas. */
 const MIN_REASON = 3;
 
@@ -98,7 +101,8 @@ export class LeadOrderStatusService {
       if (command)
         await this.outbox.record(
           {
-            aggregateType: 'sales_order',
+            // o‘z oqimi: ombor ishlamasa ham holat hodisasi (Elchi posilkasini bekor qilish) to‘xtab qolmasin
+            aggregateType: INVENTORY_COMMAND_AGGREGATE,
             aggregateId: orderId,
             eventType: command.cmd,
             payload: command.payload,
@@ -134,12 +138,13 @@ export class LeadOrderStatusService {
         `Holatni o‘zgartirib bo‘lmaydi: ${outcome.rejected} → ${to}`,
       );
     }
-    // BUY-3 «darhol»: commit dan keyin bir urinish; o‘tmasa outbox relay qayta yuboradi (≤ 10 s oralig‘ida)
+    // BUY-3 «darhol»: commit dan keyin bitta qisqa urinish; o‘tmasa outbox relay qayta yuboradi (≤ 10 s oralig‘ida).
+    // Qisqa kutish: gateway javobi (10 s) ombor ortidan kechikmasin — holat allaqachon saqlangan.
     if (outcome.command)
-      await sendRpc(
-        this.inventory,
-        { cmd: outcome.command.cmd },
-        outcome.command.payload,
+      await firstValueFrom(
+        this.inventory
+          .send({ cmd: outcome.command.cmd }, outcome.command.payload)
+          .pipe(timeout(IMMEDIATE_INVENTORY_TIMEOUT_MS)),
       ).catch(() => undefined);
     return result!;
   }
