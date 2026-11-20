@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { RmqQueue, rmqOptions } from '@app/common';
+import { RmqQueue, rmqServer } from '@app/common';
 import { LeadModule } from './lead.module';
 
 async function bootstrap() {
@@ -12,7 +12,7 @@ async function bootstrap() {
   // @UseFilters(RpcHttpExceptionFilter) bo‘ladi (repo qoidasi). connectMicroservice'dan
   // keyin microservice.useGlobalFilters() handlerlarga yetmaydi — RMQ da tekshirildi.
   app.connectMicroservice(
-    rmqOptions([config.getOrThrow<string>('RABBITMQ_URL')], RmqQueue.LEAD),
+    rmqServer([config.getOrThrow<string>('RABBITMQ_URL')], RmqQueue.LEAD),
   );
   await app.startAllMicroservices();
   // Hybrid app'da lifecycle hook'lar (@Cron, onModuleInit) faqat init'da ishga tushadi.

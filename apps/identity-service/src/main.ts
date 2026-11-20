@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RmqQueue, rmqOptions, RpcHttpExceptionFilter } from '@app/common';
+import { RmqQueue, rmqServer, RpcHttpExceptionFilter } from '@app/common';
 import { IdentityModule } from './identity.module';
 
 async function bootstrap() {
@@ -9,7 +9,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   const microservice = app.connectMicroservice(
-    rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
+    rmqServer([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
   );
   microservice.useGlobalFilters(new RpcHttpExceptionFilter());
   await app.startAllMicroservices();
