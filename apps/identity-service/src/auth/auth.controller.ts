@@ -6,6 +6,7 @@ import {
   ForgotPasswordDto,
   RegisterDto,
   ResetPasswordDto,
+  Role,
   RpcHttpExceptionFilter,
   UpdateProfileDto,
   VerifyPhoneDto,
@@ -106,6 +107,12 @@ export class AuthController {
       String(data.userId),
       Boolean(data.isActive),
     );
+  }
+
+  /** BE-09: ichki — faol foydalanuvchilar rol bo‘yicha (masalan, superadminlarga to‘q sariq narx xabari). */
+  @MessagePattern({ cmd: 'identity.user.active-by-role' })
+  activeByRole(@Payload() data: { role: Role }) {
+    return this.authService.activeByRole(data.role);
   }
 
   @MessagePattern({ cmd: 'identity.user.count-by-role' })

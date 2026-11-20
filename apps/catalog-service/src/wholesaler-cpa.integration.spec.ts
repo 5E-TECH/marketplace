@@ -12,6 +12,12 @@ import { CatalogOfferService } from './catalog-offer.service';
 import { ProductService } from './product.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
+import { PricingService } from './pricing.service';
+import {
+  ElchiTariffEntity,
+  PriceDecision,
+  PricePolicy,
+} from './entities/pricing.entity';
 import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -107,7 +113,16 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       ds.getRepository(Product),
       ds.getRepository(ProductVariant),
     );
-    offers = new CatalogOfferService(ds.getRepository(Product));
+    offers = new CatalogOfferService(
+      ds.getRepository(Product),
+      new PricingService(
+        ds.getRepository(Product),
+        ds.getRepository(PricePolicy),
+        ds.getRepository(ElchiTariffEntity),
+        ds.getRepository(PriceDecision),
+        emitter,
+      ),
+    );
     const rows = (await ds.query(
       `SELECT id::text, slug, cpa_enabled FROM catalog.product WHERE id >= 9000 ORDER BY id`,
     )) as Array<{ id: string; slug: string; cpa_enabled: boolean }>;

@@ -110,3 +110,6 @@ export * from './dto/lead-report.dto';
 export * from './database/migrate-cli';
 // BE-07: optovik (admin kiritadi)
 export * from './dto/wholesaler.dto';
+// BE-09: narx kalkulyatori (sof hisob)
+export * from './pricing';
+export * from './dto/pricing.dto';

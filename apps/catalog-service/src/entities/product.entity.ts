@@ -10,6 +10,7 @@ import {
   BaseEntity,
   moneyTransformer,
   numericTransformer,
+  PriceStatus,
   ProductStatus,
 } from '@app/common';
 import { Category } from './category.entity';
@@ -124,6 +125,28 @@ export class Product extends BaseEntity {
   /** Offer sotuvchilarga ochiq (admin o‘chirishi mumkin). CPA mahsulotida aniq bitta faol variant. */
   @Column({ name: 'cpa_enabled', type: 'boolean', default: true })
   cpaEnabled: boolean;
+
+  /** BE-09 (NRX-6): admin tasdiqlagan narx — mijoz ko‘radigan tovar narxi (yashirilgan yetkazish bilan). */
+  @Column({
+    name: 'approved_price',
+    type: 'bigint',
+    nullable: true,
+    transformer: moneyTransformer,
+  })
+  approvedPrice: number | null;
+
+  /** Oxirgi narx qarorining holati (GREEN, YELLOW, ORANGE). */
+  @Column({ name: 'price_status', type: 'varchar', length: 10, nullable: true })
+  priceStatus: PriceStatus | null;
+
+  /** NRX-5: raqobatchida mijoz jami to‘laydigan summa — ustama chegarasi undan oshmaydi (NRX-4). */
+  @Column({
+    name: 'market_total',
+    type: 'bigint',
+    nullable: true,
+    transformer: moneyTransformer,
+  })
+  marketTotal: number | null;
 
   /** BAD (dori vositasi emas) — admin qo‘yadi (ADM-1); sotuvchi sahifasi ogohlantirishni shundan ko‘rsatadi. */
   @Column({ name: 'is_bad', type: 'boolean', default: false })

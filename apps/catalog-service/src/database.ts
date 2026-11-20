@@ -1,6 +1,12 @@
 import type { DatabaseDefinition } from '@app/common';
 import { FixProductStatusDefault1795910400000 } from './migrations/1795910400000-fix-product-status-default';
 import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
+import { Pricing1796169600000 } from './migrations/1796169600000-pricing';
+import {
+  ElchiTariffEntity,
+  PriceDecision,
+  PricePolicy,
+} from './entities/pricing.entity';
 import { CreateCatalogTables1721736000000 } from './migrations/1721736000000-create-catalog-tables';
 import { DefaultProductActive1724414400000 } from './migrations/1724414400000-default-product-active';
 import { CreateFavorites1723300000000 } from './migrations/1723300000000-create-favorites';
@@ -25,7 +31,18 @@ import { Banner } from './entities/banner.entity';
  */
 export const CATALOG_DB: DatabaseDefinition = {
   schema: 'catalog',
-  entities: [Shop, Category, Product, ProductVariant, Favorite, Review, Banner],
+  entities: [
+    Shop,
+    Category,
+    Product,
+    ProductVariant,
+    Favorite,
+    Review,
+    Banner,
+    PricePolicy,
+    ElchiTariffEntity,
+    PriceDecision,
+  ],
   migrations: [
     CreateCatalogTables1721736000000,
     DefaultProductActive1724414400000,
@@ -39,5 +56,6 @@ export const CATALOG_DB: DatabaseDefinition = {
     MoneyToBigint1795219200000,
     FixProductStatusDefault1795910400000,
     WholesalerCpaProduct1796083200000,
+    Pricing1796169600000,
   ],
 };

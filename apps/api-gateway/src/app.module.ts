@@ -43,6 +43,7 @@ import { AdminFinanceController } from './admin/admin-finance.controller';
 import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminWholesalersController } from './admin/admin-wholesalers.controller';
+import { AdminPricingController } from './admin/admin-pricing.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
 import { AdminNotificationsController } from './admin/admin-notifications.controller';
 import { AdminTeamController } from './admin/admin-team.controller';
@@ -200,6 +201,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     ReviewsController,
     AdminProductsController,
     AdminWholesalersController,
+    AdminPricingController,
     AdminAuditController,
     AdminNotificationsController,
     AdminTeamController,
