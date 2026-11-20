@@ -70,8 +70,8 @@ export class SellerShopDto {
   @ApiProperty({ example: '15' })
   id: string;
 
-  @ApiProperty({ example: '42' })
-  ownerUserId: string;
+  @ApiProperty({ example: '42', nullable: true, type: String })
+  ownerUserId: string | null;
 
   @ApiProperty({ example: 'Ali Market' })
   name: string;
@@ -111,15 +111,6 @@ export class SellerShopDto {
 
   @ApiProperty({ example: false })
   isFeatured: boolean;
-
-  @ApiProperty({ example: 25000, description: 'Uy manziliga yetkazish tarifi' })
-  tariffHome: number;
-
-  @ApiProperty({
-    example: 15000,
-    description: 'Elchi markaziga yetkazish tarifi',
-  })
-  tariffCenter: number;
 }
 
 export class SellerShopResponseDto {

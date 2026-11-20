@@ -15,7 +15,7 @@ describe('ProductService', () => {
     save: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
-  let shopRepo: { findOne: jest.Mock };
+  let shopRepo: { findOne: jest.Mock; createQueryBuilder: jest.Mock };
   let categoryRepo: { findOne: jest.Mock };
   let variantRepo: { create: jest.Mock; save: jest.Mock };
   let service: ProductService;
@@ -29,7 +29,15 @@ describe('ProductService', () => {
       save: jest.fn(async (value) => ({ id: value.id ?? '10', ...value })),
       createQueryBuilder: jest.fn(),
     };
-    shopRepo = { findOne: jest.fn() };
+    shopRepo = { findOne: jest.fn(), createQueryBuilder: jest.fn() };
+    // Optovik rekvizitlari `select: false` — servis ularni query builder bilan o‘qiydi; mock findOne natijasini beradi
+    shopRepo.createQueryBuilder.mockImplementation(() => {
+      const qb: Record<string, unknown> = {};
+      qb.addSelect = () => qb;
+      qb.where = () => qb;
+      qb.getOne = () => shopRepo.findOne();
+      return qb;
+    });
     categoryRepo = { findOne: jest.fn() };
     variantRepo = {
       create: jest.fn((value) => value),
@@ -47,44 +55,57 @@ describe('ProductService', () => {
     );
   });
 
-  it('ACTIVE yangi mahsulot uchun search reindex event yuboradi', async () => {
+  // BE-07: og‘irlik, o‘lchamlar va bazaviy narx majburiy; optovikda shartnoma (OPT-1)
+  const PHYS = {
+    basePrice: 140000,
+    weightGrams: 450,
+    lengthMm: 200,
+    widthMm: 120,
+    heightMm: 80,
+  };
+  const CONTRACT = { contractNumber: 'K-2026/014', contractDate: '2026-11-20' };
+
+  it('BE-07 TC1: yangi mahsulot PENDING_REVIEW — qidiruvga va sotuvga chiqmaydi', async () => {
     shopRepo.findOne.mockResolvedValue({
       id: '5',
       ownerUserId: '42',
       name: 'Ali Market',
       status: ShopStatus.ACTIVE,
       isDeleted: false,
+      ...CONTRACT,
     });
     productRepo.findOne.mockResolvedValue(null);
 
     await service.create('42', {
       name: 'Telefon',
-      price: 1200000,
       imageUrl: 'http://minio/telefon.jpg',
-      status: ProductStatus.ACTIVE,
+      ...PHYS,
     });
 
+    expect(productRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ status: ProductStatus.PENDING_REVIEW }),
+    );
     expect(searchClient.emit).toHaveBeenCalledWith(
       'catalog.product.changed',
-      expect.objectContaining({
-        productId: '10',
-        title: 'Telefon',
-        shopName: 'Ali Market',
-        active: true,
-      }),
+      expect.objectContaining({ productId: '10', active: false }),
     );
+    expect(searchClient.emit.mock.calls[0][1]).not.toHaveProperty('shopName');
   });
 
-  it('seller uchun slug va ownership bilan mahsulot yaratadi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+  it('seller uchun slug va ownership bilan mahsulot yaratadi; narx berilmasa — bazaviy narx', async () => {
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      ...CONTRACT,
+    });
     categoryRepo.findOne.mockResolvedValue({ id: '3', isActive: true });
     productRepo.findOne.mockResolvedValue(null);
 
     await service.create('42', {
       name: 'O‘yin telefoni',
       categoryId: '3',
-      price: 1200000,
       imageUrl: 'http://minio/oyin-telefoni.jpg',
+      ...PHYS,
     });
 
     expect(productRepo.create).toHaveBeenCalledWith(
@@ -92,8 +113,15 @@ describe('ProductService', () => {
         shopId: '5',
         ownerUserId: '42',
         slug: 'oyin-telefoni',
-        price: 1200000,
-        status: ProductStatus.ACTIVE,
+        price: 140000,
+        basePrice: 140000,
+        weightGrams: 450,
+        lengthMm: 200,
+        widthMm: 120,
+        heightMm: 80,
+        cpaEnabled: true,
+        isBad: false,
+        status: ProductStatus.PENDING_REVIEW,
       }),
     );
     expect(variantRepo.create).toHaveBeenCalledWith(
@@ -108,56 +136,112 @@ describe('ProductService', () => {
     expect(variantRepo.save).toHaveBeenCalledTimes(1);
   });
 
-  it('bir shopdagi takroriy nom uchun unique slug yaratadi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+  it('BE-07 TC4: slug global — boshqa optovikda ham band bo‘lsa yangi slug', async () => {
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      ...CONTRACT,
+    });
     productRepo.findOne
-      .mockResolvedValueOnce({ id: '1', shopId: '5', slug: 'iphone' })
+      .mockResolvedValueOnce({ id: '1', shopId: '77', slug: 'iphone' })
       .mockResolvedValueOnce(null);
 
     await service.create('42', {
       name: 'iPhone',
-      price: 100,
       imageUrl: 'http://minio/iphone.jpg',
+      ...PHYS,
     });
 
+    expect(productRepo.findOne).toHaveBeenNthCalledWith(1, {
+      where: { slug: 'iphone' },
+    });
     expect(productRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({ slug: 'iphone-2' }),
     );
   });
 
   it('mavjud bo‘lmagan kategoriya bilan yaratishni bloklaydi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      ...CONTRACT,
+    });
     categoryRepo.findOne.mockResolvedValue(null);
 
     await expect(
       service.create('42', {
         name: 'Telefon',
         categoryId: '404',
-        price: 100,
         imageUrl: 'http://minio/telefon.jpg',
+        ...PHYS,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(productRepo.save).not.toHaveBeenCalled();
   });
 
   it('rasmsiz mahsulot yaratishni 400 bilan bloklaydi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      ...CONTRACT,
+    });
     productRepo.findOne.mockResolvedValue(null);
 
     await expect(
-      service.create('42', { name: 'Telefon', price: 100 }),
+      service.create('42', { name: 'Telefon', ...PHYS }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(productRepo.save).not.toHaveBeenCalled();
   });
 
+  it.each(['weightGrams', 'lengthMm', 'widthMm', 'heightMm'] as const)(
+    'BE-07 TC3: %s siz mahsulot saqlanmaydi — 400',
+    async (field) => {
+      shopRepo.findOne.mockResolvedValue({
+        id: '5',
+        ownerUserId: '42',
+        ...CONTRACT,
+      });
+      productRepo.findOne.mockResolvedValue(null);
+      const dto = { name: 'Telefon', imageUrl: 'http://minio/t.jpg', ...PHYS };
+      delete (dto as Record<string, unknown>)[field];
+      await expect(service.create('42', dto as never)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(productRepo.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it('BE-07 OPT-1: shartnomasiz optovikka mahsulot qo‘shib bo‘lmaydi — 409', async () => {
+    shopRepo.findOne.mockResolvedValue({
+      id: '9',
+      ownerUserId: null,
+      isDeleted: false,
+      contractNumber: null,
+      contractDate: null,
+    });
+    await expect(
+      service.adminCreate('9', {
+        wholesalerId: '9',
+        name: 'Telefon',
+        imageUrl: 'http://minio/t.jpg',
+        ...PHYS,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(productRepo.save).not.toHaveBeenCalled();
+  });
+
   it('gallerydagi birinchi yaroqli rasmni asosiy rasm qiladi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '5', ownerUserId: '42' });
+    shopRepo.findOne.mockResolvedValue({
+      id: '5',
+      ownerUserId: '42',
+      ...CONTRACT,
+    });
     productRepo.findOne.mockResolvedValue(null);
 
     await service.create('42', {
       name: 'Telefon',
-      price: 100,
       images: ['  ', ' http://minio/telefon.jpg '],
+      ...PHYS,
     });
 
     expect(productRepo.create).toHaveBeenCalledWith(
@@ -168,31 +252,152 @@ describe('ProductService', () => {
     );
   });
 
-  it('admin tanlagan shop egasi nomidan mahsulot yaratadi', async () => {
+  it('BE-07 TC1/TC5/TC7: admin foydalanuvchisiz optovik nomidan mahsulot qo‘shadi, BAD belgisi bilan', async () => {
     shopRepo.findOne.mockResolvedValue({
       id: '9',
-      ownerUserId: '42',
-      name: 'Ali Market',
+      ownerUserId: null,
+      name: 'Gadget Trade',
       isDeleted: false,
+      ...CONTRACT,
     });
     productRepo.findOne.mockResolvedValue(null);
 
     await service.adminCreate('9', {
+      wholesalerId: '9',
       name: 'Telefon',
-      price: 1200000,
       imageUrl: 'https://cdn.example.com/telefon.jpg',
+      affiliateFee: 65000,
+      isBad: true,
+      ...PHYS,
     });
 
-    expect(shopRepo.findOne).toHaveBeenCalledWith({
-      where: { id: '9', isDeleted: false },
-    });
     expect(productRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         shopId: '9',
-        ownerUserId: '42',
+        ownerUserId: null,
         name: 'Telefon',
+        affiliateFee: 65000,
+        isBad: true,
+        status: ProductStatus.PENDING_REVIEW,
       }),
     );
+  });
+
+  describe('BE-07: moderatsiya', () => {
+    const pending = (over: Record<string, unknown> = {}) => ({
+      id: '10',
+      shopId: '9',
+      name: 'Telefon',
+      slug: 'telefon',
+      status: ProductStatus.PENDING_REVIEW,
+      isBlocked: false,
+      isDeleted: false,
+      cpaEnabled: true,
+      isBad: false,
+      moderationNote: null,
+      ...PHYS,
+      ...over,
+    });
+    beforeEach(() => {
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        name: 'Gadget Trade',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        ...CONTRACT,
+      });
+      (variantRepo as any).count = jest.fn(async () => 1);
+    });
+
+    it('TC2: tasdiq — ACTIVE, qidiruvga chiqadi', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      const saved = await service.adminApprove('10');
+      expect(saved).toMatchObject({
+        status: ProductStatus.ACTIVE,
+        moderationNote: null,
+      });
+      expect(searchClient.emit).toHaveBeenCalledWith(
+        'catalog.product.changed',
+        expect.objectContaining({ productId: '10', active: true }),
+      );
+    });
+
+    it('OPT-1: to‘xtatilgan yoki shartnomasiz optovik mahsuloti tasdiqlanmaydi — 409', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.SUSPENDED,
+        isDeleted: false,
+        ...CONTRACT,
+      });
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        contractNumber: null,
+        contractDate: null,
+      });
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('og‘irliksiz eski mahsulotni tasdiqlab bo‘lmaydi — 400', async () => {
+      productRepo.findOne.mockResolvedValue(pending({ weightGrams: null }));
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('tasdiqlangan mahsulotni qayta tasdiqlash — 409', async () => {
+      productRepo.findOne.mockResolvedValue(
+        pending({ status: ProductStatus.ACTIVE }),
+      );
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('TC6: CPA mahsulotida ikki faol variant bo‘lsa tasdiqlanmaydi — 400', async () => {
+      (variantRepo as any).count = jest.fn(async () => 2);
+      productRepo.findOne.mockResolvedValue(pending());
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('rad — REJECTED, sabab saqlanadi, qidiruvdan chiqadi', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      const saved = await service.adminReject('10', '  Rasm sifatsiz  ');
+      expect(saved).toMatchObject({
+        status: ProductStatus.REJECTED,
+        moderationNote: 'Rasm sifatsiz',
+      });
+      expect(searchClient.emit).toHaveBeenCalledWith(
+        'catalog.product.changed',
+        expect.objectContaining({ productId: '10', active: false }),
+      );
+    });
+
+    it('TC7: admin BAD belgisini va CPA ni o‘zgartiradi; holat tahrirda o‘zgarmaydi', async () => {
+      productRepo.findOne
+        .mockResolvedValueOnce(pending())
+        .mockResolvedValue(null);
+      const saved = await service.adminUpdate('10', {
+        isBad: true,
+        cpaEnabled: false,
+        affiliateFee: 65000,
+      });
+      expect(saved).toMatchObject({
+        isBad: true,
+        cpaEnabled: false,
+        affiliateFee: 65000,
+        status: ProductStatus.PENDING_REVIEW,
+      });
+    });
   });
 
   it('boshqa seller mahsulotini tahrirlashni 403 bilan bloklaydi', async () => {

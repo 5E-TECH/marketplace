@@ -65,10 +65,8 @@ export class SearchProductsQueryDto {
 
 export class SearchProductItemDto {
   @ApiProperty({ example: '12' }) productId: string;
-  @ApiProperty({ example: '5' }) shopId: string;
   @ApiProperty({ example: 'iphone-16-pro' }) slug: string;
   @ApiProperty({ example: 'iPhone 16 Pro' }) title: string;
-  @ApiProperty({ example: 'Ali Market' }) shopName: string;
   @ApiProperty({ example: '7', nullable: true }) categoryId: string | null;
   @ApiProperty({ example: 14999000 }) price: number;
   @ApiProperty({ example: null, nullable: true }) imageUrl: string | null;
@@ -98,15 +96,14 @@ export class SearchProductsPageDto {
   @ApiProperty({ type: SearchFacetDto }) facets: SearchFacetDto;
 }
 
+/** BE-07: qidiruv hujjatida do‘kon maydonlari yo‘q. */
 export interface CatalogProductChangedEvent {
   productId: string;
-  shopId: string;
   categoryId: string | null;
   title: string;
   content: string | null;
   slug: string;
   imageUrl: string | null;
-  shopName: string;
   price: number;
   attributes: Record<string, unknown>;
   active: boolean;

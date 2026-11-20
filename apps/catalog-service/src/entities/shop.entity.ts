@@ -1,18 +1,22 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 import {
   BaseEntity,
-  moneyTransformer,
   numericTransformer,
   ShopStatus,
+  WholesalerLegalType,
 } from '@app/common';
 import { Product } from './product.entity';
 
+/**
+ * BE-07: optovik (TZ 6.9). Jadval nomi `shop` qoldi — mahsulot, buyurtma va ombor `shop_id` ga bog‘langan. Ishga
+ * tushishda optovikni admin kiritadi, foydalanuvchisiz (`owner_user_id` bo‘sh); o‘zi ro‘yxatdan o‘tishi — BE-30.
+ */
 @Entity('shop')
 @Index('uq_catalog_shop_owner_user_id', ['ownerUserId'], { unique: true })
 @Index('uq_catalog_shop_slug', ['slug'], { unique: true })
 export class Shop extends BaseEntity {
-  @Column({ name: 'owner_user_id', type: 'bigint' })
-  ownerUserId: string;
+  @Column({ name: 'owner_user_id', type: 'bigint', nullable: true })
+  ownerUserId: string | null;
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -41,24 +45,71 @@ export class Shop extends BaseEntity {
   @Column({ name: 'district_id', type: 'bigint', nullable: true })
   districtId: string | null;
 
-  @Column({
-    name: 'tariff_home',
-    type: 'bigint',
-    default: 25000,
-    transformer: moneyTransformer,
-  })
-  tariffHome: number;
-
-  @Column({
-    name: 'tariff_center',
-    type: 'bigint',
-    default: 15000,
-    transformer: moneyTransformer,
-  })
-  tariffCenter: number;
-
   @Column({ type: 'text', nullable: true })
   address: string | null;
+
+  // BE-07: rekvizitlar (STIR, bank, shartnoma) sukut bo‘yicha o‘qilmaydi (`select: false`) — ochiq storefront va
+  // boshqa javoblarga chiqmasin; ularni faqat `WHOLESALER_PRIVATE_COLUMNS` bilan admin API o‘qiydi.
+  /** OPT-1: yuridik shaxs yoki YaTT. */
+  @Column({
+    name: 'legal_type',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    select: false,
+  })
+  legalType: WholesalerLegalType | null;
+
+  /** OPT-1: STIR (9 raqam). */
+  @Column({ type: 'varchar', length: 9, nullable: true, select: false })
+  tin: string | null;
+
+  @Column({
+    name: 'bank_name',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    select: false,
+  })
+  bankName: string | null;
+
+  /** Hisob raqami (20 raqam). */
+  @Column({
+    name: 'bank_account',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    select: false,
+  })
+  bankAccount: string | null;
+
+  /** Bank MFO kodi (5 raqam). */
+  @Column({
+    name: 'bank_mfo',
+    type: 'varchar',
+    length: 5,
+    nullable: true,
+    select: false,
+  })
+  bankMfo: string | null;
+
+  /** OPT-1: komissiya shartnomasi. Shartnomasiz mahsulot qo‘shib bo‘lmaydi. */
+  @Column({
+    name: 'contract_number',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+    select: false,
+  })
+  contractNumber: string | null;
+
+  @Column({
+    name: 'contract_date',
+    type: 'date',
+    nullable: true,
+    select: false,
+  })
+  contractDate: string | null;
 
   @Column({
     type: 'numeric',
@@ -81,3 +132,14 @@ export class Shop extends BaseEntity {
   @OneToMany(() => Product, (product) => product.shop)
   products: Product[];
 }
+
+/** Optovik rekvizitlari ustunlari (`select: false`): admin API va shartnoma tekshiruvi `addSelect` bilan o‘qiydi. */
+export const WHOLESALER_PRIVATE_COLUMNS = [
+  'legalType',
+  'tin',
+  'bankName',
+  'bankAccount',
+  'bankMfo',
+  'contractNumber',
+  'contractDate',
+] as const;

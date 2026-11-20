@@ -1,6 +1,8 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  AdminCreateProductDto,
+  AdminUpdateProductDto,
   CreateProductDto,
   AdminProductsQueryDto,
   MyProductsQueryDto,
@@ -20,8 +22,25 @@ export class ProductController {
   }
 
   @MessagePattern({ cmd: 'catalog.product.admin-create' })
-  adminCreate(@Payload() data: { shopId: string; dto: CreateProductDto }) {
-    return this.products.adminCreate(data.shopId, data.dto);
+  adminCreate(@Payload() data: { dto: AdminCreateProductDto }) {
+    return this.products.adminCreate(String(data.dto.wholesalerId), data.dto);
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-update' })
+  adminUpdate(
+    @Payload() data: { productId: string; dto: AdminUpdateProductDto },
+  ) {
+    return this.products.adminUpdate(String(data.productId), data.dto);
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-approve' })
+  adminApprove(@Payload() data: { productId: string }) {
+    return this.products.adminApprove(String(data.productId));
+  }
+
+  @MessagePattern({ cmd: 'catalog.product.admin-reject' })
+  adminReject(@Payload() data: { productId: string; reason: string }) {
+    return this.products.adminReject(String(data.productId), data.reason);
   }
 
   @MessagePattern({ cmd: 'product.get-mine' })

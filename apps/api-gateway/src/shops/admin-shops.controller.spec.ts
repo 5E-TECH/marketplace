@@ -28,7 +28,6 @@ describe('AdminShopsController (C1.7)', () => {
       'suspend',
       'activate',
       'feature',
-      'updateTariffs',
     ] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, AdminShopsController.prototype[method]),
@@ -134,8 +133,6 @@ describe('AdminShopsController (C1.7)', () => {
         phone: '+998901234567',
         regionId: '1',
         districtId: '10',
-        tariffHome: 15000,
-        tariffCenter: 10000,
       }),
     );
     const identity = jest.fn(() => of({}));
@@ -171,8 +168,6 @@ describe('AdminShopsController (C1.7)', () => {
         phone: '+998901234567',
         regionId: '1',
         districtId: '10',
-        tariffHome: 15000,
-        tariffCenter: 10000,
       },
     );
     // tartib: inventory (3-qadam) publish (4-qadam) dan OLDIN
@@ -180,72 +175,6 @@ describe('AdminShopsController (C1.7)', () => {
       catalog.mock.invocationCallOrder[1],
     );
     expect(res.id).toBe('9');
-  });
-
-  it('C1.46: admin tariflarni catalogga uzatadi va audit qiladi', async () => {
-    const catalog = jest.fn(() =>
-      of({ id: '9', tariffHome: 15000, tariffCenter: 10000 }),
-    );
-    const identity = jest.fn(() => of({}));
-    const ctrl = makeController(catalog, identity);
-
-    await ctrl.updateTariffs(
-      '9',
-      { tariffHome: 15000, tariffCenter: 10000 },
-      { sub: '7', role: Role.ADMIN } as never,
-      '1.2.3.4',
-    );
-
-    expect(catalog).toHaveBeenCalledWith(
-      { cmd: 'catalog.shop.update-tariffs' },
-      { shopId: '9', tariffHome: 15000, tariffCenter: 10000 },
-    );
-    expect(identity).toHaveBeenCalledWith(
-      { cmd: 'identity.audit.log' },
-      expect.objectContaining({
-        action: 'shop.tariffs.update',
-        entityId: '9',
-      }),
-    );
-  });
-
-  it('C1.46 TC3: mavjud market tarifi Elchi integrationda ham yangilanadi', async () => {
-    const catalog = jest.fn(() =>
-      of({
-        id: '9',
-        name: 'Zamon',
-        phone: '+998901234567',
-        regionId: '1',
-        districtId: '10',
-        tariffHome: 25000,
-        tariffCenter: 15000,
-        elchiMarketId: '500',
-      }),
-    );
-    const integration = jest.fn(() => of({ updated: true }));
-    const ctrl = makeController(
-      catalog,
-      jest.fn(() => of({})),
-      jest.fn(() => of({})),
-      jest.fn(() => of(0)),
-      integration,
-    );
-
-    await ctrl.updateTariffs(
-      '9',
-      { tariffHome: 25000, tariffCenter: 15000 },
-      { sub: '7', role: Role.ADMIN } as never,
-      '1.2.3.4',
-    );
-
-    expect(integration).toHaveBeenCalledWith(
-      { cmd: 'integration.market.update-tariffs' },
-      expect.objectContaining({
-        shopId: '9',
-        tariffHome: 25000,
-        tariffCenter: 15000,
-      }),
-    );
   });
 
   it('TC3: reject -> catalog.shop.reject (reason bilan)', async () => {

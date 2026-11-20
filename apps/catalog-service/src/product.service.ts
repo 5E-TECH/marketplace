@@ -12,6 +12,8 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Brackets, QueryFailedError, Repository } from 'typeorm';
 import {
+  AdminCreateProductDto,
+  AdminUpdateProductDto,
   CreateProductDto,
   AdminProductsQueryDto,
   CatalogProductChangedEvent,
@@ -26,6 +28,7 @@ import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
 import { ProductVariant } from './entities/product-variant.entity';
+import { hasContract } from './wholesaler.service';
 
 @Injectable()
 export class ProductService {
@@ -50,17 +53,31 @@ export class ProductService {
     return this.createForShop(shop, dto);
   }
 
-  async adminCreate(shopId: string, dto: CreateProductDto): Promise<Product> {
-    const shop = await this.getShopById(shopId);
-    return this.createForShop(shop, dto);
+  /** BE-07: admin optovik nomidan mahsulot qo‘shadi (FE-25); holat — PENDING_REVIEW. */
+  async adminCreate(
+    wholesalerId: string,
+    dto: AdminCreateProductDto,
+  ): Promise<Product> {
+    const shop = await this.getShopById(wholesalerId);
+    return this.createForShop(shop, dto, {
+      cpaEnabled: dto.cpaEnabled,
+      isBad: dto.isBad,
+    });
   }
 
   private async createForShop(
     shop: Shop,
     dto: CreateProductDto,
+    flags: { cpaEnabled?: boolean; isBad?: boolean } = {},
   ): Promise<Product> {
+    // OPT-1: shartnomasiz mahsulot qo‘shib bo‘lmaydi
+    if (!hasContract(shop))
+      throw new ConflictException(
+        'Optovik shartnomasi kiritilmagan — mahsulot qo‘shib bo‘lmaydi',
+      );
+    this.assertPhysical(dto);
     await this.ensureCategoryExists(dto.categoryId);
-    const slug = await this.uniqueSlug(shop.id, dto.name);
+    const slug = await this.uniqueSlug(dto.name);
     // Validate that at least one image (imageUrl or images) is provided
     const primaryImage = dto.imageUrl?.trim();
     const galleryImages = (dto.images ?? [])
@@ -82,14 +99,23 @@ export class ProductService {
       name: dto.name.trim(),
       slug,
       description: dto.description ?? null,
-      price: dto.price,
+      price: dto.price ?? dto.basePrice,
       oldPrice: dto.oldPrice ?? null,
       imageUrl,
       images,
       attributes: dto.attributes ?? {},
       hasVariants: false,
-      // Yangi mahsulot faol marketda public katalogga darhol chiqadi.
-      status: dto.status ?? ProductStatus.ACTIVE,
+      // BE-07 (OPT-2, ADM-1): admin tasdiqlamaguncha sotuvga chiqmaydi
+      status: ProductStatus.PENDING_REVIEW,
+      moderationNote: null,
+      basePrice: dto.basePrice,
+      affiliateFee: dto.affiliateFee ?? null,
+      weightGrams: dto.weightGrams,
+      lengthMm: dto.lengthMm,
+      widthMm: dto.widthMm,
+      heightMm: dto.heightMm,
+      cpaEnabled: flags.cpaEnabled ?? true,
+      isBad: flags.isBad ?? false,
     });
     const createdProduct = await this.save(product);
     const defaultVariant = this.variants.create({
@@ -181,25 +207,7 @@ export class ProductService {
     dto: UpdateProductDto,
   ): Promise<Product> {
     const product = await this.getOwned(ownerUserId, id);
-    await this.ensureCategoryExists(dto.categoryId);
-
-    if (dto.name !== undefined) {
-      product.name = dto.name.trim();
-      product.slug = await this.uniqueSlug(
-        product.shopId,
-        dto.name,
-        product.id,
-      );
-    }
-    if (dto.categoryId !== undefined) product.categoryId = dto.categoryId;
-    if (dto.description !== undefined) product.description = dto.description;
-    if (dto.price !== undefined) product.price = dto.price;
-    if (dto.oldPrice !== undefined) product.oldPrice = dto.oldPrice;
-    if (dto.imageUrl !== undefined) product.imageUrl = dto.imageUrl;
-    if (dto.images !== undefined) product.images = dto.images;
-    if (dto.attributes !== undefined) product.attributes = dto.attributes;
-    if (dto.status !== undefined) product.status = dto.status;
-
+    await this.applyChanges(product, dto);
     const updated = await this.save(product);
     const shop = await this.shops.findOne({ where: { id: product.shopId } });
     if (shop) await this.publishChanged(updated, shop);
@@ -256,6 +264,135 @@ export class ProductService {
     return this.getAdminProduct(id);
   }
 
+  /** BE-07: admin tahriri — CPA maydonlari, BAD va CPA belgilari (ADM-1). Holat faqat tasdiq/rad orqali. */
+  async adminUpdate(id: string, dto: AdminUpdateProductDto): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    await this.applyChanges(product, dto);
+    if (dto.cpaEnabled !== undefined && dto.cpaEnabled !== product.cpaEnabled) {
+      if (dto.cpaEnabled) await this.assertSingleActiveVariant(product.id);
+      product.cpaEnabled = dto.cpaEnabled;
+    }
+    if (dto.isBad !== undefined) product.isBad = dto.isBad;
+    const saved = await this.save(product);
+    await this.publish(saved);
+    return saved;
+  }
+
+  /** BE-07 (OPT-2, ADM-1): admin tasdig‘i — mahsulot sotuvga chiqadi. */
+  async adminApprove(id: string): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    if (product.status === ProductStatus.ACTIVE)
+      throw new ConflictException('Mahsulot allaqachon tasdiqlangan');
+    if (
+      ![
+        ProductStatus.PENDING_REVIEW,
+        ProductStatus.REJECTED,
+        ProductStatus.DRAFT,
+      ].includes(product.status)
+    )
+      throw new ConflictException(
+        `${product.status} holatidagi mahsulotni tasdiqlab bo‘lmaydi`,
+      );
+    // Eski (BE-07 dan oldingi) mahsulotda og‘irlik, o‘lcham yoki bazaviy narx bo‘lmasligi mumkin
+    if (
+      product.basePrice === null ||
+      !product.weightGrams ||
+      !product.lengthMm ||
+      !product.widthMm ||
+      !product.heightMm
+    )
+      throw new BadRequestException(
+        'Tasdiqdan oldin bazaviy narx, og‘irlik va o‘lchamlarni kiriting',
+      );
+    // OPT-1: shartnomasiz yoki to‘xtatilgan optovikning mahsuloti sotuvga chiqmaydi
+    const shop = await this.getShopById(product.shopId);
+    if (!hasContract(shop) || shop.status !== ShopStatus.ACTIVE)
+      throw new ConflictException(
+        'Optovik faol emas yoki shartnomasi kiritilmagan — tasdiqlab bo‘lmaydi',
+      );
+    if (product.cpaEnabled) await this.assertSingleActiveVariant(product.id);
+    product.status = ProductStatus.ACTIVE;
+    product.moderationNote = null;
+    const saved = await this.save(product);
+    await this.publish(saved);
+    return saved;
+  }
+
+  /** BE-07: admin rad etadi — sabab mahsulotda saqlanadi, sotuvga chiqmaydi. */
+  async adminReject(id: string, reason: string): Promise<Product> {
+    const product = await this.getAdminProduct(id);
+    if (product.status === ProductStatus.REJECTED)
+      throw new ConflictException('Mahsulot allaqachon rad etilgan');
+    product.status = ProductStatus.REJECTED;
+    product.moderationNote = reason.trim();
+    const saved = await this.save(product);
+    await this.publishRemoved(saved);
+    return saved;
+  }
+
+  /**
+   * CPA mahsulotida aniq bitta faol variant: qoldiq, band va buyurtma shu variant orqali (BE-17, BE-18).
+   */
+  async assertSingleActiveVariant(productId: string): Promise<void> {
+    const active = await this.variants.count({
+      where: { productId, isActive: true, isDeleted: false },
+    });
+    if (active > 1)
+      throw new BadRequestException(
+        'CPA mahsulotida faqat bitta faol variant bo‘ladi',
+      );
+  }
+
+  /** Umumiy maydonlar (sotuvchi va admin tahriri). Og‘irlik va o‘lchamni o‘chirib bo‘lmaydi (DTO: musbat son). */
+  private async applyChanges(
+    product: Product,
+    dto: Partial<CreateProductDto>,
+  ): Promise<void> {
+    await this.ensureCategoryExists(dto.categoryId);
+    if (dto.name !== undefined) {
+      product.name = dto.name.trim();
+      product.slug = await this.uniqueSlug(dto.name, product.id);
+    }
+    if (dto.categoryId !== undefined) product.categoryId = dto.categoryId;
+    if (dto.description !== undefined) product.description = dto.description;
+    if (dto.price === null)
+      throw new BadRequestException('Narx bo‘sh bo‘lishi mumkin emas');
+    if (dto.price !== undefined) product.price = dto.price;
+    if (dto.oldPrice !== undefined) product.oldPrice = dto.oldPrice;
+    if (dto.imageUrl !== undefined) product.imageUrl = dto.imageUrl;
+    if (dto.images !== undefined) product.images = dto.images;
+    if (dto.attributes !== undefined) product.attributes = dto.attributes;
+    if (dto.basePrice !== undefined) product.basePrice = dto.basePrice;
+    if (dto.affiliateFee !== undefined)
+      product.affiliateFee = dto.affiliateFee ?? null;
+    if (dto.weightGrams !== undefined) product.weightGrams = dto.weightGrams;
+    if (dto.lengthMm !== undefined) product.lengthMm = dto.lengthMm;
+    if (dto.widthMm !== undefined) product.widthMm = dto.widthMm;
+    if (dto.heightMm !== undefined) product.heightMm = dto.heightMm;
+  }
+
+  /** Og‘irlik va o‘lchamsiz mahsulot saqlanmaydi (karta qabul mezoni; DTO dan tashqari chaqiruvlar uchun ham). */
+  private assertPhysical(dto: CreateProductDto): void {
+    const positive = (value: unknown) =>
+      Number.isSafeInteger(value) && (value as number) > 0;
+    if (
+      !positive(dto.weightGrams) ||
+      !positive(dto.lengthMm) ||
+      !positive(dto.widthMm) ||
+      !positive(dto.heightMm)
+    )
+      throw new BadRequestException(
+        'Og‘irlik (g) va o‘lchamlar (mm) majburiy, musbat butun son',
+      );
+    if (!Number.isSafeInteger(dto.basePrice) || dto.basePrice < 0)
+      throw new BadRequestException('Bazaviy narx majburiy');
+  }
+
+  private async publish(product: Product): Promise<void> {
+    const shop = await this.shops.findOne({ where: { id: product.shopId } });
+    if (shop) await this.publishChanged(product, shop);
+  }
+
   async adminSuspend(id: string): Promise<Product> {
     const product = await this.getAdminProduct(id);
     if (product.isBlocked) {
@@ -294,18 +431,30 @@ export class ProductService {
   }
 
   private async getShop(ownerUserId: string): Promise<Shop> {
-    const shop = await this.shops.findOne({
-      where: { ownerUserId, isDeleted: false },
-    });
+    // shartnoma maydonlari `select: false` — OPT-1 tekshiruvi uchun o‘qiladi
+    const shop = await this.shops
+      .createQueryBuilder('shop')
+      .addSelect(['shop.contractNumber', 'shop.contractDate'])
+      .where('shop.owner_user_id = :ownerUserId AND shop.is_deleted = FALSE', {
+        ownerUserId: String(ownerUserId),
+      })
+      .getOne();
     if (!shop) throw new NotFoundException('Sotuvchining do‘koni topilmadi');
     return shop;
   }
 
+  /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
   private async getShopById(shopId: string): Promise<Shop> {
-    const shop = await this.shops.findOne({
-      where: { id: shopId, isDeleted: false },
-    });
-    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
+    const shop = /^\d+$/.test(String(shopId ?? ''))
+      ? await this.shops
+          .createQueryBuilder('shop')
+          .addSelect(['shop.contractNumber', 'shop.contractDate'])
+          .where('shop.id = :id AND shop.is_deleted = FALSE', {
+            id: String(shopId),
+          })
+          .getOne()
+      : null;
+    if (!shop) throw new NotFoundException('Optovik topilmadi');
     return shop;
   }
 
@@ -341,18 +490,13 @@ export class ProductService {
     if (!category) throw new NotFoundException('Kategoriya topilmadi');
   }
 
-  private async uniqueSlug(
-    shopId: string,
-    name: string,
-    ignoredId?: string,
-  ): Promise<string> {
+  /** BE-07: slug global unikal (uq_catalog_product_slug); band bo‘lsa `-2`, `-3`… */
+  private async uniqueSlug(name: string, ignoredId?: string): Promise<string> {
     const base = this.toSlug(name);
     let slug = base;
     let suffix = 2;
     while (true) {
-      const existing = await this.products.findOne({
-        where: { shopId, slug },
-      });
+      const existing = await this.products.findOne({ where: { slug } });
       if (!existing || existing.id === ignoredId) return slug;
       slug = `${base}-${suffix++}`;
     }
@@ -390,13 +534,11 @@ export class ProductService {
   private async publishChanged(product: Product, shop: Shop): Promise<void> {
     const event: CatalogProductChangedEvent = {
       productId: product.id,
-      shopId: product.shopId,
       categoryId: product.categoryId,
       title: product.name,
       content: product.description,
       slug: product.slug,
       imageUrl: product.imageUrl,
-      shopName: shop.name,
       price: product.price,
       attributes: product.attributes,
       active:
@@ -412,13 +554,11 @@ export class ProductService {
   private publishRemoved(product: Product): Promise<void> {
     return this.emitChanged({
       productId: product.id,
-      shopId: product.shopId,
       categoryId: product.categoryId,
       title: product.name,
       content: product.description,
       slug: product.slug,
       imageUrl: product.imageUrl,
-      shopName: '',
       price: product.price,
       attributes: product.attributes,
       active: false,
@@ -439,6 +579,7 @@ export class ProductService {
     product: Product,
     reason: string,
   ): Promise<void> {
+    if (!product.ownerUserId) return; // BE-07: egasiz optovik mahsuloti — xabar oluvchi yo‘q
     try {
       await firstValueFrom(
         this.notifications.emit('product.hidden', {

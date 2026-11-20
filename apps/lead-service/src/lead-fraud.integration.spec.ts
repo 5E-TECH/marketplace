@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
@@ -46,6 +47,9 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+/** lead.integration.spec.ts dagi bilan bir xil: lead sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
+const LEAD_SCHEMA_TEST_LOCK = 2_304_002;
+let schemaLock: Client | undefined;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 const MIN = 60_000;
 
@@ -119,6 +123,11 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       throw new Error(
         'TEST_DATABASE_URL faqat nomida "test" bor alohida bazaga ishora qilishi kerak',
       );
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      LEAD_SCHEMA_TEST_LOCK,
+    ]);
     db = new DataSource({
       type: 'postgres',
       url: testDatabaseUrl,
@@ -148,6 +157,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
       await db.destroy();
     }
+    await schemaLock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {

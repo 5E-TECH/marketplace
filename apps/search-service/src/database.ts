@@ -1,6 +1,7 @@
 import type { DatabaseDefinition } from '@app/common';
 import { CreateSearchIndex1722945600000 } from './migrations/1722945600000-create-search-index';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
+import { DropShopFields1796083200001 } from './migrations/1796083200001-drop-shop-fields';
 import { SearchDocument } from './entities/search-document.entity';
 
 /**
@@ -10,5 +11,9 @@ import { SearchDocument } from './entities/search-document.entity';
 export const SEARCH_DB: DatabaseDefinition = {
   schema: 'search',
   entities: [SearchDocument],
-  migrations: [CreateSearchIndex1722945600000, MoneyToBigint1795219200000],
+  migrations: [
+    CreateSearchIndex1722945600000,
+    MoneyToBigint1795219200000,
+    DropShopFields1796083200001,
+  ],
 };

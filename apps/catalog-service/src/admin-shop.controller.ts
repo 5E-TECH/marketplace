@@ -46,22 +46,6 @@ export class AdminShopController {
     );
   }
 
-  @MessagePattern({ cmd: 'catalog.shop.update-tariffs' })
-  updateTariffs(
-    @Payload()
-    data: {
-      shopId: string;
-      tariffHome: number;
-      tariffCenter: number;
-    },
-  ) {
-    return this.adminShops.adminUpdateTariffs(
-      String(data.shopId),
-      Number(data.tariffHome),
-      Number(data.tariffCenter),
-    );
-  }
-
   @MessagePattern({ cmd: 'catalog.shop.publish-approved' })
   async publishApproved(
     @Payload()

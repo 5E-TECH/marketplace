@@ -39,8 +39,7 @@ interface CatalogShop {
   phone: string | null;
   regionId: string | null;
   districtId: string | null;
-  tariffHome: number;
-  tariffCenter: number;
+  // BE-07: catalogda tarif yo‘q (do‘kon → optovik); Elchi market tariflari shu servisning provision yozuvida
   elchiMarketId: string | null;
 }
 
@@ -225,8 +224,9 @@ export class ElchiIntegrationService {
           phone: shop.phone,
           regionId: shop.regionId,
           districtId: shop.districtId,
-          tariffHome: Number(shop.tariffHome),
-          tariffCenter: Number(shop.tariffCenter),
+          // BE-07: catalogda tarif yo‘q — market oxirgi saqlangan tariflari bilan qayta provision qilinadi
+          tariffHome: Number(record.tariffHome ?? 0),
+          tariffCenter: Number(record.tariffCenter ?? 0),
         });
         if (update.updated) result.updated++;
         else result.failed++;
@@ -303,14 +303,18 @@ export class ElchiIntegrationService {
   /** C6.7 — bitta do‘konni catalogdagi joriy ma’lumot bilan qayta provision. */
   async reprovisionMarket(shopId: string) {
     const shop = await this.getCatalogShop(String(shopId));
+    // BE-07: catalogda tarif yo‘q — oxirgi saqlangan Elchi tariflari
+    const stored = await this.provisionRepo.findOne({
+      where: { shopId: String(shopId), isDeleted: false },
+    });
     const result = await this.updateMarketTariffs({
       shopId: shop.id,
       shopName: shop.name,
       phone: shop.phone,
       regionId: shop.regionId,
       districtId: shop.districtId,
-      tariffHome: Number(shop.tariffHome),
-      tariffCenter: Number(shop.tariffCenter),
+      tariffHome: Number(stored?.tariffHome ?? 0),
+      tariffCenter: Number(stored?.tariffCenter ?? 0),
     });
     const record = await this.provisionRepo.findOne({
       where: { shopId: String(shopId), isDeleted: false },
@@ -552,8 +556,7 @@ export class ElchiIntegrationService {
         phone: shop.phone,
         region_id: shop.regionId,
         district_id: shop.districtId,
-        tariffHome: Number(shop.tariffHome ?? 0),
-        tariffCenter: Number(shop.tariffCenter ?? 0),
+        // BE-07: catalogda tarif yo‘q; eski do‘kon marketi (BE-20 dan oldingi oqim) saqlangan tarif bilan
       });
       shop = await this.getCatalogShop(shopId);
     }

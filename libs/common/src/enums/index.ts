@@ -51,9 +51,19 @@ export enum ShopStatus {
 
 export enum ProductStatus {
   DRAFT = 'DRAFT',
+  /** BE-07 (OPT-2, ADM-1): yangi mahsulot admin tasdig‘igacha sotuvga chiqmaydi. */
+  PENDING_REVIEW = 'PENDING_REVIEW',
   ACTIVE = 'ACTIVE',
+  /** BE-07: admin rad etdi (sababi `moderationNote` da). */
+  REJECTED = 'REJECTED',
   ARCHIVED = 'ARCHIVED',
   OUT_OF_STOCK = 'OUT_OF_STOCK',
+}
+
+/** BE-07 (OPT-1): optovik — yuridik shaxs yoki yakka tartibdagi tadbirkor (YaTT). */
+export enum WholesalerLegalType {
+  LEGAL_ENTITY = 'LEGAL_ENTITY',
+  SOLE_PROPRIETOR = 'SOLE_PROPRIETOR',
 }
 
 export enum WarehouseOwnerType {

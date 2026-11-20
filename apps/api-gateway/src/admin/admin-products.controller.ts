@@ -5,6 +5,7 @@ import {
   Inject,
   Ip,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -19,9 +20,11 @@ import {
 import {
   AdminCreateProductDto,
   AdminProductsQueryDto,
+  AdminUpdateProductDto,
   CurrentUser,
   HideProductDto,
   JwtUser,
+  RejectProductDto,
   ProductDto,
   Role,
   Roles,
@@ -41,21 +44,82 @@ export class AdminProductsController {
 
   @Post()
   @ApiOperation({
-    summary: 'Admin tanlangan do‘kon uchun yangi mahsulot yaratadi',
+    summary: 'Admin optovik nomidan mahsulot qo‘shadi (FE-25)',
+    description:
+      'BE-07: og‘irlik, o‘lchamlar va bazaviy narx majburiy; optovik shartnomasisiz — 409. Holat PENDING_REVIEW: tasdiqlanmaguncha sotuvga chiqmaydi.',
   })
   @ApiCreatedResponse({ type: ProductDto })
   async create(
-    @Body() body: AdminCreateProductDto,
+    @Body() dto: AdminCreateProductDto,
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ) {
-    const { shopId, ...dto } = body;
     const product = await sendRpc<ProductDto>(
       this.catalog,
       { cmd: 'catalog.product.admin-create' },
-      { shopId, dto },
+      { dto },
     );
-    this.audit(admin.sub, 'product.create', product.id, ip, { shopId });
+    this.audit(admin.sub, 'product.create', product.id, ip, {
+      wholesalerId: dto.wholesalerId,
+    });
+    return product;
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary:
+      'Mahsulotni tahrirlash: CPA maydonlari, BAD va CPA belgilari (BE-07)',
+  })
+  @ApiOkResponse({ type: ProductDto })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateProductDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc<ProductDto>(
+      this.catalog,
+      { cmd: 'catalog.product.admin-update' },
+      { productId: id, dto },
+    );
+    this.audit(admin.sub, 'product.update', id, ip, { changes: dto });
+    return product;
+  }
+
+  @Post(':id/approve')
+  @ApiOperation({
+    summary: 'Mahsulotni tasdiqlash — sotuvga chiqadi (OPT-2, ADM-1)',
+  })
+  @ApiOkResponse({ type: ProductDto })
+  async approve(
+    @Param('id') id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc<ProductDto>(
+      this.catalog,
+      { cmd: 'catalog.product.admin-approve' },
+      { productId: id },
+    );
+    this.audit(admin.sub, 'product.approve', id, ip);
+    return product;
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Mahsulotni sabab bilan rad etish (BE-07)' })
+  @ApiOkResponse({ type: ProductDto })
+  async reject(
+    @Param('id') id: string,
+    @Body() dto: RejectProductDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc<ProductDto>(
+      this.catalog,
+      { cmd: 'catalog.product.admin-reject' },
+      { productId: id, reason: dto.reason },
+    );
+    this.audit(admin.sub, 'product.reject', id, ip, { reason: dto.reason });
     return product;
   }
 
