@@ -55,7 +55,7 @@ export class StreamService {
     if (!offer) throw new NotFoundException('Offer topilmadi');
     if (!canOpenStream(offer))
       throw new ConflictException(
-        offer.stock <= 0
+        (offer.stock ?? 0) <= 0
           ? 'Qoldiq yo‘q: bu offerga sahifa ochilmaydi'
           : 'Offer sotuvchilarga ochiq emas',
       );

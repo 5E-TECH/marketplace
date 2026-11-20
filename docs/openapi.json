@@ -8180,6 +8180,66 @@
         ]
       }
     },
+    "/api/v1/admin/inventory/inbound": {
+      "post": {
+        "operationId": "AdminInventoryController_inbound",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminStockInboundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "HQ omborga kirim (omborchi) — BE-16; to‘liq qabul akti BE-17 da",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/adjust": {
+      "post": {
+        "operationId": "AdminInventoryController_adjust",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminStockAdjustDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "HQ qoldig‘ini tuzatish (inventarizatsiya); band qilingandan kam bo‘lmaydi",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
     "/api/v1/admin/inventory/stock": {
       "get": {
         "operationId": "AdminInventoryController_stock",
@@ -17650,6 +17710,59 @@
             "description": "Bo‘sh qoldirilsa standart sabab yoziladi."
           }
         }
+      },
+      "AdminStockInboundDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "501"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 20,
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "example": "Postavka № 12, optovik Gadget Trade"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Takror yuborishdan himoya"
+          }
+        },
+        "required": [
+          "variantId",
+          "quantity",
+          "reason"
+        ]
+      },
+      "AdminStockAdjustDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "501"
+          },
+          "delta": {
+            "type": "number",
+            "example": -1,
+            "description": "Noldan farqli butun son"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Inventarizatsiya: 1 dona kam"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "delta",
+          "reason"
+        ]
       },
       "AdminStockItemDto": {
         "type": "object",

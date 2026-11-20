@@ -1,8 +1,9 @@
 import { Client } from 'pg';
 import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { StockMovementType } from '@app/common';
+import { ErrorCode, StockMovementType } from '@app/common';
 import { INVENTORY_DB } from './database';
+import { AdminInventoryController } from './admin-inventory.controller';
 import { AdminInventoryQueryService } from './admin-inventory-query.service';
 import { InventoryService } from './inventory.service';
 import { Stock } from './entities/stock.entity';
@@ -137,7 +138,14 @@ describeWithPostgres('BE-16 HQ ombor (PostgreSQL)', () => {
       ),
     );
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    expect(rejected).toHaveLength(1);
+    // rad sababi — qoldiq yetishmadi (boshqa xato emas)
+    expect(rejected[0].reason).toMatchObject({
+      errorCode: ErrorCode.INSUFFICIENT_STOCK,
+    });
     await expect(stockRow()).resolves.toMatchObject({
       quantityOnHand: 1,
       quantityReserved: 1,
@@ -233,6 +241,55 @@ describeWithPostgres('BE-16 HQ ombor (PostgreSQL)', () => {
     // sendRpc noma’lum xatoni umumiy matnga aylantiradi — qator baribir qaytadi
     expect(degraded.warnings).toEqual([
       { shopId: null, reason: expect.any(String) },
+    ]);
+  });
+  it('omborchi kirimi va tuzatish (vaqtinchalik yo‘l, BE-17 gacha): HQ ga yoziladi, takror kalit ikki marta qo‘shmaydi', async () => {
+    const controller = new AdminInventoryController({} as never, inventory);
+    const before = await stockRow();
+    const inbound = {
+      variantId: variant,
+      quantity: 3,
+      reason: 'Postavka (qo‘lda)',
+      actorId: '7',
+      idempotencyKey: 'hq-in-1',
+    };
+    await controller.hqInbound(inbound);
+    await controller.hqInbound(inbound);
+    await expect(stockRow()).resolves.toMatchObject({
+      quantityOnHand: before.quantityOnHand + 3,
+    });
+    await controller.hqAdjust({
+      variantId: variant,
+      delta: -1,
+      reason: 'Inventarizatsiya',
+      actorId: '7',
+      idempotencyKey: 'hq-adj-1',
+    });
+    await expect(stockRow()).resolves.toMatchObject({
+      quantityOnHand: before.quantityOnHand + 2,
+    });
+    // band qilingandan kam bo‘lmaydi
+    await inventory.reserveAvailable({
+      orderRef: '9010',
+      items: [{ variantId: variant, quantity: before.quantityOnHand + 2 }],
+      idempotencyKey: 'r-9010',
+    });
+    await expect(
+      controller.hqAdjust({
+        variantId: variant,
+        delta: -1,
+        reason: 'Inventarizatsiya',
+        actorId: '7',
+        idempotencyKey: 'hq-adj-2',
+      }),
+    ).rejects.toMatchObject({ errorCode: ErrorCode.INSUFFICIENT_STOCK });
+    const moves = await ds.getRepository(StockMovement).find({
+      where: { variantId: variant, actorId: '7' },
+      order: { id: 'ASC' },
+    });
+    expect(moves.map((m) => [m.type, m.quantity, m.warehouseId])).toEqual([
+      [StockMovementType.INBOUND, 3, hqId],
+      [StockMovementType.ADJUST, -1, hqId],
     ]);
   });
 });

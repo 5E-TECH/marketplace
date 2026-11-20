@@ -158,8 +158,9 @@ export class InventoryService {
     );
     if (!ids.length) return result;
     const warehouseId = await this.hqWarehouseId();
+    // band qilish (`lockStock`) ham `is_deleted` ga qaramaydi — hisob bir xil bo‘lsin
     const rows = await this.dataSource.getRepository(Stock).find({
-      where: { variantId: In(ids), warehouseId, isDeleted: false },
+      where: { variantId: In(ids), warehouseId },
     });
     for (const row of rows)
       result[String(row.variantId)] = Math.max(

@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { SalesOrderSellerStatus, StockMovementType } from '../enums';
 import { StockQueryDto } from './inventory.dto';
@@ -261,4 +262,58 @@ export class AdminStockMovementsPageDto {
   @ApiProperty() totalPages: number;
   @ApiProperty({ type: [AdminCatalogWarningDto] })
   warnings: AdminCatalogWarningDto[];
+}
+
+/**
+ * BE-16: HQ omborga tovar kirimi (omborchi). To‘liq qabul akti va brak — BE-17; shungacha vaqtinchalik yo‘l [taklif].
+ */
+export class AdminStockInboundDto {
+  @ApiProperty({ example: '501' })
+  @Matches(/^[1-9]\d*$/, { message: "variantId musbat son bo'lishi kerak" })
+  variantId: string;
+
+  @ApiProperty({ example: 20, minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  quantity: number;
+
+  @ApiProperty({ example: 'Postavka № 12, optovik Gadget Trade' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  reason: string;
+
+  @ApiPropertyOptional({ description: 'Takror yuborishdan himoya' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  idempotencyKey?: string;
+}
+
+/** BE-16: HQ qoldig‘ini tuzatish (inventarizatsiya); band qilingandan kam bo‘lmaydi. */
+export class AdminStockAdjustDto {
+  @ApiProperty({ example: '501' })
+  @Matches(/^[1-9]\d*$/, { message: "variantId musbat son bo'lishi kerak" })
+  variantId: string;
+
+  @ApiProperty({ example: -1, description: 'Noldan farqli butun son' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1_000_000)
+  @Max(1_000_000)
+  delta: number;
+
+  @ApiProperty({ example: 'Inventarizatsiya: 1 dona kam' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  reason: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  idempotencyKey?: string;
 }

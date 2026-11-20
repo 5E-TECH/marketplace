@@ -10,8 +10,6 @@ import {
   RmqClient,
   RpcHttpExceptionFilter,
   SellerOrdersQueryDto,
-  sendRpc,
-  StockPageDto,
 } from '@app/common';
 import {
   SellerOrdersService,
@@ -33,7 +31,6 @@ export class SellerOrdersController {
   constructor(
     private readonly orders: SellerOrdersService,
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
-    @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
     private readonly labels: ShippingLabelService,
   ) {}
 
@@ -332,15 +329,8 @@ export class SellerOrdersController {
   @MessagePattern({ cmd: 'seller.dashboard.get' })
   async dashboard(@Payload() data: { ownerUserId: string }) {
     const shop = await this.shop(data.ownerUserId);
-    const lowStock = await sendRpc<StockPageDto>(
-      this.inventory,
-      { cmd: 'inventory.stock.low' },
-      {
-        ownerUserId: data.ownerUserId,
-        query: { page: 1, limit: 1, lowOnly: true },
-      },
-    );
-    return this.orders.dashboard(shop.id, lowStock.total);
+    // BE-16: do‘kon ombori va sotuvchi qoldig‘i yo‘q (bitta HQ ombor) — kam qoldiq soni 0
+    return this.orders.dashboard(shop.id, 0);
   }
 
   private shop(ownerUserId: string): Promise<{ id: string }> {

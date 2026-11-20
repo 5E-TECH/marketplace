@@ -11,7 +11,10 @@ describe('AdminInventoryController (C6.7)', () => {
       Role.SUPERADMIN,
     ]);
     const send = jest.fn(() => of({ items: [], total: 0 }));
-    const controller = new AdminInventoryController({ send } as never);
+    const controller = new AdminInventoryController(
+      { send } as never,
+      { send: jest.fn() } as never,
+    );
     await controller.stock({ page: 1, limit: 20, lowOnly: false });
     await controller.movements({ page: 1, limit: 20 });
     expect(send).toHaveBeenNthCalledWith(

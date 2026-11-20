@@ -585,8 +585,8 @@ export interface CatalogOfferSnapshot {
   /** Ko‘rinadigan yetkazish: markazgacha va eshikkacha (BE-09). */
   centerDeliveryFee: number;
   addressDeliveryFee: number;
-  /** Band qilinmagan qoldiq, dona. */
-  stock: number;
+  /** Band qilinmagan qoldiq, dona; null — noma’lum (inventory javob bermadi): lid qabul ochiq, yangi sahifa yopiq. */
+  stock: number | null;
   /** Admin yuklagan kreativlar (BE-08 fayl servisi). */
   creatives: Array<{ id: string; type: 'IMAGE' | 'VIDEO'; url: string }>;
   createdAt: string;

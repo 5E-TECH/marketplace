@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, timeout } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import {
@@ -7,7 +8,6 @@ import {
   CatalogOfferSnapshot,
   ProductStatus,
   RmqClient,
-  sendRpc,
   ShopStatus,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
@@ -20,6 +20,8 @@ import {
 
 /** Bitta so‘rovda qaytariladigan offerlar soni (lead-service o‘zi sahifalaydi). */
 const LIST_LIMIT = 500;
+/** inventory.available kutish chegarasi, ms (lead→catalog RPC 10 s dan ancha qisqa). */
+const INVENTORY_TIMEOUT_MS = 1500;
 
 /**
  * lead-service uchun katalog offer ma’lumoti (`LEAD_CATALOG_RPC`, BE-11 shartnomasi). BE-07 maydonlari:
@@ -41,10 +43,14 @@ export class CatalogOfferService {
 
   /**
    * BE-16: bo‘sh qoldiq HQ omborda — mahsulotning faol varianti(lari) bo‘yicha (CPA da bitta). Inventory javob
-   * bermasa — 0 (sotuvchi yangi sahifa ocholmaydi; yolg‘on qoldiq ko‘rsatilmaydi).
+   * bermasa — null (noma’lum): kelayotgan lid rad etilmaydi, sotuvchi esa yangi sahifa ocholmaydi.
    */
-  private async stockOf(productIds: string[]): Promise<Map<string, number>> {
-    const result = new Map<string, number>(productIds.map((id) => [id, 0]));
+  private async stockOf(
+    productIds: string[],
+  ): Promise<Map<string, number | null>> {
+    const result = new Map<string, number | null>(
+      productIds.map((id) => [id, 0]),
+    );
     if (!productIds.length) return result;
     const variants = await this.variants.find({
       where: { productId: In(productIds), isActive: true, isDeleted: false },
@@ -52,10 +58,14 @@ export class CatalogOfferService {
     });
     if (!variants.length) return result;
     try {
-      const available = await sendRpc<Record<string, number>>(
-        this.inventory,
-        { cmd: 'inventory.available' },
-        { variantIds: variants.map((v) => String(v.id)) },
+      // qisqa kutish: inventory osilib qolsa offer (va lid qabul qilish) uning ortidan kutib qolmasin
+      const available = await firstValueFrom(
+        this.inventory
+          .send<Record<string, number>>(
+            { cmd: 'inventory.available' },
+            { variantIds: variants.map((v) => String(v.id)) },
+          )
+          .pipe(timeout(INVENTORY_TIMEOUT_MS)),
       );
       for (const v of variants) {
         const key = String(v.productId);
@@ -65,6 +75,8 @@ export class CatalogOfferService {
         );
       }
     } catch (error) {
+      // noma’lum (null): sahifa va lid qabul qilish ochiq qoladi, yangi sahifa ochish — yopiq (lead-service)
+      for (const id of productIds) result.set(id, null);
       this.logger.warn(`Qoldiq olinmadi: ${(error as Error).message}`);
     }
     return result;
@@ -80,7 +92,8 @@ export class CatalogOfferService {
     return toSnapshot(
       product,
       this.pricingOf(product, await this.pricing.context()),
-      stock.get(String(product.id)) ?? 0,
+      // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
+      stock.get(String(product.id)),
     );
   }
 
@@ -130,7 +143,7 @@ export class CatalogOfferService {
     const ctx = await this.pricing.context();
     const stock = await this.stockOf(rows.map((row) => String(row.id)));
     return rows.map((row) =>
-      toSnapshot(row, this.pricingOf(row, ctx), stock.get(String(row.id)) ?? 0),
+      toSnapshot(row, this.pricingOf(row, ctx), stock.get(String(row.id))),
     );
   }
 
@@ -183,7 +196,7 @@ export function isWithdrawn(product: Product): boolean {
 export function toSnapshot(
   product: Product,
   pricing?: OfferPricing,
-  stock = 0,
+  stock: number | null = 0,
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images

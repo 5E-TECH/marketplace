@@ -130,7 +130,9 @@ export function landingState(
     offer.approvedPrice === null
   )
     return LandingPageState.NOT_ACCEPTED;
-  if (offer.stock <= 0) return LandingPageState.OUT_OF_STOCK;
+  // BE-16: noma’lum qoldiq (inventory javob bermadi) — sahifa ochiq, pullik lid yo‘qolmasin
+  if (offer.stock !== null && offer.stock <= 0)
+    return LandingPageState.OUT_OF_STOCK;
   return LandingPageState.OPEN;
 }
 
