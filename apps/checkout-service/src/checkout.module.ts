@@ -36,6 +36,9 @@ import { ReturnNotifierService } from './return-notifier.service';
 import { LeadOrderController } from './lead-order.controller';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
+import { FulfillmentController } from './fulfillment.controller';
+import { FulfillmentService } from './fulfillment.service';
+import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 
 @Module({
   imports: [
@@ -119,6 +122,7 @@ import { LeadOrderStatusService } from './lead-order-status.service';
     CheckoutController,
     ReturnRequestsController,
     LeadOrderController,
+    FulfillmentController,
   ],
   providers: [
     SellerOrdersService,
@@ -137,6 +141,8 @@ import { LeadOrderStatusService } from './lead-order-status.service';
     CheckoutOutboxRelayService,
     LeadOrderService,
     LeadOrderStatusService,
+    FulfillmentService,
+    ElchiParcelEventsService,
   ],
 })
 export class CheckoutModule {}

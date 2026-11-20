@@ -19,10 +19,12 @@ import {
   ShippingLabelTarget,
 } from './seller-orders.service';
 import {
+  ShippingLabelData,
   ShippingLabelService,
   SkippedShippingLabel,
 } from './shipping-label.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
+import { FulfillmentService } from './fulfillment.service';
 import {
   resolveSellerShopId,
   SellerScope,
@@ -37,6 +39,7 @@ export class SellerOrdersController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     private readonly labels: ShippingLabelService,
     private readonly leadOrders: LeadOrderStatusService,
+    private readonly fulfillment: FulfillmentService,
   ) {}
 
   @MessagePattern({ cmd: 'seller.orders.list' })
@@ -152,6 +155,9 @@ export class SellerOrdersController {
   /** Admin: `orderId` = sales_order.id — buyurtmaning barcha posilkalari. */
   @MessagePattern({ cmd: 'checkout.admin.order-label' })
   async adminLabel(@Payload() data: { orderId: string }) {
+    // BE-19: lid buyurtmasi — telefon, SOATO va posilka `parcel` da (eski yorliq ularni manzil matnidan o‘qirdi)
+    if (await this.leadOrders.isLeadOrder(String(data?.orderId ?? '')))
+      return this.fulfillment.label(String(data.orderId));
     const { targets, missing } = await this.orders.adminShippingLabelTargets([
       String(data.orderId),
     ]);
@@ -161,10 +167,15 @@ export class SellerOrdersController {
 
   @MessagePattern({ cmd: 'checkout.admin.order-labels' })
   async adminLabelsBatch(@Payload() data: { orderIds: string[] }) {
-    const { targets, missing } = await this.orders.adminShippingLabelTargets(
-      data.orderIds,
-    );
-    return this.batchLabels(targets, missing);
+    // BE-19: lid buyurtmalari — o‘z yorlig‘i (telefon, SOATO, posilka `parcel` da); qolganlari eski tartibda
+    const orderIds = (data?.orderIds ?? []).map(String);
+    const leadIds = await this.fulfillment.leadOrderIds(orderIds);
+    const lead = await this.fulfillment.collectLabels(leadIds);
+    const legacyIds = orderIds.filter((id) => !leadIds.includes(id));
+    const { targets, missing } = legacyIds.length
+      ? await this.orders.adminShippingLabelTargets(legacyIds)
+      : { targets: [], missing: [] };
+    return this.batchLabels(targets, missing, lead, orderIds);
   }
 
   /** Admin: bitta posilka (buyurtma tafsilotidagi do'kon bo'limi). */
@@ -172,6 +183,9 @@ export class SellerOrdersController {
   async adminSellerOrderLabel(
     @Payload() data: { orderId: string; sellerOrderId: string },
   ) {
+    // BE-19: lid buyurtmasida posilka bitta
+    if (await this.leadOrders.isLeadOrder(String(data?.orderId ?? '')))
+      return this.fulfillment.label(String(data.orderId));
     return this.labels.generate(
       await this.orders.getShippingLabelDataForAdmin(
         String(data.orderId),
@@ -195,9 +209,26 @@ export class SellerOrdersController {
   private async batchLabels(
     targets: ShippingLabelTarget[],
     missing: SkippedShippingLabel[] = [],
+    lead: { labels: ShippingLabelData[]; skipped: SkippedShippingLabel[] } = {
+      labels: [],
+      skipped: [],
+    },
+    requested?: string[],
   ) {
-    const { labels, skipped } =
-      await this.orders.collectShippingLabels(targets);
+    const collected = targets.length
+      ? await this.orders.collectShippingLabels(targets)
+      : { labels: [], skipped: [] };
+    const labels = [...lead.labels, ...collected.labels];
+    // admin so‘ragan tartibda (lid va eski buyurtmalar aralash bo‘lsa ham); bir buyurtma posilkalari o‘z tartibida
+    if (requested?.length) {
+      const position = new Map(requested.map((id, index) => [id, index]));
+      labels.sort(
+        (a, b) =>
+          (position.get(String(a.salesOrderId)) ?? Infinity) -
+          (position.get(String(b.salesOrderId)) ?? Infinity),
+      );
+    }
+    const skipped = [...lead.skipped, ...collected.skipped];
     const all = [...missing, ...skipped];
     if (!labels.length) {
       // Sabab bo'yicha guruhlanadi: 100 ta buyurtmada ham xabar qisqa

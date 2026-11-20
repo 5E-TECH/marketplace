@@ -149,12 +149,19 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /supervisor/leads/:id/transfer',
     'PUT /operator/state',
   ],
-  // Qoldiqni ko‘rish; HQ kirim va tuzatish — BE-16 (to‘liq qabul akti BE-17, yig‘ish BE-19).
+  // Qoldiqni ko‘rish; HQ kirim va tuzatish — BE-16 (to‘liq qabul akti BE-17); yig‘ish, qadoq, yorliq, topshirish — BE-19.
   [Role.WAREHOUSE]: [
     'GET /admin/inventory/movements',
     'GET /admin/inventory/stock',
     'POST /admin/inventory/adjust',
     'POST /admin/inventory/inbound',
+    'GET /warehouse/handover-acts/:id',
+    'GET /warehouse/handover-acts/:id/pdf',
+    'GET /warehouse/orders/:id/label',
+    'GET /warehouse/pick-list',
+    'POST /warehouse/handover-acts',
+    'POST /warehouse/tasks/:id/pack',
+    'POST /warehouse/tasks/:id/scan',
   ],
   // To‘lovni tasdiqlash va Elchi sverkasi.
   [Role.FINANCE]: [

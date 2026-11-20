@@ -18,6 +18,18 @@ export interface ShippingLabelData {
   items: Array<{ productName: string; quantity: number }>;
 }
 
+/** BE-19: topshirish akti PDF ma’lumoti. */
+export interface HandoverActPdfData {
+  id: string;
+  /** Toshkent vaqti, matn. */
+  createdAt: string;
+  items: Array<{
+    orderNumber: string;
+    shipmentId: string;
+    qrCodeToken: string;
+  }>;
+}
+
 /** Partiyada chiqmay qolgan yorliq va sababi — butun PDF yiqilmaydi. */
 export interface SkippedShippingLabel {
   orderId: string;
@@ -64,6 +76,59 @@ export class ShippingLabelService {
       contentType: 'application/pdf',
       base64: pdf.toString('base64'),
       ...(skipped.length ? { skipped } : {}),
+    };
+  }
+
+  /**
+   * BE-19 (OMB-5): Elchi’ga topshirish akti — A4: raqam, sana, posilkalar soni va ro‘yxati, imzo joylari.
+   * Aktdagi son = ro‘yxatdagi posilkalar (TC4).
+   */
+  async generateHandoverAct(
+    act: HandoverActPdfData,
+  ): Promise<ShippingLabelDocument> {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 40,
+      compress: false,
+      info: { Title: `Elchi topshirish akti #${act.id}` },
+    });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    const completed = new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(14)
+      .text(`Elchi Pochtaga topshirish akti No ${act.id}`);
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .text(`Sana: ${act.createdAt}`)
+      .text(`Posilkalar soni: ${act.items.length}`)
+      .moveDown();
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text('No   Buyurtma   Elchi posilka   QR');
+    doc.font('Helvetica').fontSize(9);
+    act.items.forEach((item, index) => {
+      doc.text(
+        `${index + 1}.   ${item.orderNumber}   ${item.shipmentId}   ${item.qrCodeToken}`,
+      );
+    });
+    doc
+      .moveDown(2)
+      .text('Topshirdi (ombor): ____________________')
+      .moveDown()
+      .text('Qabul qildi (Elchi kuryeri): ____________________');
+    doc.end();
+    const pdf = await completed;
+    return {
+      fileName: `handover-act-${act.id}.pdf`,
+      contentType: 'application/pdf',
+      base64: pdf.toString('base64'),
     };
   }
 

@@ -96,6 +96,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     productName: 'Simsiz quloqchin',
     variantId: VARIANT,
     sku: 'Q-1',
+    barcode: '4780012345678',
     wholesalerId: '15',
     weightGrams,
     cpaAvailable: true,

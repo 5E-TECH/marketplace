@@ -30,6 +30,7 @@ export * from './dto/search.dto';
 export * from './dto/cart.dto';
 export * from './dto/order-events.dto';
 export * from './dto/lead-order.dto';
+export * from './dto/fulfillment.dto';
 export * from './dto/product-variant.dto';
 export * from './dto/file.dto';
 export * from './dto/inventory.dto';

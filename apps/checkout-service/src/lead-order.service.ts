@@ -6,6 +6,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   CatalogOrderSnapshot,
   CheckoutDeliveryDestination,
+  FulfillmentTaskStatus,
+  pickDateFor,
   CheckoutPaymentMethod,
   ErrorCode,
   LEAD_EVENTS,
@@ -272,17 +274,17 @@ export class LeadOrderService {
         ],
       );
       const [seller] = (await manager.query(
-        `INSERT INTO checkout.sales_order_seller
-           (sales_order_id, shop_id, subtotal, cod_amount, delivery_fee, status)
-         VALUES ($1, $2, $3, $4, $5, 'PENDING') RETURNING id::text AS id`,
+        `INSERT INTO checkout.parcel
+           (sales_order_id, shop_id, subtotal, cod_amount, delivery_fee, status, elchi_state)
+         VALUES ($1, $2, $3, $4, $5, 'PENDING', 'PENDING') RETURNING id::text AS id`,
         [row.orderId, offer.wholesalerId, goods, cod, deliveryShown],
       )) as Array<{ id: string }>;
       await manager.query(
         `INSERT INTO checkout.sales_order_item
            (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
             line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
-            affiliate_fee, call_center_fee, hidden_delivery, platform_service)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+            affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
         [
           seller.id,
           offer.productId,
@@ -301,6 +303,20 @@ export class LeadOrderService {
           offer.callCenterFee,
           offer.hiddenDelivery,
           platformService,
+          offer.barcode?.trim() || null,
+        ],
+      );
+      // BE-19: yig‘ish vazifasi; kun — operator tasdiqlagan vaqtdan (14:00 chegarasi, OMB-4)
+      await manager.query(
+        `INSERT INTO checkout.fulfillment_task
+           (order_id, parcel_id, status, pick_date, required_qty)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          row.orderId,
+          seller.id,
+          FulfillmentTaskStatus.TO_PICK,
+          pickDateFor(confirmedAtOf(event)),
+          quantity,
         ],
       );
       await this.status.journal(
@@ -511,6 +527,12 @@ export function priceProblem(
   if (offer.platformService < 0)
     return `Platforma xizmati manfiy: ${offer.platformService}`;
   return null;
+}
+
+/** Operator «Tasdiqlandi» ni bosgan vaqt; noto‘g‘ri bo‘lsa — hozir. */
+function confirmedAtOf(event: LeadConfirmedEvent): Date {
+  const at = new Date(event.confirmedAt);
+  return Number.isNaN(at.getTime()) ? new Date() : at;
 }
 
 /** Katalog javobi buyurtma uchun yaroqlimi; yo‘q bo‘lsa — sabab. */
