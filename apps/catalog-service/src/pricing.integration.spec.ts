@@ -244,6 +244,42 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     });
   });
 
+  it('yashil → sariq (M oshdi, hech kim zarar ko‘rmaydi) — tasdiq saqlanadi; soliq + to‘lov ≥ 50% — 400', async () => {
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { deliveryMode: null },
+      '1',
+    );
+    await pricing.setPolicy(
+      PricePolicyScope.GLOBAL,
+      null,
+      { targetMargin: 10_000 },
+      '1',
+    );
+    await expect(pricing.calculate(productId)).resolves.toMatchObject({
+      approvalCurrent: true,
+      evaluation: { status: PriceStatus.YELLOW },
+    });
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      approvedPrice: 262_000,
+    });
+    await pricing.setPolicy(
+      PricePolicyScope.GLOBAL,
+      null,
+      { targetMargin: 9_000 },
+      '1',
+    );
+    await expect(
+      pricing.setPolicy(
+        PricePolicyScope.GLOBAL,
+        null,
+        { taxRate: 0.4, paymentRate: 0.2 },
+        '1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('asosi o‘zgargan tasdiq: rejim bepulga o‘tsa (262 000 qizil) yoki B oshsa — offer narxi bo‘sh, yangi qaror kerak; qaytsa — tiklanadi', async () => {
     await expect(offers.get(productId)).resolves.toMatchObject({
       approvedPrice: 262_000,

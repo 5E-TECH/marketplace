@@ -23,7 +23,6 @@ import {
   maxSalePriceFor,
   PriceDecisionDto,
   PricePolicyDto,
-  PRICE_STATUS_SEVERITY,
   PriceStatus,
   PricingParams,
   recommendedAffiliateFee,
@@ -264,6 +263,12 @@ export class PricingService {
             `Global sozlamada ${key} bo‘sh bo‘lmaydi`,
           );
     row.updatedBy = String(actorId);
+    const tax = Number(row.taxRate ?? 0);
+    const pay = Number(row.paymentRate ?? 0);
+    if ((row.taxRate != null || row.paymentRate != null) && tax + pay >= 0.5)
+      throw new BadRequestException(
+        'Soliq va to‘lov foizlari yig‘indisi 50% dan kam bo‘lishi kerak',
+      );
     await this.assertVisibleWithinTariff(row, scope, scopeId, dto);
     const saved = await this.policies.save(row);
     return { before, after: this.policyView(saved, scope, scopeId) };
@@ -397,7 +402,10 @@ export class PricingService {
     };
   }
 
-  /** Tasdiqlangan narx joriy sozlamada qizil emas va holati qarordagidan yomon emas. */
+  /**
+   * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
+   * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
+   */
   private isApprovalCurrent(
     product: Product,
     params: PricingParams,
@@ -414,10 +422,10 @@ export class PricingService {
       }),
       product.approvedPrice,
     ).status;
-    return (
-      now !== PriceStatus.RED &&
-      PRICE_STATUS_SEVERITY[now] <= PRICE_STATUS_SEVERITY[product.priceStatus]
-    );
+    if (now === PriceStatus.RED) return false;
+    const lossNow = now === PriceStatus.ORANGE;
+    const lossApproved = product.priceStatus === PriceStatus.ORANGE;
+    return !lossNow || lossApproved;
   }
 
   private inputs(product: Product) {
