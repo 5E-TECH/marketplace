@@ -106,17 +106,19 @@ async function checkDeadLetters(deadLetters) {
   const detail = deadLetters.length
     ? `DLQ da xabar bor: ${deadLetters.join(', ')}`
     : '';
+  // Takror ogohlantirish faqat DLQ lar ro'yxati o'zgarsa (xabar soni o'sishi emas)
+  const key = deadLetters.map((entry) => entry.split(' (')[0]).join(',');
   const status = detail ? 'dlq_firing' : 'dlq_resolved';
   if (
     detail
-      ? deadLetterAlertOpen && detail === deadLetterDetail
+      ? deadLetterAlertOpen && key === deadLetterDetail
       : !deadLetterAlertOpen
   )
     return;
   try {
     await notify(status, detail || "DLQ lar bo'sh");
     deadLetterAlertOpen = Boolean(detail);
-    deadLetterDetail = detail;
+    deadLetterDetail = key;
   } catch (error) {
     console.error(
       JSON.stringify({

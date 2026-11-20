@@ -100,4 +100,34 @@ describe('ReliableRmqServer (BE-02)', () => {
     expect(ch.ack).toHaveBeenCalledTimes(1);
     expect(ch.nack).not.toHaveBeenCalled();
   });
+
+  it('tasdiqli kanal: retry nusxasi broker tasdiqlagach asl xabar tasdiqlanadi; tasdiq xatosi — asl xabar qayta navbatga', async () => {
+    const { server } = make();
+    const confirmed = {
+      ...channel(),
+      waitForConfirms: jest.fn(),
+      sendToQueue: jest.fn(
+        (_q: string, _c: Buffer, _o: unknown, cb: (e: unknown) => void) => {
+          cb(null);
+          return true;
+        },
+      ),
+    };
+    await server.handleMessage(message('probe.fail'), confirmed);
+    expect(confirmed.ack).toHaveBeenCalledTimes(1);
+
+    const rejected = {
+      ...channel(),
+      waitForConfirms: jest.fn(),
+      sendToQueue: jest.fn(
+        (_q: string, _c: Buffer, _o: unknown, cb: (e: unknown) => void) => {
+          cb(new Error('nack'));
+          return true;
+        },
+      ),
+    };
+    await server.handleMessage(message('probe.fail'), rejected);
+    expect(rejected.ack).not.toHaveBeenCalled();
+    expect(rejected.nack).toHaveBeenCalledWith(expect.anything(), false, true);
+  });
 });

@@ -37,7 +37,10 @@ interface AmqpChannel {
     queue: string,
     content: Buffer,
     options?: Record<string, unknown>,
+    callback?: (error: unknown) => void,
   ): boolean;
+  /** Tasdiqli kanal (amqp-connection-manager sukutda shunday ochadi). */
+  waitForConfirms?: () => Promise<void>;
 }
 
 /** Xabar necha marta ishlanganini o‘zimiz sanaymiz (`redelivered` iste’molchi o‘lganda ham true bo‘ladi). */
@@ -217,7 +220,7 @@ export class ReliableRmqServer extends ServerRMQ {
           await lastValueFrom(result, { defaultValue: undefined });
         this.settle(channel, message, 'ack');
       } catch (error) {
-        this.retryOrDeadLetter(pattern, channel, message, error);
+        await this.retryOrDeadLetter(pattern, channel, message, error);
       } finally {
         this.onProcessingEndHook?.(this.transportId, context);
       }
@@ -225,12 +228,12 @@ export class ReliableRmqServer extends ServerRMQ {
   }
 
   /** Urinishlar tugamagan bo‘lsa — kechiktirilgan qayta urinish; tugagan bo‘lsa — DLQ. */
-  private retryOrDeadLetter(
+  private async retryOrDeadLetter(
     pattern: string,
     channel: AmqpChannel,
     message: AmqpMessage,
     error: unknown,
-  ): void {
+  ): Promise<void> {
     const reason = String((error as { message?: unknown })?.message ?? error);
     const attempt = attemptOf(message) + 1;
     if (attempt >= this.maxAttempts) {
@@ -242,7 +245,7 @@ export class ReliableRmqServer extends ServerRMQ {
     }
     if (this.settled.has(message)) return;
     try {
-      channel.sendToQueue(retryQueue(this.queue), message.content, {
+      await publishConfirmed(channel, retryQueue(this.queue), message.content, {
         ...message.properties,
         persistent: true,
         headers: {
@@ -281,6 +284,37 @@ export class ReliableRmqServer extends ServerRMQ {
       );
     }
   }
+}
+
+/** Retry nusxasi broker tomonidan qabul qilingach (publisher confirm) — shundan keyin asl xabar tasdiqlanadi. */
+const CONFIRM_TIMEOUT_MS = 5_000;
+function publishConfirmed(
+  channel: AmqpChannel,
+  queue: string,
+  content: Buffer,
+  options: Record<string, unknown>,
+): Promise<void> {
+  if (typeof channel.waitForConfirms !== 'function') {
+    channel.sendToQueue(queue, content, options);
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Broker tasdig‘i kelmadi')),
+      CONFIRM_TIMEOUT_MS,
+    );
+    try {
+      channel.sendToQueue(queue, content, options, (error) => {
+        clearTimeout(timer);
+        if (error)
+          reject(error instanceof Error ? error : new Error(String(error)));
+        else resolve();
+      });
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error as Error);
+    }
+  });
 }
 
 function attemptOf(message: AmqpMessage): number {
