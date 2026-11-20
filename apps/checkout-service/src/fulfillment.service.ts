@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   ErrorCode,
@@ -19,7 +20,6 @@ import {
   PickListItem,
   PickListPage,
   RmqClient,
-  sendRpc,
   tashkentDate,
 } from '@app/common';
 import {
@@ -36,6 +36,15 @@ import {
 
 const ID = /^[1-9]\d{0,18}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** «2026-02-30» kabi mavjud bo‘lmagan sana ham rad (Date.parse uni keyingi oyga suradi). */
+const isRealDate = (day: string) =>
+  DATE.test(day) &&
+  !Number.isNaN(Date.parse(`${day}T00:00:00Z`)) &&
+  new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day;
+/** Bitta aktda posilkalar [taklif]: bitta tranzaksiya va javob gateway kutishiga sig‘sin. */
+const MAX_ACT_PARCELS = 200;
+/** Yorliqdagi viloyat/tuman nomi uchun kutish — gateway kutishidan ancha qisqa. */
+const GEO_TIMEOUT_MS = 3_000;
 /** Bir kunlik ro‘yxat chegarasi (sahifalashsiz); oshsa — `truncated`. */
 const PICK_LIST_LIMIT = 1_000;
 /** Yorliqdagi jo‘natuvchi — bitta platforma marketi (BE-20 `ELCHI_PLATFORM_MARKET_ID`) [taklif]. */
@@ -80,7 +89,7 @@ export class FulfillmentService {
    */
   async pickList(date?: string): Promise<PickListPage> {
     const day = date ?? tashkentDate(new Date());
-    if (!DATE.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`)))
+    if (!isRealDate(day))
       throw new BadRequestException('date YYYY-MM-DD bo‘lishi kerak');
     const rows = (await this.dataSource.query(
       `SELECT t.id::text AS "taskId", t.order_id::text AS "orderId", t.status,
@@ -151,17 +160,17 @@ export class FulfillmentService {
       const task = await this.lockTask(manager, taskId);
       if (task.status !== FulfillmentTaskStatus.TO_PICK)
         throw this.taskState(task, 'skanerlash');
-      const matches = [task.sku, task.barcode].some(
-        (value) =>
-          value && value.trim().toLowerCase() === scanned.toLowerCase(),
-      );
+      // OMB-2: shtrix-kod bo‘lsa — faqat u; bo‘lmasa SKU. Aniq solishtirish (katalogda SKU katta-kichik harfga sezgir)
+      const expected = (task.barcode ?? task.sku ?? '').trim();
+      const matches = expected !== '' && expected === scanned;
       await manager.query(
         `INSERT INTO checkout.fulfillment_scan (task_id, code, matched, actor_id)
          VALUES ($1, $2, $3, $4)`,
         [task.id, scanned, matches, who.id],
       );
       if (!matches) {
-        outcome.wrong = `Boshqa tovar: «${scanned}». Kutilgan: ${task.barcode ?? task.sku ?? '—'}`;
+        // kutilgan kod aytilmaydi — qo‘lda terib o‘tkazib yuborilmasin
+        outcome.wrong = `Boshqa tovar: «${scanned}» bu buyurtmaga tegishli emas`;
         return null;
       }
       let applied: AppliedTransition | null = null;
@@ -258,7 +267,7 @@ export class FulfillmentService {
               o.cod_amount::text AS "codAmount", p.id::text AS "parcelId",
               p.elchi_shipment_id::text AS "shipmentId", p.qr_code_token AS "qrToken",
               p.elchi_to_be_paid::text AS "toBePaid", p.elchi_state AS "elchiState",
-              p.elchi_error AS "elchiError"
+              p.elchi_error AS "elchiError", o.status AS "orderStatus"
          FROM checkout.sales_order o
          JOIN checkout.parcel p ON p.sales_order_id = o.id
         WHERE o.id = $1 AND o.source IS NOT NULL
@@ -266,6 +275,14 @@ export class FulfillmentService {
       [String(orderId)],
     )) as Array<Record<string, string | null>>;
     if (!row) throw new NotFoundException('Buyurtma topilmadi');
+    if (
+      row.orderStatus === LeadOrderStatus.CANCELLED ||
+      row.elchiState === ParcelElchiState.CANCELLED
+    )
+      throw new ConflictException({
+        message: 'Buyurtma bekor qilingan — yorliq chiqmaydi',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     if (!row.shipmentId || !row.qrToken)
       throw new ConflictException({
         message:
@@ -306,6 +323,48 @@ export class FulfillmentService {
     return this.labels.generate(await this.labelData(orderId));
   }
 
+  /** Berilgan ID lardan lid buyurtmalari (admin yorliq partiyasi shu bo‘yicha ajratiladi). */
+  async leadOrderIds(orderIds: string[]): Promise<string[]> {
+    const ids = (Array.isArray(orderIds) ? orderIds : [])
+      .map(String)
+      .filter((id) => ID.test(id));
+    if (!ids.length) return [];
+    const rows = (await this.dataSource.query(
+      `SELECT id::text AS id FROM checkout.sales_order
+        WHERE id = ANY($1::bigint[]) AND source IS NOT NULL`,
+      [ids],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
+  /** Lid buyurtmalari yorliqlari partiyada: chiqmaganlari sababi bilan (butun partiya yiqilmaydi). */
+  async collectLabels(orderIds: string[]): Promise<{
+    labels: ShippingLabelData[];
+    skipped: Array<{ orderId: string; reason: string }>;
+  }> {
+    const labels: ShippingLabelData[] = [];
+    const skipped: Array<{ orderId: string; reason: string }> = [];
+    for (const orderId of orderIds) {
+      try {
+        labels.push(await this.labelData(orderId));
+      } catch (error) {
+        const response =
+          error instanceof ConflictException ||
+          error instanceof NotFoundException
+            ? (error.getResponse() as { message?: string } | string)
+            : null;
+        skipped.push({
+          orderId,
+          reason:
+            typeof response === 'object' && response?.message
+              ? String(response.message)
+              : (error as Error).message,
+        });
+      }
+    }
+    return { labels, skipped };
+  }
+
   /**
    * Elchi’ga topshirish akti (OMB-5, TC4): skanerlangan QR lar bo‘yicha. Har posilka «Qadoqlandi» va Elchi posilkasi
    * yaratilgan bo‘lishi kerak — bittasi ham tayyor bo‘lmasa butun akt rad (qaysi va nima uchun). Bitta tranzaksiyada:
@@ -321,15 +380,26 @@ export class FulfillmentService {
           .filter(Boolean),
       ),
     ];
-    if (!tokens.length || tokens.length > 500)
-      throw new BadRequestException('1 dan 500 gacha QR kerak');
+    if (!tokens.length || tokens.length > MAX_ACT_PARCELS)
+      throw new BadRequestException(`1 dan ${MAX_ACT_PARCELS} gacha QR kerak`);
     const result = await this.inTransaction(async (manager) => {
+      // Qulf tartibi hamma joyda bir xil: avval buyurtma, keyin vazifa (bekor qilish bilan o‘zaro to‘siq bo‘lmasin)
+      await manager.query(
+        `SELECT o.id FROM checkout.sales_order o
+           JOIN checkout.parcel p ON p.sales_order_id = o.id
+          WHERE p.qr_code_token = ANY($1::text[])
+          ORDER BY o.id
+          FOR UPDATE OF o`,
+        [tokens],
+      );
       const rows = (await manager.query(
         `SELECT p.id::text AS "parcelId", p.qr_code_token AS "qrToken",
                 p.elchi_shipment_id::text AS "shipmentId", p.sales_order_id::text AS "orderId",
-                t.id::text AS "taskId", t.status
+                p.handover_act_id::text AS "actId",
+                t.id::text AS "taskId", t.status, o.status AS "orderStatus"
            FROM checkout.parcel p
            JOIN checkout.fulfillment_task t ON t.parcel_id = p.id
+           JOIN checkout.sales_order o ON o.id = p.sales_order_id
           WHERE p.qr_code_token = ANY($1::text[])
           ORDER BY p.id
           FOR UPDATE OF t`,
@@ -339,9 +409,27 @@ export class FulfillmentService {
         qrToken: string;
         shipmentId: string | null;
         orderId: string;
+        actId: string | null;
         taskId: string;
         status: FulfillmentTaskStatus;
+        orderStatus: LeadOrderStatus;
       }>;
+      // Takror so‘rov (javob yo‘qolgan): hammasi bitta aktda topshirilgan — o‘sha akt qaytadi
+      const acts = new Set(rows.map((r) => r.actId));
+      if (
+        rows.length === tokens.length &&
+        acts.size === 1 &&
+        rows[0].actId &&
+        rows.every((r) => r.status === FulfillmentTaskStatus.HANDED_OVER)
+      ) {
+        const [act] = (await manager.query(
+          `SELECT parcel_count AS count FROM checkout.handover_act WHERE id = $1`,
+          [rows[0].actId],
+        )) as Array<{ count: number }>;
+        // aynan o‘sha posilkalar to‘plami bo‘lsa — o‘sha akt (qismi emas)
+        if (Number(act?.count) === tokens.length)
+          return { actId: rows[0].actId, applied: [] as AppliedTransition[] };
+      }
       const found = new Set(rows.map((r) => r.qrToken));
       const problems = [
         ...tokens
@@ -351,6 +439,16 @@ export class FulfillmentService {
           .filter((r) => r.status !== FulfillmentTaskStatus.PACKED)
           .map(
             (r) => `${leadOrderNumber(r.orderId)}: qadoqlanmagan (${r.status})`,
+          ),
+        ...rows
+          .filter(
+            (r) =>
+              r.status === FulfillmentTaskStatus.PACKED &&
+              r.orderStatus !== LeadOrderStatus.PACKED,
+          )
+          .map(
+            (r) =>
+              `${leadOrderNumber(r.orderId)}: buyurtma holati ${r.orderStatus}`,
           ),
         ...rows
           .filter((r) => !r.shipmentId)
@@ -398,8 +496,9 @@ export class FulfillmentService {
       }
       return { actId: act.id, applied };
     }, who);
+    // Ombor buyruqlari outbox’da — relay yetkazadi; javobni kutmaymiz (ko‘p posilkada gateway kutishi tugab qolardi)
     for (const applied of result.applied)
-      await this.status.sendInventoryNow(applied.command);
+      void this.status.sendInventoryNow(applied.command);
     return this.act(result.actId);
   }
 
@@ -470,6 +569,14 @@ export class FulfillmentService {
   ): Promise<TaskRow> {
     if (!ID.test(String(taskId ?? '')))
       throw new NotFoundException('Vazifa topilmadi');
+    // Qulf tartibi: avval buyurtma, keyin vazifa (bekor qilish ham shu tartibda)
+    await manager.query(
+      `SELECT o.id FROM checkout.sales_order o
+         JOIN checkout.fulfillment_task t ON t.order_id = o.id
+        WHERE t.id = $1
+        FOR UPDATE OF o`,
+      [String(taskId)],
+    );
     const [task] = (await manager.query(
       `SELECT t.id::text AS id, t.order_id::text AS "orderId", t.status,
               t.required_qty AS "requiredQty", t.picked_qty AS "pickedQty",
@@ -511,14 +618,13 @@ export class FulfillmentService {
     districtSoato: string,
   ): Promise<{ regionName: string; districtName: string }> {
     try {
-      const geo = await sendRpc<{
-        ok: boolean;
-        regionName?: string;
-        districtName?: string;
-      }>(
-        this.integration,
-        { cmd: 'integration.geo.resolve-address' },
-        { regionSoato, districtSoato },
+      const geo = await firstValueFrom(
+        this.integration
+          .send<{ ok: boolean; regionName?: string; districtName?: string }>(
+            { cmd: 'integration.geo.resolve-address' },
+            { regionSoato, districtSoato },
+          )
+          .pipe(timeout(GEO_TIMEOUT_MS)),
       );
       if (geo?.ok && geo.regionName && geo.districtName)
         return { regionName: geo.regionName, districtName: geo.districtName };

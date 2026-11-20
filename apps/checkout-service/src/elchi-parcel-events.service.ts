@@ -88,6 +88,8 @@ export class ElchiParcelEventsService {
             SET elchi_state = $2, elchi_error = $3, updated_at = now()
            FROM checkout.sales_order o
           WHERE o.id = p.sales_order_id AND o.source IS NOT NULL AND p.sales_order_id = $1
+            -- bekor qilingan posilkani kech kelgan «yaratilmadi» bosib ketmaydi
+            AND NOT ($2 = 'FAILED' AND p.elchi_state = 'CANCELLED')
           RETURNING p.id`,
         [orderId, state, error ? error.slice(0, 2000) : null],
       ),
@@ -114,7 +116,7 @@ export class ElchiParcelEventsService {
         const rows =
           result.length === 2 && Array.isArray(result[0]) ? result[0] : result;
         if (!(rows as unknown[]).length)
-          this.logger.warn(
+          this.logger.error(
             `Elchi posilka xabari: lid buyurtmasi ${orderId} topilmadi (xabar ${eventId})`,
           );
       },

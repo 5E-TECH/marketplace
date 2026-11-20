@@ -55,7 +55,10 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
       { send: jest.fn(() => of({ id: '4' })) } as never,
       { generateBatch } as unknown as ShippingLabelService,
       { isLeadOrder: jest.fn(async () => false) } as never,
-      {} as never,
+      {
+        leadOrderIds: jest.fn(async () => []),
+        collectLabels: jest.fn(async () => ({ labels: [], skipped: [] })),
+      } as never,
     );
     return { controller, generateBatch };
   }

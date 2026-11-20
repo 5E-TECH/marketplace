@@ -149,13 +149,7 @@ export class LeadOrderStatusService {
       `UPDATE checkout.sales_order SET status = $2, updated_at = now() WHERE id = $1`,
       [orderId, to],
     );
-    // BE-19: bekor qilingan buyurtma yig‘ish ro‘yxatidan chiqadi
-    if (to === LeadOrderStatus.CANCELLED)
-      await manager.query(
-        `UPDATE checkout.fulfillment_task SET status = 'CANCELLED', updated_at = now()
-          WHERE order_id = $1 AND status <> 'HANDED_OVER'`,
-        [orderId],
-      );
+    await this.syncTask(manager, orderId, to, actor);
     await this.journal(manager, orderId, from, to, true, actor, reason);
     await this.emit(manager, orderId, from, to);
     return {
@@ -167,6 +161,47 @@ export class LeadOrderStatusService {
       },
       command,
     };
+  }
+
+  /**
+   * BE-19: yig‘ish vazifasi buyurtma bilan bir xil turadi, holat qaysi yo‘l bilan o‘zgarmasin (ombor, Elchi webhook
+   * BE-21, moliya): bekor — vazifa bekor; qadoqlandi — qadoqlangan; Elchi’ga topshirildi va undan keyingi holat —
+   * topshirilgan. Ombor yo‘llari vazifani o‘zi yangilaydi — bu yerda faqat orqada qolgan vazifa tortiladi.
+   */
+  private async syncTask(
+    manager: EntityManager,
+    orderId: string,
+    to: LeadOrderStatus,
+    actor: LeadOrderActor,
+  ): Promise<void> {
+    if (to === LeadOrderStatus.CANCELLED) {
+      await manager.query(
+        `UPDATE checkout.fulfillment_task SET status = 'CANCELLED', updated_at = now()
+          WHERE order_id = $1 AND status <> 'HANDED_OVER'`,
+        [orderId],
+      );
+      return;
+    }
+    if (to === LeadOrderStatus.PACKED) {
+      await manager.query(
+        `UPDATE checkout.fulfillment_task
+            SET status = 'PACKED', picked_qty = required_qty,
+                packed_at = COALESCE(packed_at, now()), packed_by = COALESCE(packed_by, $2::bigint),
+                updated_at = now()
+          WHERE order_id = $1 AND status IN ('TO_PICK', 'PICKED')`,
+        [orderId, actor.id],
+      );
+      return;
+    }
+    if (to !== LeadOrderStatus.PICKING && to !== LeadOrderStatus.CONFIRMED)
+      await manager.query(
+        `UPDATE checkout.fulfillment_task
+            SET status = 'HANDED_OVER', picked_qty = required_qty,
+                handed_over_at = COALESCE(handed_over_at, now()),
+                handed_over_by = COALESCE(handed_over_by, $2::bigint), updated_at = now()
+          WHERE order_id = $1 AND status IN ('TO_PICK', 'PICKED', 'PACKED')`,
+        [orderId, actor.id],
+      );
   }
 
   /** BUY-2: rad etilgan o‘tish jurnalga — asosiy tranzaksiya qaytgandan keyin, alohida. */

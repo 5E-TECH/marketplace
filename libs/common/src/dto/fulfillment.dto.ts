@@ -105,7 +105,7 @@ export class WarehouseHandoverDto {
   })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(200)
   @IsString({ each: true })
   @MinLength(1, { each: true })
   @MaxLength(128, { each: true })

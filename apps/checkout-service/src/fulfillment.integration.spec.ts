@@ -15,6 +15,7 @@ import {
   OutboxService,
 } from '@app/common';
 import { CHECKOUT_DB } from './database';
+import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 import { FulfillmentService } from './fulfillment.service';
 import { LeadOrderService } from './lead-order.service';
@@ -48,6 +49,7 @@ describeWithPostgres(
     let status: LeadOrderStatusService;
     let fulfillment: FulfillmentService;
     let parcels: ElchiParcelEventsService;
+    let relay: CheckoutOutboxRelayService;
 
     const rpc = (work: () => Promise<unknown>) =>
       defer(() =>
@@ -226,6 +228,14 @@ describeWithPostgres(
         integration as never,
       );
       parcels = new ElchiParcelEventsService(checkoutDs);
+      const quiet = { emit: () => from([undefined]) };
+      relay = new CheckoutOutboxRelayService(
+        outbox,
+        quiet as never,
+        quiet as never,
+        quiet as never,
+        inventoryClient as never,
+      );
     });
 
     afterAll(async () => {
@@ -301,11 +311,22 @@ describeWithPostgres(
       await expect(orderOf('7001')).resolves.toMatchObject({
         status: 'PICKING',
       });
+      // shtrix-kod bor — SKU ni qo‘lda terib o‘tkazib bo‘lmaydi; xabarda kutilgan kod yo‘q
+      const typed = fulfillment.scan(order.taskId, 'Q-1', WAREHOUSE);
+      await expect(typed).rejects.toMatchObject({
+        status: 409,
+        response: { errorCode: ErrorCode.WRONG_ITEM },
+      });
+      await typed.catch((error: HttpException) =>
+        expect(JSON.stringify(error.getResponse())).not.toContain(
+          '4780012345678',
+        ),
+      );
       await expect(
-        fulfillment.scan(order.taskId, ' q-1 ', WAREHOUSE),
+        fulfillment.scan(order.taskId, ' 4780012345678 ', WAREHOUSE),
       ).resolves.toMatchObject({ status: 'PICKED', pickedQty: 2 });
       await expect(
-        fulfillment.scan(order.taskId, 'Q-1', WAREHOUSE),
+        fulfillment.scan(order.taskId, '4780012345678', WAREHOUSE),
       ).rejects.toMatchObject({ status: 409 });
 
       const scans = (await checkoutDs.query(
@@ -316,7 +337,8 @@ describeWithPostgres(
       expect(scans).toEqual([
         { code: 'BOSHQA-SKU', matched: false, actor: '61' },
         { code: '4780012345678', matched: true, actor: '61' },
-        { code: 'q-1', matched: true, actor: '61' },
+        { code: 'Q-1', matched: false, actor: '61' },
+        { code: '4780012345678', matched: true, actor: '61' },
       ]);
     });
 
@@ -392,7 +414,7 @@ describeWithPostgres(
       const first = await orderOf('7001');
       const second = await orderOf('7002');
       // 7002 ni yig‘ib qadoqlaymiz va posilkasini yaratamiz
-      await fulfillment.scan(second.taskId, 'Q-1', WAREHOUSE);
+      await fulfillment.scan(second.taskId, '4780012345678', WAREHOUSE);
       await fulfillment.pack(second.taskId, WAREHOUSE);
       await created(second.id, 'tok-7002');
       // 7003 — qadoqlanmagan
@@ -421,6 +443,8 @@ describeWithPostgres(
         'tok-7001',
         'tok-7002',
       ]);
+      // ombor buyrug‘i outbox’da: relay yetkazadi (har 10 s; testda bir necha o‘tish)
+      for (let tick = 0; tick < 5; tick++) await relay.relayPending();
       for (const order of [first, second]) {
         await expect(
           orderOf(order.id === first.id ? '7001' : '7002'),
@@ -448,10 +472,17 @@ describeWithPostgres(
       // topshirilganlar ro‘yxatdan chiqdi
       const list = await fulfillment.pickList('2026-12-16');
       expect(list.items.map((item) => item.orderId)).toEqual([third.id]);
-      // ikkinchi marta topshirib bo‘lmaydi
+      // javob yo‘qolib qayta yuborilsa — o‘sha akt (yangi akt yo‘q); faqat bir qismi — rad
+      await expect(
+        fulfillment.handover(['tok-7002', 'tok-7001'], WAREHOUSE),
+      ).resolves.toMatchObject({ id: act.id, parcelCount: 2 });
       await expect(
         fulfillment.handover(['tok-7001'], WAREHOUSE),
       ).rejects.toMatchObject({ status: 409 });
+      const [{ total }] = (await checkoutDs.query(
+        `SELECT COUNT(*)::int AS total FROM checkout.handover_act`,
+      )) as Array<{ total: number }>;
+      expect(total).toBe(1);
     });
 
     it('bekor qilingan buyurtma ro‘yxatdan chiqadi; Elchi posilkasi yaratilmasa — sabab ro‘yxatda va yorliqda', async () => {
@@ -465,8 +496,13 @@ describeWithPostgres(
         taskStatus: 'CANCELLED',
       });
       await expect(
-        fulfillment.scan(third.taskId, 'Q-1', WAREHOUSE),
+        fulfillment.scan(third.taskId, '4780012345678', WAREHOUSE),
       ).rejects.toMatchObject({ status: 409 });
+      // bekor qilingan buyurtma yorlig‘i chiqmaydi
+      await created(third.id, 'tok-7003b');
+      await expect(fulfillment.label(third.id)).rejects.toMatchObject({
+        status: 409,
+      });
       await parcels.onCancelled({
         eventId: `elchi.parcel.cancelled:${third.id}:1`,
         orderId: third.id,
@@ -510,6 +546,58 @@ describeWithPostgres(
       expect(page.items.find((item) => item.id === order.id)).toMatchObject({
         sellersCount: 1,
         shipmentsCount: 1,
+      });
+    });
+
+    it('buyurtma holati boshqa yo‘l bilan o‘zgarsa (Elchi webhook, BE-21) vazifa ham ergashadi', async () => {
+      await orders.onLeadConfirmed(confirmed('7005', '2026-12-16T05:00:00Z'));
+      const order = await orderOf('7005');
+      const elchi = { type: LeadOrderActorType.ELCHI, id: null };
+      for (const to of ['PICKING', 'PACKED'])
+        await status.transition({
+          orderId: order.id,
+          to: to as never,
+          actor: elchi,
+        });
+      await expect(orderOf('7005')).resolves.toMatchObject({
+        taskStatus: 'PACKED',
+      });
+      await status.transition({
+        orderId: order.id,
+        to: 'HANDED_TO_ELCHI' as never,
+        actor: elchi,
+      });
+      await expect(orderOf('7005')).resolves.toMatchObject({
+        taskStatus: 'HANDED_OVER',
+      });
+      const list = await fulfillment.pickList('2026-12-16');
+      expect(list.items.map((item) => item.orderId)).not.toContain(order.id);
+    });
+
+    it('admin yorliq partiyasi: lid buyurtmasi o‘z yorlig‘i bilan, tayyor bo‘lmagani sababi bilan', async () => {
+      const ready = await orderOf('7001');
+      const notReady = await orderOf('7004');
+      await expect(
+        fulfillment.leadOrderIds([ready.id, notReady.id, '999999', 'x']),
+      ).resolves.toEqual([ready.id, notReady.id]);
+      const { labels, skipped } = await fulfillment.collectLabels([
+        ready.id,
+        notReady.id,
+      ]);
+      expect(labels.map((label) => label.buyerPhone)).toEqual([
+        '+998901234567',
+      ]);
+      expect(skipped).toEqual([
+        {
+          orderId: notReady.id,
+          reason: expect.stringContaining('yaratilmadi'),
+        },
+      ]);
+    });
+
+    it('mavjud bo‘lmagan sana — 400 (500 emas)', async () => {
+      await expect(fulfillment.pickList('2026-02-30')).rejects.toMatchObject({
+        status: 400,
       });
     });
   },

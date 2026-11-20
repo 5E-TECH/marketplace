@@ -19,6 +19,7 @@ import {
   ShippingLabelTarget,
 } from './seller-orders.service';
 import {
+  ShippingLabelData,
   ShippingLabelService,
   SkippedShippingLabel,
 } from './shipping-label.service';
@@ -166,10 +167,15 @@ export class SellerOrdersController {
 
   @MessagePattern({ cmd: 'checkout.admin.order-labels' })
   async adminLabelsBatch(@Payload() data: { orderIds: string[] }) {
-    const { targets, missing } = await this.orders.adminShippingLabelTargets(
-      data.orderIds,
-    );
-    return this.batchLabels(targets, missing);
+    // BE-19: lid buyurtmalari — o‘z yorlig‘i (telefon, SOATO, posilka `parcel` da); qolganlari eski tartibda
+    const orderIds = (data?.orderIds ?? []).map(String);
+    const leadIds = await this.fulfillment.leadOrderIds(orderIds);
+    const lead = await this.fulfillment.collectLabels(leadIds);
+    const legacyIds = orderIds.filter((id) => !leadIds.includes(id));
+    const { targets, missing } = legacyIds.length
+      ? await this.orders.adminShippingLabelTargets(legacyIds)
+      : { targets: [], missing: [] };
+    return this.batchLabels(targets, missing, lead);
   }
 
   /** Admin: bitta posilka (buyurtma tafsilotidagi do'kon bo'limi). */
@@ -177,6 +183,9 @@ export class SellerOrdersController {
   async adminSellerOrderLabel(
     @Payload() data: { orderId: string; sellerOrderId: string },
   ) {
+    // BE-19: lid buyurtmasida posilka bitta
+    if (await this.leadOrders.isLeadOrder(String(data?.orderId ?? '')))
+      return this.fulfillment.label(String(data.orderId));
     return this.labels.generate(
       await this.orders.getShippingLabelDataForAdmin(
         String(data.orderId),
@@ -200,9 +209,16 @@ export class SellerOrdersController {
   private async batchLabels(
     targets: ShippingLabelTarget[],
     missing: SkippedShippingLabel[] = [],
+    lead: { labels: ShippingLabelData[]; skipped: SkippedShippingLabel[] } = {
+      labels: [],
+      skipped: [],
+    },
   ) {
-    const { labels, skipped } =
-      await this.orders.collectShippingLabels(targets);
+    const collected = targets.length
+      ? await this.orders.collectShippingLabels(targets)
+      : { labels: [], skipped: [] };
+    const labels = [...lead.labels, ...collected.labels];
+    const skipped = [...lead.skipped, ...collected.skipped];
     const all = [...missing, ...skipped];
     if (!labels.length) {
       // Sabab bo'yicha guruhlanadi: 100 ta buyurtmada ham xabar qisqa
