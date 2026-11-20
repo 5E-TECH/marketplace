@@ -28,10 +28,8 @@ import { AdminShopsController } from './shops/admin-shops.controller';
 import { AdminDashboardController } from './admin/admin-dashboard.controller';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { AdminOrdersController } from './admin/admin-orders.controller';
-import { CartController } from './cart/cart.controller';
 import { PaymentsController } from './payments/payments.controller';
 import { SupportController } from './support/support.controller';
-import { FavoritesController } from './favorites/favorites.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
@@ -180,10 +178,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminDashboardController,
     AdminUsersController,
     AdminOrdersController,
-    CartController,
     PaymentsController,
     SupportController,
-    FavoritesController,
     ElchiWebhookController,
     AdminFinanceController,
     AdminProductsController,
