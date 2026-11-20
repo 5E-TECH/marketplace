@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
@@ -81,19 +81,25 @@ export class PricePolicyDto {
   @ApiPropertyOptional({
     example: 29688,
     nullable: true,
-    description: 'K, sotilish 70%',
+    description: 'K, sotilish 70% (2 xonagacha kasr)',
   })
   @IsOptional()
-  @apply(...money())
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_MONEY)
   kSale70?: number | null;
 
   @ApiPropertyOptional({
     example: 15232,
     nullable: true,
-    description: 'K, sotilish 100%',
+    description: 'K, sotilish 100% (2 xonagacha kasr)',
   })
   @IsOptional()
-  @apply(...money())
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_MONEY)
   kSale100?: number | null;
 
   @ApiPropertyOptional({ example: 9000, nullable: true, description: 'M' })
@@ -217,3 +223,13 @@ export class PriceDecisionViewDto {
   @ApiProperty() decidedBy: string;
   @ApiProperty() createdAt: Date;
 }
+
+/**
+ * `PUT /admin/products/:id/price-policy` — admin mahsulot uchun faqat yetkazish ko‘rinishini tanlaydi (TZ 2.4);
+ * K, M, foizlar va boshqa pul parametrlari — superadmin sozlamasi (TZ 3: «Narx kalkulyatori … sozlamalari»).
+ */
+export class ProductPricePolicyDto extends PickType(PricePolicyDto, [
+  'deliveryMode',
+  'visibleCenter',
+  'visibleAddress',
+] as const) {}

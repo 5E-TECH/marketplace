@@ -3,6 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * BE-09: narx kalkulyatori (TZ 2-bo‘lim, 6.13).
  * - `price_policy` — parametrlar: global → kategoriya → mahsulot (bo‘sh maydon — yuqori darajadan); global sukut TZ dan;
+ *   K kasrli (2 xona): «Narx» varag‘idagi K butun emas, TZ matnida yaxlitlangan (29 688, 15 232);
  * - `elchi_tariff` — Elchi tarifi kuchga kirish vaqti bilan (NRX-7), tarix o‘chmaydi;
  * - `price_decision` — har narx qarori: kim, qachon, holat, sabab, hisob nusxasi (NRX-6);
  * - mahsulotda tasdiqlangan narx, uning holati va bozor narxi (raqobatchida mijoz jami, NRX-4/NRX-5).
@@ -15,8 +16,8 @@ export class Pricing1796169600000 implements MigrationInterface {
       "id" BIGSERIAL PRIMARY KEY,
       "scope" VARCHAR(10) NOT NULL,
       "scope_id" BIGINT,
-      "k_sale70" BIGINT,
-      "k_sale100" BIGINT,
+      "k_sale70" NUMERIC(12,2),
+      "k_sale100" NUMERIC(12,2),
       "target_margin" BIGINT,
       "tax_rate" NUMERIC(6,4),
       "payment_rate" NUMERIC(6,4),

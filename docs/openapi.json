@@ -6707,7 +6707,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PricePolicyDto"
+                "$ref": "#/components/schemas/ProductPricePolicyDto"
               }
             }
           }
@@ -6722,7 +6722,7 @@
             "bearer": []
           }
         ],
-        "summary": "Mahsulot darajasidagi sozlama: yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan",
+        "summary": "Mahsulot darajasidagi sozlama: faqat yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan. Pul parametrlari — superadmin",
         "tags": [
           "admin-pricing"
         ]
@@ -16966,6 +16966,32 @@
           "competitorTotal"
         ]
       },
+      "ProductPricePolicyDto": {
+        "type": "object",
+        "properties": {
+          "deliveryMode": {
+            "type": "string",
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "nullable": true
+          },
+          "visibleCenter": {
+            "type": "object",
+            "example": 30000,
+            "nullable": true,
+            "description": "Ko‘rinadigan yetkazish, markazgacha"
+          },
+          "visibleAddress": {
+            "type": "object",
+            "example": 50000,
+            "nullable": true,
+            "description": "Ko‘rinadigan yetkazish, eshikkacha"
+          }
+        }
+      },
       "PricePolicyDto": {
         "type": "object",
         "properties": {
@@ -16973,13 +16999,13 @@
             "type": "object",
             "example": 29688,
             "nullable": true,
-            "description": "K, sotilish 70%"
+            "description": "K, sotilish 70% (2 xonagacha kasr)"
           },
           "kSale100": {
             "type": "object",
             "example": 15232,
             "nullable": true,
-            "description": "K, sotilish 100%"
+            "description": "K, sotilish 100% (2 xonagacha kasr)"
           },
           "targetMargin": {
             "type": "object",

@@ -39,8 +39,9 @@ export class PricePolicy extends BaseEntity {
   @Column({ name: 'scope_id', type: 'bigint', nullable: true })
   scopeId: string | null;
 
-  @money('k_sale70') kSale70: number | null;
-  @money('k_sale100') kSale100: number | null;
+  /** K kasrli (2 xona) — «Narx» varag‘idagi aniq qiymat uchun. */
+  @rate('k_sale70', 12, 2) kSale70: number | null;
+  @rate('k_sale100', 12, 2) kSale100: number | null;
   @money('target_margin') targetMargin: number | null;
   @rate('tax_rate', 6, 4) taxRate: number | null;
   @rate('payment_rate', 6, 4) paymentRate: number | null;

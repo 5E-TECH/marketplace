@@ -63,6 +63,7 @@ describe('BE-09 narx kalkulyatori (TZ 2-bo‘lim)', () => {
       affiliate: 65_000,
       callCenter: 12_000,
       platformService: 34_000,
+      hiddenDelivery: 0,
     });
     expect(e.platformResult70).toBe(9_828);
     expect(e.status).toBe(PriceStatus.GREEN);
@@ -144,7 +145,7 @@ describe('BE-09 narx kalkulyatori (TZ 2-bo‘lim)', () => {
     expect(elchiTariffFor(TARIFF, 5_000, DeliveryKind.ADDRESS)).toBe(68_000);
   });
 
-  it('ko‘rinadigan yetkazish tarifdan oshmaydi (og‘ir tovarda ham); bepul rejimda doim 0', () => {
+  it('ko‘rinadigan yetkazish tarifdan oshmaydi (og‘ir tovarda ham)', () => {
     const heavy = calculatePrice(partial, TARIFF, {
       basePrice: 140_000,
       affiliateFee: A,
@@ -155,19 +156,91 @@ describe('BE-09 narx kalkulyatori (TZ 2-bo‘lim)', () => {
     expect(heavy.delivery.hidden).toBe(22_000);
   });
 
-  it('TC6 (NRX-5): raqobatchi summasi bilan «mos»/«qimmat» va eng yuqori bazaviy narx (u bilan jami raqobatchidan oshmaydi)', () => {
+  it('TC6 (NRX-5): «Narx» varag‘i C62/C63 — 299 000 → mos, eng yuqori B 148 099; 285 000 → qimmat, 134 369', () => {
+    // manba: docs/dizayn/manbalar/p-a1.md, kadrlar 2.1–2.2 (Narx!C62, C63)
     const p = calc(partial);
-    const ok = marketCheck(partial, p, 300_000);
-    expect(ok).toMatchObject({ ourTotal: 292_000, verdict: 'MOS' });
-    const dear = marketCheck(partial, p, 280_000);
-    expect(dear.verdict).toBe('QIMMAT');
-    // eng yuqori bazaviy narx bilan hisoblangan jami raqobatchidan oshmaydi, 1 so‘m ortig‘i bilan — oshadi
-    const total = (b: number) => {
-      const c = calc(partial, b);
-      return c.recommended + c.delivery.visibleCenter;
-    };
-    expect(total(dear.maxBasePrice!)).toBeLessThanOrEqual(280_000);
-    expect(total(dear.maxBasePrice! + 1)).toBeGreaterThan(280_000);
+    expect(marketCheck(partial, p, 299_000)).toEqual({
+      ourTotal: 292_000,
+      competitorTotal: 299_000,
+      verdict: 'MOS',
+      maxBasePrice: 148_099,
+    });
+    expect(marketCheck(partial, p, 285_000)).toEqual({
+      ourTotal: 292_000,
+      competitorTotal: 285_000,
+      verdict: 'QIMMAT',
+      maxBasePrice: 134_369,
+    });
+  });
+
+  it('«Narx» varag‘i holat kadrlari: 255 000 — 3 594 (70%); 245 000 — −5 821; 230 000 — −19 943, haq ko‘pi bilan 44 226 < 50 420', () => {
+    // manba: docs/dizayn/manbalar/p-a1.md 1.1–1.3 (Narx!C53–H56); 100% ustuni K₁₀₀ kasrli bo‘lgani uchun ±1 (savollar.md 1)
+    const p = calc(partial);
+    expect(evaluatePrice(partial, p, 255_000).platformResult70).toBe(3_594);
+    expect(evaluatePrice(partial, p, 245_000).platformResult70).toBe(-5_821);
+    const red = evaluatePrice(partial, p, 230_000);
+    expect(red.platformResult70).toBe(-19_943);
+    expect(red.platformResult100).toBe(-5_487);
+    expect(red.safeAffiliateFee).toBeNull(); // 44 226 < 50 420
+  });
+
+  it('chegarada aniq: natija aynan 0 bo‘lgan narx sariq (suzuvchi nuqta xatosi yo‘q)', () => {
+    // B = 31 745, A = 65 000, qisman: sariq chegarasi 140 800 — u yerda natija aynan 0
+    const p = calc(partial, 31_745);
+    expect(p.yellowFrom).toBe(140_800);
+    expect(evaluatePrice(partial, p, 140_800).status).toBe(PriceStatus.YELLOW);
+    expect(evaluatePrice(partial, p, 140_799).status).toBe(PriceStatus.ORANGE);
+  });
+
+  it('sotuvchi zarari (haq < reklama xarajati) tavsiya narxda ham to‘q sariq — sababsiz saqlanmaydi', () => {
+    const p = calc(partial, 140_000, 0);
+    expect(evaluatePrice(partial, p, p.recommended).status).toBe(
+      PriceStatus.ORANGE,
+    );
+  });
+
+  it('taqsimotda yashirilgan yetkazish alohida qator: 262 000 → platforma xizmati 34 000 + yashirilgan 11 000', () => {
+    const p = calc(partial);
+    expect(evaluatePrice(partial, p, 262_000).split).toEqual({
+      wholesaler: 140_000,
+      affiliate: 65_000,
+      callCenter: 12_000,
+      platformService: 34_000,
+      hiddenDelivery: 11_000,
+    });
+  });
+
+  it('eshikkacha (qisman): eshik tarifi − tovardagi yashirilgan qism; markazgacha 35 000 → eshik 55 000, 25 000 → 45 000', () => {
+    const at = (visibleCenter: number) =>
+      calculatePrice({ ...partial, visibleCenter }, TARIFF, {
+        basePrice: 140_000,
+        affiliateFee: A,
+        weightGrams: WEIGHT,
+      }).delivery;
+    expect(at(30_000)).toMatchObject({
+      visibleAddress: 50_000,
+      hidden: 10_000,
+    });
+    expect(at(35_000)).toMatchObject({ visibleAddress: 55_000, hidden: 5_000 });
+    expect(at(25_000)).toMatchObject({
+      visibleAddress: 45_000,
+      hidden: 15_000,
+    });
+    // Elchi har ikki turda to‘liq tarif oladi: ko‘rinadigan + yashirilgan = tarif
+    for (const v of [25_000, 30_000, 35_000]) {
+      const d = at(v);
+      expect(d.visibleAddress + d.hidden).toBe(d.tariffAddress);
+      expect(d.visibleCenter + d.hidden).toBe(d.tariffCenter);
+    }
+  });
+
+  it('bepul rejim: markazgacha va eshikkacha 0, butun tarif tovar narxida', () => {
+    expect(calc(free).delivery).toMatchObject({
+      visibleCenter: 0,
+      visibleAddress: 0,
+      hidden: 40_000,
+      hiddenPriceAdd: 43_000,
+    });
   });
 
   it('NRX-3: sotuvchi haqi tavsiyasi = 50 420 × 1.29 → 65 000', () => {

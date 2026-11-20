@@ -23,6 +23,7 @@ import {
   maxSalePriceFor,
   PriceDecisionDto,
   PricePolicyDto,
+  PRICE_STATUS_SEVERITY,
   PriceStatus,
   PricingParams,
   recommendedAffiliateFee,
@@ -211,7 +212,11 @@ export class PricingService {
     const product = await this.product(productId);
     const ctx = await this.context();
     const params = this.paramsFor(product, ctx);
-    const calc = calculatePrice(params, ctx.tariff, this.inputs(product));
+    // sotuvchi haqi — hisob ekrani bilan bir xil (mahsulotda bo‘lmasa — tavsiya)
+    const calc = calculatePrice(params, ctx.tariff, {
+      ...this.inputs(product),
+      affiliateFee: product.affiliateFee ?? recommendedAffiliateFee(params),
+    });
     await this.products.update(
       { id: product.id },
       { marketTotal: competitorTotal },
@@ -259,7 +264,7 @@ export class PricingService {
             `Global sozlamada ${key} bo‘sh bo‘lmaydi`,
           );
     row.updatedBy = String(actorId);
-    await this.assertVisibleWithinTariff(row, scope, scopeId);
+    await this.assertVisibleWithinTariff(row, scope, scopeId, dto);
     const saved = await this.policies.save(row);
     return { before, after: this.policyView(saved, scope, scopeId) };
   }
@@ -290,28 +295,30 @@ export class PricingService {
     );
   }
 
-  /** Offer maydonlari: tasdiqlangan narx, eng katta narx (NRX-4), ko‘rinadigan yetkazish (bir dona). */
+  /**
+   * Offer maydonlari: tasdiqlangan narx, eng katta narx (NRX-4), ko‘rinadigan yetkazish (bir dona). Tasdiqlangan narx
+   * joriy sozlama bilan qayta baholanadi: asosi (B, A, og‘irlik, rejim, K, tarif) o‘zgarib holati yomonlashgan yoki
+   * qizil bo‘lsa — narx tasdiqlanmagan hisoblanadi, offer sotuvdan tushadi (yangi qaror kerak).
+   */
   offerPricing(product: Product, ctx: PricingContext): OfferPricing {
-    if (product.weightGrams == null)
+    if (product.weightGrams == null || product.basePrice == null)
       return {
-        approvedPrice: product.approvedPrice,
+        approvedPrice: null,
         maxSalePrice: null,
         centerDeliveryFee: 0,
         addressDeliveryFee: 0,
       };
     const params = this.paramsFor(product, ctx);
     const delivery = deliveryView(params, ctx.tariff, product.weightGrams);
+    const approved = this.isApprovalCurrent(product, params, ctx)
+      ? product.approvedPrice
+      : null;
     return {
-      approvedPrice: product.approvedPrice,
+      approvedPrice: approved,
       maxSalePrice:
-        product.approvedPrice == null
+        approved == null
           ? null
-          : maxSalePriceFor(
-              params,
-              product.approvedPrice,
-              delivery,
-              product.marketTotal,
-            ),
+          : maxSalePriceFor(params, approved, delivery, product.marketTotal),
       centerDeliveryFee: delivery.visibleCenter,
       addressDeliveryFee: delivery.visibleAddress,
     };
@@ -368,6 +375,8 @@ export class PricingService {
     const evaluation = evaluatePrice(params, calculation, price);
     return {
       productId: String(product.id),
+      /** Tasdiq joriymi: asosi o‘zgarib holati yomonlashgan bo‘lsa — false (offer sotuvdan tushgan, yangi qaror kerak). */
+      approvalCurrent: this.isApprovalCurrent(product, params, ctx),
       params,
       tariff: ctx.tariff,
       recommendedAffiliateFee: recommendedAffiliateFee(params),
@@ -386,6 +395,29 @@ export class PricingService {
               product.marketTotal,
             ),
     };
+  }
+
+  /** Tasdiqlangan narx joriy sozlamada qizil emas va holati qarordagidan yomon emas. */
+  private isApprovalCurrent(
+    product: Product,
+    params: PricingParams,
+    ctx: PricingContext,
+  ): boolean {
+    if (product.approvedPrice == null || !product.priceStatus) return false;
+    if (product.basePrice == null || !product.weightGrams) return false;
+    const now = evaluatePrice(
+      params,
+      calculatePrice(params, ctx.tariff, {
+        basePrice: product.basePrice,
+        affiliateFee: product.affiliateFee ?? 0,
+        weightGrams: product.weightGrams,
+      }),
+      product.approvedPrice,
+    ).status;
+    return (
+      now !== PriceStatus.RED &&
+      PRICE_STATUS_SEVERITY[now] <= PRICE_STATUS_SEVERITY[product.priceStatus]
+    );
   }
 
   private inputs(product: Product) {
@@ -429,13 +461,20 @@ export class PricingService {
     row: PricePolicy,
     scope: PricePolicyScope,
     scopeId: string | null,
+    dto: PricePolicyDto,
   ) {
     if (row.visibleCenter == null && row.visibleAddress == null) return;
-    const tariff = await this.currentTariff(new Date());
+    const ctx = await this.context();
+    const tariff = ctx.tariff;
     let weight = tariff.baseWeightGrams;
+    let product: Pick<Product, 'id' | 'categoryId'> = {
+      id: '0',
+      categoryId: scope === PricePolicyScope.CATEGORY ? scopeId : null,
+    };
     if (scope === PricePolicyScope.PRODUCT) {
-      const product = await this.product(scopeId!);
-      weight = product.weightGrams ?? weight;
+      const found = await this.product(scopeId!);
+      weight = found.weightGrams ?? weight;
+      product = found;
     }
     const center = elchiTariffFor(tariff, weight, DeliveryKind.CENTER);
     const address = elchiTariffFor(tariff, weight, DeliveryKind.ADDRESS);
@@ -447,6 +486,29 @@ export class PricingService {
       throw new BadRequestException(
         `Ko‘rinadigan yetkazish (eshikkacha) Elchi tarifidan (${address}) oshmaydi`,
       );
+    // Tovar narxidagi yashirilgan qism bitta (markazgacha bo‘yicha): qisman rejimda eshikkacha = eshik tarifi − shu qism
+    // (sukut 50 000), aks holda eshik buyurtmasida platforma zarar ko‘radi yoki mijoz tarifdan ortiq to‘laydi
+    if (dto.visibleAddress != null) {
+      const others = ctx.policies.filter(
+        (p) =>
+          !(
+            p.scope === row.scope &&
+            (p.scopeId ?? null) === (row.scopeId ?? null)
+          ),
+      );
+      const params = this.paramsFor(product, {
+        ...ctx,
+        policies: [...others, row],
+      });
+      const view = deliveryView(params, tariff, weight);
+      if (
+        params.deliveryMode === DeliveryDisplayMode.PARTIAL &&
+        dto.visibleAddress !== view.visibleAddress
+      )
+        throw new BadRequestException(
+          `Eshikkacha ko‘rinadigan summa markazgacha + eshik qo‘shimchasi bo‘lishi kerak: ${view.visibleAddress}`,
+        );
+    }
   }
 
   private policyView(

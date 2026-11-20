@@ -181,9 +181,14 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
   });
 
   it('TC6 (NRX-5): bozor narxi — «mos»/«qimmat», eng yuqori bazaviy narx; summa saqlanadi va ustamani cheklaydi', async () => {
-    const dear = await pricing.marketCheck(productId, 280_000);
-    expect(dear).toMatchObject({ ourTotal: 292_000, verdict: 'QIMMAT' });
-    expect(dear.maxBasePrice).toBeLessThan(140_000);
+    // «Narx» varag‘i C62/C63 (docs/dizayn/manbalar/p-a1.md 2.2): 285 000 → qimmat, eng yuqori B 134 369
+    const dear = await pricing.marketCheck(productId, 285_000);
+    expect(dear).toEqual({
+      ourTotal: 292_000,
+      competitorTotal: 285_000,
+      verdict: 'QIMMAT',
+      maxBasePrice: 134_369,
+    });
     const ok = await pricing.marketCheck(productId, 300_000);
     expect(ok.verdict).toBe('MOS');
     // ustama: jami 300 000 dan oshmaydi → 300 000 − 30 000 = 270 000
@@ -237,6 +242,73 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       deliveryFee: 50_000,
       elchiTariff: 60_000,
     });
+  });
+
+  it('asosi o‘zgargan tasdiq: rejim bepulga o‘tsa (262 000 qizil) yoki B oshsa — offer narxi bo‘sh, yangi qaror kerak; qaytsa — tiklanadi', async () => {
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      approvedPrice: 262_000,
+    });
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { deliveryMode: 'FREE' as never },
+      '1',
+    );
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      approvedPrice: null,
+      maxSalePrice: null,
+    });
+    await expect(pricing.calculate(productId)).resolves.toMatchObject({
+      approvedPrice: 262_000,
+      approvalCurrent: false,
+    });
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { deliveryMode: null },
+      '1',
+    );
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      approvedPrice: 262_000,
+    });
+    await ds.query(
+      `UPDATE catalog.product SET base_price = 200000 WHERE id = $1`,
+      [productId],
+    );
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      approvedPrice: null,
+    });
+    await ds.query(
+      `UPDATE catalog.product SET base_price = 140000 WHERE id = $1`,
+      [productId],
+    );
+  });
+
+  it('eshikkacha summa: markazgacha + eshik qo‘shimchasidan farqli — 400', async () => {
+    await expect(
+      pricing.setPolicy(
+        PricePolicyScope.PRODUCT,
+        productId,
+        { visibleCenter: 35_000, visibleAddress: 50_000 },
+        '1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { visibleCenter: 35_000, visibleAddress: 55_000 },
+      '1',
+    );
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      centerDeliveryFee: 35_000,
+      addressDeliveryFee: 55_000,
+    });
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { visibleCenter: null, visibleAddress: null },
+      '1',
+    );
   });
 
   it('NRX-7: yangi Elchi tarifi kuchga kirgach hisob o‘zgaradi, kelajakdagisi — hali yo‘q', async () => {

@@ -25,6 +25,7 @@ import {
   PriceDecisionViewDto,
   PricePolicyDto,
   PricingQueryDto,
+  ProductPricePolicyDto,
   RmqClient,
   Role,
   Roles,
@@ -127,11 +128,11 @@ export class AdminPricingController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({
     summary:
-      'Mahsulot darajasidagi sozlama: yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan',
+      'Mahsulot darajasidagi sozlama: faqat yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan. Pul parametrlari — superadmin',
   })
   setProductPolicy(
     @Param('id', ParseLeadIdPipe) id: string,
-    @Body() dto: PricePolicyDto,
+    @Body() dto: ProductPricePolicyDto,
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ) {
