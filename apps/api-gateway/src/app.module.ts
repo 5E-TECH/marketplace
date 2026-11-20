@@ -23,7 +23,6 @@ import { ProductsController } from './products/products.controller';
 import { PublicProductsController } from './products/public-products.controller';
 import { ProductVariantsController } from './products/product-variants.controller';
 import { FilesController } from './files/files.controller';
-import { InventoryController } from './inventory/inventory.controller';
 import { SellerOrdersController } from './sellers/seller-orders.controller';
 import { NotificationsController } from './notifications/notifications.controller';
 import { StorefrontController } from './storefront/storefront.controller';
@@ -181,7 +180,6 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     PublicProductsController,
     ProductVariantsController,
     FilesController,
-    InventoryController,
     SellerOrdersController,
     NotificationsController,
     StorefrontController,
