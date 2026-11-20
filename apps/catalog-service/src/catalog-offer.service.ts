@@ -8,6 +8,11 @@ import {
   ShopStatus,
 } from '@app/common';
 import { Product } from './entities/product.entity';
+import {
+  OfferPricing,
+  PricingContext,
+  PricingService,
+} from './pricing.service';
 
 /** Bitta so‘rovda qaytariladigan offerlar soni (lead-service o‘zi sahifalaydi). */
 const LIST_LIMIT = 500;
@@ -15,13 +20,14 @@ const LIST_LIMIT = 500;
 /**
  * lead-service uchun katalog offer ma’lumoti (`LEAD_CATALOG_RPC`, BE-11 shartnomasi). BE-07 maydonlari:
  * mahsulot, og‘irlik, BAD, sotuvchi haqi, sotuvchilarga ochiqligi va sotuvdan olinganligi.
- * Keyingi kartalar to‘ldiradi: tasdiqlangan narx, eng katta narx va ko‘rinadigan yetkazish — BE-09; qoldiq — BE-16/BE-17;
- * kreativlar va video — BE-08/BE-27. Ungacha `approvedPrice` bo‘sh — lead-service bunday offerni ochmaydi.
+ * Narx (tasdiqlangan, eng katta) va ko‘rinadigan yetkazish — BE-09. Keyingi kartalar to‘ldiradi: qoldiq — BE-16/BE-17;
+ * kreativlar va video — BE-08/BE-27. Narx tasdiqlanmagan offerni lead-service ochmaydi.
  */
 @Injectable()
 export class CatalogOfferService {
   constructor(
     @InjectRepository(Product) private readonly products: Repository<Product>,
+    private readonly pricing: PricingService,
   ) {}
 
   async get(productId: string): Promise<CatalogOfferSnapshot | null> {
@@ -29,7 +35,11 @@ export class CatalogOfferService {
     const product = await this.base()
       .where('product.id = :id', { id: String(productId) })
       .getOne();
-    return product ? toSnapshot(product) : null;
+    if (!product) return null;
+    return toSnapshot(
+      product,
+      this.pricingOf(product, await this.pricing.context()),
+    );
   }
 
   /**
@@ -74,7 +84,21 @@ export class CatalogOfferService {
       .addOrderBy('product.id', 'DESC')
       .take(LIST_LIMIT)
       .getMany();
-    return rows.map(toSnapshot);
+    if (!rows.length) return [];
+    const ctx = await this.pricing.context();
+    return rows.map((row) => toSnapshot(row, this.pricingOf(row, ctx)));
+  }
+
+  /** Narx sozlamasi buzilgan bo‘lsa ham offer qaytadi — narxsiz (lead-service uni ochmaydi). */
+  private pricingOf(
+    product: Product,
+    ctx: PricingContext,
+  ): OfferPricing | undefined {
+    try {
+      return this.pricing.offerPricing(product, ctx);
+    } catch {
+      return undefined;
+    }
   }
 
   private base() {
@@ -111,7 +135,10 @@ export function isWithdrawn(product: Product): boolean {
   );
 }
 
-export function toSnapshot(product: Product): CatalogOfferSnapshot {
+export function toSnapshot(
+  product: Product,
+  pricing?: OfferPricing,
+): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
     : product.imageUrl
@@ -135,11 +162,12 @@ export function toSnapshot(product: Product): CatalogOfferSnapshot {
     isBad: product.isBad,
     cpaAvailable: isCpaAvailable(product),
     withdrawn: isWithdrawn(product),
-    approvedPrice: null, // BE-09: narx kalkulyatori va narx tasdig‘i
-    maxSalePrice: null, // BE-09
+    // BE-09: tasdiqlangan narx, eng katta narx (NRX-4) va ko‘rinadigan yetkazish (bir dona)
+    approvedPrice: pricing?.approvedPrice ?? null,
+    maxSalePrice: pricing?.maxSalePrice ?? null,
     affiliateFee: product.affiliateFee,
-    centerDeliveryFee: 0, // BE-09: ko‘rinadigan yetkazish
-    addressDeliveryFee: 0, // BE-09
+    centerDeliveryFee: pricing?.centerDeliveryFee ?? 0,
+    addressDeliveryFee: pricing?.addressDeliveryFee ?? 0,
     stock: 0, // BE-16/BE-17: band qilinmagan qoldiq
     creatives: [], // BE-08
     createdAt: new Date(product.createdAt).toISOString(),

@@ -1,5 +1,6 @@
-import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { Controller, Inject, Logger } from '@nestjs/common';
+import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
+import { RmqClient, sendRpc } from '@app/common';
 import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
 import { TemplateKey } from './notification-templates';
@@ -15,10 +16,54 @@ import {
 
 @Controller()
 export class NotificationEventsController {
+  private readonly logger = new Logger(NotificationEventsController.name);
+
   constructor(
     private readonly notifications: NotificationService,
     private readonly templates: NotificationTemplateService,
+    @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
   ) {}
+
+  /** BE-09 (TZ 2.6, NRX-6): to‘q sariq narx tasdiqlansa — har bir faol superadminga xabar. */
+  @EventPattern('price.decision.orange')
+  async priceOrange(
+    @Payload()
+    event: {
+      productId: string;
+      productName: string;
+      price: number;
+      recommended: number;
+      reason: string | null;
+      decidedBy: string;
+    },
+  ) {
+    const recipients = await sendRpc<
+      Array<{ id: string; phone: string; email: string | null }>
+    >(
+      this.identity,
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'SUPERADMIN' },
+    );
+    if (!recipients.length) {
+      this.logger.warn(
+        `To‘q sariq narx (${event.productId}): faol superadmin yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('price_orange', {
+      productName: event.productName,
+      price: event.price,
+      recommended: event.recommended,
+      reason: event.reason ?? '',
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'price_orange',
+        ...content,
+        data: { productId: event.productId, decidedBy: event.decidedBy },
+      });
+  }
 
   @EventPattern('seller.registration.created')
   async sellerRegistered(@Payload() event: SellerRegistrationCreatedEvent) {

@@ -6524,6 +6524,372 @@
         ]
       }
     },
+    "/api/v1/admin/products/{id}/pricing": {
+      "get": {
+        "description": "`price` va `affiliateFee` berilsa — shu qiymatlar bilan qayta hisoblanadi (tasdiqlashdan oldin).",
+        "operationId": "AdminPricingController_calculate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "price",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 255000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "affiliateFee",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 65000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Narx hisobi: tavsiya, zararsizlik, qat’iy chegara, taqsimot, holat (NRX-2)",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/price-decision": {
+      "post": {
+        "operationId": "AdminPricingController_decide",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceDecisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Narxni tasdiqlash (NRX-6): qizil — 400; to‘q sariq — sabab majburiy, superadminga xabar",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/price-decisions": {
+      "get": {
+        "operationId": "AdminPricingController_history",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceDecisionViewDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Narx qarorlari tarixi: kim, qachon, holat, sabab",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/market-check": {
+      "post": {
+        "operationId": "AdminPricingController_market",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketCheckDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bozor narxi tekshiruvi (NRX-5): «mos»/«qimmat» va optovik uchun eng yuqori bazaviy narx",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/price-policy": {
+      "put": {
+        "operationId": "AdminPricingController_setProductPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricePolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot darajasidagi sozlama: yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/pricing/policy": {
+      "get": {
+        "operationId": "AdminPricingController_getGlobal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Global narx sozlamasi (K, M, foizlar, sotuvchi haqi koeffitsienti, yetkazish)",
+        "tags": [
+          "admin-pricing"
+        ]
+      },
+      "put": {
+        "operationId": "AdminPricingController_setGlobal",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricePolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Global narx sozlamasini o‘zgartirish (ADM-2)",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/pricing/policy/categories/{id}": {
+      "get": {
+        "operationId": "AdminPricingController_getCategory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kategoriya darajasidagi narx sozlamasi",
+        "tags": [
+          "admin-pricing"
+        ]
+      },
+      "put": {
+        "operationId": "AdminPricingController_setCategory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricePolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kategoriya darajasidagi narx sozlamasi (null — globaldan)",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
+    "/api/v1/admin/pricing/elchi-tariffs": {
+      "get": {
+        "operationId": "AdminPricingController_tariffs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi tariflari tarixi (NRX-7)",
+        "tags": [
+          "admin-pricing"
+        ]
+      },
+      "post": {
+        "operationId": "AdminPricingController_addTariff",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ElchiTariffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yangi Elchi tarifi kuchga kirish vaqti bilan (NRX-7); yaratilgan buyurtmalarga ta’sir qilmaydi",
+        "tags": [
+          "admin-pricing"
+        ]
+      }
+    },
     "/api/v1/admin/audit": {
       "get": {
         "operationId": "AdminAuditController_list",
@@ -13206,6 +13572,24 @@
             "example": 80,
             "nullable": true
           },
+          "approvedPrice": {
+            "type": "number",
+            "example": 262000,
+            "nullable": true,
+            "description": "BE-09: tasdiqlangan narx"
+          },
+          "priceStatus": {
+            "type": "string",
+            "example": "GREEN",
+            "nullable": true,
+            "description": "BE-09: oxirgi narx qarori holati"
+          },
+          "marketTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "BE-09: raqobatchida mijoz jami (NRX-5)"
+          },
           "cpaEnabled": {
             "type": "boolean",
             "example": true
@@ -13255,6 +13639,9 @@
           "lengthMm",
           "widthMm",
           "heightMm",
+          "approvedPrice",
+          "priceStatus",
+          "marketTotal",
           "cpaEnabled",
           "isBad",
           "isBlocked",
@@ -13598,6 +13985,24 @@
             "example": 80,
             "nullable": true
           },
+          "approvedPrice": {
+            "type": "number",
+            "example": 262000,
+            "nullable": true,
+            "description": "BE-09: tasdiqlangan narx"
+          },
+          "priceStatus": {
+            "type": "string",
+            "example": "GREEN",
+            "nullable": true,
+            "description": "BE-09: oxirgi narx qarori holati"
+          },
+          "marketTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "BE-09: raqobatchida mijoz jami (NRX-5)"
+          },
           "cpaEnabled": {
             "type": "boolean",
             "example": true
@@ -13670,6 +14075,9 @@
           "lengthMm",
           "widthMm",
           "heightMm",
+          "approvedPrice",
+          "priceStatus",
+          "marketTotal",
           "cpaEnabled",
           "isBad",
           "isBlocked",
@@ -16467,6 +16875,204 @@
             "description": "To‘xtatilgan optovik offerlari sotuvdan olinadi"
           }
         }
+      },
+      "PriceDecisionDto": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number",
+            "example": 262000,
+            "description": "Mijoz ko‘radigan tovar narxi (tavsiya yoki admin narxi)"
+          },
+          "affiliateFee": {
+            "type": "number",
+            "example": 65000,
+            "description": "Sotuvchi haqi (NRX-3, NRX-13); berilmasa — mahsulotdagi"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Raqobatchi narxi past, pilot uchun",
+            "description": "To‘q sariq holatda majburiy"
+          }
+        },
+        "required": [
+          "price"
+        ]
+      },
+      "PriceDecisionViewDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "basePrice": {
+            "type": "number"
+          },
+          "affiliateFee": {
+            "type": "number"
+          },
+          "recommended": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "YELLOW",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "decidedBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "price",
+          "basePrice",
+          "affiliateFee",
+          "recommended",
+          "status",
+          "reason",
+          "decidedBy",
+          "createdAt"
+        ]
+      },
+      "MarketCheckDto": {
+        "type": "object",
+        "properties": {
+          "competitorTotal": {
+            "type": "number",
+            "example": 290000
+          }
+        },
+        "required": [
+          "competitorTotal"
+        ]
+      },
+      "PricePolicyDto": {
+        "type": "object",
+        "properties": {
+          "kSale70": {
+            "type": "object",
+            "example": 29688,
+            "nullable": true,
+            "description": "K, sotilish 70%"
+          },
+          "kSale100": {
+            "type": "object",
+            "example": 15232,
+            "nullable": true,
+            "description": "K, sotilish 100%"
+          },
+          "targetMargin": {
+            "type": "object",
+            "example": 9000,
+            "nullable": true,
+            "description": "M"
+          },
+          "taxRate": {
+            "type": "object",
+            "example": 0.04,
+            "nullable": true
+          },
+          "paymentRate": {
+            "type": "object",
+            "example": 0.0185,
+            "nullable": true
+          },
+          "callCenterFee": {
+            "type": "object",
+            "example": 12000,
+            "nullable": true
+          },
+          "affiliateCoef": {
+            "type": "object",
+            "example": 1.29,
+            "nullable": true
+          },
+          "adCost": {
+            "type": "object",
+            "example": 50420,
+            "nullable": true,
+            "description": "Sotuvchining reklama xarajati"
+          },
+          "markupCapPercent": {
+            "type": "object",
+            "example": 10,
+            "nullable": true,
+            "description": "Ustama chegarasi, %"
+          },
+          "deliveryMode": {
+            "type": "string",
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "nullable": true
+          },
+          "visibleCenter": {
+            "type": "object",
+            "example": 30000,
+            "nullable": true,
+            "description": "Ko‘rinadigan yetkazish, markazgacha"
+          },
+          "visibleAddress": {
+            "type": "object",
+            "example": 50000,
+            "nullable": true,
+            "description": "Ko‘rinadigan yetkazish, eshikkacha"
+          }
+        }
+      },
+      "ElchiTariffDto": {
+        "type": "object",
+        "properties": {
+          "centerBase": {
+            "type": "number",
+            "example": 40000
+          },
+          "baseWeightGrams": {
+            "type": "number",
+            "example": 3000
+          },
+          "perExtraKg": {
+            "type": "number",
+            "example": 4000
+          },
+          "addressExtra": {
+            "type": "number",
+            "example": 20000
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-12-01T00:00:00+05:00",
+            "description": "Berilmasa — hozirdan"
+          }
+        },
+        "required": [
+          "centerBase",
+          "baseWeightGrams",
+          "perExtraKg",
+          "addressExtra"
+        ]
       },
       "NotificationTemplateDto": {
         "type": "object",

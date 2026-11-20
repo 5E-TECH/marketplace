@@ -43,6 +43,7 @@ describe('NotificationTemplateService (C6.8)', () => {
       'order_created',
       'order_cancelled',
       'order_refunded',
+      'price_orange', // BE-09
     ]);
     expect(list.find((row) => row.key === 'shop_approved')).toMatchObject({
       title: 'Tabriklaymiz',

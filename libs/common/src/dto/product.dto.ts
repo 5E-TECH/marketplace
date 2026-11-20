@@ -271,6 +271,27 @@ export class ProductDto {
   widthMm: number | null;
   @ApiProperty({ example: 80, nullable: true, type: Number })
   heightMm: number | null;
+  @ApiProperty({
+    example: 262000,
+    nullable: true,
+    type: Number,
+    description: 'BE-09: tasdiqlangan narx',
+  })
+  approvedPrice: number | null;
+  @ApiProperty({
+    example: 'GREEN',
+    nullable: true,
+    type: String,
+    description: 'BE-09: oxirgi narx qarori holati',
+  })
+  priceStatus: string | null;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description: 'BE-09: raqobatchida mijoz jami (NRX-5)',
+  })
+  marketTotal: number | null;
   @ApiProperty({ example: true }) cpaEnabled: boolean;
   @ApiProperty({ example: false }) isBad: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;

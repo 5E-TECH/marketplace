@@ -36,6 +36,8 @@ import { WholesalerController } from './wholesaler.controller';
 import { WholesalerService } from './wholesaler.service';
 import { CatalogOfferController } from './catalog-offer.controller';
 import { CatalogOfferService } from './catalog-offer.service';
+import { PricingController } from './pricing.controller';
+import { PricingService } from './pricing.service';
 
 const entities = CATALOG_DB.entities;
 
@@ -101,6 +103,7 @@ const entities = CATALOG_DB.entities;
     BannerController,
     WholesalerController,
     CatalogOfferController,
+    PricingController,
   ],
   providers: [
     SellerShopService,
@@ -115,6 +118,7 @@ const entities = CATALOG_DB.entities;
     CategorySeeder,
     WholesalerService,
     CatalogOfferService,
+    PricingService,
   ],
 })
 export class CatalogModule {}

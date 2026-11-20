@@ -114,6 +114,24 @@ export class AuthService {
     return this.sanitize(saved);
   }
 
+  /** BE-09: faol (bloklanmagan, o‘chirilmagan) foydalanuvchilar — bildirishnoma qabul qiluvchilari. */
+  async activeByRole(
+    role: Role,
+  ): Promise<Array<{ id: string; phone: string; email: string | null }>> {
+    if (!Object.values(Role).includes(role)) return [];
+    const rows = await this.users.find({
+      where: { role, isActive: true, isBlocked: false, isDeleted: false },
+      select: { id: true, phone: true, email: true },
+      order: { id: 'ASC' },
+      take: 100,
+    });
+    return rows.map((u) => ({
+      id: String(u.id),
+      phone: u.phone,
+      email: u.email ?? null,
+    }));
+  }
+
   /** C1.28 — foydalanuvchilar soni rol bo'yicha (admin dashboard). BE-05: sakkiz rol, yo‘q rol — 0. */
   async countUsersByRole(): Promise<{ total: number } & Record<Role, number>> {
     const rows = await this.users

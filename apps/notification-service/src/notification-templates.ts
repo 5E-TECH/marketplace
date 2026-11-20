@@ -71,6 +71,19 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Buyurtma puli qaytarildi',
     body: '#{orderId} buyurtma. Sabab: {reason}',
   },
+  price_orange: {
+    name: 'To‘q sariq narx tasdiqlandi',
+    description:
+      'BE-09 (TZ 2.6): admin zararli (to‘q sariq) narxni sabab bilan tasdiqlaganda superadminlarga',
+    variables: {
+      productName: 'Mahsulot nomi',
+      price: 'Tasdiqlangan narx',
+      recommended: 'Tavsiya narx',
+      reason: 'Sabab',
+    },
+    title: 'To‘q sariq narx tasdiqlandi',
+    body: '{productName}: {price} so‘m (tavsiya {recommended}). Sabab: {reason}',
+  },
 } satisfies Record<string, TemplateDefinition>;
 
 export type TemplateKey = keyof typeof NOTIFICATION_TEMPLATES;

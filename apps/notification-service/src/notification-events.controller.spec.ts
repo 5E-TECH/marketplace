@@ -1,3 +1,4 @@
+import { of } from 'rxjs';
 import { NotificationEventsController } from './notification-events.controller';
 import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
@@ -11,9 +12,11 @@ describe('NotificationEventsController', () => {
       async ({ key }: { key: string }) => overrides.get(key) ?? null,
     ),
   } as never);
+  const identitySend = jest.fn();
   const controller = new NotificationEventsController(
     { create } as unknown as NotificationService,
     templates,
+    { send: identitySend } as never,
   );
 
   beforeEach(() => {
@@ -202,5 +205,47 @@ describe('NotificationEventsController', () => {
         body: expect.stringContaining('150'),
       }),
     );
+  });
+
+  it('BE-09: to‘q sariq narx — har bir faol superadminga xabar; superadmin yo‘q bo‘lsa — hech narsa', async () => {
+    identitySend.mockReturnValueOnce(
+      of([
+        { id: '1', phone: '+998900000001', email: null },
+        { id: '2', phone: '+998900000002', email: 'a@x.uz' },
+      ]),
+    );
+    await controller.priceOrange({
+      productId: '10',
+      productName: 'Simsiz quloqchin',
+      price: 245000,
+      recommended: 262000,
+      reason: 'Raqobatchi narxi past',
+      decidedBy: '7',
+    });
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'SUPERADMIN' },
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipient: { userId: '2', email: 'a@x.uz', phone: '+998900000002' },
+        type: 'price_orange',
+        title: 'To‘q sariq narx tasdiqlandi',
+        body: 'Simsiz quloqchin: 245000 so‘m (tavsiya 262000). Sabab: Raqobatchi narxi past',
+        data: { productId: '10', decidedBy: '7' },
+      }),
+    );
+    create.mockClear();
+    identitySend.mockReturnValueOnce(of([]));
+    await controller.priceOrange({
+      productId: '10',
+      productName: 'X',
+      price: 1,
+      recommended: 2,
+      reason: null,
+      decidedBy: '7',
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 });
