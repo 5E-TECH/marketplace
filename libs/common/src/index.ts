@@ -33,6 +33,7 @@ export * from './dto/lead-order.dto';
 export * from './dto/fulfillment.dto';
 export * from './dto/product-variant.dto';
 export * from './dto/file.dto';
+export * from './dto/creative.dto';
 export * from './dto/inventory.dto';
 export * from './dto/notification.dto';
 export * from './dto/admin-shop.dto';

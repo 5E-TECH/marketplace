@@ -54,6 +54,11 @@ export const envValidationSchema = Joi.object({
   MINIO_PUBLIC_URL: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .required(),
+  // BE-08: kreativlar sozlamasi (fayl turi va hajm) [taklif]
+  CREATIVE_VIDEO_TYPES: Joi.string().default('video/mp4,video/webm'),
+  CREATIVE_VIDEO_MAX_MB: Joi.number().integer().min(1).max(2048).default(100),
+  CREATIVE_IMAGE_TYPES: Joi.string().default('image/jpeg,image/png,image/webp'),
+  CREATIVE_IMAGE_MAX_MB: Joi.number().integer().min(1).max(100).default(10),
 
   // Auth (JWT)
   JWT_SECRET: Joi.string().min(16).required(),

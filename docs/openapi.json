@@ -4667,6 +4667,186 @@
         ]
       }
     },
+    "/api/v1/admin/products/{id}/creatives/upload": {
+      "post": {
+        "description": "Fayl `multipart/form-data` bilan `url` ga yuboriladi: avval `fields` (o‘zgartirmasdan), oxirida `file`. Hajm va turni MinIO ham tekshiradi. Sozlamada yo‘q tur yoki katta hajm — 400.",
+        "operationId": "AdminCreativesController_uploadPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeUploadRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeUploadPolicyDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fayl turi yoki hajmi ruxsat etilmagan"
+          },
+          "404": {
+            "description": "Mahsulot topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuklash uchun imzolangan POST (15 daqiqa)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/creatives": {
+      "post": {
+        "description": "Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Bir mahsulotga 20 tagacha kreativ.",
+        "operationId": "AdminCreativesController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeConfirmDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fayl yo‘q yoki mos emas"
+          },
+          "409": {
+            "description": "Kreativlar chegarasi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuklangan faylni kreativ qilib saqlash",
+        "tags": [
+          "admin-creatives"
+        ]
+      },
+      "get": {
+        "operationId": "AdminCreativesController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CreativeDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot kreativlari (tartib bilan)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/creatives/{creativeId}": {
+      "delete": {
+        "operationId": "AdminCreativesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creativeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Kreativ topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kreativni o‘chirish (offerdan chiqadi, fayl ham o‘chiriladi)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
     "/api/v1/admin/wholesalers": {
       "post": {
         "operationId": "AdminWholesalersController_create",
@@ -14005,6 +14185,134 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "CreativeUploadRequestDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ],
+            "example": "VIDEO"
+          },
+          "contentType": {
+            "type": "string",
+            "example": "video/mp4",
+            "description": "Fayl turi (MIME)"
+          },
+          "size": {
+            "type": "number",
+            "example": 83886080,
+            "description": "Fayl hajmi, bayt"
+          }
+        },
+        "required": [
+          "type",
+          "contentType",
+          "size"
+        ]
+      },
+      "CreativeUploadPolicyDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media",
+            "description": "Fayl `multipart/form-data` bilan shu manzilga POST qilinadi"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Formaga shu maydonlar (o‘zgartirmasdan) va oxirida `file` qo‘shiladi",
+            "example": {
+              "key": "creatives/12/…mp4",
+              "Content-Type": "video/mp4"
+            }
+          },
+          "objectKey": {
+            "type": "string",
+            "example": "creatives/12/7b0c…mp4"
+          },
+          "expiresAt": {
+            "type": "string",
+            "example": "2026-11-21T10:15:00.000Z"
+          },
+          "maxSize": {
+            "type": "number",
+            "example": 104857600,
+            "description": "Ruxsat etilgan eng katta hajm, bayt"
+          }
+        },
+        "required": [
+          "url",
+          "fields",
+          "objectKey",
+          "expiresAt",
+          "maxSize"
+        ]
+      },
+      "CreativeConfirmDto": {
+        "type": "object",
+        "properties": {
+          "objectKey": {
+            "type": "string",
+            "example": "creatives/12/7b0c3e1a-….mp4"
+          }
+        },
+        "required": [
+          "objectKey"
+        ]
+      },
+      "CreativeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media/creatives/12/….mp4"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "video/mp4"
+          },
+          "size": {
+            "type": "number",
+            "example": 83886080
+          },
+          "position": {
+            "type": "number",
+            "example": 0
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "type",
+          "url",
+          "mimeType",
+          "size",
+          "position",
+          "createdAt"
         ]
       },
       "CreateWholesalerDto": {

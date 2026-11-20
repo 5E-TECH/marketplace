@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Client } from 'minio';
 import { randomUUID } from 'node:crypto';
 import {
+  CREATIVE_FOLDER,
   PUBLIC_MEDIA_FOLDERS,
   UploadFileCommand,
   UploadedFileDto,
@@ -106,7 +107,8 @@ export class FileServiceService implements OnModuleInit {
           Effect: 'Allow',
           Principal: '*',
           Action: ['s3:GetObject'],
-          Resource: PUBLIC_MEDIA_FOLDERS.map(
+          // BE-08: kreativlar ham ochiq o‘qiladi (sotuvchi sahifasi, offer ro‘yxati)
+          Resource: [...PUBLIC_MEDIA_FOLDERS, CREATIVE_FOLDER].map(
             (folder) => `arn:aws:s3:::${this.bucketName}/${folder}/*`,
           ),
         },
