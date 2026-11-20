@@ -9,6 +9,8 @@ import { Product } from './entities/product.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { Shop } from './entities/shop.entity';
 import { CatalogOfferService } from './catalog-offer.service';
+import { CreativeService } from './creative.service';
+import { Creative } from './entities/creative.entity';
 import { ProductService } from './product.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
@@ -128,6 +130,10 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
         send: (_p: unknown, d: { variantIds: string[] }) =>
           of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
       } as never,
+      new CreativeService(
+        ds.getRepository(Creative),
+        ds.getRepository(Product),
+      ),
     );
     const rows = (await ds.query(
       `SELECT id::text, slug, cpa_enabled FROM catalog.product WHERE id >= 9000 ORDER BY id`,

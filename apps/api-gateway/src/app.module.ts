@@ -33,6 +33,7 @@ import { SupportController } from './support/support.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { AdminCreativesController } from './admin/admin-creatives.controller';
 import { AdminWholesalersController } from './admin/admin-wholesalers.controller';
 import { AdminPricingController } from './admin/admin-pricing.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
@@ -184,6 +185,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     ElchiWebhookController,
     AdminFinanceController,
     AdminProductsController,
+    AdminCreativesController,
     AdminWholesalersController,
     AdminPricingController,
     AdminAuditController,
