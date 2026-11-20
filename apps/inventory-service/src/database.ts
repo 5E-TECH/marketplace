@@ -3,6 +3,7 @@ import { CreateInventoryTables1721822400000 } from './migrations/1721822400000-c
 import { CreateInventoryOperation1721822400001 } from './migrations/1721822400001-create-inventory-operation';
 import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-create-inventory-outbox';
 import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
+import { HqWarehouse1796256000000 } from './migrations/1796256000000-hq-warehouse';
 import { Warehouse } from './entities/warehouse.entity';
 import { Stock } from './entities/stock.entity';
 import { StockMovement } from './entities/stock-movement.entity';
@@ -31,5 +32,6 @@ export const INVENTORY_DB: DatabaseDefinition = {
     CreateInventoryOperation1721822400001,
     CreateInventoryOutbox1721822400002,
     AddInventoryBaseColumns1721822400003,
+    HqWarehouse1796256000000,
   ],
 };

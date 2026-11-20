@@ -40,6 +40,6 @@ export function canOpenStream(offer: CatalogOfferSnapshot | null): boolean {
     offer.cpaAvailable &&
     !offer.withdrawn &&
     offer.approvedPrice !== null &&
-    offer.stock > 0
+    (offer.stock ?? 0) > 0 // noma’lum qoldiq — yangi sahifa ochilmaydi
   );
 }

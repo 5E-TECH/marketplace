@@ -27,7 +27,6 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
     const controller = new SellerOrdersController(
       { getShippingLabelData } as unknown as SellerOrdersService,
       { send: jest.fn(() => of({ id: '4' })) } as never,
-      { send: jest.fn() } as never,
       { generate } as unknown as ShippingLabelService,
     );
 
@@ -52,7 +51,6 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
     const controller = new SellerOrdersController(
       orders as unknown as SellerOrdersService,
       { send: jest.fn(() => of({ id: '4' })) } as never,
-      { send: jest.fn() } as never,
       { generateBatch } as unknown as ShippingLabelService,
     );
     return { controller, generateBatch };

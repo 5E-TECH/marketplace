@@ -42,6 +42,12 @@ export class InventoryOperationsController {
     return this.inventory.release(input);
   }
 
+  /** BE-16: bo‘sh qoldiq HQ omborda — { variantIds } → { [variantId]: soni } (catalog offer, SOT-2). */
+  @MessagePattern({ cmd: 'inventory.available' })
+  available(@Payload() data: { variantIds: string[] }) {
+    return this.inventory.available(data?.variantIds ?? []);
+  }
+
   @MessagePattern({ cmd: 'inventory.return-order-items' })
   returnOrderItems(@Payload() input: ReturnOrderItemsDto) {
     return this.inventory.returnOrderItems(input);

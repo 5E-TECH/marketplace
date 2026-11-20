@@ -18,9 +18,6 @@ import {
 import { InventoryService } from './inventory.service';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
-import { SellerInventoryController } from './seller-inventory.controller';
-import { StockQueryService } from './stock-query.service';
-import { WarehouseService } from './warehouse.service';
 import { InventoryOperationsController } from './inventory-operations.controller';
 import { AdminInventoryController } from './admin-inventory.controller';
 import { AdminInventoryQueryService } from './admin-inventory-query.service';
@@ -54,15 +51,9 @@ const entities = INVENTORY_DB.entities;
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [
-    SellerInventoryController,
-    InventoryOperationsController,
-    AdminInventoryController,
-  ],
+  controllers: [InventoryOperationsController, AdminInventoryController],
   providers: [
     InventoryService,
-    WarehouseService,
-    StockQueryService,
     ReservationSweeperService,
     OutboxService,
     InventoryOutboxRelayService,

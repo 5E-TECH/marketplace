@@ -1749,510 +1749,6 @@
         ]
       }
     },
-    "/api/v1/inventory/warehouses": {
-      "get": {
-        "operationId": "InventoryController_listWarehouses",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WarehouseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Sotuvchining faol omborlarini olish",
-        "tags": [
-          "inventory"
-        ]
-      },
-      "post": {
-        "operationId": "InventoryController_createWarehouse",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateWarehouseDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WarehouseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Yangi ombor yaratish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
-    "/api/v1/inventory/warehouses/{id}": {
-      "get": {
-        "operationId": "InventoryController_getWarehouse",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WarehouseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Bitta omborni olish",
-        "tags": [
-          "inventory"
-        ]
-      },
-      "patch": {
-        "operationId": "InventoryController_updateWarehouse",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateWarehouseDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WarehouseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Omborni tahrirlash",
-        "tags": [
-          "inventory"
-        ]
-      },
-      "delete": {
-        "operationId": "InventoryController_deleteWarehouse",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "example": {
-                    "id": "3",
-                    "deleted": true
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Omborni soft-delete qilish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
-    "/api/v1/inventory/stock/low": {
-      "get": {
-        "operationId": "InventoryController_lowStock",
-        "parameters": [
-          {
-            "name": "warehouseId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "3",
-              "type": "string"
-            }
-          },
-          {
-            "name": "variantId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "88",
-              "type": "string"
-            }
-          },
-          {
-            "name": "productId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "12",
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "lowOnly",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": false,
-              "example": false,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "example": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "example": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StockPageDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Kam qolgan tovarlarni olish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
-    "/api/v1/inventory/stock": {
-      "get": {
-        "operationId": "InventoryController_listStock",
-        "parameters": [
-          {
-            "name": "warehouseId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "3",
-              "type": "string"
-            }
-          },
-          {
-            "name": "variantId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "88",
-              "type": "string"
-            }
-          },
-          {
-            "name": "productId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "12",
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "example": "iphone",
-              "type": "string"
-            }
-          },
-          {
-            "name": "lowOnly",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": false,
-              "example": false,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "example": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "example": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StockPageDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Sotuvchining qoldig‘ini olish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
-    "/api/v1/inventory/stock/inbound": {
-      "post": {
-        "operationId": "InventoryController_inbound",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StockInboundDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StockMutationResultDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Tovarni omborga kirim qilish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
-    "/api/v1/inventory/stock/adjust": {
-      "post": {
-        "operationId": "InventoryController_adjust",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StockAdjustDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StockMutationResultDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Ombor qoldig‘ini sabab bilan tuzatish",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
     "/api/v1/seller/orders": {
       "get": {
         "operationId": "SellerOrdersController_orders",
@@ -8684,6 +8180,66 @@
         ]
       }
     },
+    "/api/v1/admin/inventory/inbound": {
+      "post": {
+        "operationId": "AdminInventoryController_inbound",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminStockInboundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "HQ omborga kirim (omborchi) — BE-16; to‘liq qabul akti BE-17 da",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/adjust": {
+      "post": {
+        "operationId": "AdminInventoryController_adjust",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminStockAdjustDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "HQ qoldig‘ini tuzatish (inventarizatsiya); band qilingandan kam bo‘lmaydi",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
     "/api/v1/admin/inventory/stock": {
       "get": {
         "operationId": "AdminInventoryController_stock",
@@ -8917,7 +8473,11 @@
                 "RELEASE",
                 "COMMIT",
                 "ADJUST",
-                "TRANSFER"
+                "TRANSFER",
+                "RETURN",
+                "DEFECT",
+                "WRITE_OFF",
+                "RETURN_TO_SUPPLIER"
               ]
             }
           },
@@ -14264,329 +13824,6 @@
           "isCover"
         ]
       },
-      "WarehouseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "3"
-          },
-          "ownerId": {
-            "type": "string",
-            "example": "15"
-          },
-          "name": {
-            "type": "string",
-            "example": "Asosiy ombor"
-          },
-          "regionId": {
-            "type": "object",
-            "example": "12",
-            "nullable": true
-          },
-          "districtId": {
-            "type": "object",
-            "example": "140",
-            "nullable": true
-          },
-          "address": {
-            "type": "object",
-            "example": "Toshkent shahri, Chilonzor tumani",
-            "nullable": true
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true
-          },
-          "isActive": {
-            "type": "boolean",
-            "example": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string",
-            "example": "2026-07-29T10:00:00.000Z"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string",
-            "example": "2026-07-29T10:00:00.000Z"
-          }
-        },
-        "required": [
-          "id",
-          "ownerId",
-          "name",
-          "regionId",
-          "districtId",
-          "address",
-          "isDefault",
-          "isActive",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateWarehouseDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Asosiy ombor",
-            "description": "Ombor nomi"
-          },
-          "regionId": {
-            "type": "object",
-            "example": "12",
-            "nullable": true,
-            "description": "Viloyat yoki hudud IDsi"
-          },
-          "districtId": {
-            "type": "object",
-            "example": "140",
-            "nullable": true,
-            "description": "Tuman IDsi"
-          },
-          "address": {
-            "type": "object",
-            "example": "Toshkent shahri, Chilonzor tumani",
-            "nullable": true,
-            "description": "Omborning to‘liq manzili"
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true,
-            "default": false,
-            "description": "Ombor asosiy ombor ekanligini bildiradi"
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "UpdateWarehouseDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Asosiy ombor",
-            "description": "Ombor nomi"
-          },
-          "regionId": {
-            "type": "object",
-            "example": "12",
-            "nullable": true,
-            "description": "Viloyat yoki hudud IDsi"
-          },
-          "districtId": {
-            "type": "object",
-            "example": "140",
-            "nullable": true,
-            "description": "Tuman IDsi"
-          },
-          "address": {
-            "type": "object",
-            "example": "Toshkent shahri, Chilonzor tumani",
-            "nullable": true,
-            "description": "Omborning to‘liq manzili"
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true,
-            "default": false,
-            "description": "Ombor asosiy ombor ekanligini bildiradi"
-          }
-        }
-      },
-      "StockItemDto": {
-        "type": "object",
-        "properties": {
-          "variantId": {
-            "type": "string",
-            "example": "88"
-          },
-          "productName": {
-            "type": "string",
-            "example": "iPhone 16 Pro"
-          },
-          "variantName": {
-            "type": "object",
-            "example": "Qora / 256 GB",
-            "nullable": true
-          },
-          "sku": {
-            "type": "string",
-            "example": "IPHONE-16-BLACK-256"
-          },
-          "warehouseId": {
-            "type": "string",
-            "example": "3"
-          },
-          "warehouseName": {
-            "type": "string",
-            "example": "Asosiy ombor"
-          },
-          "onHand": {
-            "type": "number",
-            "example": 15
-          },
-          "reserved": {
-            "type": "number",
-            "example": 3
-          },
-          "available": {
-            "type": "number",
-            "example": 12
-          },
-          "lowStockThreshold": {
-            "type": "number",
-            "example": 5
-          }
-        },
-        "required": [
-          "variantId",
-          "productName",
-          "variantName",
-          "sku",
-          "warehouseId",
-          "warehouseName",
-          "onHand",
-          "reserved",
-          "available",
-          "lowStockThreshold"
-        ]
-      },
-      "StockPageDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StockItemDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "example": 25
-          },
-          "page": {
-            "type": "number",
-            "example": 1
-          },
-          "limit": {
-            "type": "number",
-            "example": 20
-          },
-          "totalPages": {
-            "type": "number",
-            "example": 2
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "limit",
-          "totalPages"
-        ]
-      },
-      "StockInboundDto": {
-        "type": "object",
-        "properties": {
-          "variantId": {
-            "type": "string",
-            "example": "88"
-          },
-          "warehouseId": {
-            "type": "string",
-            "example": "3"
-          },
-          "quantity": {
-            "type": "number",
-            "example": 50,
-            "minimum": 1
-          },
-          "reason": {
-            "type": "string",
-            "example": "Yangi partiya"
-          },
-          "idempotencyKey": {
-            "type": "string",
-            "example": "po-2026-07-21-001",
-            "maxLength": 230
-          }
-        },
-        "required": [
-          "variantId",
-          "warehouseId",
-          "quantity",
-          "reason"
-        ]
-      },
-      "StockMutationResultDto": {
-        "type": "object",
-        "properties": {
-          "variantId": {
-            "type": "string",
-            "example": "88"
-          },
-          "warehouseId": {
-            "type": "string",
-            "example": "3"
-          },
-          "onHand": {
-            "type": "number",
-            "example": 45
-          },
-          "reserved": {
-            "type": "number",
-            "example": 3
-          },
-          "available": {
-            "type": "number",
-            "example": 42
-          }
-        },
-        "required": [
-          "variantId",
-          "warehouseId",
-          "onHand",
-          "reserved",
-          "available"
-        ]
-      },
-      "StockAdjustDto": {
-        "type": "object",
-        "properties": {
-          "variantId": {
-            "type": "string",
-            "example": "88"
-          },
-          "warehouseId": {
-            "type": "string",
-            "example": "3"
-          },
-          "delta": {
-            "type": "number",
-            "example": -5,
-            "description": "Noldan farqli signed miqdor"
-          },
-          "reason": {
-            "type": "string",
-            "example": "Yaroqsiz tovar"
-          },
-          "idempotencyKey": {
-            "type": "string",
-            "example": "adj-2026-07-21-001",
-            "maxLength": 230
-          }
-        },
-        "required": [
-          "variantId",
-          "warehouseId",
-          "delta",
-          "reason"
-        ]
-      },
       "SellerOrderItemDto": {
         "type": "object",
         "properties": {
@@ -18474,6 +17711,59 @@
           }
         }
       },
+      "AdminStockInboundDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "501"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 20,
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "example": "Postavka № 12, optovik Gadget Trade"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Takror yuborishdan himoya"
+          }
+        },
+        "required": [
+          "variantId",
+          "quantity",
+          "reason"
+        ]
+      },
+      "AdminStockAdjustDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "501"
+          },
+          "delta": {
+            "type": "number",
+            "example": -1,
+            "description": "Noldan farqli butun son"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Inventarizatsiya: 1 dona kam"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "delta",
+          "reason"
+        ]
+      },
       "AdminStockItemDto": {
         "type": "object",
         "properties": {
@@ -18508,7 +17798,8 @@
           },
           "shopId": {
             "type": "string",
-            "example": "15"
+            "example": "15",
+            "nullable": true
           },
           "warehouseId": {
             "type": "string",
@@ -18561,7 +17852,8 @@
         "properties": {
           "shopId": {
             "type": "string",
-            "example": "15"
+            "example": null,
+            "nullable": true
           },
           "reason": {
             "type": "string",
@@ -18656,7 +17948,8 @@
             "type": "string"
           },
           "shopId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "warehouseId": {
             "type": "string"
@@ -18676,7 +17969,11 @@
               "RELEASE",
               "COMMIT",
               "ADJUST",
-              "TRANSFER"
+              "TRANSFER",
+              "RETURN",
+              "DEFECT",
+              "WRITE_OFF",
+              "RETURN_TO_SUPPLIER"
             ]
           },
           "quantity": {

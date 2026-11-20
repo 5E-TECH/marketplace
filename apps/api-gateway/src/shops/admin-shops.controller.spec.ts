@@ -78,7 +78,7 @@ describe('AdminShopsController (C1.7)', () => {
       id: '9',
       name: 'Zamon',
       status: 'ACTIVE',
-      stats: { products: 4, orders: 7, warehouses: 2 },
+      stats: { products: 4, orders: 7, warehouses: 0 }, // BE-16: bitta HQ ombor
     });
   });
 
@@ -153,10 +153,8 @@ describe('AdminShopsController (C1.7)', () => {
       { cmd: 'identity.user.set-active' },
       { userId: '42', isActive: true },
     );
-    expect(inventory).toHaveBeenCalledWith(
-      { cmd: 'inventory.warehouse.ensure-default' },
-      expect.objectContaining({ shopId: '9', regionId: '1', districtId: '10' }),
-    );
+    // BE-16: bitta HQ ombor — do‘kon uchun ombor yaratilmaydi
+    expect(inventory).not.toHaveBeenCalled();
     // EMIT OXIRIDA: shop.approved faqat user+ombor tayyor bo'lgach chiqadi
     expect(catalog).toHaveBeenNthCalledWith(
       2,
@@ -169,10 +167,6 @@ describe('AdminShopsController (C1.7)', () => {
         regionId: '1',
         districtId: '10',
       },
-    );
-    // tartib: inventory (3-qadam) publish (4-qadam) dan OLDIN
-    expect(inventory.mock.invocationCallOrder[0]).toBeLessThan(
-      catalog.mock.invocationCallOrder[1],
     );
     expect(res.id).toBe('9');
   });

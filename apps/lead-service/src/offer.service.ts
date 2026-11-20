@@ -129,7 +129,7 @@ export class OfferService {
       epc: null,
       approveRate,
       saleRate: null,
-      stock: o.stock,
+      stock: o.stock ?? 0, // noma’lum — 0 ko‘rinadi (yangi sahifa ochilmaydi)
       hasVideo: o.creatives.some((c) => c.type === 'VIDEO') || !!o.videoUrl,
       creatives: o.creatives.map((c) => ({
         id: c.id,
