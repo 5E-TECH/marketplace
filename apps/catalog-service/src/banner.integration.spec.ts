@@ -6,6 +6,8 @@ import { Banner } from './entities/banner.entity';
 import { CreateBanners1726588800000 } from './migrations/1726588800000-create-banners';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+/** wholesaler-cpa.integration.spec.ts dagi bilan bir xil: catalog sxemasini o‘zgartiradigan spec’lar ketma-ket (BE-07). */
+const CATALOG_SCHEMA_TEST_LOCK = 2_304_004;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 
 const MEDIA = 'https://api.elchimarket.uz/media/marketplace-media';
@@ -21,6 +23,7 @@ const config = {
  */
 describeWithPostgres('BannerService PostgreSQL (C6.9)', () => {
   let dataSource: DataSource;
+  let lock: Client | undefined;
   let service: BannerService;
 
   const insert = (sql: string) => dataSource.query(sql);
@@ -34,6 +37,9 @@ describeWithPostgres('BannerService PostgreSQL (C6.9)', () => {
         'TEST_DATABASE_URL faqat nomida "test" bor alohida bazaga ishora qilishi kerak',
       );
     }
+    lock = new Client({ connectionString: testDatabaseUrl });
+    await lock.connect();
+    await lock.query('SELECT pg_advisory_lock($1)', [CATALOG_SCHEMA_TEST_LOCK]);
     const admin = new Client({ connectionString: testDatabaseUrl });
     await admin.connect();
     await admin.query('CREATE SCHEMA IF NOT EXISTS catalog');
@@ -63,6 +69,7 @@ describeWithPostgres('BannerService PostgreSQL (C6.9)', () => {
       await dataSource.query('DROP TABLE IF EXISTS catalog.banner CASCADE');
       await dataSource.destroy();
     }
+    await lock?.end(); // sessiya yopilsa qulf bo‘shaydi
   });
 
   beforeEach(async () => {

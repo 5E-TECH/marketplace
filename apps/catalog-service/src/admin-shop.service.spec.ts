@@ -125,32 +125,6 @@ describe('AdminShopService (C1.7)', () => {
     expect(intgEmit).toHaveBeenCalledWith('shop.approved', event);
   });
 
-  it('C1.46: admin do‘kon tariflarini yangilaydi', async () => {
-    const shop: any = { id: '9', tariffHome: 0, tariffCenter: 0 };
-    const { service, shops } = makeService(shop);
-
-    await expect(
-      service.adminUpdateTariffs('9', 15000, 10000),
-    ).resolves.toMatchObject({ tariffHome: 15000, tariffCenter: 10000 });
-    expect(shops.save).toHaveBeenCalledWith(
-      expect.objectContaining({ tariffHome: 15000, tariffCenter: 10000 }),
-    );
-  });
-
-  it('C1.46 TC3: Elchi market yaratilgan do‘kon tarifi ham yangilanadi', async () => {
-    const { service, shops } = makeService({
-      id: '9',
-      elchiMarketId: '500',
-      tariffHome: 15000,
-      tariffCenter: 10000,
-    });
-
-    await expect(
-      service.adminUpdateTariffs('9', 20000, 12000),
-    ).resolves.toMatchObject({ tariffHome: 20000, tariffCenter: 12000 });
-    expect(shops.save).toHaveBeenCalled();
-  });
-
   it('TC3: reject -> REJECTED + shop.rejected (notification), integration EMAS', async () => {
     const shop: any = {
       id: '9',

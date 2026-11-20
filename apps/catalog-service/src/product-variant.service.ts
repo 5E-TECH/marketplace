@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -55,6 +56,9 @@ export class ProductVariantService {
     dto: CreateProductVariantDto,
   ): Promise<ProductVariant> {
     const product = await this.getOwnedProduct(ownerUserId, productId);
+    // BE-07: CPA mahsulotida aniq bitta faol variant (birinchi variant sukutdagisini almashtiradi, ikkinchisi — 400)
+    if (product.cpaEnabled && (dto.isActive ?? true))
+      await this.assertNoOtherActiveVariant(productId);
     const productVariant = await this.productVariants.findOne({
       where: {
         sku: dto.sku,
@@ -147,6 +151,11 @@ export class ProductVariantService {
     dto: UpdateProductVariantDto,
   ): Promise<ProductVariant> {
     const variant = await this.getVariant(ownerUserId, productId, variantId);
+    if (dto.isActive === true && !variant.isActive) {
+      const product = await this.getOwnedProduct(ownerUserId, productId);
+      if (product.cpaEnabled)
+        await this.assertNoOtherActiveVariant(productId, variantId);
+    }
     if (
       variant.sku === this.defaultSku(productId) &&
       dto.sku !== undefined &&
@@ -305,6 +314,26 @@ export class ProductVariantService {
       // U savatga suratga olinadi va buyurtma orqali Elchi'ga boradi.
       productName: variant.product.name,
     };
+  }
+
+  /** CPA mahsulotida sukutdagidan boshqa faol variant bo‘lsa — 400 (qoldiq va band shu bitta variant orqali). */
+  private async assertNoOtherActiveVariant(
+    productId: string,
+    exceptId?: string,
+  ): Promise<void> {
+    const others = await this.productVariants.count({
+      where: {
+        productId,
+        isActive: true,
+        isDeleted: false,
+        sku: Not(this.defaultSku(productId)),
+        ...(exceptId ? { id: Not(exceptId) } : {}),
+      },
+    });
+    if (others > 0)
+      throw new BadRequestException(
+        'CPA mahsulotida faqat bitta faol variant bo‘ladi',
+      );
   }
 
   private defaultSku(productId: string): string {

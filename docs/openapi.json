@@ -1023,7 +1023,9 @@
               "type": "string",
               "enum": [
                 "DRAFT",
+                "PENDING_REVIEW",
                 "ACTIVE",
+                "REJECTED",
                 "ARCHIVED",
                 "OUT_OF_STOCK"
               ]
@@ -3683,45 +3685,6 @@
         ]
       }
     },
-    "/api/v1/admin/shops/{id}/tariffs": {
-      "patch": {
-        "operationId": "AdminShopsController_updateTariffs",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateShopTariffsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Do‘konning Elchi yetkazish tariflarini sozlash/sinxronlash",
-        "tags": [
-          "admin-shops"
-        ]
-      }
-    },
     "/api/v1/admin/shops/{id}/approve": {
       "post": {
         "operationId": "AdminShopsController_approve",
@@ -6005,6 +5968,7 @@
     },
     "/api/v1/admin/products": {
       "post": {
+        "description": "BE-07: og‘irlik, o‘lchamlar va bazaviy narx majburiy; optovik shartnomasisiz — 409. Holat PENDING_REVIEW: tasdiqlanmaguncha sotuvga chiqmaydi.",
         "operationId": "AdminProductsController_create",
         "parameters": [],
         "requestBody": {
@@ -6034,7 +5998,7 @@
             "bearer": []
           }
         ],
-        "summary": "Admin tanlangan do‘kon uchun yangi mahsulot yaratadi",
+        "summary": "Admin optovik nomidan mahsulot qo‘shadi (FE-25)",
         "tags": [
           "admin-products"
         ]
@@ -6050,7 +6014,9 @@
               "type": "string",
               "enum": [
                 "DRAFT",
+                "PENDING_REVIEW",
                 "ACTIVE",
+                "REJECTED",
                 "ARCHIVED",
                 "OUT_OF_STOCK"
               ]
@@ -6129,6 +6095,50 @@
       }
     },
     "/api/v1/admin/products/{id}": {
+      "patch": {
+        "operationId": "AdminProductsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUpdateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulotni tahrirlash: CPA maydonlari, BAD va CPA belgilari (BE-07)",
+        "tags": [
+          "admin-products"
+        ]
+      },
       "get": {
         "operationId": "AdminProductsController_get",
         "parameters": [
@@ -6158,6 +6168,88 @@
             "bearer": []
           }
         ],
+        "tags": [
+          "admin-products"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/approve": {
+      "post": {
+        "operationId": "AdminProductsController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulotni tasdiqlash — sotuvga chiqadi (OPT-2, ADM-1)",
+        "tags": [
+          "admin-products"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/reject": {
+      "post": {
+        "operationId": "AdminProductsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulotni sabab bilan rad etish (BE-07)",
         "tags": [
           "admin-products"
         ]
@@ -6255,6 +6347,180 @@
         ],
         "tags": [
           "admin-products"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers": {
+      "post": {
+        "operationId": "AdminWholesalersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWholesalerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovikni kiritish (foydalanuvchisiz)",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      },
+      "get": {
+        "operationId": "AdminWholesalersController_list",
+        "parameters": [
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Nom yoki STIR bo‘yicha",
+            "schema": {
+              "example": "gadget",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optoviklar ro‘yxati (nom yoki STIR bo‘yicha qidiruv)",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}": {
+      "get": {
+        "operationId": "AdminWholesalersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminWholesalersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWholesalerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik rekvizitlari va shartnomasini tahrirlash",
+        "tags": [
+          "admin-wholesalers"
         ]
       }
     },
@@ -12433,7 +12699,8 @@
           },
           "ownerUserId": {
             "type": "string",
-            "example": "42"
+            "example": "42",
+            "nullable": true
           },
           "name": {
             "type": "string",
@@ -12499,16 +12766,6 @@
           "isFeatured": {
             "type": "boolean",
             "example": false
-          },
-          "tariffHome": {
-            "type": "number",
-            "example": 25000,
-            "description": "Uy manziliga yetkazish tarifi"
-          },
-          "tariffCenter": {
-            "type": "number",
-            "example": 15000,
-            "description": "Elchi markaziga yetkazish tarifi"
           }
         },
         "required": [
@@ -12526,9 +12783,7 @@
           "address",
           "rating",
           "ordersCount",
-          "isFeatured",
-          "tariffHome",
-          "tariffCenter"
+          "isFeatured"
         ]
       },
       "SellerShopResponseDto": {
@@ -12763,8 +13018,45 @@
           },
           "price": {
             "type": "number",
-            "example": 14999000,
+            "example": 140000,
             "minimum": 0
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0,
+            "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
+          },
+          "affiliateFee": {
+            "type": "object",
+            "example": 65000,
+            "minimum": 0,
+            "nullable": true,
+            "description": "Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "minimum": 1,
+            "description": "Bir dona og‘irligi, gramm (OPT-2, BUY-4)"
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "minimum": 1,
+            "description": "Uzunlik, mm"
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "minimum": 1,
+            "description": "Kenglik, mm"
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "minimum": 1,
+            "description": "Balandlik, mm"
           },
           "oldPrice": {
             "type": "object",
@@ -12793,21 +13085,15 @@
               "brand": "Apple",
               "storage": "256 GB"
             }
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "ACTIVE",
-              "ARCHIVED",
-              "OUT_OF_STOCK"
-            ],
-            "default": "ACTIVE"
           }
         },
         "required": [
           "name",
-          "price"
+          "basePrice",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm"
         ]
       },
       "ProductDto": {
@@ -12823,7 +13109,8 @@
           },
           "ownerUserId": {
             "type": "string",
-            "example": "42"
+            "example": "42",
+            "nullable": true
           },
           "categoryId": {
             "type": "object",
@@ -12877,10 +13164,55 @@
             "type": "string",
             "enum": [
               "DRAFT",
+              "PENDING_REVIEW",
               "ACTIVE",
+              "REJECTED",
               "ARCHIVED",
               "OUT_OF_STOCK"
             ]
+          },
+          "moderationNote": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "nullable": true
+          },
+          "affiliateFee": {
+            "type": "number",
+            "example": 65000,
+            "nullable": true
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "nullable": true
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "nullable": true
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "nullable": true
+          },
+          "cpaEnabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false
           },
           "isBlocked": {
             "type": "boolean",
@@ -12916,6 +13248,15 @@
           "attributes",
           "hasVariants",
           "status",
+          "moderationNote",
+          "basePrice",
+          "affiliateFee",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "cpaEnabled",
+          "isBad",
           "isBlocked",
           "rating",
           "createdAt",
@@ -12978,8 +13319,45 @@
           },
           "price": {
             "type": "number",
-            "example": 14999000,
+            "example": 140000,
             "minimum": 0
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0,
+            "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
+          },
+          "affiliateFee": {
+            "type": "object",
+            "example": 65000,
+            "minimum": 0,
+            "nullable": true,
+            "description": "Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "minimum": 1,
+            "description": "Bir dona og‘irligi, gramm (OPT-2, BUY-4)"
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "minimum": 1,
+            "description": "Uzunlik, mm"
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "minimum": 1,
+            "description": "Kenglik, mm"
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "minimum": 1,
+            "description": "Balandlik, mm"
           },
           "oldPrice": {
             "type": "object",
@@ -13008,16 +13386,6 @@
               "brand": "Apple",
               "storage": "256 GB"
             }
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "ACTIVE",
-              "ARCHIVED",
-              "OUT_OF_STOCK"
-            ],
-            "default": "ACTIVE"
           }
         }
       },
@@ -13133,7 +13501,8 @@
           },
           "ownerUserId": {
             "type": "string",
-            "example": "42"
+            "example": "42",
+            "nullable": true
           },
           "categoryId": {
             "type": "object",
@@ -13187,10 +13556,55 @@
             "type": "string",
             "enum": [
               "DRAFT",
+              "PENDING_REVIEW",
               "ACTIVE",
+              "REJECTED",
               "ARCHIVED",
               "OUT_OF_STOCK"
             ]
+          },
+          "moderationNote": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "nullable": true
+          },
+          "affiliateFee": {
+            "type": "number",
+            "example": 65000,
+            "nullable": true
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "nullable": true
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "nullable": true
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "nullable": true
+          },
+          "cpaEnabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false
           },
           "isBlocked": {
             "type": "boolean",
@@ -13249,6 +13663,15 @@
           "attributes",
           "hasVariants",
           "status",
+          "moderationNote",
+          "basePrice",
+          "affiliateFee",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "cpaEnabled",
+          "isBad",
           "isBlocked",
           "rating",
           "createdAt",
@@ -14092,7 +14515,8 @@
           },
           "ownerUserId": {
             "type": "string",
-            "example": "42"
+            "example": "42",
+            "nullable": true
           },
           "name": {
             "type": "string",
@@ -14158,16 +14582,6 @@
           "isFeatured": {
             "type": "boolean",
             "example": true
-          },
-          "tariffHome": {
-            "type": "number",
-            "example": 25000,
-            "description": "Uy manziliga yetkazish tarifi"
-          },
-          "tariffCenter": {
-            "type": "number",
-            "example": 15000,
-            "description": "Elchi markaziga yetkazish tarifi"
           }
         },
         "required": [
@@ -14185,9 +14599,7 @@
           "address",
           "rating",
           "ordersCount",
-          "isFeatured",
-          "tariffHome",
-          "tariffCenter"
+          "isFeatured"
         ]
       },
       "StorefrontShopPageDto": {
@@ -14212,10 +14624,6 @@
             "type": "string",
             "example": "12"
           },
-          "shopId": {
-            "type": "string",
-            "example": "5"
-          },
           "slug": {
             "type": "string",
             "example": "iphone-16-pro"
@@ -14223,10 +14631,6 @@
           "title": {
             "type": "string",
             "example": "iPhone 16 Pro"
-          },
-          "shopName": {
-            "type": "string",
-            "example": "Ali Market"
           },
           "categoryId": {
             "type": "object",
@@ -14255,10 +14659,8 @@
         },
         "required": [
           "productId",
-          "shopId",
           "slug",
           "title",
-          "shopName",
           "categoryId",
           "price",
           "imageUrl",
@@ -14371,7 +14773,8 @@
           },
           "ownerUserId": {
             "type": "string",
-            "example": "42"
+            "example": "42",
+            "nullable": true
           },
           "name": {
             "type": "string",
@@ -14386,14 +14789,6 @@
               "REJECTED"
             ]
           },
-          "tariffHome": {
-            "type": "number",
-            "example": 25000
-          },
-          "tariffCenter": {
-            "type": "number",
-            "example": 15000
-          },
           "stats": {
             "$ref": "#/components/schemas/AdminShopDetailStatsDto"
           }
@@ -14403,8 +14798,6 @@
           "ownerUserId",
           "name",
           "status",
-          "tariffHome",
-          "tariffCenter",
           "stats"
         ]
       },
@@ -14418,25 +14811,6 @@
         },
         "required": [
           "featured"
-        ]
-      },
-      "UpdateShopTariffsDto": {
-        "type": "object",
-        "properties": {
-          "tariffHome": {
-            "type": "number",
-            "example": 25000,
-            "minimum": 1
-          },
-          "tariffCenter": {
-            "type": "number",
-            "example": 15000,
-            "minimum": 1
-          }
-        },
-        "required": [
-          "tariffHome",
-          "tariffCenter"
         ]
       },
       "RejectShopDto": {
@@ -15605,8 +15979,45 @@
           },
           "price": {
             "type": "number",
-            "example": 14999000,
+            "example": 140000,
             "minimum": 0
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0,
+            "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
+          },
+          "affiliateFee": {
+            "type": "object",
+            "example": 65000,
+            "minimum": 0,
+            "nullable": true,
+            "description": "Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "minimum": 1,
+            "description": "Bir dona og‘irligi, gramm (OPT-2, BUY-4)"
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "minimum": 1,
+            "description": "Uzunlik, mm"
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "minimum": 1,
+            "description": "Kenglik, mm"
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "minimum": 1,
+            "description": "Balandlik, mm"
           },
           "oldPrice": {
             "type": "object",
@@ -15636,26 +16047,140 @@
               "storage": "256 GB"
             }
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "ACTIVE",
-              "ARCHIVED",
-              "OUT_OF_STOCK"
-            ],
-            "default": "ACTIVE"
+          "cpaEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "Offer sotuvchilarga ochiq (sukut: ha)"
           },
-          "shopId": {
+          "isBad": {
+            "type": "boolean",
+            "example": false,
+            "description": "BAD — «Dori vositasi emas» yozuvi (8-bo‘lim)"
+          },
+          "wholesalerId": {
             "type": "string",
             "example": "15",
-            "description": "Mahsulot biriktiriladigan do‘kon IDsi"
+            "description": "Optovik ID si (OPT-1: shartnomasi kiritilgan bo‘lishi kerak)"
           }
         },
         "required": [
           "name",
-          "price",
-          "shopId"
+          "basePrice",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "wholesalerId"
+        ]
+      },
+      "AdminUpdateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "iPhone 16 Pro"
+          },
+          "categoryId": {
+            "type": "object",
+            "example": "1",
+            "nullable": true
+          },
+          "description": {
+            "type": "object",
+            "example": "Titanium, 256 GB"
+          },
+          "price": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0,
+            "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
+          },
+          "affiliateFee": {
+            "type": "object",
+            "example": 65000,
+            "minimum": 0,
+            "nullable": true,
+            "description": "Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "minimum": 1,
+            "description": "Bir dona og‘irligi, gramm (OPT-2, BUY-4)"
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "minimum": 1,
+            "description": "Uzunlik, mm"
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "minimum": 1,
+            "description": "Kenglik, mm"
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "minimum": 1,
+            "description": "Balandlik, mm"
+          },
+          "oldPrice": {
+            "type": "object",
+            "example": 15999000,
+            "minimum": 0,
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": "https://cdn.example.com/iphone.jpg",
+            "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
+          },
+          "images": {
+            "example": [
+              "https://cdn.example.com/iphone-1.jpg"
+            ],
+            "description": "Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "example": {
+              "brand": "Apple",
+              "storage": "256 GB"
+            }
+          },
+          "cpaEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "Offer sotuvchilarga ochiq (sukut: ha)"
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false,
+            "description": "BAD — «Dori vositasi emas» yozuvi (8-bo‘lim)"
+          }
+        }
+      },
+      "RejectProductDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Og‘irlik hujjatdagidan farq qiladi"
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "HideProductDto": {
@@ -15669,6 +16194,271 @@
         "required": [
           "reason"
         ]
+      },
+      "CreateWholesalerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "example": "LEGAL_ENTITY"
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "description": "STIR, 9 raqam"
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank"
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "description": "Hisob raqami, 20 raqam"
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "description": "Bank MFO, 5 raqam"
+          },
+          "contractNumber": {
+            "type": "string",
+            "example": "K-2026/014",
+            "description": "Komissiya shartnomasi raqami"
+          },
+          "contractDate": {
+            "type": "string",
+            "example": "2026-11-20",
+            "description": "Shartnoma sanasi (YYYY-MM-DD)"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567"
+          },
+          "address": {
+            "type": "string",
+            "example": "Toshkent, Chilonzor 5"
+          },
+          "description": {
+            "type": "string",
+            "example": "Maishiy texnika optovigi"
+          }
+        },
+        "required": [
+          "name",
+          "legalType",
+          "tin",
+          "bankName",
+          "bankAccount",
+          "bankMfo",
+          "contractNumber",
+          "contractDate"
+        ]
+      },
+      "WholesalerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "15"
+          },
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "slug": {
+            "type": "string",
+            "example": "gadget-trade-mchj-15"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "SUSPENDED",
+              "REJECTED"
+            ]
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "nullable": true
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "nullable": true
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank",
+            "nullable": true
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "nullable": true
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "nullable": true
+          },
+          "contractNumber": {
+            "type": "string",
+            "example": "K-2026/014",
+            "nullable": true
+          },
+          "contractDate": {
+            "type": "string",
+            "example": "2026-11-20",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerUserId": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Optovik kabineti foydalanuvchisi (BE-30)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "legalType",
+          "tin",
+          "bankName",
+          "bankAccount",
+          "bankMfo",
+          "contractNumber",
+          "contractDate",
+          "phone",
+          "address",
+          "description",
+          "ownerUserId",
+          "createdAt"
+        ]
+      },
+      "WholesalerPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 3
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "UpdateWholesalerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "example": "LEGAL_ENTITY"
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "description": "STIR, 9 raqam"
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank"
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "description": "Hisob raqami, 20 raqam"
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "description": "Bank MFO, 5 raqam"
+          },
+          "contractNumber": {
+            "type": "string",
+            "example": "K-2026/014",
+            "description": "Komissiya shartnomasi raqami"
+          },
+          "contractDate": {
+            "type": "string",
+            "example": "2026-11-20",
+            "description": "Shartnoma sanasi (YYYY-MM-DD)"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567"
+          },
+          "address": {
+            "type": "string",
+            "example": "Toshkent, Chilonzor 5"
+          },
+          "description": {
+            "type": "string",
+            "example": "Maishiy texnika optovigi"
+          }
+        }
       },
       "NotificationTemplateDto": {
         "type": "object",

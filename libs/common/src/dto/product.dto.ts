@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -14,8 +15,16 @@ import {
   MinLength,
 } from 'class-validator';
 import { MAX_MONEY } from '../database/money.transformer';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  IntersectionType,
+  PartialType,
+} from '@nestjs/swagger';
 import { ProductStatus } from '../enums';
+
+/** Og‘irlik (g) va o‘lcham (mm) uchun texnik yuqori chegara — INTEGER ustuni (2^31 − 1). */
+const MAX_DIMENSION = 2_147_483_647;
 
 export class CreateProductDto {
   @ApiProperty({ example: 'iPhone 16 Pro' })
@@ -34,11 +43,64 @@ export class CreateProductDto {
   @IsString()
   description?: string | null;
 
-  @ApiProperty({ example: 14999000, minimum: 0 })
+  /** Eski «narx» maydoni; berilmasa bazaviy narx (B). Sotuv narxi — BE-09 (narx kalkulyatori va tasdiq). */
+  @ApiPropertyOptional({ example: 140000, minimum: 0 })
+  @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
   @Max(MAX_MONEY)
   @Min(0)
-  price: number;
+  price?: number;
+
+  @ApiProperty({
+    example: 140000,
+    minimum: 0,
+    description: 'Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)',
+  })
+  @IsInt()
+  @Max(MAX_MONEY)
+  @Min(0)
+  basePrice: number;
+
+  @ApiPropertyOptional({
+    example: 65000,
+    minimum: 0,
+    nullable: true,
+    description:
+      'Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Max(MAX_MONEY)
+  @Min(0)
+  affiliateFee?: number | null;
+
+  @ApiProperty({
+    example: 450,
+    minimum: 1,
+    description: 'Bir dona og‘irligi, gramm (OPT-2, BUY-4)',
+  })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DIMENSION)
+  weightGrams: number;
+
+  @ApiProperty({ example: 200, minimum: 1, description: 'Uzunlik, mm' })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DIMENSION)
+  lengthMm: number;
+
+  @ApiProperty({ example: 120, minimum: 1, description: 'Kenglik, mm' })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DIMENSION)
+  widthMm: number;
+
+  @ApiProperty({ example: 80, minimum: 1, description: 'Balandlik, mm' })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DIMENSION)
+  heightMm: number;
 
   @ApiPropertyOptional({ example: 15999000, minimum: 0, nullable: true })
   @IsOptional()
@@ -79,19 +141,54 @@ export class CreateProductDto {
   @IsObject()
   attributes?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ enum: ProductStatus, default: ProductStatus.ACTIVE })
-  @IsOptional()
-  @IsEnum(ProductStatus)
-  status?: ProductStatus;
+  // BE-07: holat bu yerda berilmaydi — yangi mahsulot PENDING_REVIEW, ACTIVE faqat admin tasdig‘i bilan
 }
 
-export class AdminCreateProductDto extends CreateProductDto {
+/** BE-07: faqat admin o‘zgartiradigan maydonlar (ADM-1). */
+class AdminProductFlagsDto {
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Offer sotuvchilarga ochiq (sukut: ha)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  cpaEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'BAD — «Dori vositasi emas» yozuvi (8-bo‘lim)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isBad?: boolean;
+}
+
+export class AdminCreateProductDto extends IntersectionType(
+  CreateProductDto,
+  AdminProductFlagsDto,
+) {
   @ApiProperty({
     example: '15',
-    description: 'Mahsulot biriktiriladigan do‘kon IDsi',
+    description: 'Optovik ID si (OPT-1: shartnomasi kiritilgan bo‘lishi kerak)',
   })
-  @Matches(/^\d+$/, { message: "shopId musbat son bo'lishi kerak" })
-  shopId: string;
+  @Matches(/^\d+$/, { message: "wholesalerId musbat son bo'lishi kerak" })
+  wholesalerId: string;
+}
+
+/** `PATCH /admin/products/:id` — admin tahriri (BE-07). */
+export class AdminUpdateProductDto extends IntersectionType(
+  PartialType(CreateProductDto),
+  AdminProductFlagsDto,
+) {}
+
+/** `POST /admin/products/:id/reject` — rad sababi. */
+export class RejectProductDto {
+  @ApiProperty({ example: 'Og‘irlik hujjatdagidan farq qiladi' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason: string;
 }
 
 /** `POST /admin/products/:id/hide` — yashirish sababi sellerga yuboriladi. */
@@ -142,7 +239,8 @@ export class MyProductsQueryDto {
 export class ProductDto {
   @ApiProperty({ example: '12' }) id: string;
   @ApiProperty({ example: '5' }) shopId: string;
-  @ApiProperty({ example: '42' }) ownerUserId: string;
+  @ApiProperty({ example: '42', nullable: true, type: String })
+  ownerUserId: string | null;
   @ApiProperty({ example: '1', nullable: true }) categoryId: string | null;
   @ApiProperty({ example: 'iPhone 16 Pro' }) name: string;
   @ApiProperty({ example: 'iphone-16-pro' }) slug: string;
@@ -156,6 +254,22 @@ export class ProductDto {
   attributes: Record<string, unknown>;
   @ApiProperty({ example: false }) hasVariants: boolean;
   @ApiProperty({ enum: ProductStatus }) status: ProductStatus;
+  @ApiProperty({ example: null, nullable: true, type: String })
+  moderationNote: string | null;
+  @ApiProperty({ example: 140000, nullable: true, type: Number })
+  basePrice: number | null;
+  @ApiProperty({ example: 65000, nullable: true, type: Number })
+  affiliateFee: number | null;
+  @ApiProperty({ example: 450, nullable: true, type: Number })
+  weightGrams: number | null;
+  @ApiProperty({ example: 200, nullable: true, type: Number })
+  lengthMm: number | null;
+  @ApiProperty({ example: 120, nullable: true, type: Number })
+  widthMm: number | null;
+  @ApiProperty({ example: 80, nullable: true, type: Number })
+  heightMm: number | null;
+  @ApiProperty({ example: true }) cpaEnabled: boolean;
+  @ApiProperty({ example: false }) isBad: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;
   @ApiProperty({ example: 4.75 }) rating: number;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) createdAt: Date;

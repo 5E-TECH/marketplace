@@ -7,7 +7,6 @@ import {
   Param,
   Post,
   Query,
-  Patch,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -29,18 +28,15 @@ import {
   RejectShopDto,
   RmqClient,
   sendRpc,
-  UpdateShopTariffsDto,
 } from '@app/common';
 
 interface ApprovedShop {
   id: string;
-  ownerUserId: string;
+  ownerUserId: string | null;
   name: string;
   phone?: string | null;
   regionId?: string | null;
   districtId?: string | null;
-  tariffHome: number;
-  tariffCenter: number;
   elchiMarketId?: string | null;
 }
 
@@ -161,46 +157,6 @@ export class AdminShopsController {
     return result;
   }
 
-  @Patch('admin/shops/:id/tariffs')
-  @LegacyOnly()
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Do‘konning Elchi yetkazish tariflarini sozlash/sinxronlash',
-  })
-  async updateTariffs(
-    @Param('id') id: string,
-    @Body() dto: UpdateShopTariffsDto,
-    @CurrentUser() admin: JwtUser,
-    @Ip() ip: string,
-  ) {
-    const result = await sendRpc(
-      this.catalog,
-      { cmd: 'catalog.shop.update-tariffs' },
-      { shopId: id, ...dto },
-    );
-    const shop = result as ApprovedShop;
-    if (shop.elchiMarketId) {
-      await sendRpc(
-        this.integration,
-        { cmd: 'integration.market.update-tariffs' },
-        {
-          shopId: shop.id,
-          shopName: shop.name,
-          phone: shop.phone ?? null,
-          regionId: shop.regionId ?? null,
-          districtId: shop.districtId ?? null,
-          tariffHome: dto.tariffHome,
-          tariffCenter: dto.tariffCenter,
-        },
-      );
-    }
-    this.audit(admin?.sub, 'shop.tariffs.update', 'Shop', id, ip, {
-      tariffHome: dto.tariffHome,
-      tariffCenter: dto.tariffCenter,
-    });
-    return result;
-  }
-
   @Post('admin/shops/:id/approve')
   @LegacyOnly()
   @ApiBearerAuth()
@@ -249,8 +205,6 @@ export class AdminShopsController {
         phone: shop.phone ?? null,
         regionId: shop.regionId ?? null,
         districtId: shop.districtId ?? null,
-        tariffHome: Number(shop.tariffHome ?? 0),
-        tariffCenter: Number(shop.tariffCenter ?? 0),
       },
     );
     // C1.31 — audit (best-effort): approve muvaffaqiyatidan so'ng.

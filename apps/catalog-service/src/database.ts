@@ -1,5 +1,6 @@
 import type { DatabaseDefinition } from '@app/common';
 import { FixProductStatusDefault1795910400000 } from './migrations/1795910400000-fix-product-status-default';
+import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
 import { CreateCatalogTables1721736000000 } from './migrations/1721736000000-create-catalog-tables';
 import { DefaultProductActive1724414400000 } from './migrations/1724414400000-default-product-active';
 import { CreateFavorites1723300000000 } from './migrations/1723300000000-create-favorites';
@@ -37,5 +38,6 @@ export const CATALOG_DB: DatabaseDefinition = {
     CreateBanners1726588800000,
     MoneyToBigint1795219200000,
     FixProductStatusDefault1795910400000,
+    WholesalerCpaProduct1796083200000,
   ],
 };

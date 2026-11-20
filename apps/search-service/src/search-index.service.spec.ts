@@ -24,7 +24,6 @@ describe('SearchIndexService', () => {
       .mockResolvedValueOnce([
         {
           productId: '2',
-          shopId: '5',
           categoryId: '7',
           title: 'Telefon Pro',
           price: '500',
@@ -32,7 +31,6 @@ describe('SearchIndexService', () => {
         },
         {
           productId: '1',
-          shopId: '5',
           categoryId: '7',
           title: 'Telefon g‘ilofi',
           price: '100',
@@ -95,13 +93,11 @@ describe('SearchIndexService', () => {
   it('TC3: yangi active mahsulotni indeksga upsert qiladi', async () => {
     await service.reindex({
       productId: '12',
-      shopId: '5',
       categoryId: '7',
       title: 'Telefon',
       content: 'Yangi telefon',
       slug: 'telefon',
       imageUrl: null,
-      shopName: 'Ali Market',
       price: 500,
       attributes: { brand: 'Elchi' },
       active: true,
@@ -116,13 +112,11 @@ describe('SearchIndexService', () => {
   it('inactive yoki o‘chirilgan mahsulotni indeksdan chiqaradi', async () => {
     await service.reindex({
       productId: '12',
-      shopId: '5',
       categoryId: null,
       title: 'Draft',
       content: null,
       slug: 'draft',
       imageUrl: null,
-      shopName: '',
       price: 0,
       attributes: {},
       active: false,

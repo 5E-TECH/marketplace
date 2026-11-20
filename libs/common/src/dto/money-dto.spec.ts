@@ -3,7 +3,6 @@ import { validate } from 'class-validator';
 import { MAX_MONEY } from '../database/money.transformer';
 import { AdminOrderRefundDto } from './admin-order.dto';
 import { UpdateAdminSettingsDto } from './admin-settings.dto';
-import { UpdateShopTariffsDto } from './admin-shop.dto';
 import { CreateProductDto } from './product.dto';
 import { CreateProductVariantDto } from './product-variant.dto';
 import { AdminReturnRefundDto } from './return-request.dto';
@@ -21,8 +20,8 @@ describe('Pul DTO maydonlari — butun so‘m (BE-01)', () => {
     ['CreateProductDto', CreateProductDto, 'price', 150000],
     ['CreateProductDto', CreateProductDto, 'oldPrice', 180000],
     ['CreateProductVariantDto', CreateProductVariantDto, 'price', 150000],
-    ['UpdateShopTariffsDto', UpdateShopTariffsDto, 'tariffHome', 25000],
-    ['UpdateShopTariffsDto', UpdateShopTariffsDto, 'tariffCenter', 15000],
+    ['CreateProductDto', CreateProductDto, 'basePrice', 140000],
+    ['CreateProductDto', CreateProductDto, 'affiliateFee', 65000],
     [
       'UpdateAdminSettingsDto',
       UpdateAdminSettingsDto,

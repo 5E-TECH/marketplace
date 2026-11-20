@@ -25,13 +25,11 @@ export class SearchIndexService {
     }
     const document = this.documents.create({
       productId: event.productId,
-      shopId: event.shopId,
       categoryId: event.categoryId,
       title: event.title,
       content: event.content,
       slug: event.slug,
       imageUrl: event.imageUrl,
-      shopName: event.shopName,
       price: event.price,
       attributes: event.attributes,
     });
@@ -89,9 +87,9 @@ export class SearchIndexService {
     ]);
     const listParams = [...params, limit, (page - 1) * limit];
     const items = await this.dataSource.query(
-      `SELECT d.product_id AS "productId", d.shop_id AS "shopId",
+      `SELECT d.product_id AS "productId",
               d.category_id AS "categoryId", d.slug, d.title,
-              d.shop_name AS "shopName", d.price, d.image_url AS "imageUrl",
+              d.price, d.image_url AS "imageUrl",
               d.attributes,
               ts_rank(to_tsvector('simple', d.title || ' ' || COALESCE(d.content, '')),
                       websearch_to_tsquery('simple', $1)) AS relevance
@@ -106,7 +104,6 @@ export class SearchIndexService {
       items: items.map((item: Record<string, unknown>) => ({
         ...item,
         productId: String(item.productId),
-        shopId: String(item.shopId),
         categoryId: item.categoryId == null ? null : String(item.categoryId),
         price: moneyFromDb(item.price as string),
         relevance: Number(item.relevance),

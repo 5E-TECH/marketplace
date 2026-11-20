@@ -14,7 +14,6 @@ import { moneyTransformer } from '@app/common';
 export class SearchDocument {
   @PrimaryGeneratedColumn({ type: 'bigint' }) id: string;
   @Column({ name: 'product_id', type: 'bigint' }) productId: string;
-  @Column({ name: 'shop_id', type: 'bigint' }) shopId: string;
   @Column({ name: 'category_id', type: 'bigint', nullable: true })
   categoryId: string | null;
   @Column({ type: 'varchar', length: 255 }) title: string;
@@ -22,7 +21,6 @@ export class SearchDocument {
   @Column({ type: 'varchar', length: 255 }) slug: string;
   @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })
   imageUrl: string | null;
-  @Column({ name: 'shop_name', type: 'varchar', length: 255 }) shopName: string;
   @Column({
     type: 'bigint',
     transformer: moneyTransformer,

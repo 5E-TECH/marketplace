@@ -33,28 +33,25 @@ describe('AdminProductsController (C4.5)', () => {
     );
   });
 
-  it('tanlangan shop uchun mahsulot yaratadi va admin harakatini audit qiladi', async () => {
+  it('BE-07: optovik uchun mahsulot yaratadi va admin harakatini audit qiladi', async () => {
     const { controller, catalog, identity } = setup();
     const admin = { sub: '7', role: Role.ADMIN } as never;
     const body = {
-      shopId: '9',
+      wholesalerId: '9',
       name: 'Telefon',
-      price: 1200000,
       imageUrl: 'https://cdn.example.com/telefon.jpg',
+      basePrice: 140000,
+      weightGrams: 450,
+      lengthMm: 200,
+      widthMm: 120,
+      heightMm: 80,
     };
 
     await controller.create(body, admin, '1.2.3.4');
 
     expect(catalog).toHaveBeenCalledWith(
       { cmd: 'catalog.product.admin-create' },
-      {
-        shopId: '9',
-        dto: {
-          name: 'Telefon',
-          price: 1200000,
-          imageUrl: 'https://cdn.example.com/telefon.jpg',
-        },
-      },
+      { dto: body },
     );
     expect(identity).toHaveBeenCalledWith(
       { cmd: 'identity.audit.log' },
@@ -63,7 +60,7 @@ describe('AdminProductsController (C4.5)', () => {
         action: 'product.create',
         entityType: 'Product',
         entityId: '10',
-        meta: { shopId: '9', ip: '1.2.3.4' },
+        meta: { wholesalerId: '9', ip: '1.2.3.4' },
       }),
     );
   });

@@ -108,3 +108,5 @@ export * from './dto/lead-report.dto';
 
 // BE-04: migratsiya CLI va servis bazasi ta’rifi
 export * from './database/migrate-cli';
+// BE-07: optovik (admin kiritadi)
+export * from './dto/wholesaler.dto';
