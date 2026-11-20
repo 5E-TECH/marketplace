@@ -17,7 +17,7 @@ import * as amqp from 'amqplib';
 import { firstValueFrom } from 'rxjs';
 import { RpcHttpExceptionFilter } from '../filters/rpc-http-exception.filter';
 import { rmqServer } from './reliable-rmq.server';
-import { deadLetterQueue, rmqOptions } from './rmq.util';
+import { deadLetterQueue, retryQueue, rmqOptions } from './rmq.util';
 
 const url = process.env.TEST_RABBITMQ_URL;
 const describeWithRabbit = url ? describe : describe.skip;
@@ -79,7 +79,7 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
 
   beforeAll(async () => {
     app = await NestFactory.createMicroservice(ProbeModule, {
-      ...rmqServer([url!], queue),
+      ...rmqServer([url!], queue, { retryDelayMs: 200 }),
       logger: false,
     });
     await app.listen();
@@ -95,6 +95,7 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
     if (channel) {
       await channel.deleteQueue(queue).catch(() => undefined);
       await channel.deleteQueue(dlq).catch(() => undefined);
+      await channel.deleteQueue(retryQueue(queue)).catch(() => undefined);
       await channel.close().catch(() => undefined);
     }
     await connection?.close().catch(() => undefined);
@@ -126,12 +127,13 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
     expect(await ready(queue)).toBe(0);
   });
 
-  it('TC1: handler xato tashlaydi — bir marta qayta urinadi, keyin DLQ da (navbatdan yo‘qolmaydi)', async () => {
+  it('TC1: handler xato tashlaydi — kechiktirib 3 marta urinadi, keyin DLQ da (navbatdan yo‘qolmaydi)', async () => {
     await firstValueFrom(client.emit('probe.fail', { orderId: '7' }), {
       defaultValue: undefined,
     });
     await waitFor(async () => (await ready(dlq)) === 1);
-    expect(calls.fail).toBe(2);
+    expect(await ready(retryQueue(queue))).toBe(0);
+    expect(calls.fail).toBe(3);
     expect(await ready(queue)).toBe(0);
 
     const dead = await channel.get(dlq, { noAck: false });
@@ -143,6 +145,7 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
       pattern: 'probe.fail',
       data: { orderId: '7' },
     });
+    expect(message.properties.headers?.['x-elchi-attempt']).toBe(2);
     expect(message.properties.headers?.['x-death']?.[0]).toMatchObject({
       queue,
       reason: 'rejected',
@@ -150,11 +153,13 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
     channel.nack(message, false, true); // DLQ da qolsin
   });
 
-  it('handleri yo‘q hodisa — DLQ ga (jim yo‘qolmaydi)', async () => {
+  it('handleri yo‘q hodisa — avvalgidek logda va tasdiqlanadi (DLQ ni to‘ldirmaydi)', async () => {
     await firstValueFrom(client.emit('probe.unknown', {}), {
       defaultValue: undefined,
     });
-    await waitFor(async () => (await ready(dlq)) === 2);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await ready(queue)).toBe(0);
+    expect(await ready(dlq)).toBe(1);
   });
 
   it('so‘rov: javob qaytadi; xato javob ham — ikkalasi tasdiqlanadi, DLQ ga tushmaydi', async () => {
@@ -167,13 +172,13 @@ describeWithRabbit('BE-02 ishonchli RabbitMQ (haqiqiy broker)', () => {
     expect(calls.boom).toBe(1);
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(await ready(queue)).toBe(0);
-    expect(await ready(dlq)).toBe(2);
+    expect(await ready(dlq)).toBe(1);
   });
 
   it('iste’molchi to‘xtaganda tasdiqlanmagan xabar qolmagan (hammasi ack yoki DLQ)', async () => {
     await app.close();
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(await ready(queue)).toBe(0);
-    expect(calls).toMatchObject({ ok: 1, fail: 2, boom: 1 });
+    expect(calls).toMatchObject({ ok: 1, fail: 3, boom: 1 });
   });
 });

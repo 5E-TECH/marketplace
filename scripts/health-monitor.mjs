@@ -26,6 +26,9 @@ const requiredQueues = [
 
 let failures = 0;
 let alertOpen = false;
+// BE-02: DLQ ogohlantirishi alohida — u ochiq turganda API yoki consumer uzilishi ogohlantirishi bosilmasin
+let deadLetterAlertOpen = false;
+let deadLetterDetail = '';
 
 function positiveInt(value, fallback) {
   const number = Number(value);
@@ -43,7 +46,7 @@ async function fetchOk(url, options = {}) {
 }
 
 async function checkRabbitMq() {
-  if (!rabbitUrl) return;
+  if (!rabbitUrl) return [];
   const user = process.env.RABBITMQ_USER ?? 'guest';
   const password = process.env.RABBITMQ_PASSWORD ?? 'guest';
   const auth = Buffer.from(`${user}:${password}`).toString('base64');
@@ -56,11 +59,10 @@ async function checkRabbitMq() {
   );
   const down = requiredQueues.filter((name) => !consumers.get(name));
   if (down.length) throw new Error(`consumer yo'q: ${down.join(', ')}`);
-  // BE-02: ishlanmagan xabar DLQ ga tushadi — ko'rib chiqilmaguncha ogohlantirish
-  const dead = queues
+  // BE-02: ishlanmagan xabar DLQ ga tushadi — sog'liqdan alohida qaytariladi
+  return queues
     .filter((queue) => queue.name.endsWith('.dlq') && queue.messages > 0)
     .map((queue) => `${queue.name} (${queue.messages})`);
-  if (dead.length) throw new Error(`DLQ da xabar bor: ${dead.join(', ')}`);
 }
 
 async function notify(status, detail) {
@@ -72,7 +74,8 @@ async function notify(status, detail) {
   };
   console.log(
     JSON.stringify({
-      level: status === 'resolved' ? 'info' : 'error',
+      level:
+        status === 'resolved' || status === 'dlq_resolved' ? 'info' : 'error',
       ...payload,
     }),
   );
@@ -92,18 +95,48 @@ async function notify(status, detail) {
   );
 }
 
+/** API va consumerlar sog'ligi; yiqilsa xato. Natija — xabari bor DLQ lar (alohida ogohlantirish). */
 export async function checkOnce() {
   await fetchOk(apiUrl);
-  await checkRabbitMq();
+  return checkRabbitMq();
+}
+
+/** BE-02: DLQ da xabar paydo bo'lsa — `dlq_firing`, bo'shasa — `dlq_resolved` (asosiy ogohlantirishdan mustaqil). */
+async function checkDeadLetters(deadLetters) {
+  const detail = deadLetters.length
+    ? `DLQ da xabar bor: ${deadLetters.join(', ')}`
+    : '';
+  const status = detail ? 'dlq_firing' : 'dlq_resolved';
+  if (
+    detail
+      ? deadLetterAlertOpen && detail === deadLetterDetail
+      : !deadLetterAlertOpen
+  )
+    return;
+  try {
+    await notify(status, detail || "DLQ lar bo'sh");
+    deadLetterAlertOpen = Boolean(detail);
+    deadLetterDetail = detail;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        status: 'alert_failed',
+        detail: String(error),
+      }),
+    );
+  }
 }
 
 export async function tick() {
   let healthError;
+  let deadLetters = null;
   try {
-    await checkOnce();
+    deadLetters = await checkOnce();
   } catch (error) {
     healthError = error;
   }
+  if (deadLetters) await checkDeadLetters(deadLetters);
   if (healthError) {
     failures += 1;
     const detail =

@@ -80,7 +80,9 @@ export type RemittanceMatch = 'PENDING' | 'MATCHED' | 'PARTIAL' | 'MISMATCH';
  * qulfi ostida o'zgaradi; qulflar hisob ID si bo'yicha tartiblangan.
  *
  * Xato hodisa (noto'g'ri summa, yetishmagan maydon) `event_failure` ga
- * yoziladi: RMQ hozir noAck (BE-02 gacha), tashlangan xato hodisani yo'qotardi.
+ * yoziladi va tasdiqlanadi — qayta urinish foydasiz. Kutilmagan xato (baza
+ * uzilishi) ham yoziladi, lekin qayta tashlanadi: RabbitMQ uni kechiktirib
+ * qayta yetkazadi, oxirida DLQ (BE-02).
  */
 @Injectable()
 export class LedgerService {
@@ -205,7 +207,8 @@ export class LedgerService {
   /**
    * Hodisani bir marta ishlaydi; kutilgan xato (SplitError) — event_failure
    * qatori, hodisa belgisi yoziladi (qayta urinish foydasiz). Kutilmagan xato
-   * ham event_failure ga tushadi, lekin belgi rollback bo'ladi.
+   * ham event_failure ga tushadi, belgi rollback bo'ladi va xato qayta
+   * tashlanadi — RabbitMQ qayta yetkazadi (BE-02).
    */
   private async guard(
     consumer: string,
@@ -245,6 +248,7 @@ export class LedgerService {
         this.logger.error(
           `${consumer} ${event.eventId}: ${(error as Error).message}`,
         );
+        throw error; // BE-02: kechiktirilgan qayta urinish, oxirida DLQ
       }
     }
   }

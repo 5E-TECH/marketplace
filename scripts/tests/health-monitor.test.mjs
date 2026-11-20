@@ -64,9 +64,11 @@ test('consumer outage retries failed alerts, deduplicates and retries recovery',
   assert.ok(logs.some((row) => row.detail?.includes('catalog_queue_v2')));
 });
 
-test("BE-02: DLQ da xabar bo'lsa — sog'liq tekshiruvi yiqiladi", async (t) => {
+test('BE-02: DLQ ogohlantirishi alohida — asosiy ogohlantirishni bosmaydi', async (t) => {
+  process.env.MONITOR_FAILURE_THRESHOLD = '1';
   process.env.RABBITMQ_MANAGEMENT_URL = 'http://rabbit.test';
   process.env.MONITOR_API_URL = 'http://monitor.test/health';
+  process.env.ALERT_WEBHOOK_URL = 'http://alerts.test';
   const names = [
     'echo',
     'identity',
@@ -82,14 +84,20 @@ test("BE-02: DLQ da xabar bo'lsa — sog'liq tekshiruvi yiqiladi", async (t) => 
     'lead',
   ];
   let deadLetters = 2;
-  t.mock.method(globalThis, 'fetch', async (url) => {
+  let catalogDown = false;
+  const sent = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === process.env.ALERT_WEBHOOK_URL) {
+      sent.push(JSON.parse(options.body).status);
+      return { ok: true, status: 200 };
+    }
     if (url.includes('/api/queues/'))
       return {
         ok: true,
         json: async () => [
           ...names.map((name) => ({
             name: `${name}_queue_v2`,
-            consumers: 1,
+            consumers: catalogDown && name === 'catalog' ? 0 : 1,
             messages: 0,
           })),
           { name: 'lead_queue_v2.dlq', consumers: 0, messages: deadLetters },
@@ -97,11 +105,17 @@ test("BE-02: DLQ da xabar bo'lsa — sog'liq tekshiruvi yiqiladi", async (t) => 
       };
     return { ok: true };
   });
-  const { checkOnce } = await import('../health-monitor.mjs');
-  await assert.rejects(
-    checkOnce(),
-    /DLQ da xabar bor: lead_queue_v2\.dlq \(2\)/,
-  );
+  t.mock.method(console, 'log', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  const { tick } = await import(`../health-monitor.mjs?dlq=${Date.now()}`);
+  await tick();
+  assert.deepEqual(sent, ['dlq_firing']);
+  await tick(); // takror emas
+  catalogDown = true;
+  await tick(); // DLQ ochiq bo'lsa ham consumer uzilishi ogohlantiriladi
+  assert.deepEqual(sent, ['dlq_firing', 'firing']);
+  catalogDown = false;
   deadLetters = 0;
-  await checkOnce();
+  await tick();
+  assert.deepEqual(sent, ['dlq_firing', 'firing', 'dlq_resolved', 'resolved']);
 });

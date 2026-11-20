@@ -6,7 +6,9 @@
  *   RABBITMQ_URL=amqp://... node scripts/rmq-migrate-v2.mjs           # faqat ko‘rsatadi
  *   RABBITMQ_URL=amqp://... node scripts/rmq-migrate-v2.mjs --apply   # ko‘chiradi va o‘chiradi
  *
- * Eski navbatni hali eski servis tinglayotgan bo‘lsa, o‘chirilmaydi (`ifUnused`) — avval eski servislar to‘xtasin.
+ * Faqat HAMMA eski konteynerlar to‘xtagandan keyin ishga tushiring: eski navbat o‘chirilgach eski versiyadagi
+ * yuboruvchi xabarni yo‘qqa yuborardi. Eski navbatni hali tinglayotgan bo‘lsa, o‘chirilmaydi (`ifUnused`).
+ * Eski RPC so‘rovlari (javob kutgan chaqiruvchi allaqachon yo‘q) ko‘chirilmaydi — tashlanadi va sanaladi.
  */
 import amqp from 'amqplib';
 
@@ -31,12 +33,13 @@ if (!url) {
   process.exit(2);
 }
 
-/** libs/common/src/messaging/rmq.util.ts `rmqQueueOptions` bilan bir xil. */
+/** libs/common/src/messaging/rmq.util.ts bilan bir xil (argumentlar farq qilsa RabbitMQ PRECONDITION_FAILED beradi). */
 const queueOptions = (queue) => ({
   durable: true,
   deadLetterExchange: '',
   deadLetterRoutingKey: `${queue}.dlq`,
 });
+const DLQ_OPTIONS = { durable: true, messageTtl: 14 * 24 * 60 * 60 * 1000 };
 
 async function messageCount(connection, queue) {
   const channel = await connection.createChannel();
@@ -64,23 +67,33 @@ try {
       `${old}: ${count} ta xabar → ${next}${apply ? '' : ' (faqat ko‘rsatildi)'}`,
     );
     if (!apply) continue;
-    const channel = await connection.createChannel();
+    // tasdiqli kanal: eski navbatdan faqat broker nusxani qabul qilgach o‘chiriladi
+    const channel = await connection.createConfirmChannel();
     try {
       await channel.assertQueue(next, queueOptions(next));
-      await channel.assertQueue(`${next}.dlq`, { durable: true });
+      await channel.assertQueue(`${next}.dlq`, DLQ_OPTIONS);
       let moved = 0;
+      let dropped = 0;
       for (;;) {
         const message = await channel.get(old, { noAck: false });
         if (!message) break;
+        if (message.properties.replyTo) {
+          channel.ack(message); // eskirgan RPC so‘rovi
+          dropped++;
+          continue;
+        }
         channel.sendToQueue(next, message.content, {
           ...message.properties,
           persistent: true,
         });
+        await channel.waitForConfirms();
         channel.ack(message);
         moved++;
       }
       await channel.deleteQueue(old, { ifUnused: true, ifEmpty: true });
-      console.log(`${old}: ${moved} ta ko‘chirildi, navbat o‘chirildi`);
+      console.log(
+        `${old}: ${moved} ta hodisa ko‘chirildi, ${dropped} ta eski RPC so‘rovi tashlandi, navbat o‘chirildi`,
+      );
     } catch (error) {
       failed = true;
       console.error(
