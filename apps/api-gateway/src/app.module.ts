@@ -20,26 +20,20 @@ import { AuthController } from './auth/auth.controller';
 import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
 import { ProductsController } from './products/products.controller';
-import { PublicProductsController } from './products/public-products.controller';
 import { ProductVariantsController } from './products/product-variants.controller';
 import { FilesController } from './files/files.controller';
 import { SellerOrdersController } from './sellers/seller-orders.controller';
 import { NotificationsController } from './notifications/notifications.controller';
-import { StorefrontController } from './storefront/storefront.controller';
-import { SearchController } from './search/search.controller';
 import { AdminShopsController } from './shops/admin-shops.controller';
 import { AdminDashboardController } from './admin/admin-dashboard.controller';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { AdminOrdersController } from './admin/admin-orders.controller';
 import { CartController } from './cart/cart.controller';
-import { CheckoutController } from './cart/checkout.controller';
 import { PaymentsController } from './payments/payments.controller';
 import { SupportController } from './support/support.controller';
 import { FavoritesController } from './favorites/favorites.controller';
-import { GuestController } from './guest/guest.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
-import { ReviewsController } from './storefront/reviews.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminWholesalersController } from './admin/admin-wholesalers.controller';
 import { AdminPricingController } from './admin/admin-pricing.controller';
@@ -65,6 +59,7 @@ import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdraw
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
+import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
 import { AdminFraudController } from './leads/admin-fraud.controller';
 import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
@@ -177,26 +172,20 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     SellersController,
     CategoriesController,
     ProductsController,
-    PublicProductsController,
     ProductVariantsController,
     FilesController,
     SellerOrdersController,
     NotificationsController,
-    StorefrontController,
-    SearchController,
     AdminShopsController,
     AdminDashboardController,
     AdminUsersController,
     AdminOrdersController,
     CartController,
-    CheckoutController,
     PaymentsController,
     SupportController,
     FavoritesController,
-    GuestController,
     ElchiWebhookController,
     AdminFinanceController,
-    ReviewsController,
     AdminProductsController,
     AdminWholesalersController,
     AdminPricingController,
@@ -222,6 +211,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
     OperatorLeadsController,
+    OperatorOrdersController,
     AdminLeadsController,
     AdminOfferContentController,
     SupervisorLeadsController,
