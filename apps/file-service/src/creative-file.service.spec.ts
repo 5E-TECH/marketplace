@@ -52,10 +52,16 @@ describe('CreativeFileService (BE-08)', () => {
   const uuid = '7b0c3e1a-1111-4222-8333-944455556666';
   const uploadKey = `creative-uploads/12/${uuid}.png`;
   const finalKey = `creatives/12/${uuid}.png`;
-  const png = () =>
-    Readable.from([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]),
-    ]);
+  /** getPartialObject javobi kabi: baytlar va HTTP sarlavhalari (ETag qo‘shtirnoq bilan). */
+  const withEtag = (stream: Readable, etag = 'e1') =>
+    Object.assign(stream, { headers: { etag: `"${etag}"` } });
+  const png = (etag = 'e1') =>
+    withEtag(
+      Readable.from([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]),
+      ]),
+      etag,
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -138,7 +144,7 @@ describe('CreativeFileService (BE-08)', () => {
       metaData: { 'content-type': 'video/mp4' },
     });
     minio.getPartialObject.mockResolvedValue(
-      Readable.from([Buffer.from('<html><script>…</script>')]),
+      withEtag(Readable.from([Buffer.from('<html><script>…</script>')])),
     );
     const key = `creative-uploads/12/${uuid}.mp4`;
     await expect(
@@ -194,6 +200,32 @@ describe('CreativeFileService (BE-08)', () => {
       make().verify({ productId: '12', objectKey: uploadKey }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(minio.removeObject).not.toHaveBeenCalled();
+  });
+
+  it('baytlar o‘qilayotganda fayl almashtirildi (o‘qilgan ETag stat dagidan boshqa) — 409, ko‘chirilmaydi', async () => {
+    minio.statObject.mockResolvedValue({
+      size: 2048,
+      etag: 'e1',
+      metaData: { 'content-type': 'image/png' },
+    });
+    minio.getPartialObject.mockResolvedValue(png('e2'));
+    await expect(
+      make().verify({ productId: '12', objectKey: uploadKey }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(minio.copyObject).not.toHaveBeenCalled();
+  });
+
+  it('imzolovchi kalitning faqat bittasi berilgan — ishga tushmaydi (jim root kalitiga qaytmaydi)', () => {
+    const half = {
+      ...config,
+      get: (key: string, fallback?: unknown) =>
+        ({ MINIO_USE_SSL: false, CREATIVE_UPLOAD_ACCESS_KEY: 'uploader' })[
+          key
+        ] ?? fallback,
+    };
+    expect(() => new CreativeFileService(half as never)).toThrow(
+      'birga beriladi',
+    );
   });
 
   it('MinIO ishlamasa — 503 («topilmadi» emas), fayl o‘chirilmaydi', async () => {

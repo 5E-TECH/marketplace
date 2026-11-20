@@ -87,6 +87,11 @@ export class CreativeFileService implements OnApplicationBootstrap {
     });
     const uploadAccessKey = config.get<string>('CREATIVE_UPLOAD_ACCESS_KEY');
     const uploadSecretKey = config.get<string>('CREATIVE_UPLOAD_SECRET_KEY');
+    // bittasi berilgan bo‘lsa jim root kalitiga qaytmasin
+    if (!uploadAccessKey !== !uploadSecretKey)
+      throw new Error(
+        'CREATIVE_UPLOAD_ACCESS_KEY va CREATIVE_UPLOAD_SECRET_KEY birga beriladi (yoki ikkalasi bo‘sh)',
+      );
     this.signer =
       uploadAccessKey && uploadSecretKey
         ? new Client({
@@ -203,8 +208,10 @@ export class CreativeFileService implements OnApplicationBootstrap {
     let signatureOk: boolean;
     try {
       signatureOk =
-        !!type && (await this.signatureMatches(uploadKey, mimeType));
+        !!type &&
+        (await this.signatureMatches(uploadKey, mimeType, upload.etag));
     } catch (error) {
+      if (error instanceof ConflictException) throw error;
       // parallel tasdiq yuklamani ko‘chirib o‘chirib ulgurgan
       if (this.isMissing(error)) return this.alreadyCopied(finalKey);
       throw this.unavailable('o‘qish', error);
@@ -370,10 +377,23 @@ export class CreativeFileService implements OnApplicationBootstrap {
   private async signatureMatches(
     objectKey: string,
     mimeType: string,
+    etag: string,
   ): Promise<boolean> {
-    const head = await readAll(
-      await this.client.getPartialObject(this.bucket, objectKey, 0, 16),
+    const stream = await this.client.getPartialObject(
+      this.bucket,
+      objectKey,
+      0,
+      16,
     );
+    const head = await readAll(stream);
+    // o‘qilgan baytlar stat dagi (keyin ko‘chiriladigan) versiyaniki bo‘lsin — oraliqda imzo bilan almashtirilmagan
+    const readEtag = (
+      stream as Readable & { headers?: Record<string, unknown> }
+    ).headers?.etag;
+    if (unquote(readEtag) !== unquote(etag))
+      throw new ConflictException(
+        'Fayl tekshiruv paytida o‘zgardi — qayta tasdiqlang',
+      );
     if (mimeType === 'video/mp4')
       return head.length >= 8 && head.toString('ascii', 4, 8) === 'ftyp';
     if (mimeType === 'video/webm')
@@ -403,6 +423,10 @@ export class CreativeFileService implements OnApplicationBootstrap {
       );
     return false;
   }
+}
+
+function unquote(etag: unknown): string {
+  return String(etag ?? '').replace(/"/g, '');
 }
 
 async function readAll(stream: Readable): Promise<Buffer> {
