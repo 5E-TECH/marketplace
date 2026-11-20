@@ -10,14 +10,12 @@ function makeController(send: jest.Mock) {
 }
 
 describe('AdminOrdersController (C1.30/C6.4)', () => {
-  it('TC4: list/get faqat ADMIN/SUPERADMIN (@Roles)', () => {
-    for (const m of [
-      'list',
-      'get',
-      'label',
-      'sellerOrderLabel',
-      'labelsBatch',
-    ] as const) {
+  it('TC4: list/get — ADMIN, SUPERADMIN va nazoratchi (BE-18 TC12); yorliq — faqat ADMIN/SUPERADMIN', () => {
+    for (const m of ['list', 'get'] as const)
+      expect(
+        Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype[m]),
+      ).toEqual([Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN]);
+    for (const m of ['label', 'sellerOrderLabel', 'labelsBatch'] as const) {
       expect(
         Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype[m]),
       ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
@@ -114,10 +112,10 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
     );
   });
 
-  it('C6.4: cancel ADMIN/SUPERADMIN, refund faqat SUPERADMIN', () => {
+  it('C6.4: cancel ADMIN/SUPERADMIN (BE-18: nazoratchi ham), refund faqat SUPERADMIN', () => {
     expect(
       Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype.cancel),
-    ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+    ).toEqual([Role.ADMIN, Role.SUPERVISOR, Role.SUPERADMIN]);
     expect(
       Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype.refund),
     ).toEqual([Role.SUPERADMIN]);

@@ -2,7 +2,7 @@ import { CheckoutDeliveryDestination } from './cart.dto';
 
 /**
  * Buyurtma hodisalari (BE-20) [taklif]. `order.status.changed` ni checkout
- * yuboradi (BE-18, Dilshod); `elchi.parcel.*` ni elchi-integration (BE-20)
+ * yuboradi (BE-18); `elchi.parcel.*` ni elchi-integration (BE-20)
  * checkout ga qaytaradi (BE-19 yozadi). TZ T5 «Hodisalar» jadvali
  * (02-texnik-qism.md:112); maydonlar ro'yxati — BE-25 kartasi
  * («order.status.changed ning to‘liq maydonlari — iste’molchilar checkout
@@ -119,7 +119,12 @@ export interface OrderStatusChangedEvent {
    * Yetkazish rejimi (TZ T4: alohida / qisman / bepul) va mijozga ko'rsatilgan
    * yetkazish summasi (Elchi ga to'liq ketadi, ledgerga yozilmaydi — 5-qaror).
    */
-  delivery: { mode: 'SEPARATE' | 'PARTIAL' | 'FREE'; cost: number };
+  delivery: {
+    mode: 'SEPARATE' | 'PARTIAL' | 'FREE';
+    cost: number;
+    /** Elchi tarifi jami og‘irlik bo‘yicha (BE-18, NRX-10; BE-22 taklifi) — platforma Elchi’ga to‘laydi. */
+    elchiTariff?: number;
+  };
   /** Kuryer mijozdan oladigan summa, butun so'm (BE-01). */
   codAmount: number;
   /**

@@ -10,8 +10,20 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
     } = {},
   ) {
     const sellers = [
-      { id: '11', shop_id: '101', subtotal: '200', elchi_shipment_id: null },
-      { id: '12', shop_id: '102', subtotal: '300', elchi_shipment_id: null },
+      {
+        id: '11',
+        shop_id: '101',
+        subtotal: '200',
+        delivery_fee: '30',
+        elchi_shipment_id: null,
+      },
+      {
+        id: '12',
+        shop_id: '102',
+        subtotal: '300',
+        delivery_fee: '0',
+        elchi_shipment_id: null,
+      },
     ];
     const queries: Array<{ sql: string; params: unknown[] }> = [];
     const manager = {
@@ -99,7 +111,8 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       { cmd: 'integration.shipment.create' },
       expect.objectContaining({
         external_order_id: '11',
-        cod_amount: 200,
+        // BE-18 (T9-5): yagona COD — tovarlar + yetkazish (avval yetkazishsiz 200 ketardi)
+        cod_amount: 230,
         elchi_market_id: 'market-101',
       }),
     );

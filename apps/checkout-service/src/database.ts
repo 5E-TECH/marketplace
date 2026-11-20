@@ -11,6 +11,7 @@ import { AddSellerOrderToBePaid1726588800000 } from './migrations/1726588800000-
 import { CreateReturnRequests1727481600000 } from './migrations/1727481600000-create-return-requests';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { CreateCheckoutOutbox1795305600000 } from './migrations/1795305600000-create-checkout-outbox';
+import { LeadOrder1796342400000 } from './migrations/1796342400000-lead-order';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { OutboxEvent } from '@app/common';
@@ -35,5 +36,6 @@ export const CHECKOUT_DB: DatabaseDefinition = {
     CreateReturnRequests1727481600000,
     MoneyToBigint1795219200000,
     CreateCheckoutOutbox1795305600000,
+    LeadOrder1796342400000,
   ],
 };

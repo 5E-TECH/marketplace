@@ -228,6 +228,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "POST /operator/leads/:id/quote",
     "POST /operator/leads/:id/result",
     "POST /operator/leads/next",
+    "POST /operator/orders/:id/cancel",
     "POST /supervisor/leads/:id/transfer",
     "POST /support/tickets",
     "POST /support/tickets/:id/messages",

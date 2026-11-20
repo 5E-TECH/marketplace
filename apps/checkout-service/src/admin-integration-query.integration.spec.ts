@@ -15,6 +15,8 @@ import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
+/** lead-order.integration.spec.ts bilan bir xil: checkout sxemasini DROP/CREATE qiladigan spec’lar ketma-ket (BE-18). */
+const CHECKOUT_SCHEMA_TEST_LOCK = 2_304_006;
 
 type ShipmentRow = { id: string; orderStatus: string };
 
@@ -26,6 +28,7 @@ type ShipmentRow = { id: string; orderStatus: string };
 describeWithPostgres('AdminIntegrationQueryService PostgreSQL (C6.7)', () => {
   let dataSource: DataSource;
   let service: AdminIntegrationQueryService;
+  let lock: Client | undefined;
 
   beforeAll(async () => {
     const databaseUrl = new URL(testDatabaseUrl!);
@@ -34,11 +37,13 @@ describeWithPostgres('AdminIntegrationQueryService PostgreSQL (C6.7)', () => {
         'TEST_DATABASE_URL faqat nomida "test" bor alohida bazaga ishora qilishi kerak',
       );
     }
-    const admin = new Client({ connectionString: testDatabaseUrl });
-    await admin.connect();
-    await admin.query('DROP SCHEMA IF EXISTS checkout CASCADE');
-    await admin.query('CREATE SCHEMA checkout');
-    await admin.end();
+    lock = new Client({ connectionString: testDatabaseUrl });
+    await lock.connect();
+    await lock.query('SELECT pg_advisory_lock($1)', [
+      CHECKOUT_SCHEMA_TEST_LOCK,
+    ]);
+    await lock.query('DROP SCHEMA IF EXISTS checkout CASCADE');
+    await lock.query('CREATE SCHEMA checkout');
 
     dataSource = new DataSource({
       type: 'postgres',
@@ -80,6 +85,7 @@ describeWithPostgres('AdminIntegrationQueryService PostgreSQL (C6.7)', () => {
 
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
+    await lock?.end();
   });
 
   it('filtrsiz (all) so‘rov ishlaydi va hammasini qaytaradi', async () => {

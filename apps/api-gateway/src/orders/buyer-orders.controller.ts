@@ -1,10 +1,8 @@
 import {
-  Body,
   Controller,
   Get,
   Inject,
   Param,
-  Post,
   Query,
   Req,
   UnauthorizedException,
@@ -12,24 +10,20 @@ import {
 import type { Request } from 'express';
 import { ClientProxy } from '@nestjs/microservices';
 import {
-  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiHeader,
   ApiOkResponse,
   ApiOperation,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import {
   BuyerOrderDetailsDto,
-  BuyerOrderRefundDto,
   BuyerOrdersPageDto,
   BuyerOrdersQueryDto,
   BuyerOrderTrackingDto,
   JwtUser,
   legacyBuyer,
   LegacyRole,
-  OrderActionResultDto,
   Public,
   RmqClient,
   Roles,
@@ -109,38 +103,7 @@ export class BuyerOrdersController {
     );
   }
 
-  @Post(':orderId/refund')
-  @Public()
-  @ApiBearerAuth()
-  @ApiHeader({
-    name: 'X-Session-Id',
-    required: false,
-    description: 'Guest checkoutda ishlatilgan session identifikatori',
-  })
-  @ApiOperation({
-    summary: 'Xaridor buyurtmasini qaytarish (to‘lanmagan bo‘lsa — bekor)',
-    description:
-      'To‘lanmagan buyurtma bekor qilinadi va rezerv bo‘shaydi; to‘langan, ' +
-      'lekin posilka hali chiqmagan buyurtma to‘liq refund qilinadi. ' +
-      'Posilka yo‘lga chiqqan bo‘lsa 400 qaytadi.',
-    security: [{ bearer: [] }, {}],
-  })
-  @ApiResponse({ status: 201, type: OrderActionResultDto })
-  @ApiBadRequestResponse({
-    description: 'Buyurtma holati o‘z-o‘ziga qaytarishga yo‘l qo‘ymaydi',
-  })
-  refund(
-    @Req() request: Request & { user?: JwtUser },
-    @Param('orderId') orderId: string,
-    @Body() dto: BuyerOrderRefundDto,
-  ) {
-    const owner = this.owner(request);
-    return sendRpc(
-      this.checkout,
-      { cmd: 'checkout.order.refund' },
-      { orderId, reason: dto.reason ?? '', ...owner },
-    );
-  }
+  // BE-18: `POST /orders/:orderId/refund` yopildi (404) — buyurtmani operator yoki admin bekor qiladi (BUY-3).
 
   private owner(request: Request & { user?: JwtUser }) {
     const sessionHeader = request.headers['x-session-id'];

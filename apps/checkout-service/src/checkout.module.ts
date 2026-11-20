@@ -33,6 +33,9 @@ import { ReturnRequestService } from './return-request.service';
 import { ReturnRequestQueryService } from './return-request-query.service';
 import { ReturnRefundService } from './return-refund.service';
 import { ReturnNotifierService } from './return-notifier.service';
+import { LeadOrderController } from './lead-order.controller';
+import { LeadOrderService } from './lead-order.service';
+import { LeadOrderStatusService } from './lead-order-status.service';
 
 @Module({
   imports: [
@@ -88,6 +91,13 @@ import { ReturnNotifierService } from './return-notifier.service';
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.FINANCE),
       },
+      // BE-18: order.status.changed va order.create-failed lid servisiga
+      {
+        name: RmqClient.LEAD,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.LEAD),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -108,6 +118,7 @@ import { ReturnNotifierService } from './return-notifier.service';
     CartController,
     CheckoutController,
     ReturnRequestsController,
+    LeadOrderController,
   ],
   providers: [
     SellerOrdersService,
@@ -124,6 +135,8 @@ import { ReturnNotifierService } from './return-notifier.service';
     ReturnNotifierService,
     OutboxService,
     CheckoutOutboxRelayService,
+    LeadOrderService,
+    LeadOrderStatusService,
   ],
 })
 export class CheckoutModule {}

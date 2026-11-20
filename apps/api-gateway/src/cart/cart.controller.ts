@@ -116,22 +116,7 @@ export class CartController {
     );
   }
 
-  @Post('merge')
-  @ApiOperation({ summary: 'Anon savatni login qilgan user savatiga qo‘shish' })
-  @ApiOkResponse({ type: CartDto })
-  merge(
-    @CurrentUser() user: JwtUser | undefined,
-    @Headers('x-session-id') sessionId?: string,
-  ) {
-    return sendRpc(
-      this.checkout,
-      { cmd: 'cart.merge' },
-      {
-        customerId: legacyBuyer(user)?.sub, // BE-05: faqat eski xaridor
-        sessionId,
-      },
-    );
-  }
+  // BE-18: `POST /cart/merge` yopildi (404) — mijoz foydalanuvchi emas (T01:140), mijoz kabineti 2-bosqichda.
 
   private owner(user?: JwtUser, sessionId?: string): CartOwnerDto {
     const buyer = legacyBuyer(user); // BE-05: sotuvchi/xodim tokeni — mehmon

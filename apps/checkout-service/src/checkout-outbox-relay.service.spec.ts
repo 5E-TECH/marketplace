@@ -23,11 +23,15 @@ describe('CheckoutOutboxRelayService (BE-03)', () => {
       ),
     };
     const finance = { emit: jest.fn(() => of(undefined)) };
+    const lead = { emit: jest.fn(() => of(undefined)) };
+    const integration = { emit: jest.fn(() => of(undefined)) };
     const relay = new CheckoutOutboxRelayService(
       outbox as never,
       finance as never,
+      lead as never,
+      integration as never,
     );
-    return { relay, finance, results };
+    return { relay, finance, lead, integration, results };
   }
 
   it('moliya hodisasini o‘z nomi va payload i bilan finance ga yuboradi', async () => {
@@ -51,5 +55,41 @@ describe('CheckoutOutboxRelayService (BE-03)', () => {
     await expect(relay.relayPending()).resolves.toBe(0);
     expect(finance.emit).not.toHaveBeenCalled();
     expect(results[0]).toBeInstanceOf(OutboxPermanentError);
+  });
+
+  it('BE-18: order.status.changed — moliya, lid va Elchi integratsiyasi navbatlariga (har biriga alohida)', async () => {
+    const payload = { eventId: 'evt_1', orderId: '7', status: 'CONFIRMED' };
+    const { relay, finance, lead, integration } = setup([
+      { id: '3', eventType: 'order.status.changed', payload },
+    ]);
+
+    await expect(relay.relayPending()).resolves.toBe(1);
+    for (const client of [finance, lead, integration])
+      expect(client.emit).toHaveBeenCalledWith('order.status.changed', payload);
+  });
+
+  it('BE-18: order.create-failed — faqat lid servisiga', async () => {
+    const payload = { eventId: 'evt_2', leadId: '9', reason: 'OUT_OF_STOCK' };
+    const { relay, finance, lead, integration } = setup([
+      { id: '4', eventType: 'order.create-failed', payload },
+    ]);
+
+    await expect(relay.relayPending()).resolves.toBe(1);
+    expect(lead.emit).toHaveBeenCalledWith('order.create-failed', payload);
+    expect(finance.emit).not.toHaveBeenCalled();
+    expect(integration.emit).not.toHaveBeenCalled();
+  });
+
+  it('BE-18: bitta navbat yiqilsa hodisa yuborilmagan hisoblanadi (qayta urinish, iste’molchilar takrorni tashlaydi)', async () => {
+    const { relay, lead, results } = setup([
+      { id: '5', eventType: 'order.status.changed', payload: {} },
+    ]);
+    lead.emit.mockImplementation(() => {
+      throw new Error('lid navbati yo‘q');
+    });
+
+    await expect(relay.relayPending()).resolves.toBe(0);
+    expect(results[0]).toBeInstanceOf(Error);
+    expect(results[0]).not.toBeInstanceOf(OutboxPermanentError);
   });
 });

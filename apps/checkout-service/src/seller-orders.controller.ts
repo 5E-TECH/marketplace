@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  LeadOrderActorType,
   RmqClient,
   RpcHttpExceptionFilter,
   SellerOrdersQueryDto,
@@ -19,6 +20,7 @@ import {
   ShippingLabelService,
   SkippedShippingLabel,
 } from './shipping-label.service';
+import { LeadOrderStatusService } from './lead-order-status.service';
 import {
   resolveSellerShopId,
   SellerScope,
@@ -32,6 +34,7 @@ export class SellerOrdersController {
     private readonly orders: SellerOrdersService,
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     private readonly labels: ShippingLabelService,
+    private readonly leadOrders: LeadOrderStatusService,
   ) {}
 
   @MessagePattern({ cmd: 'seller.orders.list' })
@@ -307,9 +310,32 @@ export class SellerOrdersController {
   }
 
   @MessagePattern({ cmd: 'checkout.admin.order-cancel' })
-  adminCancelOrder(
-    @Payload() data: { orderId: string; reason: string; actorId: string },
+  async adminCancelOrder(
+    @Payload()
+    data: {
+      orderId: string;
+      reason: string;
+      actorId: string;
+      actorRole?: string;
+    },
   ) {
+    // BE-18: lid buyurtmasi — Elchi’ga topshirilgunga qadar, sabab bilan, band darhol bo‘shaydi (BUY-3)
+    if (await this.leadOrders.isLeadOrder(String(data?.orderId ?? ''))) {
+      const result = await this.leadOrders.cancel({
+        orderId: String(data.orderId),
+        reason: data.reason,
+        actor: {
+          type: LeadOrderActorType.USER,
+          id: String(data.actorId),
+          role: data.actorRole ?? null,
+        },
+      });
+      return {
+        id: result.id,
+        status: result.status,
+        idempotent: result.idempotent,
+      };
+    }
     return this.orders.adminCancelOrder(data);
   }
 
