@@ -18,6 +18,8 @@ import {
   moneyFromDb,
   RmqClient,
   sendRpc,
+  SettlementSettingsDto,
+  UpdateSettlementSettingsDto,
   WholesalerPaymentDetails,
   returningRows,
   runAsLeader,
@@ -98,6 +100,9 @@ export interface BankFileFormat {
         account: string;
         mfo: string;
       };
+      /** To‘lovchi (platforma) — EQ-05 sozlamasi. */
+      payer: { account: string; mfo: string };
+      purposeCode: string;
     }>,
   ): SettlementFile;
 }
@@ -123,14 +128,14 @@ export const csvBankFile: BankFileFormat = {
       [
         r.number,
         r.date,
-        '',
-        '',
+        r.payer.account,
+        r.payer.mfo,
         r.recipient.name,
         r.recipient.tin,
         r.recipient.account,
         r.recipient.mfo,
         String(r.amount),
-        '',
+        r.purposeCode,
         r.purpose,
       ]
         .map(esc)
@@ -222,6 +227,81 @@ export class SettlementService {
   }
 
   /** Hozirgi vaqt (testda almashtiriladi). */
+  /** BE-33 (QA): qaytarish muddati (EQ-10) va to‘lovchi rekvizitlari (EQ-05) — joriy qiymatlar. */
+  async settings(): Promise<SettlementSettingsDto> {
+    const text = (await this.db.query(
+      `SELECT DISTINCT ON (key) key, value FROM finance.text_setting
+        WHERE effective_from <= now()
+        ORDER BY key, effective_from DESC`,
+    )) as Array<{ key: string; value: string }>;
+    const value = (key: string) =>
+      text.find((row) => row.key === key)?.value ?? null;
+    return {
+      returnWindowDays: await this.returnWindowDays(
+        this.db.manager,
+        new Date(this.nowMs()),
+      ),
+      payerName: value('payer_name'),
+      payerTin: value('payer_tin'),
+      payerAccount: value('payer_account'),
+      payerMfo: value('payer_mfo'),
+      paymentPurposeCode: value('payment_purpose_code'),
+    };
+  }
+
+  /** Superadmin kiritadi; har o‘zgarish tarixda (kim, qachon). Berilmagan maydon o‘zgarmaydi. */
+  async updateSettings(input: {
+    dto: UpdateSettlementSettingsDto;
+    changedBy: string;
+  }): Promise<SettlementSettingsDto> {
+    const dto = input?.dto ?? {};
+    const changedBy = String(input?.changedBy ?? '');
+    if (!ID.test(changedBy))
+      throw new BadRequestException('changedBy noto‘g‘ri');
+    const patterns: Record<string, RegExp> = {
+      payer_tin: /^\d{9}$/,
+      payer_account: /^\d{20}$/,
+      payer_mfo: /^\d{5}$/,
+      payment_purpose_code: /^\d{5}$/,
+    };
+    const text: Array<[string, string | undefined]> = [
+      ['payer_name', dto.payerName?.trim()],
+      ['payer_tin', dto.payerTin],
+      ['payer_account', dto.payerAccount],
+      ['payer_mfo', dto.payerMfo],
+      ['payment_purpose_code', dto.paymentPurposeCode],
+    ];
+    for (const [key, value] of text)
+      if (
+        value !== undefined &&
+        (value.length < 2 || (patterns[key] && !patterns[key].test(value)))
+      )
+        throw new BadRequestException(`${key}: qiymat noto‘g‘ri`);
+    if (
+      dto.returnWindowDays !== undefined &&
+      (!Number.isSafeInteger(dto.returnWindowDays) ||
+        dto.returnWindowDays < 0 ||
+        dto.returnWindowDays > 365)
+    )
+      throw new BadRequestException('returnWindowDays 0–365 kun');
+    await this.db.transaction(async (m) => {
+      for (const [key, value] of text)
+        if (value !== undefined)
+          await m.query(
+            `INSERT INTO finance.text_setting (key, value, effective_from, changed_by)
+             VALUES ($1, $2, clock_timestamp(), $3)`,
+            [key, value, changedBy],
+          );
+      if (dto.returnWindowDays !== undefined)
+        await m.query(
+          `INSERT INTO finance.setting (key, value, effective_from, changed_by)
+           VALUES ('return_window_days', $1, clock_timestamp(), $2)`,
+          [dto.returnWindowDays, changedBy],
+        );
+    });
+    return this.settings();
+  }
+
   protected nowMs(): number {
     return Date.now();
   }
@@ -486,6 +566,18 @@ export class SettlementService {
   async bankFile(input: { periodEnd: string }): Promise<SettlementFile> {
     const periodEnd = validDay(input?.periodEnd, 'periodEnd');
     let payees = new Map<string, WholesalerPaymentDetails>();
+    // To‘lovchi rekvizitlarisiz fayl bankda qabul qilinmaydi (EQ-05) — muzlatishdan oldin
+    const settings = await this.settings();
+    if (
+      !settings.payerAccount ||
+      !settings.payerMfo ||
+      !settings.paymentPurposeCode
+    )
+      throw new ConflictException({
+        message:
+          'To‘lovchi (platforma) rekvizitlari sozlanmagan: hisob raqami, MFO va to‘lov maqsadi kodi (Moliya → Sozlamalar, EQ-05)',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     const rows = await this.db.transaction(async (m) => {
       await lockRun(m);
       const ready = (await m.query(
@@ -524,6 +616,11 @@ export class SettlementService {
             account: payee.bankAccount!,
             mfo: payee.bankMfo!,
           },
+          payer: {
+            account: settings.payerAccount!,
+            mfo: settings.payerMfo!,
+          },
+          purposeCode: settings.paymentPurposeCode!,
         };
       }),
     );

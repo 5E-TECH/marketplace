@@ -10,6 +10,7 @@ import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-ad
 import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
 import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
+import { CreateTextSetting1796774400000 } from '../migrations/1796774400000-create-text-setting';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -128,6 +129,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         CreateWithdrawal1795651200000,
         CreateWholesalerSettlement1795737600000,
         CreateFeeHold1795824000000,
+        CreateTextSetting1796774400000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -139,6 +141,17 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       .mockReturnValue(Date.parse('2027-03-01T00:00:00Z') as never);
     ledger = new LedgerService(ds);
     svc = new SettlementService(ds, ledger, catalog as never);
+    // BE-33 (QA): to‘lovchi rekvizitlari — bank fayli shularsiz chiqmaydi (EQ-05)
+    await svc.updateSettings({
+      dto: {
+        payerName: 'Elchi Marketplace MChJ',
+        payerTin: '305000000',
+        payerAccount: '20208000900100000001',
+        payerMfo: '01158',
+        paymentPurposeCode: '00668',
+      },
+      changedBy: '1',
+    });
     check = new BalanceCheckService(ds);
   }, 300_000);
 
@@ -218,6 +231,9 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     expect(csv.startsWith('﻿Hujjat raqami;Sana;')).toBe(true);
     expect(csv.split('\r\n').filter(Boolean)).toHaveLength(3); // sarlavha + 2 optovik
     expect(csv).toContain(';280000;');
+    // BE-33 (QA): to‘lovchi (platforma) va maqsad kodi — sozlamadan
+    expect(csv).toMatch(/;20208000900100000001;01158;Optovik/);
+    expect(csv).toMatch(/;280000;00668;|;\d+;00668;/);
     // BE-33 (QA): oluvchi — katalogdagi nom, STIR, hisob raqami, MFO
     expect(csv).toMatch(
       /;Optovik \S+ MCHJ;301234567;20208000900123456789;00450;/,
@@ -548,5 +564,46 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     await expect(
       svc.list({ query: { wholesalerId: 'W' } }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('BE-33 (QA): to‘lovchi rekvizitlari bo‘lmasa bank fayli chiqmaydi (409); sozlamalar tarixda, qaytarish muddati ham', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    const saved = (await ds.query(
+      `SELECT key, value, effective_from FROM finance.text_setting`,
+    )) as Array<{ key: string; value: string; effective_from: Date }>;
+    await ds.query('DELETE FROM finance.text_setting');
+    try {
+      await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
+        'To‘lovchi (platforma) rekvizitlari sozlanmagan',
+      );
+      const statuses = (await ds.query(
+        `SELECT status FROM finance.wholesaler_settlement`,
+      )) as Array<{ status: string }>;
+      expect(statuses.every((r) => r.status === 'READY')).toBe(true);
+    } finally {
+      for (const row of saved)
+        await ds.query(
+          `INSERT INTO finance.text_setting (key, value, effective_from, changed_by) VALUES ($1, $2, $3, '1')`,
+          [row.key, row.value, row.effective_from],
+        );
+    }
+    await expect(
+      svc.updateSettings({ dto: { payerMfo: '1158' }, changedBy: '1' }),
+    ).rejects.toThrow('payer_mfo');
+    const updated = await svc.updateSettings({
+      dto: { payerMfo: '00450', returnWindowDays: 14 },
+      changedBy: '7',
+    });
+    expect(updated).toMatchObject({
+      payerMfo: '00450',
+      payerAccount: '20208000900100000001',
+    });
+    const history = (await ds.query(
+      `SELECT value, changed_by AS "by" FROM finance.text_setting WHERE key = 'payer_mfo' ORDER BY effective_from`,
+    )) as Array<{ value: string; by: string }>;
+    expect(history.map((h) => h.value)).toEqual(['01158', '00450']);
+    expect(history[1].by).toBe('7');
   });
 });

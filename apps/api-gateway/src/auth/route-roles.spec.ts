@@ -165,6 +165,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   ],
   // To‘lovni tasdiqlash va Elchi sverkasi.
   [Role.FINANCE]: [
+    'GET /admin/finance/settlements/settings',
     'GET /admin/finance/ledger',
     'GET /admin/finance/reports',
     'GET /admin/finance/reports/reconciliation',

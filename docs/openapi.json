@@ -9787,6 +9787,69 @@
         ]
       }
     },
+    "/api/v1/admin/finance/settlements/settings": {
+      "get": {
+        "operationId": "AdminSettlementsController_settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hisob-kitob sozlamalari: qaytarish muddati, to‘lovchi rekvizitlari",
+        "tags": [
+          "admin-finance"
+        ]
+      },
+      "put": {
+        "description": "Berilgan maydonlar tarixga yoziladi (kim, qachon); berilmagani o‘zgarmaydi. Bank fayli to‘lovchi hisob raqami, MFO va to‘lov maqsadi kodisiz chiqmaydi (409).",
+        "operationId": "AdminSettlementsController_updateSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettlementSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hisob-kitob sozlamalarini o‘zgartirish (superadmin) [taklif]",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
     "/api/v1/admin/finance/settlements/{id}": {
       "get": {
         "operationId": "AdminSettlementsController_get",
@@ -18897,6 +18960,85 @@
           "settlements",
           "items"
         ]
+      },
+      "SettlementSettingsDto": {
+        "type": "object",
+        "properties": {
+          "returnWindowDays": {
+            "type": "number",
+            "example": 10,
+            "nullable": true,
+            "description": "Qaytarish muddati, kun (EQ-10); bo‘sh — dushanbalik akt tuzilmaydi"
+          },
+          "payerName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Elchi Marketplace MChJ"
+          },
+          "payerTin": {
+            "type": "string",
+            "nullable": true,
+            "example": "305000000"
+          },
+          "payerAccount": {
+            "type": "string",
+            "nullable": true,
+            "example": "20208000900100000001"
+          },
+          "payerMfo": {
+            "type": "string",
+            "nullable": true,
+            "example": "00450"
+          },
+          "paymentPurposeCode": {
+            "type": "string",
+            "nullable": true,
+            "example": "00668",
+            "description": "To‘lov maqsadi kodi"
+          }
+        },
+        "required": [
+          "returnWindowDays",
+          "payerName",
+          "payerTin",
+          "payerAccount",
+          "payerMfo",
+          "paymentPurposeCode"
+        ]
+      },
+      "UpdateSettlementSettingsDto": {
+        "type": "object",
+        "properties": {
+          "returnWindowDays": {
+            "type": "number",
+            "example": 10,
+            "description": "Kun, 0–365"
+          },
+          "payerName": {
+            "type": "string",
+            "example": "Elchi Marketplace MChJ"
+          },
+          "payerTin": {
+            "type": "string",
+            "example": "305000000",
+            "description": "STIR, 9 raqam"
+          },
+          "payerAccount": {
+            "type": "string",
+            "example": "20208000900100000001",
+            "description": "Hisob raqami, 20 raqam"
+          },
+          "payerMfo": {
+            "type": "string",
+            "example": "00450",
+            "description": "MFO, 5 raqam"
+          },
+          "paymentPurposeCode": {
+            "type": "string",
+            "example": "00668",
+            "description": "To‘lov maqsadi kodi, 5 raqam [taklif]"
+          }
+        }
       },
       "LeadProductRefDto": {
         "type": "object",

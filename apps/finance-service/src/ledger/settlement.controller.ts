@@ -4,6 +4,7 @@ import {
   FINANCE_SETTLEMENT_RPC,
   RpcHttpExceptionFilter,
   WholesalerSettlementQueryDto,
+  UpdateSettlementSettingsDto,
 } from '@app/common';
 import { SettlementService } from './settlement.service';
 
@@ -12,6 +13,22 @@ import { SettlementService } from './settlement.service';
 @UseFilters(RpcHttpExceptionFilter)
 export class SettlementController {
   constructor(private readonly settlements: SettlementService) {}
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET })
+  settings() {
+    return this.settlements.settings();
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_UPDATE })
+  updateSettings(
+    @Payload()
+    input: {
+      dto: UpdateSettlementSettingsDto;
+      changedBy: string;
+    },
+  ) {
+    return this.settlements.updateSettings(input);
+  }
 
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.RUN })
   run(@Payload() input: { asOf?: string }) {
