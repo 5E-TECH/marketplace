@@ -18,6 +18,7 @@ import {
   UpdateWholesalerDto,
   WholesalerDto,
   WholesalerPageDto,
+  WholesalerPaymentDetails,
 } from '@app/common';
 import { Shop, WHOLESALER_PRIVATE_COLUMNS } from './entities/shop.entity';
 
@@ -118,6 +119,30 @@ export class WholesalerService {
       if (dto[field] !== undefined)
         (shop as unknown as Record<string, unknown>)[field] = dto[field];
     return this.view(await this.save(shop));
+  }
+
+  /**
+   * BE-33: bank fayli uchun oluvchi rekvizitlari (finance ichki RPC). O‘chirilgan yoki topilmagan optovik — ro‘yxatda
+   * yo‘q (finance «rekvizit yo‘q» deb to‘xtaydi).
+   */
+  async paymentDetails(ids: string[]): Promise<WholesalerPaymentDetails[]> {
+    const unique = [...new Set((ids ?? []).map(String))].filter((id) =>
+      /^[1-9]\d{0,18}$/.test(id),
+    );
+    if (!unique.length) return [];
+    const shops = await this.withPrivate(this.shops.createQueryBuilder('shop'))
+      .where('shop.id IN (:...ids) AND shop.is_deleted = FALSE', {
+        ids: unique,
+      })
+      .getMany();
+    return shops.map((shop) => ({
+      id: String(shop.id),
+      name: shop.name,
+      tin: shop.tin,
+      bankName: shop.bankName,
+      bankAccount: shop.bankAccount,
+      bankMfo: shop.bankMfo,
+    }));
   }
 
   private async find(id: string): Promise<Shop> {

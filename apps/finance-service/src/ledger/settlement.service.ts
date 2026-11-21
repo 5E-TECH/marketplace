@@ -1,16 +1,24 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { Cron } from '@nestjs/schedule';
 import PDFDocument from 'pdfkit';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  CATALOG_WHOLESALER_PAYMENT_DETAILS,
   ErrorCode,
   moneyFromDb,
+  RmqClient,
+  sendRpc,
+  WholesalerPaymentDetails,
   returningRows,
   runAsLeader,
   SettlementRunResultDto,
@@ -73,7 +81,8 @@ const fmt = (n: number) =>
 /**
  * Bank to‘lov topshiriqnomasi fayli — format almashtiriladigan (bank tanlanmagan, TZ T7 «to‘lov topshiriqnomasi
  * fayli» — T02:166). Hozirgisi: dizayn `hujjat-bank-fayli` dagi 11 ustunli CSV (UTF-8 BOM, «;») [taklif — bank
- * tasdiqlaydi]. Rekvizitlar (to‘lovchi — platforma, oluvchi — optovik) BE-07/EQ-05 dan keyin; hozir bo‘sh.
+ * tasdiqlaydi]. Oluvchi (optovik) rekvizitlari katalogdan (BE-07); to‘lovchi (platforma) rekvizitlari va to‘lov
+ * maqsadi kodi — EQ-05 dan keyin, hozir bo‘sh.
  */
 export interface BankFileFormat {
   build(
@@ -83,6 +92,12 @@ export interface BankFileFormat {
       wholesalerId: string;
       amount: number;
       purpose: string;
+      recipient: {
+        name: string;
+        tin: string;
+        account: string;
+        mfo: string;
+      };
     }>,
   ): SettlementFile;
 }
@@ -110,10 +125,10 @@ export const csvBankFile: BankFileFormat = {
         r.date,
         '',
         '',
-        `Optovik #${r.wholesalerId}`,
-        '',
-        '',
-        '',
+        r.recipient.name,
+        r.recipient.tin,
+        r.recipient.account,
+        r.recipient.mfo,
         String(r.amount),
         '',
         r.purpose,
@@ -185,6 +200,10 @@ export class SettlementService {
   constructor(
     private readonly db: DataSource,
     private readonly ledger: LedgerService,
+    // BE-33 (QA 2026-11-21): bank faylidagi oluvchi rekvizitlari katalogdan
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
   ) {}
 
   @Cron('0 0 9 * * 1', {
@@ -466,12 +485,21 @@ export class SettlementService {
    */
   async bankFile(input: { periodEnd: string }): Promise<SettlementFile> {
     const periodEnd = validDay(input?.periodEnd, 'periodEnd');
+    let payees = new Map<string, WholesalerPaymentDetails>();
     const rows = await this.db.transaction(async (m) => {
       await lockRun(m);
       const ready = (await m.query(
         `${SELECT} WHERE s.period_end = $1::date AND s.status = 'READY' ORDER BY s.wholesaler_id, s.id`,
         [periodEnd],
       )) as Row[];
+      const exported = (await m.query(
+        `${SELECT} WHERE s.period_end = $1::date AND s.status = 'EXPORTED' ORDER BY s.id`,
+        [periodEnd],
+      )) as Row[];
+      // Rekvizitsiz to‘lov topshiriqnomasini bank qabul qilmaydi — muzlatishdan oldin tekshiriladi (hech narsa o‘zgarmaydi)
+      payees = await this.payees([
+        ...new Set([...ready, ...exported].map((r) => r.wholesalerId)),
+      ]);
       for (const s of ready) await this.freeze(m, s);
       return (await m.query(
         `${SELECT} WHERE s.period_end = $1::date AND s.status = 'EXPORTED' ORDER BY s.id`,
@@ -482,14 +510,55 @@ export class SettlementService {
       throw new NotFoundException('Bu davrda to‘lanadigan akt yo‘q');
     const today = new Date().toISOString().slice(0, 10);
     return this.bankFormat.build(
-      rows.map((r) => ({
-        number: actNumber(r.id),
-        date: today,
-        wholesalerId: r.wholesalerId,
-        amount: moneyFromDb(r.exportedTotal),
-        purpose: `${r.periodStart}–${r.periodEnd} davr uchun sotilgan tovarlar, akt ${actNumber(r.id)}`,
-      })),
+      rows.map((r) => {
+        const payee = payees.get(String(r.wholesalerId))!;
+        return {
+          number: actNumber(r.id),
+          date: today,
+          wholesalerId: r.wholesalerId,
+          amount: moneyFromDb(r.exportedTotal),
+          purpose: `${r.periodStart}–${r.periodEnd} davr uchun sotilgan tovarlar, akt ${actNumber(r.id)}`,
+          recipient: {
+            name: payee.name,
+            tin: payee.tin!,
+            account: payee.bankAccount!,
+            mfo: payee.bankMfo!,
+          },
+        };
+      }),
     );
+  }
+
+  /**
+   * Oluvchi rekvizitlari (BE-07 katalogi). STIR, hisob raqami yoki MFO bo‘lmasa — 409: qaysi optovikda yetishmasligi
+   * aytiladi (admin «Optoviklar» sahifasida to‘ldiradi). Katalog javob bermasa — 503.
+   */
+  private async payees(
+    ids: string[],
+  ): Promise<Map<string, WholesalerPaymentDetails>> {
+    if (!ids.length) return new Map();
+    if (!this.catalog)
+      throw new ServiceUnavailableException('Katalog ulanmagan');
+    const list = await sendRpc<WholesalerPaymentDetails[]>(
+      this.catalog,
+      { cmd: CATALOG_WHOLESALER_PAYMENT_DETAILS },
+      { ids },
+    );
+    const byId = new Map(list.map((p) => [String(p.id), p]));
+    const missing = ids.filter((id) => {
+      const p = byId.get(String(id));
+      return (
+        !p || !p.tin?.trim() || !p.bankAccount?.trim() || !p.bankMfo?.trim()
+      );
+    });
+    if (missing.length)
+      throw new ConflictException({
+        message: `Optovik rekvizitlari to‘liq emas (STIR, hisob raqami, MFO): ${missing
+          .map((id) => byId.get(String(id))?.name ?? `#${id}`)
+          .join(', ')}`,
+        errorCode: ErrorCode.INVALID_STATE,
+      });
+    return byId;
   }
 
   /**

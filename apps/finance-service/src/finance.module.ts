@@ -1,11 +1,15 @@
 import { FINANCE_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClientsModule } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  RmqClient,
+  RmqQueue,
+  rmqOptions,
   ServiceHealthModule,
   shouldRunMigrations,
   typeOrmOptions,
@@ -42,6 +46,15 @@ const entities = FINANCE_DB.entities;
       },
     }),
     TypeOrmModule.forFeature(entities),
+    // BE-33: bank faylidagi optovik rekvizitlari — katalogdan
+    ClientsModule.registerAsync([
+      {
+        name: RmqClient.CATALOG,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
+      },
+    ]),
   ],
   controllers: [
     FinanceController,

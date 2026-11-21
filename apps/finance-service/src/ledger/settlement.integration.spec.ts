@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { WholesalerSettlementStatus } from '@app/common';
 import { CreateFinanceTables1724673600000 } from '../migrations/1724673600000-create-finance-tables';
@@ -31,6 +32,22 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   let ds: DataSource;
   let ledger: LedgerService;
   let svc: SettlementService;
+  // BE-33: oluvchi rekvizitlari katalogdan; `noDetails` dagilar — rekvizitsiz
+  const noDetails = new Set<string>();
+  const catalog = {
+    send: jest.fn((_pattern: unknown, data: { ids: string[] }) =>
+      of(
+        data.ids.map((id) => ({
+          id,
+          name: `Optovik ${id} MCHJ`,
+          tin: noDetails.has(id) ? null : '301234567',
+          bankName: 'Ipoteka bank',
+          bankAccount: noDetails.has(id) ? null : '20208000900123456789',
+          bankMfo: '00450',
+        })),
+      ),
+    ),
+  };
   let check: BalanceCheckService;
   let seq = 0;
   const MONDAY = '2027-01-11T04:00:00.000Z';
@@ -121,7 +138,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       .spyOn(SettlementService.prototype as never, 'nowMs' as never)
       .mockReturnValue(Date.parse('2027-03-01T00:00:00Z') as never);
     ledger = new LedgerService(ds);
-    svc = new SettlementService(ds, ledger);
+    svc = new SettlementService(ds, ledger, catalog as never);
     check = new BalanceCheckService(ds);
   }, 300_000);
 
@@ -201,6 +218,35 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     expect(csv.startsWith('﻿Hujjat raqami;Sana;')).toBe(true);
     expect(csv.split('\r\n').filter(Boolean)).toHaveLength(3); // sarlavha + 2 optovik
     expect(csv).toContain(';280000;');
+    // BE-33 (QA): oluvchi — katalogdagi nom, STIR, hisob raqami, MFO
+    expect(csv).toMatch(
+      /;Optovik \S+ MCHJ;301234567;20208000900123456789;00450;/,
+    );
+    expect(csv).not.toContain('Optovik #');
+  });
+
+  it('BE-33: optovik rekvizitlari to‘liq bo‘lmasa — 409, akt muzlatilmaydi (keyin to‘ldirilsa — fayl chiqadi)', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    const [{ wholesalerId }] = (await ds.query(
+      `SELECT wholesaler_id AS "wholesalerId" FROM finance.wholesaler_settlement`,
+    )) as Array<{ wholesalerId: string }>;
+    noDetails.add(String(wholesalerId));
+    try {
+      await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
+        'rekvizitlari to‘liq emas',
+      );
+      const statuses = (await ds.query(
+        `SELECT status FROM finance.wholesaler_settlement`,
+      )) as Array<{ status: string }>;
+      expect(statuses.every((r) => r.status === 'READY')).toBe(true);
+    } finally {
+      noDetails.clear();
+    }
+    await expect(
+      svc.bankFile({ periodEnd: '2027-01-10' }),
+    ).resolves.toMatchObject({ contentType: 'text/csv; charset=utf-8' });
   });
 
   it('xatoli buyurtma (ochiq event_failure) aktga kirmaydi; hodisa keyin muvaffaqiyatli ishlansa — kiradi', async () => {
@@ -416,7 +462,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         .slice(1);
     const first = await lines('2027-01-10');
     expect(first).toHaveLength(1);
-    expect(first[0]).toContain('Optovik #501;');
+    expect(first[0]).toContain('Optovik 501 MCHJ;');
     // Fayl bankka ketdi; 502 ning puli keldi va moliya qo‘lda run bosdi
     await ledger.onRemittance({
       schemaVersion: 2,
@@ -448,7 +494,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     });
     const second = await lines('2027-01-17');
     expect(second).toHaveLength(1);
-    expect(second[0]).toContain('Optovik #502;');
+    expect(second[0]).toContain('Optovik 502 MCHJ;');
     expect(second[0]).toContain(';140000;');
   });
 

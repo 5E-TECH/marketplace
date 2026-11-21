@@ -184,3 +184,19 @@ export class WholesalerPageDto {
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 1 }) totalPages: number;
 }
+
+/**
+ * finance → catalog (BE-33): bank to‘lov fayli uchun optovik (oluvchi) rekvizitlari. Faqat ichki RPC — rekvizitlar
+ * ochiq javoblarga chiqmaydi (BE-07 `select: false`).
+ */
+export const CATALOG_WHOLESALER_PAYMENT_DETAILS =
+  'catalog.wholesaler.payment-details';
+
+export interface WholesalerPaymentDetails {
+  id: string;
+  name: string;
+  tin: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  bankMfo: string | null;
+}
