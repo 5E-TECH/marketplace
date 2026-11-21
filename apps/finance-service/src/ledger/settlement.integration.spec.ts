@@ -9,6 +9,8 @@ import { AddJournalLeadIndex1795564800000 } from '../migrations/1795564800000-ad
 import { CreateWithdrawal1795651200000 } from '../migrations/1795651200000-create-withdrawal';
 import { CreateWholesalerSettlement1795737600000 } from '../migrations/1795737600000-create-wholesaler-settlement';
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
+import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
+import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -111,6 +113,8 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         CreateWithdrawal1795651200000,
         CreateWholesalerSettlement1795737600000,
         CreateFeeHold1795824000000,
+        AddRemittanceResolution1796860800000,
+        CreateSettlementResponse1796947200000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -126,7 +130,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   }, 300_000);
 
   beforeEach(async () => {
-    await ds.query(`TRUNCATE finance.wholesaler_settlement_item, finance.wholesaler_settlement,
+    await ds.query(`TRUNCATE finance.settlement_dispute, finance.wholesaler_settlement_item, finance.wholesaler_settlement,
       finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
       finance.ledger_entry, finance.journal, finance.remittance_item, finance.elchi_remittance,
       finance.balance_check, finance.processed_event, finance.event_failure, finance.fee_hold`);
