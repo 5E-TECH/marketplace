@@ -83,17 +83,17 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Sverka farqi: {date}',
     body: '{date}: Elchi o‘tkazmasi {mismatchCount} ta buyurtmada mos emas, farq {diffTotal} so‘m. Moliya → kunlik sverka.',
   },
-  elchi_sale_rollback: {
-    name: 'Elchi sotuvni bekor qildi',
+  elchi_status_conflict: {
+    name: 'Elchi holati buyurtmaga zid',
     description:
-      'BE-21: yetkazilgan buyurtmani Elchi bekor qilsa yoki qaytarsa (buyurtma o‘zgarmaydi, pul HOLD da) — moliya va nazoratchiga',
+      'BE-21: Elchi xabari buyurtma holatiga zid (yetkazilgan sotuvni bekor qildi, rad etilganini «sotildi» dedi va h.k.) — buyurtma o‘zgarmaydi, moliya va nazoratchiga',
     variables: {
       orderId: 'Buyurtma raqami',
       orderStatus: 'Buyurtma holati',
       elchiStatus: 'Elchi holati',
     },
-    title: 'Elchi sotuvni bekor qildi: buyurtma {orderId}',
-    body: 'Buyurtma {orderId} ({orderStatus}) — Elchi «{elchiStatus}» yubordi. Holat o‘zgarmadi, pul HOLD da. Qo‘lda tekshiring.',
+    title: 'Elchi holati zid: buyurtma {orderId}',
+    body: 'Buyurtma {orderId} ({orderStatus}) — Elchi «{elchiStatus}» yubordi. Holat o‘zgarmadi. Pul va holatni qo‘lda tekshiring.',
   },
   price_orange: {
     name: 'To‘q sariq narx tasdiqlandi',

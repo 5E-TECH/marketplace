@@ -107,12 +107,13 @@ export class ElchiWebhookDto {
 }
 
 /**
- * checkout → notification (BE-21): Elchi yetkazilgan sotuvni orqaga qaytardi (bekor yoki qaytarildi). Buyurtma
- * «faqat oldinga» qoidasi bilan o‘zgarmaydi — moliya va nazoratchi qo‘lda hal qiladi (pul HOLD da qoladi).
+ * checkout → notification (BE-21): Elchi xabari buyurtma holatiga zid — masalan, yetkazilgan sotuvni bekor qildi,
+ * rad etilgan posilkani «sotildi» dedi yoki akt yopilmagan buyurtmaga «to‘landi» yubordi. Buyurtma «faqat oldinga»
+ * qoidasi bilan o‘zgarmaydi — moliya va nazoratchi qo‘lda hal qiladi. Bir buyurtma uchun bir marta.
  */
-export const ELCHI_SALE_ROLLBACK_EVENT = 'elchi.sale.rollback';
+export const ELCHI_STATUS_CONFLICT_EVENT = 'elchi.status.conflict';
 
-export interface ElchiSaleRollbackEvent {
+export interface ElchiStatusConflictEvent {
   orderId: string;
   shipmentId: string;
   orderStatus: string;

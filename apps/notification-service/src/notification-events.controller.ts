@@ -3,8 +3,8 @@ import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
   CodReconciliationMismatchEvent,
-  ELCHI_SALE_ROLLBACK_EVENT,
-  ElchiSaleRollbackEvent,
+  ELCHI_STATUS_CONFLICT_EVENT,
+  ElchiStatusConflictEvent,
   RmqClient,
   sendRpc,
 } from '@app/common';
@@ -97,16 +97,16 @@ export class NotificationEventsController {
   }
 
   /** BE-21: Elchi yetkazilgan sotuvni bekor qildi — buyurtma o‘zgarmaydi, moliya va nazoratchi qo‘lda hal qiladi. */
-  @EventPattern(ELCHI_SALE_ROLLBACK_EVENT)
-  async elchiSaleRollback(@Payload() event: ElchiSaleRollbackEvent) {
+  @EventPattern(ELCHI_STATUS_CONFLICT_EVENT)
+  async elchiStatusConflict(@Payload() event: ElchiStatusConflictEvent) {
     const recipients = await this.financeAndSupervisors();
     if (!recipients.length) {
       this.logger.warn(
-        `Elchi sotuvni bekor qildi (${event.orderId}): faol moliya yoki nazoratchi yo‘q`,
+        `Elchi holati zid (${event.orderId}): faol moliya yoki nazoratchi yo‘q`,
       );
       return;
     }
-    const content = await this.templates.render('elchi_sale_rollback', {
+    const content = await this.templates.render('elchi_status_conflict', {
       orderId: event.orderId,
       orderStatus: event.orderStatus,
       elchiStatus: event.elchiStatus,
@@ -114,7 +114,7 @@ export class NotificationEventsController {
     for (const user of recipients)
       await this.notifications.create({
         recipient: { userId: user.id, email: user.email, phone: user.phone },
-        type: 'elchi_sale_rollback',
+        type: 'elchi_status_conflict',
         ...content,
         data: {
           orderId: event.orderId,

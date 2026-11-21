@@ -403,7 +403,7 @@ describeWithPostgres(
       ).resolves.toMatchObject({ result: 'REJECTED', status: 'DELIVERED' });
       expect(await outboxOf(target.id, 'finance.cod.settled')).toEqual([]);
       expect(notifications.emit).toHaveBeenCalledWith(
-        'elchi.sale.rollback',
+        'elchi.status.conflict',
         expect.objectContaining({
           orderId: target.id,
           orderStatus: 'DELIVERED',
@@ -412,16 +412,37 @@ describeWithPostgres(
       );
     });
 
-    it('rad to‘lovi faqat musbat `extra_cost` va bir marta: 0 — yozilmaydi; «qaytdi» takror yubormaydi; keyingi «bekor» — NOOP', async () => {
+    it('rad to‘lovi faqat musbat `extra_cost`: 0 — yozilmaydi; keyingi xabarda kiritilsa — yoziladi; keyingi «bekor» — NOOP', async () => {
       const target = await order('8108');
       await webhook.process(hook(target, 'on_the_road'));
       await webhook.process(hook(target, 'cancelled', { extraCost: 0 }));
       expect(await statusOf(target.id)).toBe('REFUSED');
-      await webhook.process(hook(target, 'returned', { extraCost: 20_000 }));
       expect(await outboxOf(target.id, 'finance.cod.settled')).toEqual([]);
+      await webhook.process(hook(target, 'returned', { extraCost: 20_000 }));
+      const fees = await outboxOf(target.id, 'finance.cod.settled');
+      expect(fees.map((f) => f.payload.refusalFee)).toEqual([20_000]);
       await expect(
         webhook.process(hook(target, 'cancelled', { extraCost: 0 })),
       ).resolves.toMatchObject({ result: 'NOOP', status: 'RETURNING' });
+    });
+
+    it('zid xabar: rad etilgan posilkaga «sotildi»/«to‘landi» — o‘zgarmaydi, pul yozilmaydi, buyurtma uchun bir marta xabar', async () => {
+      const target = await order('8109');
+      await webhook.process(hook(target, 'on_the_road'));
+      await webhook.process(hook(target, 'cancelled'));
+      notifications.emit.mockClear();
+      await expect(
+        webhook.process(hook(target, 'sold')),
+      ).resolves.toMatchObject({ result: 'REJECTED', status: 'REFUSED' });
+      await webhook.process(
+        hook(target, 'paid', { marketPaidAmount: 266_000 }),
+      );
+      expect(await outboxOf(target.id, 'finance.cod.settled')).toEqual([]);
+      expect(notifications.emit).toHaveBeenCalledTimes(1);
+      expect(notifications.emit).toHaveBeenCalledWith(
+        'elchi.status.conflict',
+        expect.objectContaining({ orderId: target.id, elchiStatus: 'sold' }),
+      );
     });
   },
 );

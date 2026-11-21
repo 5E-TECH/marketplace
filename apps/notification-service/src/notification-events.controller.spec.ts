@@ -286,13 +286,13 @@ describe('NotificationEventsController', () => {
     );
   });
 
-  it('BE-21: Elchi sotuvni bekor qildi — moliya va nazoratchiga', async () => {
+  it('BE-21: Elchi holati buyurtmaga zid — moliya va nazoratchiga', async () => {
     identitySend
       .mockReturnValueOnce(
         of([{ id: '5', phone: '+998900000005', email: null }]),
       )
       .mockReturnValueOnce(of([]));
-    await controller.elchiSaleRollback({
+    await controller.elchiStatusConflict({
       orderId: '77',
       shipmentId: '1251177',
       orderStatus: 'DELIVERED',
@@ -302,8 +302,8 @@ describe('NotificationEventsController', () => {
     });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'elchi_sale_rollback',
-        title: 'Elchi sotuvni bekor qildi: buyurtma 77',
+        type: 'elchi_status_conflict',
+        title: 'Elchi holati zid: buyurtma 77',
       }),
     );
   });

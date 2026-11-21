@@ -103,15 +103,25 @@ export class CodDailyCheckService {
     let receivedTotal = 0;
     const mismatches: CodDailyCheckMismatchDto[] = [];
     for (const row of rows) {
-      // hisob-kitobdan keyingi ortiqcha o‘tkazmada `expected` bo‘sh — buyurtmaning kutilgan summasi
-      const known = row.expected ?? row.orderExpected;
-      const expected = known === null ? null : moneyFromDb(known);
-      const received =
+      const paid =
         row.refusalFee !== null
           ? moneyFromDb(row.refusalFee)
           : row.paid !== null
             ? moneyFromDb(row.paid)
-            : (expected ?? 0) + moneyFromDb(row.diff ?? '0');
+            : null;
+      let expected: number | null;
+      let received: number;
+      let diff: number;
+      if (row.expected !== null) {
+        expected = moneyFromDb(row.expected);
+        received = paid ?? expected + moneyFromDb(row.diff ?? '0');
+        diff = received - expected;
+      } else {
+        // hisob-kitobdan keyingi o‘tkazma: moliya farqni oldingi mos to‘lovga nisbatan yozadi (BE-22) — o‘sha farq
+        diff = moneyFromDb(row.diff ?? '0');
+        received = paid ?? 0;
+        expected = row.orderExpected === null ? null : received - diff;
+      }
       if (expected !== null && row.state !== 'PENDING') {
         expectedTotal += expected;
         receivedTotal += received;
@@ -123,10 +133,7 @@ export class CodDailyCheckService {
           elchiStatus: row.elchiStatus,
           expected: expected ?? 0,
           received,
-          diff:
-            expected === null
-              ? moneyFromDb(row.diff ?? '0')
-              : received - expected,
+          diff,
         });
     }
     const [saved] = (await this.dataSource.query(
