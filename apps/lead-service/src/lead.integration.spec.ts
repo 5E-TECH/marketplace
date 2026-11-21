@@ -477,6 +477,43 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       };
     });
 
+    it('BE-08 (QA TC5): offer kartasi — video ochiq havola bilan; yopiq offer — 404', async () => {
+      catalog['501'] = offer('501', {
+        creatives: [
+          {
+            id: '31',
+            type: 'VIDEO',
+            url: 'https://media.test/creatives/501/v.mp4',
+            createdAt: '2026-11-21T10:00:00.000Z',
+          },
+        ],
+      });
+      const card = await offers().getForAffiliate('501');
+      expect(card).toMatchObject({
+        productId: '501',
+        name: 'Simsiz quloqchinlar',
+        hasVideo: true,
+        state: 'OPEN',
+        results: null,
+        priceSplit: null,
+        creatives: [
+          {
+            id: '31',
+            type: 'VIDEO',
+            url: 'https://media.test/creatives/501/v.mp4',
+            caption: null,
+            processing: false,
+            approvedAt: '2026-11-21T10:00:00.000Z',
+          },
+        ],
+      });
+      catalog['502'] = offer('502', { withdrawn: true });
+      for (const id of ['502', '999', 'x'])
+        await expect(offers().getForAffiliate(id)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+    });
+
     it('TC1: faqat offer ID → standart shablon, tasdiqlangan narx va tayyor havola', async () => {
       const s1 = await streams().create('77', '501');
       expect(s1.code).toMatch(/^[A-Za-z0-9]{6}$/);

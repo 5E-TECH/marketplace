@@ -481,8 +481,18 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
 
     await expect(offers.get(productId)).resolves.toMatchObject({
       creatives: [
-        { id: video.id, type: 'VIDEO', url: video.url },
-        { id: image.id, type: 'IMAGE', url: image.url },
+        {
+          id: video.id,
+          type: 'VIDEO',
+          url: video.url,
+          createdAt: expect.any(String),
+        },
+        {
+          id: image.id,
+          type: 'IMAGE',
+          url: image.url,
+          createdAt: expect.any(String),
+        },
       ],
     });
     await expect(creatives.list(productId)).resolves.toHaveLength(2);
@@ -515,7 +525,12 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     ).rejects.toThrow('o‘chirilgan');
     const after = await offers.list({ productIds: [productId] } as never);
     expect(after.find((o) => o.productId === productId)?.creatives).toEqual([
-      { id: video.id, type: 'VIDEO', url: video.url },
+      {
+        id: video.id,
+        type: 'VIDEO',
+        url: video.url,
+        createdAt: expect.any(String),
+      },
     ]);
 
     for (let n = 10; n < 29; n++)

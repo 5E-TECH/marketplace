@@ -143,11 +143,14 @@ export class CreativeService {
   async forProducts(
     productIds: string[],
   ): Promise<
-    Map<string, Array<{ id: string; type: CreativeType; url: string }>>
+    Map<
+      string,
+      Array<{ id: string; type: CreativeType; url: string; createdAt: string }>
+    >
   > {
     const result = new Map<
       string,
-      Array<{ id: string; type: CreativeType; url: string }>
+      Array<{ id: string; type: CreativeType; url: string; createdAt: string }>
     >();
     const ids = [...new Set(productIds.map(String))].filter((id) =>
       ID.test(id),
@@ -159,7 +162,12 @@ export class CreativeService {
     });
     for (const row of rows) {
       const list = result.get(String(row.productId)) ?? [];
-      list.push({ id: String(row.id), type: row.type, url: row.url });
+      list.push({
+        id: String(row.id),
+        type: row.type,
+        url: row.url,
+        createdAt: new Date(row.createdAt).toISOString(),
+      });
       result.set(String(row.productId), list);
     }
     return result;

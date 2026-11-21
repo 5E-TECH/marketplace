@@ -8903,6 +8903,46 @@
         ]
       }
     },
+    "/api/v1/affiliate/offers/{productId}": {
+      "get": {
+        "description": "Ro‘yxat maydonlari va tafsilot (kategoriya, tavsif, og‘irlik, yetkazish, BAD, holat, kreativlar). Katalogda hali bo‘lmagan qismlar (yetkazish rejimi, narx taqsimoti, hamma sotuvchilar natijasi) — null. Yopiq offer — 404.",
+        "operationId": "AffiliateStreamsController_getOffer",
+        "parameters": [
+          {
+            "name": "productId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateOfferDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Offer topilmadi yoki yopiq"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Offer kartasi: tafsilot va kreativlar",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
     "/api/v1/affiliate/streams": {
       "post": {
         "description": "Faqat offer ID: standart shablon, tasdiqlangan narx va unikal kod bilan tayyor havola. Qoldiq 0 bo‘lsa rad (BE-11).",
@@ -17955,6 +17995,197 @@
           "page",
           "limit",
           "totalPages"
+        ]
+      },
+      "AffiliateOfferCreativeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media/creatives/12/….mp4"
+          },
+          "caption": {
+            "type": "string",
+            "nullable": true,
+            "description": "Admin izohi (hozir yo‘q)"
+          },
+          "processing": {
+            "type": "boolean",
+            "example": false,
+            "description": "Video tayyorlanmoqda (hozir doim false — fayl yuklanganda tekshiriladi)"
+          },
+          "approvedAt": {
+            "type": "string",
+            "example": "2026-11-21T10:00:00.000Z",
+            "description": "Kutubxonaga qo‘shilgan vaqt (moderatsiya yo‘q)"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "url",
+          "caption",
+          "processing",
+          "approvedAt"
+        ]
+      },
+      "AffiliateOfferDetailDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "name": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "approvedPrice": {
+            "type": "number"
+          },
+          "maxSalePrice": {
+            "type": "number"
+          },
+          "affiliateFee": {
+            "type": "number"
+          },
+          "epc": {
+            "type": "number",
+            "nullable": true
+          },
+          "approveRate": {
+            "type": "number",
+            "nullable": true
+          },
+          "saleRate": {
+            "type": "number",
+            "nullable": true
+          },
+          "stock": {
+            "type": "number"
+          },
+          "hasVideo": {
+            "type": "boolean"
+          },
+          "categoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "subtitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "boxContents": {
+            "type": "string",
+            "nullable": true,
+            "description": "Qutida (offer matnidan)"
+          },
+          "weightKg": {
+            "type": "number",
+            "nullable": true
+          },
+          "deliveryMode": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "description": "Hozir null — katalog snapshotida yo‘q"
+          },
+          "centerDeliveryFee": {
+            "type": "number"
+          },
+          "addressDeliveryFee": {
+            "type": "number"
+          },
+          "isBad": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "OUT_OF_STOCK"
+            ],
+            "description": "Qoldiq 0 — OUT_OF_STOCK (yopiq offer — 404)"
+          },
+          "stoppedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "stopReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "onSaleSince": {
+            "type": "string",
+            "example": "2026-11-20"
+          },
+          "results": {
+            "type": "object",
+            "nullable": true,
+            "description": "Hamma sotuvchilar natijasi — hozir null"
+          },
+          "priceSplit": {
+            "type": "object",
+            "nullable": true,
+            "description": "Narx taqsimoti — hozir null"
+          },
+          "creatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliateOfferCreativeDto"
+            }
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "imageUrl",
+          "approvedPrice",
+          "maxSalePrice",
+          "affiliateFee",
+          "epc",
+          "approveRate",
+          "saleRate",
+          "stock",
+          "hasVideo",
+          "categoryName",
+          "subtitle",
+          "description",
+          "boxContents",
+          "weightKg",
+          "deliveryMode",
+          "centerDeliveryFee",
+          "addressDeliveryFee",
+          "isBad",
+          "state",
+          "stoppedAt",
+          "stopReason",
+          "onSaleSince",
+          "results",
+          "priceSplit",
+          "creatives"
         ]
       },
       "CreateAffiliateStreamDto": {

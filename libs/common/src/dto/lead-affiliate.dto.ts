@@ -181,6 +181,94 @@ export class AffiliateOfferDto {
   creatives: AffiliateCreativeDto[];
 }
 
+/** BE-08 (FE-05 taklifi `docs/api-taklif/fe-05-sotuvchi-offer.md`): offer kartasidagi kreativ. */
+export class AffiliateOfferCreativeDto {
+  @ApiProperty({ example: '31' }) id: string;
+  @ApiProperty({ enum: AffiliateCreativeType }) type: AffiliateCreativeType;
+  @ApiProperty({
+    example:
+      'https://api.elchimarket.uz/media/marketplace-media/creatives/12/….mp4',
+  })
+  url: string;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'Admin izohi (hozir yo‘q)',
+  })
+  caption: string | null;
+  @ApiProperty({
+    example: false,
+    description:
+      'Video tayyorlanmoqda (hozir doim false — fayl yuklanganda tekshiriladi)',
+  })
+  processing: boolean;
+  @ApiProperty({
+    example: '2026-11-21T10:00:00.000Z',
+    description: 'Kutubxonaga qo‘shilgan vaqt (moderatsiya yo‘q)',
+  })
+  approvedAt: string;
+}
+
+/**
+ * BE-08: sotuvchi uchun offer kartasi (`GET /affiliate/offers/{productId}`) — ro‘yxat maydonlari va tafsilot.
+ * Katalogda hali bo‘lmagan qismlar (yetkazish rejimi, narx taqsimoti, hamma sotuvchilar natijasi) — `null`.
+ */
+export class AffiliateOfferDetailDto {
+  @ApiProperty({ example: '12' }) productId: string;
+  @ApiProperty() name: string;
+  @ApiProperty({ nullable: true, type: String }) imageUrl: string | null;
+  @ApiProperty() approvedPrice: number;
+  @ApiProperty() maxSalePrice: number;
+  @ApiProperty() affiliateFee: number;
+  @ApiProperty({ nullable: true, type: Number }) epc: number | null;
+  @ApiProperty({ nullable: true, type: Number }) approveRate: number | null;
+  @ApiProperty({ nullable: true, type: Number }) saleRate: number | null;
+  @ApiProperty() stock: number;
+  @ApiProperty() hasVideo: boolean;
+  @ApiProperty({ nullable: true, type: String }) categoryName: string | null;
+  @ApiProperty({ nullable: true, type: String }) subtitle: string | null;
+  @ApiProperty({ nullable: true, type: String }) description: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'Qutida (offer matnidan)',
+  })
+  boxContents: string | null;
+  @ApiProperty({ nullable: true, type: Number }) weightKg: number | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    enum: ['SEPARATE', 'PARTIAL', 'FREE'],
+    description: 'Hozir null — katalog snapshotida yo‘q',
+  })
+  deliveryMode: 'SEPARATE' | 'PARTIAL' | 'FREE' | null;
+  @ApiProperty() centerDeliveryFee: number;
+  @ApiProperty() addressDeliveryFee: number;
+  @ApiProperty() isBad: boolean;
+  @ApiProperty({
+    enum: ['OPEN', 'OUT_OF_STOCK'],
+    description: 'Qoldiq 0 — OUT_OF_STOCK (yopiq offer — 404)',
+  })
+  state: 'OPEN' | 'OUT_OF_STOCK';
+  @ApiProperty({ nullable: true, type: String }) stoppedAt: string | null;
+  @ApiProperty({ nullable: true, type: String }) stopReason: string | null;
+  @ApiProperty({ example: '2026-11-20' }) onSaleSince: string;
+  @ApiProperty({
+    nullable: true,
+    type: Object,
+    description: 'Hamma sotuvchilar natijasi — hozir null',
+  })
+  results: null;
+  @ApiProperty({
+    nullable: true,
+    type: Object,
+    description: 'Narx taqsimoti — hozir null',
+  })
+  priceSplit: null;
+  @ApiProperty({ type: [AffiliateOfferCreativeDto] })
+  creatives: AffiliateOfferCreativeDto[];
+}
+
 export class AffiliateOffersPageDto {
   @ApiProperty({ type: [AffiliateOfferDto] }) items: AffiliateOfferDto[];
   @ApiProperty({ example: 42 }) total: number;

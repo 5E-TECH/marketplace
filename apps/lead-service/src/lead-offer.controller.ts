@@ -109,6 +109,12 @@ export class LeadOfferController {
     });
   }
 
+  /** BE-08: sotuvchi offer kartasi. */
+  @MessagePattern({ cmd: 'lead.offer.get-affiliate' })
+  getForAffiliate(@Payload() input: { productId: string }) {
+    return this.offers.getForAffiliate(input?.productId);
+  }
+
   @MessagePattern({ cmd: 'lead.offer-content.get' })
   getContent(@Payload() input: { productId: string }) {
     return this.offers.getContent(input.productId);
