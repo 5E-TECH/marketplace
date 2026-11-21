@@ -22,6 +22,8 @@ import {
   LOT_BLOCKED_EVENT,
   LOT_MIN_SHELF_DAYS,
   LotBlockedEvent,
+  PDF_FONT,
+  registerPdfFonts,
   RmqClient,
   runAsLeader,
   sendRpc,
@@ -31,7 +33,7 @@ import {
 } from '@app/common';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
-import { tashkentTime, uzbekText } from './pdf-text';
+import { tashkentTime } from './pdf-text';
 import { TODAY_SQL } from './stock-lots';
 
 const ID = /^[1-9]\d{0,18}$/;
@@ -498,13 +500,14 @@ export class InboundService {
       { cmd: 'catalog.wholesaler.admin-get' },
       { id: shipment.wholesalerId },
     ).catch(() => null);
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 40,
-      compress: false,
-      info: { Title: `Qabul akti ${shipment.number}` },
-    });
-    uzbekText(doc);
+    const doc = registerPdfFonts(
+      new PDFDocument({
+        size: 'A4',
+        margin: 40,
+        compress: false,
+        info: { Title: `Qabul akti ${shipment.number}` },
+      }),
+    );
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -515,7 +518,7 @@ export class InboundService {
       ? tashkentTime(shipment.receivedAt)
       : '—';
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(14)
       .text(
         shipment.status === InboundShipmentStatus.DISCREPANCY
@@ -523,7 +526,7 @@ export class InboundService {
           : `Qabul akti No ${shipment.number}`,
       );
     doc
-      .font('Helvetica')
+      .font(PDF_FONT.regular)
       .fontSize(10)
       .text(
         `Komitent (optovik): ${wholesaler?.name ?? `#${shipment.wholesalerId}`}, STIR ${wholesaler?.tin ?? '—'}`,
@@ -537,12 +540,12 @@ export class InboundService {
       )
       .moveDown();
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(8)
       .text(
         'No  Mahsulot | SKU / shtrix-kod | Yacheyka | Partiya | Muddat | E’lon | Qabul | Brak | Farq',
       );
-    doc.font('Helvetica').fontSize(8);
+    doc.font(PDF_FONT.regular).fontSize(8);
     let declared = 0;
     let received = 0;
     let defective = 0;
@@ -558,11 +561,11 @@ export class InboundService {
     });
     doc
       .moveDown()
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .text(
         `Jami: e’lon ${declared}, qabul ${received}, brak ${defective}, farq ${received - declared}`,
       )
-      .font('Helvetica');
+      .font(PDF_FONT.regular);
     if (shipment.receiveComment)
       doc.moveDown().text(`Ombor izohi: ${shipment.receiveComment}`);
     doc
