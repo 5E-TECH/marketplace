@@ -16,6 +16,9 @@ import {
   typeOrmOptions,
 } from '@app/common';
 import { InventoryService } from './inventory.service';
+import { InboundController } from './inbound.controller';
+import { InboundService } from './inbound.service';
+import { ReturnInspectionService } from './return-inspection.service';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
 import { InventoryOperationsController } from './inventory-operations.controller';
@@ -36,6 +39,16 @@ const entities = INVENTORY_DB.entities;
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
       },
+      // BE-17 (OMB-3): partiya sotuvdan chiqdi — admin va superadminga xabar
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -51,8 +64,14 @@ const entities = INVENTORY_DB.entities;
     }),
     TypeOrmModule.forFeature(entities),
   ],
-  controllers: [InventoryOperationsController, AdminInventoryController],
+  controllers: [
+    InventoryOperationsController,
+    AdminInventoryController,
+    InboundController,
+  ],
   providers: [
+    InboundService,
+    ReturnInspectionService,
     InventoryService,
     ReservationSweeperService,
     OutboxService,

@@ -10,6 +10,7 @@ import {
   ProductStatus,
   ShopStatus,
   UpdateProductVariantDto,
+  CatalogInventoryProduct,
 } from '@app/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
@@ -222,6 +223,43 @@ export class ProductVariantService {
     }
 
     return { id: variantId, deleted: true };
+  }
+
+  /**
+   * BE-17: ombor qabuli uchun — CPA mahsulotining yagona faol varianti (SKU, shtrix-kod, optovik, BAD). Faol
+   * variant yo‘q yoki mahsulot o‘chirilgan — ro‘yxatda yo‘q.
+   */
+  async inventoryProducts(
+    productIds: string[],
+  ): Promise<CatalogInventoryProduct[]> {
+    const ids = [...new Set((productIds ?? []).map(String))].filter((id) =>
+      /^[1-9]\d{0,18}$/.test(id),
+    );
+    if (!ids.length) return [];
+    const variants = await this.productVariants
+      .createQueryBuilder('variant')
+      .innerJoinAndSelect('variant.product', 'product')
+      .where('product.id IN (:...ids)', { ids })
+      .andWhere('variant.is_deleted = FALSE')
+      .andWhere('variant.is_active = TRUE')
+      .andWhere('product.is_deleted = FALSE')
+      .orderBy('variant.id', 'ASC')
+      .getMany();
+    const byProduct = new Map<string, CatalogInventoryProduct>();
+    for (const variant of variants) {
+      const productId = String(variant.productId);
+      if (byProduct.has(productId)) continue; // CPA da bitta faol variant (BE-07); eng kichik id — order snapshot bilan bir xil
+      byProduct.set(productId, {
+        productId,
+        productName: variant.product.name,
+        variantId: String(variant.id),
+        sku: variant.sku,
+        barcode: variant.barcode ?? null,
+        wholesalerId: String(variant.product.shopId),
+        isBad: Boolean(variant.product.isBad),
+      });
+    }
+    return [...byProduct.values()];
   }
 
   /** BE-16: ombor bitta (HQ) — optovik (`shopId`) berilmasa hamma variant, javobda mahsulot optovigi. */
