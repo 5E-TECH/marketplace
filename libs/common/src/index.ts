@@ -37,6 +37,7 @@ export * from './dto/inventory.dto';
 export * from './dto/notification.dto';
 export * from './dto/admin-shop.dto';
 export * from './dto/admin-dashboard.dto';
+export * from './dto/platform-metrics.dto';
 export * from './dto/admin-user.dto';
 export * from './dto/admin-order.dto';
 export * from './dto/admin-notification.dto';
@@ -63,6 +64,8 @@ export * from './dto/lead-fraud.dto';
 export * from './dto/affiliate-income.dto';
 export * from './dto/withdrawal.dto';
 export * from './dto/wholesaler-settlement.dto';
+export * from './dto/settlement-response.dto';
+export * from './dto/finance-reconciliation.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
