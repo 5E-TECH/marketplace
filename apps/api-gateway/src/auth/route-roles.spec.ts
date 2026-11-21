@@ -129,7 +129,9 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   ],
   // Operator ishi + navbat xulosasi, o‘tkazish va qizil ro‘yxat, lidlar ro‘yxati (qayta ochish — faqat admin).
   // BE-18: buyurtmalar ro‘yxati va kartasi (TC12, FE-26), bekor qilish (BUY-3).
+  // BE-21: kunlik COD sverkasi (TZ «Sverka farqi» → nazoratchi va moliya).
   [Role.SUPERVISOR]: [
+    'GET /admin/finance/cod-reconciliation',
     'GET /admin/leads',
     'GET /admin/leads/:id',
     'GET /admin/orders',
@@ -165,6 +167,8 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   ],
   // To‘lovni tasdiqlash va Elchi sverkasi.
   [Role.FINANCE]: [
+    'GET /admin/finance/cod-reconciliation',
+    'POST /admin/finance/cod-reconciliation/run',
     'GET /admin/finance/ledger',
     'GET /admin/finance/reports',
     'GET /admin/finance/reports/reconciliation',

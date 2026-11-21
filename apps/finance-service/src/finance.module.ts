@@ -1,11 +1,15 @@
 import { FINANCE_DB } from './database';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClientsModule } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommonConfigModule,
   ensureSchema,
+  RmqClient,
+  RmqQueue,
+  rmqOptions,
   ServiceHealthModule,
   shouldRunMigrations,
   typeOrmOptions,
@@ -21,6 +25,7 @@ import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
 import { BalanceCheckService } from './ledger/balance-check.service';
+import { CodDailyCheckService } from './ledger/cod-daily-check.service';
 
 const entities = FINANCE_DB.entities;
 
@@ -42,6 +47,18 @@ const entities = FINANCE_DB.entities;
       },
     }),
     TypeOrmModule.forFeature(entities),
+    // BE-21: kunlik sverka farqi — moliya va nazoratchiga xabar
+    ClientsModule.registerAsync([
+      {
+        name: RmqClient.NOTIFICATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.NOTIFICATION,
+          ),
+      },
+    ]),
   ],
   controllers: [
     FinanceController,
@@ -55,6 +72,7 @@ const entities = FINANCE_DB.entities;
     LedgerService,
     LedgerQueryService,
     BalanceCheckService,
+    CodDailyCheckService,
     WithdrawalService,
     SettlementService,
   ],

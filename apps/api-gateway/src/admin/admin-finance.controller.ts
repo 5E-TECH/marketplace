@@ -19,6 +19,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  COD_DAILY_CHECK_RPC,
+  CodDailyCheckDto,
+  CodDailyCheckQueryDto,
   CreateCommissionDto,
   FinanceCommissionDto,
   FinanceLedgerPageDto,
@@ -68,6 +71,39 @@ export class AdminFinanceController {
       this.finance,
       { cmd: 'finance.reconciliation.report' },
       { query },
+    );
+  }
+
+  /** BE-21 (TZ ELC-4): kunlik COD sverkasi — Elchi o‘tkazmalari buyurtma jurnali bilan. */
+  @Get('cod-reconciliation')
+  @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERVISOR, Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Kunlik COD sverkasi (sana bo‘yicha; bo‘sh — kecha)',
+    description:
+      'Har kuni 09:00 (Toshkent) hisoblanadi. Mos kelmagan buyurtmalar ro‘yxati bilan; farq bo‘lsa moliya va nazoratchiga xabar ketgan.',
+  })
+  @ApiOkResponse({ type: CodDailyCheckDto })
+  @ApiNotFoundResponse({ description: 'Bu kun uchun sverka hali yo‘q' })
+  codDailyCheck(@Query() query: CodDailyCheckQueryDto) {
+    return sendRpc(
+      this.finance,
+      { cmd: COD_DAILY_CHECK_RPC.GET },
+      { date: query.date },
+    );
+  }
+
+  @Post('cod-reconciliation/run')
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Kunlik COD sverkasini qayta hisoblash',
+    description: 'Natija yangilanadi; farq xabari bir kun uchun bir marta.',
+  })
+  @ApiOkResponse({ type: CodDailyCheckDto })
+  codDailyCheckRun(@Body() body: CodDailyCheckQueryDto) {
+    return sendRpc(
+      this.finance,
+      { cmd: COD_DAILY_CHECK_RPC.RUN },
+      { date: body?.date },
     );
   }
 

@@ -1,6 +1,11 @@
 import { Controller, Inject, Logger } from '@nestjs/common';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
-import { RmqClient, sendRpc } from '@app/common';
+import {
+  COD_RECONCILIATION_MISMATCH_EVENT,
+  CodReconciliationMismatchEvent,
+  RmqClient,
+  sendRpc,
+} from '@app/common';
 import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
 import { TemplateKey } from './notification-templates';
@@ -62,6 +67,38 @@ export class NotificationEventsController {
         type: 'price_orange',
         ...content,
         data: { productId: event.productId, decidedBy: event.decidedBy },
+      });
+  }
+
+  /** BE-21 (TZ ELC-4, bildirishnomalar «Sverka farqi» → nazoratchi va moliya): kunlik sverkada farq. */
+  @EventPattern(COD_RECONCILIATION_MISMATCH_EVENT)
+  async codMismatch(@Payload() event: CodReconciliationMismatchEvent) {
+    const recipients = new Map<
+      string,
+      { id: string; phone: string; email: string | null }
+    >();
+    for (const role of ['FINANCE', 'SUPERVISOR'])
+      for (const user of await sendRpc<
+        Array<{ id: string; phone: string; email: string | null }>
+      >(this.identity, { cmd: 'identity.user.active-by-role' }, { role }))
+        recipients.set(String(user.id), user);
+    if (!recipients.size) {
+      this.logger.warn(
+        `Sverka farqi (${event.date}): faol moliya yoki nazoratchi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('cod_reconciliation_mismatch', {
+      date: event.date,
+      mismatchCount: event.mismatchCount,
+      diffTotal: event.diffTotal,
+    });
+    for (const user of recipients.values())
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'cod_reconciliation_mismatch',
+        ...content,
+        data: { date: event.date, orders: event.orders },
       });
   }
 

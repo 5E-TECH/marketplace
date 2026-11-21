@@ -248,4 +248,41 @@ describe('NotificationEventsController', () => {
     });
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('BE-21: sverka farqi — moliya va nazoratchiga (ikki rolda bitta odam — bitta xabar)', async () => {
+    identitySend
+      .mockReturnValueOnce(
+        of([
+          { id: '5', phone: '+998900000005', email: null },
+          { id: '6', phone: '+998900000006', email: 'f@x.uz' },
+        ]),
+      )
+      .mockReturnValueOnce(
+        of([{ id: '6', phone: '+998900000006', email: 'f@x.uz' }]),
+      );
+    await controller.codMismatch({
+      date: '2026-12-01',
+      mismatchCount: 2,
+      diffTotal: -21000,
+      orders: [
+        { orderId: '509', expected: 251000, received: 240000, diff: -11000 },
+      ],
+    });
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'FINANCE' },
+    );
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'SUPERVISOR' },
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'cod_reconciliation_mismatch',
+        title: 'Sverka farqi: 2026-12-01',
+        body: '2026-12-01: Elchi o‘tkazmasi 2 ta buyurtmada mos emas, farq -21000 so‘m. Moliya → kunlik sverka.',
+      }),
+    );
+  });
 });

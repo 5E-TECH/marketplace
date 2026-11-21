@@ -71,6 +71,18 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Buyurtma puli qaytarildi',
     body: '#{orderId} buyurtma. Sabab: {reason}',
   },
+  cod_reconciliation_mismatch: {
+    name: 'Sverka farqi',
+    description:
+      'BE-21 (TZ ELC-4): kunlik COD sverkasida Elchi o‘tkazmasi buyurtma bilan mos kelmasa — moliya va nazoratchiga',
+    variables: {
+      date: 'Sana',
+      mismatchCount: 'Mos kelmagan buyurtmalar soni',
+      diffTotal: 'Farq jami, so‘m (kelgan − kutilgan)',
+    },
+    title: 'Sverka farqi: {date}',
+    body: '{date}: Elchi o‘tkazmasi {mismatchCount} ta buyurtmada mos emas, farq {diffTotal} so‘m. Moliya → kunlik sverka.',
+  },
   price_orange: {
     name: 'To‘q sariq narx tasdiqlandi',
     description:
