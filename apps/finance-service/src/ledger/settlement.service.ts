@@ -11,9 +11,9 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   ErrorCode,
   moneyFromDb,
-  registerPdfFonts,
   returningRows,
   runAsLeader,
+  registerPdfFonts,
   SettlementRunResultDto,
   WholesalerSettlementDto,
   WholesalerSettlementPageDto,
