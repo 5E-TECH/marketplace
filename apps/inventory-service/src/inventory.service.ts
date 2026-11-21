@@ -34,6 +34,16 @@ import {
   StockAdjustInput,
   StockIncreaseInput,
 } from './inventory.types';
+import {
+  blockedByVariant,
+  blockedQuantity,
+  consumeLots,
+  LotChoiceRequiredError,
+  LotNotFoundError,
+  LotTooSmallError,
+  trimLots,
+  writeOffLots,
+} from './stock-lots';
 
 @Injectable()
 export class InventoryService {
@@ -78,9 +88,14 @@ export class InventoryService {
             item.variantId,
             item.warehouseId,
           );
+          // BE-17 (OMB-3): muddatga 60 kundan kam qolgan partiya sotilmaydi
+          const blocked = stock
+            ? await blockedQuantity(manager, item.variantId, item.warehouseId)
+            : 0;
           if (
             !stock ||
-            stock.quantityOnHand - stock.quantityReserved < item.quantity
+            stock.quantityOnHand - stock.quantityReserved - blocked <
+              item.quantity
           ) {
             throw BusinessException.insufficientStock(
               `Variant ${item.variantId} uchun qoldiq yetarli emas`,
@@ -162,10 +177,18 @@ export class InventoryService {
     const rows = await this.dataSource.getRepository(Stock).find({
       where: { variantId: In(ids), warehouseId },
     });
+    // BE-17 (OMB-3): sotuvdan chiqqan partiyalar offer qoldig‘iga kirmaydi
+    const blocked = await blockedByVariant(
+      this.dataSource.manager,
+      ids,
+      warehouseId,
+    );
     for (const row of rows)
       result[String(row.variantId)] = Math.max(
         0,
-        row.quantityOnHand - row.quantityReserved,
+        row.quantityOnHand -
+          row.quantityReserved -
+          (blocked.get(String(row.variantId)) ?? 0),
       );
     return result;
   }
@@ -347,6 +370,10 @@ export class InventoryService {
     assertReason(input.reason);
     assertId(input.actorId, 'actorId');
     assertIdempotencyKey(input.idempotencyKey);
+    if (input.quantityDelta > 0 && (input.lotId || input.goodStock))
+      throw BusinessException.invalidState(
+        'lotId va goodStock faqat hisobdan chiqarishda (manfiy tuzatish)',
+      );
 
     return runInTransaction(
       this.dataSource,
@@ -370,6 +397,23 @@ export class InventoryService {
         }
         stock.quantityOnHand = nextOnHand;
         await manager.getRepository(Stock).save(stock);
+        // BE-17: hisobdan chiqarish partiyadan (ko‘rsatilgan yoki sotuvdan chiqqanlari), keyin invariant
+        if (input.quantityDelta < 0) {
+          try {
+            await writeOffLots(manager, stock, -input.quantityDelta, {
+              lotId: input.lotId,
+              goodStock: input.goodStock,
+            });
+          } catch (error) {
+            if (
+              error instanceof LotNotFoundError ||
+              error instanceof LotTooSmallError ||
+              error instanceof LotChoiceRequiredError
+            )
+              throw BusinessException.invalidState(error.message);
+            throw error;
+          }
+        }
         await saveMovement(
           manager,
           stock,
@@ -454,6 +498,16 @@ export class InventoryService {
         stock.quantityOnHand -= item.quantity;
       }
       await manager.getRepository(Stock).save(stock);
+      if (type === StockMovementType.COMMIT) {
+        // BE-17 (OMB-3): chiqim partiyalardan, muddati yaqinidan (FEFO)
+        await consumeLots(
+          manager,
+          item.variantId,
+          item.warehouseId,
+          item.quantity,
+        );
+        await trimLots(manager, stock);
+      }
       await saveMovement(
         manager,
         stock,

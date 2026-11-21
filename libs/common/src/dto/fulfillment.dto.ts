@@ -74,7 +74,27 @@ export const WAREHOUSE_RPC = {
   HANDOVER: 'checkout.warehouse.handover',
   ACT_GET: 'checkout.warehouse.act-get',
   ACT_PDF: 'checkout.warehouse.act-pdf',
+  /** BE-17: qaytayotgan posilkalar (RETURNING) va bitta buyurtma ma’lumoti — saralash uchun. */
+  RETURNS: 'checkout.warehouse.returns',
+  RETURN_INFO: 'checkout.warehouse.return-info',
 } as const;
+
+/** BE-17: saralanadigan qaytgan posilka (checkout → gateway). */
+export interface WarehouseReturnView {
+  orderId: string;
+  status: string;
+  parcelId: string | null;
+  shipmentId: string | null;
+  trackingUrl: string | null;
+  updatedAt: Date;
+  items: Array<{
+    variantId: string;
+    productName: string;
+    sku: string | null;
+    barcode: string | null;
+    quantity: number;
+  }>;
+}
 
 export class WarehousePickListQueryDto {
   @ApiPropertyOptional({

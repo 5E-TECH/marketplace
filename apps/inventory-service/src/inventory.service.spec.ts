@@ -26,6 +26,8 @@ class InventoryDbFake {
   readonly manager = {
     query: jest.fn(async (sql: string, params: unknown[]) => {
       this.queries.push({ sql, params });
+      // BE-17: partiyalar (stock_lot) bu xotira modelida yo‘q — muddat kuzatilmaydigan qoldiq
+      if (sql.includes('stock_lot')) return [];
     }),
     getRepository: jest.fn((entity: unknown) => this.repository(entity)),
   };
