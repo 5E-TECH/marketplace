@@ -411,21 +411,42 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       idempotencyKey: 'in-847',
     });
     await expect(inventory.available(['847'])).resolves.toEqual({ '847': 6 });
-    await inventory.adjust({
-      variantId: '847',
-      warehouseId: hqId,
-      quantityDelta: -4,
-      reason: 'Muddati o‘tgan partiya hisobdan chiqarildi',
-      actorId: '61',
-      idempotencyKey: 'wo-847',
-    });
-    expect((await stockOf('847')).quantityOnHand).toBe(6);
-    await expect(inventory.available(['847'])).resolves.toEqual({ '847': 6 });
+    // adjust tekshiruvlari sinxron tashlaydi — async bilan rad etilgan promise
+    const adjust = async (delta: number, key: string, extra = {}) =>
+      inventory.adjust({
+        variantId: '847',
+        warehouseId: hqId,
+        quantityDelta: delta,
+        reason: 'Hisobdan chiqarish',
+        actorId: '61',
+        idempotencyKey: key,
+        ...extra,
+      });
+    // sotuvdan chiqqan partiya bor — nimani chiqarishni aytish majburiy (taxmin noto‘g‘ri qoldiq beradi)
+    await expect(adjust(-2, 'wo-0')).rejects.toThrow('lotId');
+    // yaxshi tovar (2 dona shikastlangan) — muddati o‘tgan partiyaga tegilmaydi
+    await adjust(-2, 'wo-1', { goodStock: true });
+    expect((await stockOf('847')).quantityOnHand).toBe(8);
+    await expect(inventory.available(['847'])).resolves.toEqual({ '847': 4 });
+    // muddati o‘tgan partiya — o‘zi chiqariladi, yaxshi qoldiq sotuvda qoladi
+    const [old] = (await inbound.lots({ state: 'BLOCKED' })).filter(
+      (lot) => lot.sku === 'SKU-47',
+    );
+    await adjust(-4, 'wo-2', { lotId: old.id });
+    expect((await stockOf('847')).quantityOnHand).toBe(4);
+    await expect(inventory.available(['847'])).resolves.toEqual({ '847': 4 });
     expect(
       (await inbound.lots({ state: 'ALL' })).filter(
         (lot) => lot.sku === 'SKU-47',
       ),
     ).toEqual([]);
+    // boshqa SKU partiyasi yoki kirimda partiya — rad
+    await expect(adjust(-1, 'wo-3', { lotId: '999999' })).rejects.toThrow(
+      'Partiya topilmadi',
+    );
+    await expect(adjust(1, 'wo-4', { goodStock: true })).rejects.toThrow(
+      'faqat hisobdan chiqarishda',
+    );
   });
 
   it('ikki parallel qabul (qatorlar teskari tartibda) — deadlock yo‘q, ikkalasi o‘tadi', async () => {

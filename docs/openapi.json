@@ -16322,6 +16322,10 @@
           "lotId": {
             "type": "string",
             "example": "9"
+          },
+          "goodStock": {
+            "type": "boolean",
+            "example": false
           }
         },
         "required": [

@@ -78,11 +78,16 @@ export async function consumeLots(
 export async function trimLots(
   manager: EntityManager,
   stock: Stock,
+  options: { preferSellable?: boolean } = {},
 ): Promise<void> {
+  // odatda avval sotuvdan chiqqanlari; yaxshi tovar hisobdan chiqarilganda — avval sotiladiganlari
+  const order = options.preferSellable
+    ? `(sellable_until < ${TODAY_SQL}) ASC, expiry_date, id`
+    : `(sellable_until < ${TODAY_SQL}) DESC, expiry_date, id`;
   const lots = (await manager.query(
     `SELECT id::text, quantity FROM inventory.stock_lot
       WHERE variant_id = $1 AND warehouse_id = $2 AND quantity > 0
-      ORDER BY (sellable_until < ${TODAY_SQL}) DESC, expiry_date, id FOR UPDATE`,
+      ORDER BY ${order} FOR UPDATE`,
     [stock.variantId, stock.warehouseId],
   )) as Array<{ id: string; quantity: number }>;
   let excess =
@@ -100,21 +105,23 @@ export async function trimLots(
 }
 
 /**
- * Hisobdan chiqarish (manfiy tuzatish): partiya ko‘rsatilsa — o‘sha partiyadan; aks holda avval sotuvdan chiqqan
- * (muddati yaqin) partiyalardan [taklif — hisobdan chiqarish odatda muddati o‘tgan tovar]. Partiyasiz qoldiq
- * o‘zgarmaydi; keyin `trimLots` invariantni saqlaydi.
+ * Hisobdan chiqarish (manfiy tuzatish), aniq tanlov bilan:
+ * - `lotId` — o‘sha partiyadan (masalan, muddati o‘tgan tovar);
+ * - `goodStock` — yaxshi tovar (partiyasiz yoki sotiladigan partiya); sotuvdan chiqqan partiyaga tegilmaydi;
+ * - hech biri bo‘lmasa va SKU da sotuvdan chiqqan partiya bor — tanlov majburiy (taxmin noto‘g‘ri qoldiq beradi).
+ * Keyin `trimLots` invariantni saqlaydi (yaxshi tovar chiqarilsa — sotiladigan partiyalardan).
  */
 export async function writeOffLots(
   manager: EntityManager,
   stock: Stock,
   quantity: number,
-  lotId?: string,
+  choice: { lotId?: string; goodStock?: boolean },
 ): Promise<void> {
-  if (lotId) {
+  if (choice.lotId) {
     const [lot] = (await manager.query(
       `SELECT id::text, quantity FROM inventory.stock_lot
         WHERE id = $1 AND variant_id = $2 AND warehouse_id = $3 FOR UPDATE`,
-      [lotId, stock.variantId, stock.warehouseId],
+      [choice.lotId, stock.variantId, stock.warehouseId],
     )) as Array<{ id: string; quantity: number }>;
     if (!lot) throw new LotNotFoundError();
     if (Number(lot.quantity) < quantity) throw new LotTooSmallError();
@@ -122,23 +129,25 @@ export async function writeOffLots(
       `UPDATE inventory.stock_lot SET quantity = quantity - $2, updated_at = now() WHERE id = $1`,
       [lot.id, quantity],
     );
+    await trimLots(manager, stock);
     return;
   }
-  const lots = (await manager.query(
-    `SELECT id::text, quantity FROM inventory.stock_lot
-      WHERE variant_id = $1 AND warehouse_id = $2 AND quantity > 0 AND sellable_until < ${TODAY_SQL}
-      ORDER BY expiry_date, id FOR UPDATE`,
-    [stock.variantId, stock.warehouseId],
-  )) as Array<{ id: string; quantity: number }>;
-  let remaining = quantity;
-  for (const lot of lots) {
-    if (remaining <= 0) break;
-    const take = Math.min(remaining, Number(lot.quantity));
-    await manager.query(
-      `UPDATE inventory.stock_lot SET quantity = quantity - $2, updated_at = now() WHERE id = $1`,
-      [lot.id, take],
+  if (!choice.goodStock) {
+    const blocked = await blockedQuantity(
+      manager,
+      stock.variantId,
+      stock.warehouseId,
     );
-    remaining -= take;
+    if (blocked > 0) throw new LotChoiceRequiredError();
+  }
+  await trimLots(manager, stock, { preferSellable: true });
+}
+
+export class LotChoiceRequiredError extends Error {
+  constructor() {
+    super(
+      'Bu SKU da sotuvdan chiqqan partiya bor: lotId (muddati o‘tgan partiya) yoki goodStock: true (yaxshi tovar) ni ko‘rsating',
+    );
   }
 }
 

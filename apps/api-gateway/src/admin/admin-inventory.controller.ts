@@ -107,6 +107,7 @@ export class AdminInventoryController {
         delta: dto.delta,
         reason: dto.reason,
         lotId: dto.lotId,
+        goodStock: dto.goodStock,
         actorId: user.sub,
         idempotencyKey: dto.idempotencyKey ?? randomUUID(),
       },

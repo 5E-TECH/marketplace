@@ -38,6 +38,7 @@ import {
   blockedByVariant,
   blockedQuantity,
   consumeLots,
+  LotChoiceRequiredError,
   LotNotFoundError,
   LotTooSmallError,
   trimLots,
@@ -369,6 +370,10 @@ export class InventoryService {
     assertReason(input.reason);
     assertId(input.actorId, 'actorId');
     assertIdempotencyKey(input.idempotencyKey);
+    if (input.quantityDelta > 0 && (input.lotId || input.goodStock))
+      throw BusinessException.invalidState(
+        'lotId va goodStock faqat hisobdan chiqarishda (manfiy tuzatish)',
+      );
 
     return runInTransaction(
       this.dataSource,
@@ -395,21 +400,19 @@ export class InventoryService {
         // BE-17: hisobdan chiqarish partiyadan (ko‘rsatilgan yoki sotuvdan chiqqanlari), keyin invariant
         if (input.quantityDelta < 0) {
           try {
-            await writeOffLots(
-              manager,
-              stock,
-              -input.quantityDelta,
-              input.lotId,
-            );
+            await writeOffLots(manager, stock, -input.quantityDelta, {
+              lotId: input.lotId,
+              goodStock: input.goodStock,
+            });
           } catch (error) {
             if (
               error instanceof LotNotFoundError ||
-              error instanceof LotTooSmallError
+              error instanceof LotTooSmallError ||
+              error instanceof LotChoiceRequiredError
             )
               throw BusinessException.invalidState(error.message);
             throw error;
           }
-          await trimLots(manager, stock);
         }
         await saveMovement(
           manager,

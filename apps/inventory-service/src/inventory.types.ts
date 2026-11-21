@@ -32,8 +32,10 @@ export interface StockIncreaseInput extends StockTarget {
 
 export interface StockAdjustInput extends StockTarget {
   quantityDelta: number;
-  /** BE-17: hisobdan chiqariladigan partiya (ixtiyoriy; bo‘lmasa — avval sotuvdan chiqqanlari). */
+  /** BE-17: hisobdan chiqariladigan partiya (muddati o‘tgan tovar). */
   lotId?: string;
+  /** BE-17: yaxshi tovar hisobdan chiqariladi (sotuvdan chiqqan partiyaga tegilmaydi). */
+  goodStock?: boolean;
   idempotencyKey: string;
   reason: string;
   actorId: string;

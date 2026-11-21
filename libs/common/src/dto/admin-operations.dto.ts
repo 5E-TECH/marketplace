@@ -322,9 +322,18 @@ export class AdminStockAdjustDto {
   @MaxLength(255)
   idempotencyKey?: string;
 
-  /** BE-17: manfiy tuzatishda — qaysi partiyadan (muddat ro‘yxati); bo‘lmasa avval sotuvdan chiqqan partiyalar. */
+  /**
+   * BE-17: hisobdan chiqarishda (manfiy) — qaysi partiyadan (muddat ro‘yxati). SKU da sotuvdan chiqqan partiya
+   * bo‘lsa, `lotId` yoki `goodStock` majburiy.
+   */
   @ApiPropertyOptional({ example: '9' })
   @IsOptional()
-  @Matches(/^[1-9]\d*$/)
+  @Matches(/^[1-9]\d{0,18}$/)
   lotId?: string;
+
+  /** BE-17: hisobdan chiqarilayotgani yaxshi tovar (sotuvdan chiqqan partiyaga tegilmaydi). */
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  goodStock?: boolean;
 }
