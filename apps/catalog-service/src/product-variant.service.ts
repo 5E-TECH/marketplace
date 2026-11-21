@@ -243,6 +243,8 @@ export class ProductVariantService {
       .andWhere('variant.is_deleted = FALSE')
       .andWhere('variant.is_active = TRUE')
       .andWhere('product.is_deleted = FALSE')
+      // faqat CPA mahsuloti (BE-07): eski do‘kon mahsulotiga postavka e’lon qilinmaydi
+      .andWhere('product.cpa_enabled = TRUE')
       .orderBy('variant.id', 'ASC')
       .getMany();
     const byProduct = new Map<string, CatalogInventoryProduct>();

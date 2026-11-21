@@ -375,6 +375,95 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     ).toBe(true);
   });
 
+  it('hisobdan chiqarish: muddati o‘tgan partiya chiqariladi, yaxshi qoldiq sotuvga qaytadi; qoldiq ro‘yxatida yacheyka va blok', async () => {
+    const shipment = await inbound.declare({
+      wholesalerId: WHOLESALER,
+      expectedAt: inDays(0),
+      items: [
+        { productId: '47', quantity: 4 },
+        { productId: '48', quantity: 1 },
+      ],
+      actorId: '61',
+    });
+    const [first, second] = shipment.items;
+    await inbound.receive({
+      id: shipment.id,
+      items: [
+        {
+          itemId: first.id,
+          receivedQty: 4,
+          defectiveQty: 0,
+          batch: 'OLD',
+          expiryDate: inDays(30),
+          cell: 'E-1',
+        },
+        { itemId: second.id, receivedQty: 1, defectiveQty: 0, cell: 'E-2' },
+      ],
+      actorId: '61',
+    });
+    // muddatsiz 6 dona (masalan, qaytgan tovar) — sotiladi
+    await inventory.inbound({
+      variantId: '847',
+      warehouseId: hqId,
+      quantity: 6,
+      reason: 'Muddatsiz qoldiq',
+      actorId: '61',
+      idempotencyKey: 'in-847',
+    });
+    await expect(inventory.available(['847'])).resolves.toEqual({ '847': 6 });
+    await inventory.adjust({
+      variantId: '847',
+      warehouseId: hqId,
+      quantityDelta: -4,
+      reason: 'Muddati o‘tgan partiya hisobdan chiqarildi',
+      actorId: '61',
+      idempotencyKey: 'wo-847',
+    });
+    expect((await stockOf('847')).quantityOnHand).toBe(6);
+    await expect(inventory.available(['847'])).resolves.toEqual({ '847': 6 });
+    expect(
+      (await inbound.lots({ state: 'ALL' })).filter(
+        (lot) => lot.sku === 'SKU-47',
+      ),
+    ).toEqual([]);
+  });
+
+  it('ikki parallel qabul (qatorlar teskari tartibda) — deadlock yo‘q, ikkalasi o‘tadi', async () => {
+    const make = () =>
+      inbound.declare({
+        wholesalerId: WHOLESALER,
+        expectedAt: inDays(0),
+        items: [
+          { productId: '50', quantity: 3 },
+          { productId: '51', quantity: 3 },
+        ],
+        actorId: '61',
+      });
+    const [a, b] = [await make(), await make()];
+    const lines = (shipment: typeof a, reverse: boolean) => {
+      const items = shipment.items.map((item) => ({
+        itemId: item.id,
+        receivedQty: 3,
+        defectiveQty: 0,
+        cell: 'F-1',
+      }));
+      return reverse ? items.reverse() : items;
+    };
+    for (let round = 0; round < 3; round++) {
+      const [x, y] = [await make(), await make()];
+      await Promise.all([
+        inbound.receive({ id: x.id, items: lines(x, false), actorId: '61' }),
+        inbound.receive({ id: y.id, items: lines(y, true), actorId: '61' }),
+      ]);
+    }
+    await Promise.all([
+      inbound.receive({ id: a.id, items: lines(a, false), actorId: '61' }),
+      inbound.receive({ id: b.id, items: lines(b, true), actorId: '61' }),
+    ]);
+    expect((await stockOf('850')).quantityOnHand).toBe(24);
+    expect((await stockOf('851')).quantityOnHand).toBe(24);
+  });
+
   it('chiqim qilinmagan buyurtma saralanmaydi (409)', async () => {
     await expect(
       returns.grade({

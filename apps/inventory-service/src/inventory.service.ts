@@ -38,7 +38,10 @@ import {
   blockedByVariant,
   blockedQuantity,
   consumeLots,
+  LotNotFoundError,
+  LotTooSmallError,
   trimLots,
+  writeOffLots,
 } from './stock-lots';
 
 @Injectable()
@@ -389,8 +392,25 @@ export class InventoryService {
         }
         stock.quantityOnHand = nextOnHand;
         await manager.getRepository(Stock).save(stock);
-        // BE-17: kamaytirishda (hisobdan chiqarish) avval sotuvdan chiqqan partiyalar
-        if (input.quantityDelta < 0) await trimLots(manager, stock);
+        // BE-17: hisobdan chiqarish partiyadan (ko‘rsatilgan yoki sotuvdan chiqqanlari), keyin invariant
+        if (input.quantityDelta < 0) {
+          try {
+            await writeOffLots(
+              manager,
+              stock,
+              -input.quantityDelta,
+              input.lotId,
+            );
+          } catch (error) {
+            if (
+              error instanceof LotNotFoundError ||
+              error instanceof LotTooSmallError
+            )
+              throw BusinessException.invalidState(error.message);
+            throw error;
+          }
+          await trimLots(manager, stock);
+        }
         await saveMovement(
           manager,
           stock,

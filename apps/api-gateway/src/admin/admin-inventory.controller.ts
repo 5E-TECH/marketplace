@@ -106,6 +106,7 @@ export class AdminInventoryController {
         variantId: dto.variantId,
         delta: dto.delta,
         reason: dto.reason,
+        lotId: dto.lotId,
         actorId: user.sub,
         idempotencyKey: dto.idempotencyKey ?? randomUUID(),
       },

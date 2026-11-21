@@ -20,6 +20,7 @@ import { Reservation } from './entities/reservation.entity';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
 import { PdfFile } from './inbound.service';
+import { tashkentTime, uzbekText } from './pdf-text';
 
 const ID = /^[1-9]\d{0,18}$/;
 
@@ -226,6 +227,7 @@ export class ReturnInspectionService {
       compress: false,
       info: { Title: `Brak akti ${inspection.orderId}` },
     });
+    uzbekText(doc);
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -241,7 +243,7 @@ export class ReturnInspectionService {
       .fontSize(10)
       .text(`Elchi posilkasi: ${input?.shipmentId ?? '—'}`)
       .text(
-        `Saralandi: ${new Date(inspection.inspectedAt).toISOString().slice(0, 16).replace('T', ' ')}, saraladi #${inspection.inspectedBy}`,
+        `Saralandi: ${tashkentTime(inspection.inspectedAt)}, saraladi #${inspection.inspectedBy}`,
       )
       .moveDown();
     doc

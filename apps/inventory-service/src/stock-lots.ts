@@ -98,3 +98,58 @@ export async function trimLots(
     excess -= take;
   }
 }
+
+/**
+ * Hisobdan chiqarish (manfiy tuzatish): partiya ko‘rsatilsa — o‘sha partiyadan; aks holda avval sotuvdan chiqqan
+ * (muddati yaqin) partiyalardan [taklif — hisobdan chiqarish odatda muddati o‘tgan tovar]. Partiyasiz qoldiq
+ * o‘zgarmaydi; keyin `trimLots` invariantni saqlaydi.
+ */
+export async function writeOffLots(
+  manager: EntityManager,
+  stock: Stock,
+  quantity: number,
+  lotId?: string,
+): Promise<void> {
+  if (lotId) {
+    const [lot] = (await manager.query(
+      `SELECT id::text, quantity FROM inventory.stock_lot
+        WHERE id = $1 AND variant_id = $2 AND warehouse_id = $3 FOR UPDATE`,
+      [lotId, stock.variantId, stock.warehouseId],
+    )) as Array<{ id: string; quantity: number }>;
+    if (!lot) throw new LotNotFoundError();
+    if (Number(lot.quantity) < quantity) throw new LotTooSmallError();
+    await manager.query(
+      `UPDATE inventory.stock_lot SET quantity = quantity - $2, updated_at = now() WHERE id = $1`,
+      [lot.id, quantity],
+    );
+    return;
+  }
+  const lots = (await manager.query(
+    `SELECT id::text, quantity FROM inventory.stock_lot
+      WHERE variant_id = $1 AND warehouse_id = $2 AND quantity > 0 AND sellable_until < ${TODAY_SQL}
+      ORDER BY expiry_date, id FOR UPDATE`,
+    [stock.variantId, stock.warehouseId],
+  )) as Array<{ id: string; quantity: number }>;
+  let remaining = quantity;
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, Number(lot.quantity));
+    await manager.query(
+      `UPDATE inventory.stock_lot SET quantity = quantity - $2, updated_at = now() WHERE id = $1`,
+      [lot.id, take],
+    );
+    remaining -= take;
+  }
+}
+
+export class LotNotFoundError extends Error {
+  constructor() {
+    super('Partiya topilmadi');
+  }
+}
+
+export class LotTooSmallError extends Error {
+  constructor() {
+    super('Partiyada buncha tovar yo‘q');
+  }
+}

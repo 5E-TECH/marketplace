@@ -16318,6 +16318,10 @@
           },
           "idempotencyKey": {
             "type": "string"
+          },
+          "lotId": {
+            "type": "string",
+            "example": "9"
           }
         },
         "required": [
@@ -16686,6 +16690,15 @@
           "lowStockThreshold": {
             "type": "number",
             "example": 5
+          },
+          "cell": {
+            "type": "string",
+            "example": "B-02-1",
+            "nullable": true
+          },
+          "blocked": {
+            "type": "number",
+            "example": 0
           }
         },
         "required": [
@@ -16702,7 +16715,9 @@
           "onHand",
           "reserved",
           "available",
-          "lowStockThreshold"
+          "lowStockThreshold",
+          "cell",
+          "blocked"
         ]
       },
       "AdminCatalogWarningDto": {

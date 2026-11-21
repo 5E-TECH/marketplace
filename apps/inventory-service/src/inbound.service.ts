@@ -31,6 +31,7 @@ import {
 } from '@app/common';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
+import { tashkentTime, uzbekText } from './pdf-text';
 import { TODAY_SQL } from './stock-lots';
 
 const ID = /^[1-9]\d{0,18}$/;
@@ -299,7 +300,13 @@ export class InboundService {
         );
       const warehouseId = await this.hqWarehouseId(manager);
       let discrepancy = false;
-      for (const line of lines) {
+      // qulf tartibi band qilish bilan bir xil (variant bo‘yicha) — parallel qabulda deadlock bo‘lmasin
+      const ordered = [...lines].sort(
+        (a, b) =>
+          Number(byId.get(String(a.itemId))!.variantId) -
+          Number(byId.get(String(b.itemId))!.variantId),
+      );
+      for (const line of ordered) {
         const item = byId.get(String(line.itemId))!;
         const good = line.receivedQty - line.defectiveQty;
         if (line.receivedQty !== item.declaredQty || line.defectiveQty > 0)
@@ -424,16 +431,24 @@ export class InboundService {
   /** Xabar ketgach `notified_at`; yuborilmasa — keyingi kun qayta. */
   async notifyBlocked(lotIds: string[]): Promise<void> {
     if (!this.notifications || !lotIds.length) return;
+    // avval band qilinadi (qabul va kunlik tekshiruv bir vaqtda ikki xabar yubormasin); yuborilmasa — bo‘shatiladi
+    const claimed = this.rows<{ id: string }>(
+      await this.dataSource.query(
+        `UPDATE inventory.stock_lot SET notified_at = now()
+          WHERE id = ANY($1::bigint[]) AND notified_at IS NULL RETURNING id::text`,
+        [lotIds],
+      ),
+    ).map((row) => row.id);
+    if (!claimed.length) return;
     const lots = (await this.dataSource.query(
       `SELECT l.id::text AS "lotId", i.sku, i.product_name AS "productName", l.batch,
               to_char(l.expiry_date, 'YYYY-MM-DD') AS "expiryDate",
               to_char(l.sellable_until, 'YYYY-MM-DD') AS "sellableUntil", l.quantity
          FROM inventory.stock_lot l
          JOIN inventory.inbound_shipment_item i ON i.id = l.shipment_item_id
-        WHERE l.id = ANY($1::bigint[]) AND l.notified_at IS NULL`,
-      [lotIds],
+        WHERE l.id = ANY($1::bigint[])`,
+      [claimed],
     )) as LotBlockedEvent['lots'];
-    if (!lots.length) return;
     const event: LotBlockedEvent = {
       lots: lots.map((lot) => ({ ...lot, quantity: Number(lot.quantity) })),
     };
@@ -448,12 +463,17 @@ export class InboundService {
       this.logger.warn(
         `Partiya muddati xabari yuborilmadi: ${(error as Error)?.message}`,
       );
-      return;
+      await this.dataSource.query(
+        `UPDATE inventory.stock_lot SET notified_at = NULL WHERE id = ANY($1::bigint[])`,
+        [claimed],
+      );
     }
-    await this.dataSource.query(
-      `UPDATE inventory.stock_lot SET notified_at = now() WHERE id = ANY($1::bigint[])`,
-      [lots.map((lot) => lot.lotId)],
-    );
+  }
+
+  /** TypeORM UPDATE … RETURNING uchun [qatorlar, soni] qaytaradi. */
+  private rows<T>(result: unknown): T[] {
+    const list = result as unknown[];
+    return (Array.isArray(list?.[0]) ? list[0] : list) as T[];
   }
 
   /**
@@ -484,6 +504,7 @@ export class InboundService {
       compress: false,
       info: { Title: `Qabul akti ${shipment.number}` },
     });
+    uzbekText(doc);
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -491,10 +512,7 @@ export class InboundService {
       doc.on('error', reject);
     });
     const receivedAt = shipment.receivedAt
-      ? new Date(shipment.receivedAt)
-          .toISOString()
-          .slice(0, 16)
-          .replace('T', ' ')
+      ? tashkentTime(shipment.receivedAt)
       : '—';
     doc
       .font('Helvetica-Bold')
