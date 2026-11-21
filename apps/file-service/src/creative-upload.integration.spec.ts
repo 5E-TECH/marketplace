@@ -25,13 +25,8 @@ describeWithMinio(
     let proxy: http.Server;
     let publicUrl: string;
     let creatives: CreativeFileService;
-    const admin = new Client({
-      endPoint: endpoint!,
-      port,
-      useSSL: false,
-      accessKey,
-      secretKey,
-    });
+    // `describe.skip` ham tanani yig‘adi — klient faqat MinIO bor bo‘lganda (beforeAll da) yaratiladi
+    let admin: Client;
 
     const proxyAgent = new http.Agent({ keepAlive: false });
 
@@ -112,6 +107,13 @@ describeWithMinio(
       );
 
     beforeAll(async () => {
+      admin = new Client({
+        endPoint: endpoint!,
+        port,
+        useSSL: false,
+        accessKey,
+        secretKey,
+      });
       await startProxy();
       publicUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/media`;
       // bucket va ochiq o‘qish siyosati (creatives/ ham) — file-service ishga tushganda qiladigan ish
