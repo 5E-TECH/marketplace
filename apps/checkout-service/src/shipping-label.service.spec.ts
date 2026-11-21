@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import { inspectPdf } from '@app/common/pdf/pdf-inspect';
 import {
   LABEL_MAX_ITEMS,
   ShippingLabelService,
@@ -115,6 +116,57 @@ describe('ShippingLabelService (C1.45)', () => {
       `+ yana ${9 - LABEL_MAX_ITEMS} ta pozitsiya`,
     );
     text.mockRestore();
+  });
+
+  it('kirill va ʻ/ʼ yorliqda o‘qiladi, faqat DejaVu shrifti (Helvetica yo‘q)', async () => {
+    const result = await new ShippingLabelService().generate({
+      ...label('9'),
+      senderName: 'Ромашка Савдо',
+      buyerName: 'Каримова Нодира',
+      districtName: 'Yunusobod',
+      deliveryAddress: 'Amir Temur koʻchasi 7-uy, maʼlumot: 3-qavat',
+      items: [{ productName: 'Витамин С 1000 мг', quantity: 2 }],
+    });
+
+    const pdf = pdfBuffer(result.base64);
+    const { text, fonts } = inspectPdf(pdf);
+    expect(fonts).toHaveLength(2);
+    expect(fonts).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^[A-Z]{6}\+DejaVuSansCondensed$/),
+        expect.stringMatching(/^[A-Z]{6}\+DejaVuSansCondensed-Bold$/),
+      ]),
+    );
+    expect(text.split('\n')).toEqual(
+      expect.arrayContaining([
+        'Ромашка Савдо',
+        'Каримова Нодира',
+        'Toshkent shahri, Yunusobod',
+        'Amir Temur koʻchasi 7-uy, maʼlumot: 3-qavat',
+        '2 x Витамин С 1000 мг',
+      ]),
+    );
+    expect(pdf.toString('latin1')).not.toContain('Helvetica');
+  });
+
+  it('topshirish akti ham DejaVu bilan yoziladi', async () => {
+    const result = await new ShippingLabelService().generateHandoverAct({
+      id: '5',
+      createdAt: '2026-12-16 14:05',
+      items: [
+        { orderNumber: 'MP-0001', shipmentId: '1251131', qrCodeToken: 'qr-1' },
+        { orderNumber: 'MP-0002', shipmentId: '1251132', qrCodeToken: 'qr-2' },
+      ],
+    });
+
+    const { text, fonts } = inspectPdf(pdfBuffer(result.base64));
+    expect(fonts).toHaveLength(2);
+    expect(fonts.every((f) => /\+DejaVuSansCondensed(-Bold)?$/.test(f))).toBe(
+      true,
+    );
+    expect(text).toContain('Elchi Pochtaga topshirish akti No 5');
+    expect(text).toContain('Posilkalar soni: 2');
+    expect(text).toContain('2.   MP-0002   1251132   qr-2');
   });
 
   it('partiyada chiqmaganlar hujjat bilan birga qaytadi', async () => {
