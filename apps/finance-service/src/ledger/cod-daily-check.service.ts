@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { Cron } from '@nestjs/schedule';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
@@ -23,6 +23,8 @@ const ZONE = 'Asia/Tashkent';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** Xabardagi buyurtmalar soni (to‘liq ro‘yxat — admin sahifasida) [taklif]. */
 const ALERT_ORDERS = 20;
+/** Xabar navbati ishlamasa kunlik ish (va leader qulfi) osilib qolmasin. */
+const NOTIFY_TIMEOUT_MS = 5_000;
 
 interface DailyRow {
   check_date: string;
@@ -37,13 +39,25 @@ interface DailyRow {
   alerted_at: Date | null;
 }
 
+interface ItemRow {
+  orderId: string;
+  shipmentId: string | null;
+  elchiStatus: string;
+  state: 'PENDING' | 'MATCHED' | 'PARTIAL' | 'MISMATCH';
+  expected: string | null;
+  orderExpected: string | null;
+  diff: string | null;
+  paid: string | null;
+  refusalFee: string | null;
+}
+
 /**
  * Kunlik COD sverkasi (BE-21; TZ ELC-4 «Kunlik sverka; farq bo‘lsa moliyaga ogohlantirish», TZ bildirishnomalar
  * jadvali «Sverka farqi» → nazoratchi va moliya).
  *
- * O‘sha kuni kelgan Elchi o‘tkazmalari (BE-22 `remittance_item`) buyurtma bo‘yicha: mos, qisman, mos emas, kutilmoqda;
- * kutilgan va kelgan jami. Mos emas bo‘lsa — moliya va nazoratchiga xabar (bir kun uchun bir marta). Tolerans TZ da
- * yo‘q — har qanday farq. BE-22 kechki tekshiruvi (03:00) o‘zgarmaydi.
+ * O‘sha kuni kelgan yoki holati o‘zgargan Elchi o‘tkazmalari (BE-22 `remittance_item`) buyurtma bo‘yicha: mos, qisman,
+ * mos emas, kutilmoqda; kutilgan va kelgan jami. Mos emas bo‘lsa — moliya va nazoratchiga xabar (bir kun uchun bir
+ * marta). Tolerans TZ da yo‘q — har qanday farq. BE-22 kechki tekshiruvi (03:00) o‘zgarmaydi.
  */
 @Injectable()
 export class CodDailyCheckService {
@@ -65,41 +79,54 @@ export class CodDailyCheckService {
   /** Hisoblaydi (qayta hisoblash ham — natija yangilanadi, xabar ikki marta ketmaydi). */
   async run(input: { date?: string }): Promise<CodDailyCheckDto> {
     const date = this.dateOf(input?.date);
+    // kun chegarasi Toshkent vaqtida; indeksli oraliq (created_at, updated_at)
     const rows = (await this.dataSource.query(
-      `SELECT DISTINCT ON (order_id)
-              order_id AS "orderId", shipment_id AS "shipmentId", elchi_status AS "elchiStatus",
-              match_state AS "state", expected_amount AS "expected", diff
-         FROM finance.remittance_item
-        WHERE (created_at AT TIME ZONE '${ZONE}')::date = $1::date
-        ORDER BY order_id, id DESC`,
+      `WITH day AS (
+         SELECT ($1::date)::timestamp AT TIME ZONE '${ZONE}' AS since,
+                ($1::date + 1)::timestamp AT TIME ZONE '${ZONE}' AS until
+       )
+       SELECT DISTINCT ON (i.order_id)
+              i.order_id AS "orderId", i.shipment_id AS "shipmentId", i.elchi_status AS "elchiStatus",
+              i.match_state AS "state", i.expected_amount AS "expected", i.diff,
+              i.market_paid_amount AS "paid", i.refusal_fee AS "refusalFee",
+              (SELECT max(x.expected_amount) FROM finance.remittance_item x
+                WHERE x.order_id = i.order_id) AS "orderExpected"
+         FROM finance.remittance_item i, day
+        WHERE (i.created_at >= day.since AND i.created_at < day.until)
+           OR (i.updated_at >= day.since AND i.updated_at < day.until)
+        ORDER BY i.order_id, i.id DESC`,
       [date],
-    )) as Array<{
-      orderId: string;
-      shipmentId: string | null;
-      elchiStatus: string;
-      state: 'PENDING' | 'MATCHED' | 'PARTIAL' | 'MISMATCH';
-      expected: string | null;
-      diff: string | null;
-    }>;
+    )) as ItemRow[];
     const count = (state: string) =>
       rows.filter((row) => row.state === state).length;
     let expectedTotal = 0;
     let receivedTotal = 0;
     const mismatches: CodDailyCheckMismatchDto[] = [];
     for (const row of rows) {
-      if (row.expected === null) continue; // buyurtma hodisasi hali yo‘q
-      const expected = moneyFromDb(row.expected);
-      const received = expected + moneyFromDb(row.diff ?? '0');
-      expectedTotal += expected;
-      receivedTotal += received;
+      // hisob-kitobdan keyingi ortiqcha o‘tkazmada `expected` bo‘sh — buyurtmaning kutilgan summasi
+      const known = row.expected ?? row.orderExpected;
+      const expected = known === null ? null : moneyFromDb(known);
+      const received =
+        row.refusalFee !== null
+          ? moneyFromDb(row.refusalFee)
+          : row.paid !== null
+            ? moneyFromDb(row.paid)
+            : (expected ?? 0) + moneyFromDb(row.diff ?? '0');
+      if (expected !== null && row.state !== 'PENDING') {
+        expectedTotal += expected;
+        receivedTotal += received;
+      }
       if (row.state === 'MISMATCH')
         mismatches.push({
           orderId: row.orderId,
           shipmentId: row.shipmentId,
           elchiStatus: row.elchiStatus,
-          expected,
+          expected: expected ?? 0,
           received,
-          diff: received - expected,
+          diff:
+            expected === null
+              ? moneyFromDb(row.diff ?? '0')
+              : received - expected,
         });
     }
     const [saved] = (await this.dataSource.query(
@@ -140,11 +167,22 @@ export class CodDailyCheckService {
     return this.toDto(row);
   }
 
-  /** Moliya va nazoratchiga xabar; yuborilmasa — keyingi hisoblashda qayta urinadi (`alerted_at` bo‘sh qoladi). */
+  /**
+   * Moliya va nazoratchiga xabar. Avval kun «xabar berildi» deb band qilinadi (ikki parallel hisoblash ikki xabar
+   * yubormasin); yuborilmasa — bo‘shatiladi va keyingi hisoblashda qayta urinadi.
+   */
   private async alert(
     date: string,
     mismatches: CodDailyCheckMismatchDto[],
   ): Promise<Date | null> {
+    const claimed = this.rows<{ alerted_at: Date }>(
+      await this.dataSource.query(
+        `UPDATE finance.cod_daily_check SET alerted_at = now()
+          WHERE check_date = $1::date AND alerted_at IS NULL RETURNING alerted_at`,
+        [date],
+      ),
+    );
+    if (!claimed.length) return this.alertedAt(date); // boshqasi yubordi
     const event: CodReconciliationMismatchEvent = {
       date,
       mismatchCount: mismatches.length,
@@ -158,28 +196,39 @@ export class CodDailyCheckService {
     };
     try {
       await firstValueFrom(
-        this.notifications.emit(COD_RECONCILIATION_MISMATCH_EVENT, event),
+        this.notifications
+          .emit(COD_RECONCILIATION_MISMATCH_EVENT, event)
+          .pipe(timeout(NOTIFY_TIMEOUT_MS)),
         { defaultValue: undefined },
       );
     } catch (error) {
       this.logger.error(
-        `Sverka farqi (${date}) xabari yuborilmadi: ${(error as Error).message}`,
+        `Sverka farqi (${date}) xabari yuborilmadi: ${(error as Error)?.message}`,
+      );
+      await this.dataSource.query(
+        `UPDATE finance.cod_daily_check SET alerted_at = NULL WHERE check_date = $1::date`,
+        [date],
       );
       return null;
     }
     this.logger.warn(
       `Sverka farqi (${date}): ${event.mismatchCount} buyurtma, farq ${event.diffTotal}`,
     );
-    const updated = (await this.dataSource.query(
-      `UPDATE finance.cod_daily_check SET alerted_at = now()
-        WHERE check_date = $1::date RETURNING alerted_at`,
+    return claimed[0].alerted_at;
+  }
+
+  private async alertedAt(date: string): Promise<Date | null> {
+    const [row] = (await this.dataSource.query(
+      'SELECT alerted_at FROM finance.cod_daily_check WHERE check_date = $1::date',
       [date],
-    )) as unknown[];
-    // TypeORM UPDATE … RETURNING uchun [qatorlar, soni] qaytaradi
-    const rows = (Array.isArray(updated[0]) ? updated[0] : updated) as Array<{
-      alerted_at: Date;
-    }>;
-    return rows[0]?.alerted_at ?? null;
+    )) as Array<{ alerted_at: Date | null }>;
+    return row?.alerted_at ?? null;
+  }
+
+  /** TypeORM UPDATE … RETURNING uchun [qatorlar, soni] qaytaradi. */
+  private rows<T>(result: unknown): T[] {
+    const list = result as unknown[];
+    return (Array.isArray(list?.[0]) ? list[0] : list) as T[];
   }
 
   /** Sana (Toshkent); bo‘sh — kecha. */

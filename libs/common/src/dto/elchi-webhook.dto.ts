@@ -106,6 +106,21 @@ export class ElchiWebhookDto {
   extraCost?: number;
 }
 
+/**
+ * checkout → notification (BE-21): Elchi yetkazilgan sotuvni orqaga qaytardi (bekor yoki qaytarildi). Buyurtma
+ * «faqat oldinga» qoidasi bilan o‘zgarmaydi — moliya va nazoratchi qo‘lda hal qiladi (pul HOLD da qoladi).
+ */
+export const ELCHI_SALE_ROLLBACK_EVENT = 'elchi.sale.rollback';
+
+export interface ElchiSaleRollbackEvent {
+  orderId: string;
+  shipmentId: string;
+  orderStatus: string;
+  elchiStatus: string;
+  eventId: string;
+  occurredAt: string;
+}
+
 export interface ReturnOrderItemsDto {
   orderRef: string;
   items: Array<{ variantId: string; quantity: number }>;

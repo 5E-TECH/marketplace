@@ -40,6 +40,7 @@ describeWithPostgres(
     let status: LeadOrderStatusService;
     let parcels: ElchiParcelEventsService;
     let webhook: ElchiLeadWebhookService;
+    const notifications = { emit: jest.fn(() => from([undefined])) };
 
     const rpc = (work: () => Promise<unknown>) =>
       defer(() =>
@@ -249,7 +250,12 @@ describeWithPostgres(
         inventoryClient as never,
       );
       parcels = new ElchiParcelEventsService(checkoutDs);
-      webhook = new ElchiLeadWebhookService(checkoutDs, outbox, status);
+      webhook = new ElchiLeadWebhookService(
+        checkoutDs,
+        outbox,
+        status,
+        notifications as never,
+      );
     });
 
     afterAll(async () => {
@@ -377,15 +383,45 @@ describeWithPostgres(
       expect(JSON.stringify(commands)).toContain('inventory.release');
     });
 
-    it('akt yopilmagan (yig‘ildi) — «qabul qilindi» holatni o‘zgartirmaydi; boshqa posilka raqami — 400', async () => {
+    it('akt yopilmagan (yig‘ildi) — «qabul qilindi» holatni o‘zgartirmaydi (NOOP); boshqa posilka raqami — 400', async () => {
       const target = await order('8106', LeadOrderStatus.PACKED);
       await expect(
         webhook.process(hook(target, 'received')),
-      ).resolves.toMatchObject({ result: 'REJECTED' });
+      ).resolves.toMatchObject({ result: 'NOOP', status: 'PACKED' });
       expect(await statusOf(target.id)).toBe('PACKED');
       await expect(
         webhook.process(hook({ ...target, shipmentId: '999999' }, 'sold')),
       ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('Elchi yetkazilgan sotuvni bekor qildi — holat o‘zgarmaydi (REJECTED), pul yozilmaydi, moliya va nazoratchiga xabar', async () => {
+      const target = await order('8107');
+      await webhook.process(hook(target, 'sold'));
+      notifications.emit.mockClear();
+      await expect(
+        webhook.process(hook(target, 'cancelled', { extraCost: 20_000 })),
+      ).resolves.toMatchObject({ result: 'REJECTED', status: 'DELIVERED' });
+      expect(await outboxOf(target.id, 'finance.cod.settled')).toEqual([]);
+      expect(notifications.emit).toHaveBeenCalledWith(
+        'elchi.sale.rollback',
+        expect.objectContaining({
+          orderId: target.id,
+          orderStatus: 'DELIVERED',
+          elchiStatus: 'cancelled',
+        }),
+      );
+    });
+
+    it('rad to‘lovi faqat musbat `extra_cost` va bir marta: 0 — yozilmaydi; «qaytdi» takror yubormaydi; keyingi «bekor» — NOOP', async () => {
+      const target = await order('8108');
+      await webhook.process(hook(target, 'on_the_road'));
+      await webhook.process(hook(target, 'cancelled', { extraCost: 0 }));
+      expect(await statusOf(target.id)).toBe('REFUSED');
+      await webhook.process(hook(target, 'returned', { extraCost: 20_000 }));
+      expect(await outboxOf(target.id, 'finance.cod.settled')).toEqual([]);
+      await expect(
+        webhook.process(hook(target, 'cancelled', { extraCost: 0 })),
+      ).resolves.toMatchObject({ result: 'NOOP', status: 'RETURNING' });
     });
   },
 );

@@ -57,17 +57,19 @@ const LEGACY_RANK: Partial<Record<SalesOrderSellerStatus, number>> = {
   [SalesOrderSellerStatus.DELIVERED]: 4,
 };
 
-/** Eski yo‘l: holat faqat oldinga; yakuniy holatdan faqat «yetkazildi → qaytarildi». */
+/**
+ * Eski yo‘l: holat faqat oldinga; yakuniy holatdan faqat qaytarish — «yetkazildi → qaytarildi» va «bekor →
+ * qaytarildi» (Elchi ketma-ketligi: cancelled → cancelled (sent) → returned_to_market — tovar omborga qaytadi).
+ */
 export function legacyTransitionAllowed(
   from: SalesOrderSellerStatus,
   to: SalesOrderSellerStatus,
 ): boolean {
+  if (from === SalesOrderSellerStatus.RETURNED) return false;
   if (
-    from === SalesOrderSellerStatus.CANCELLED ||
-    from === SalesOrderSellerStatus.RETURNED
+    from === SalesOrderSellerStatus.DELIVERED ||
+    from === SalesOrderSellerStatus.CANCELLED
   )
-    return false;
-  if (from === SalesOrderSellerStatus.DELIVERED)
     return to === SalesOrderSellerStatus.RETURNED;
   if (
     to === SalesOrderSellerStatus.CANCELLED ||
@@ -147,7 +149,11 @@ export class ElchiWebhookService {
 
       if (status === SalesOrderSellerStatus.RETURNED) {
         await this.restoreInventory(manager, sellerOrder, event);
-        if (sellerOrder.payment_method !== CheckoutPaymentMethod.COD) {
+        // bekor qilinganda pul allaqachon qaytarilgan — qaytarishda faqat qoldiq
+        if (
+          sellerOrder.payment_method !== CheckoutPaymentMethod.COD &&
+          sellerOrder.status !== SalesOrderSellerStatus.CANCELLED
+        ) {
           await this.refundOnlinePayment(manager, sellerOrder, event, true);
         }
       } else if (
@@ -215,6 +221,8 @@ export class ElchiWebhookService {
     result: ElchiWebhookResult,
     detail: string | null,
   ): Promise<void> {
+    // eski yo‘l jurnali holatni marketplace nomi bilan saqlaydi (admin filtri — SalesOrderSellerStatus)
+    const status = STATUS_MAP[event.status] ?? event.status;
     await manager.query(
       `INSERT INTO checkout.elchi_webhook_event
         (event_id,shipment_id,sales_order_seller_id,status,occurred_at,payload,result,detail)
@@ -223,7 +231,7 @@ export class ElchiWebhookService {
         event.eventId,
         event.shipmentId,
         sellerOrderId,
-        event.status,
+        status,
         event.occurredAt,
         JSON.stringify(event),
         result,

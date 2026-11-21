@@ -131,6 +131,33 @@ describePostgres('BE-21 kunlik COD sverkasi (PostgreSQL)', () => {
     });
   });
 
+  it('hisob-kitobdan keyin ortiqcha o‘tkazma (kutilgan summa yozilmagan) ham farq sifatida chiqadi', async () => {
+    await ledger.onOrderStatusChanged(
+      orderEvent({ eventId: 'e21', orderId: '521' }),
+    );
+    await ledger.onRemittance(
+      remittance({ eventId: 'rem-521', orderId: '521' }),
+    );
+    await ledger.onRemittance(
+      remittance({
+        eventId: 'rem-521-b',
+        orderId: '521',
+        marketPaidAmount: 351000,
+      }),
+    );
+    const notifications = { emit: jest.fn(() => of(undefined)) };
+    await ds.query('UPDATE finance.cod_daily_check SET alerted_at = NULL');
+    const result = await new CodDailyCheckService(
+      ds,
+      notifications as never,
+    ).run({ date: today() });
+    const late = result.mismatches.find((m) => m.orderId === '521');
+    expect(late).toMatchObject({ received: 351000 });
+    expect(late!.expected).toBeGreaterThan(0);
+    expect(late!.diff).toBe(late!.received - late!.expected);
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+  });
+
   it('xabar yuborilmasa — keyingi hisoblashda qayta urinadi; farqsiz kun — xabar yo‘q; sverkasiz kun — 404', async () => {
     await ds.query('UPDATE finance.cod_daily_check SET alerted_at = NULL');
     const failing = {

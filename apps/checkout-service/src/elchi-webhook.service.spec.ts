@@ -277,6 +277,19 @@ describe('ElchiWebhookService (C2.4)', () => {
       );
     });
 
+    it('bekor → qaytarildi: tovar omborga qaytadi, pul ikkinchi marta qaytarilmaydi (Elchi: cancelled → returned_to_market)', async () => {
+      const { service, inventory, payment } = setup({
+        current: 'CANCELLED',
+        paymentMethod: CheckoutPaymentMethod.ONLINE,
+      });
+      await expect(service.process(event('returned'))).resolves.toEqual({
+        received: true,
+        result: 'APPLIED',
+      });
+      expect(inventory.send).toHaveBeenCalled();
+      expect(payment.send).not.toHaveBeenCalled();
+    });
+
     it('`partly_paid` va `closed` — holatga ta’sir yo‘q, jurnalda IGNORED', async () => {
       for (const status of ['partly_paid', 'closed'] as const) {
         const { service, queries, finance } = setup({ current: 'DELIVERED' });

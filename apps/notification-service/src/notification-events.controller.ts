@@ -3,6 +3,8 @@ import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
   CodReconciliationMismatchEvent,
+  ELCHI_SALE_ROLLBACK_EVENT,
+  ElchiSaleRollbackEvent,
   RmqClient,
   sendRpc,
 } from '@app/common';
@@ -73,16 +75,8 @@ export class NotificationEventsController {
   /** BE-21 (TZ ELC-4, bildirishnomalar «Sverka farqi» → nazoratchi va moliya): kunlik sverkada farq. */
   @EventPattern(COD_RECONCILIATION_MISMATCH_EVENT)
   async codMismatch(@Payload() event: CodReconciliationMismatchEvent) {
-    const recipients = new Map<
-      string,
-      { id: string; phone: string; email: string | null }
-    >();
-    for (const role of ['FINANCE', 'SUPERVISOR'])
-      for (const user of await sendRpc<
-        Array<{ id: string; phone: string; email: string | null }>
-      >(this.identity, { cmd: 'identity.user.active-by-role' }, { role }))
-        recipients.set(String(user.id), user);
-    if (!recipients.size) {
+    const recipients = await this.financeAndSupervisors();
+    if (!recipients.length) {
       this.logger.warn(
         `Sverka farqi (${event.date}): faol moliya yoki nazoratchi yo‘q`,
       );
@@ -93,13 +87,57 @@ export class NotificationEventsController {
       mismatchCount: event.mismatchCount,
       diffTotal: event.diffTotal,
     });
-    for (const user of recipients.values())
+    for (const user of recipients)
       await this.notifications.create({
         recipient: { userId: user.id, email: user.email, phone: user.phone },
         type: 'cod_reconciliation_mismatch',
         ...content,
         data: { date: event.date, orders: event.orders },
       });
+  }
+
+  /** BE-21: Elchi yetkazilgan sotuvni bekor qildi — buyurtma o‘zgarmaydi, moliya va nazoratchi qo‘lda hal qiladi. */
+  @EventPattern(ELCHI_SALE_ROLLBACK_EVENT)
+  async elchiSaleRollback(@Payload() event: ElchiSaleRollbackEvent) {
+    const recipients = await this.financeAndSupervisors();
+    if (!recipients.length) {
+      this.logger.warn(
+        `Elchi sotuvni bekor qildi (${event.orderId}): faol moliya yoki nazoratchi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('elchi_sale_rollback', {
+      orderId: event.orderId,
+      orderStatus: event.orderStatus,
+      elchiStatus: event.elchiStatus,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'elchi_sale_rollback',
+        ...content,
+        data: {
+          orderId: event.orderId,
+          shipmentId: event.shipmentId,
+          eventId: event.eventId,
+        },
+      });
+  }
+
+  /** Moliya va nazoratchi (ikki rolda bitta odam — bir marta). */
+  private async financeAndSupervisors(): Promise<
+    Array<{ id: string; phone: string; email: string | null }>
+  > {
+    const recipients = new Map<
+      string,
+      { id: string; phone: string; email: string | null }
+    >();
+    for (const role of ['FINANCE', 'SUPERVISOR'])
+      for (const user of await sendRpc<
+        Array<{ id: string; phone: string; email: string | null }>
+      >(this.identity, { cmd: 'identity.user.active-by-role' }, { role }))
+        recipients.set(String(user.id), user);
+    return [...recipients.values()];
   }
 
   @EventPattern('seller.registration.created')

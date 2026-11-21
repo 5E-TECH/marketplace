@@ -1,10 +1,16 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  ELCHI_SALE_ROLLBACK_EVENT,
+  ElchiSaleRollbackEvent,
   ElchiWebhookDto,
   FinanceRemittanceEvent,
   LEAD_ORDER_CANCELLABLE,
@@ -14,6 +20,7 @@ import {
   LeadOrderStatus,
   leadOrderIdFromElchiRef,
   OutboxService,
+  RmqClient,
 } from '@app/common';
 import {
   InventoryCommand,
@@ -44,11 +51,20 @@ const ELCHI_STEPS: ReadonlySet<LeadOrderStatus> = new Set([
   LeadOrderStatus.CANCELLED,
 ]);
 
-/** Rad etilgan posilka holatlari — Elchi rad to‘lovi shu buyurtmalarga tegishli. */
-const REFUSAL_BRANCH: ReadonlySet<LeadOrderStatus> = new Set([
+/** Rad etilgan yoki bekor qilingan buyurtma — Elchi «bekor»/«qaytdi» xabari endi o‘zgartirmaydi (takror). */
+const CLOSED_WITHOUT_SALE: ReadonlySet<LeadOrderStatus> = new Set([
+  LeadOrderStatus.CANCELLED,
   LeadOrderStatus.REFUSED,
   LeadOrderStatus.RETURNING,
   LeadOrderStatus.RETURNED_GRADED,
+]);
+
+/** Yetkazilgan (sotilgan) buyurtma — Elchi uni bekor qilsa, bu sotuvni orqaga qaytarish. */
+const SOLD: ReadonlySet<LeadOrderStatus> = new Set([
+  LeadOrderStatus.DELIVERED,
+  LeadOrderStatus.REMITTED,
+  LeadOrderStatus.SETTLED,
+  LeadOrderStatus.RETURN_REQUESTED,
 ]);
 
 const ELCHI_ACTOR: LeadOrderActor = {
@@ -56,20 +72,27 @@ const ELCHI_ACTOR: LeadOrderActor = {
   id: null,
 };
 
+/** Xabar navbati ishlamasa webhook javobi kechikmasin. */
+const NOTIFY_TIMEOUT_MS = 2_000;
+
 /**
  * Elchi webhooki lid buyurtmasi uchun (BE-21; TZ ELC-3, ELC-4, ELC-5, T9-6, T9-7).
  *
  * - Holat faqat oldinga: T5 grafida joriy holatdan maqsadgacha Elchi qadamlari bilan yo‘l bo‘lsa, har qadam alohida
  *   o‘tish (jurnal, `order.status.changed`); yo‘l bo‘lmasa — holat o‘zgarmaydi, jurnalga «rad etildi», Elchi’ga 200.
+ *   Elchi yetkazilgan sotuvni bekor qilsa — moliya va nazoratchiga xabar (pul HOLD da, qo‘lda hal qilinadi).
  * - Pul: `paid` / `partly_paid` va rad etilgan posilkadagi `extra_cost` — `finance.cod.settled` 2-versiya (BE-22).
  * - Hammasi bitta tranzaksiyada, moliya hodisalari outbox orqali (T9-3); takror — `event_id` bo‘yicha bir marta.
  */
 @Injectable()
 export class ElchiLeadWebhookService {
+  private readonly logger = new Logger(ElchiLeadWebhookService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     private readonly outbox: OutboxService,
     private readonly statuses: LeadOrderStatusService,
+    @Inject(RmqClient.NOTIFICATION) private readonly notifications: ClientProxy,
   ) {}
 
   /** `mp-order:<id>` — lid buyurtmasi (BE-20); aks holda null (eski do‘kon buyurtmasi). */
@@ -81,6 +104,7 @@ export class ElchiLeadWebhookService {
     const orderId = this.orderIdOf(event);
     if (!orderId) throw new BadRequestException('Lid buyurtmasi kaliti emas');
     const commands: InventoryCommand[] = [];
+    let rollback: ElchiSaleRollbackEvent | null = null;
     const outcome = await this.dataSource.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         event.eventId,
@@ -91,36 +115,39 @@ export class ElchiLeadWebhookService {
       )) as unknown[];
       if (duplicate.length) return { received: true as const, duplicate: true };
 
-      // buyurtma qatori qulflanadi: yo‘l hisobi va o‘tishlar bir xil holatdan
+      // buyurtma qatori qulflanadi (tartib: buyurtma, keyin vazifa — topshirish akti bilan bir xil)
       const [order] = (await manager.query(
-        `SELECT o.status, p.id::text AS "parcelId", p.elchi_shipment_id::text AS "shipmentId"
+        `SELECT o.status, p.id::text AS "parcelId"
            FROM checkout.sales_order o
            JOIN checkout.parcel p ON p.sales_order_id = o.id
-          WHERE o.id = $1 AND o.source IS NOT NULL
+          WHERE o.id = $1 AND o.source IS NOT NULL AND p.elchi_shipment_id = $2::bigint
           FOR UPDATE OF o`,
-        [orderId],
-      )) as Array<{
-        status: LeadOrderStatus;
-        parcelId: string;
-        shipmentId: string | null;
-      }>;
-      if (!order) throw new NotFoundException('Webhook buyurtmasi topilmadi');
-      if (order.shipmentId !== String(event.shipmentId))
+        [orderId, event.shipmentId],
+      )) as Array<{ status: LeadOrderStatus; parcelId: string }>;
+      if (!order) {
+        const exists = (await manager.query(
+          'SELECT 1 FROM checkout.sales_order WHERE id = $1 AND source IS NOT NULL',
+          [orderId],
+        )) as unknown[];
+        if (!exists.length)
+          throw new NotFoundException('Webhook buyurtmasi topilmadi');
         throw new BadRequestException('shipmentId buyurtmaga mos emas');
+      }
 
       const from = order.status;
       const target = this.targetOf(event.status, from);
       let result: ElchiWebhookResult;
       let detail: string | null = null;
       let status = from;
+      let path: LeadOrderStatus[] = [];
       if (target === null) {
         result = 'NOOP';
-        detail = `holatga ta’siri yo‘q: ${event.status}`;
+        detail = `holatga ta’siri yo‘q: ${event.status} (${from})`;
       } else if (target === from) {
         result = 'NOOP';
       } else {
-        const path = forwardPath(from, target);
-        if (!path) {
+        const found = forwardPath(from, target);
+        if (!found) {
           // orqaga yoki boshqa tarmoq (masalan, «Yetkazildi» dan keyin «Yo‘lda») — o‘zgarmaydi (TC1)
           result = 'REJECTED';
           detail = `${from} → ${target}: faqat oldinga`;
@@ -130,7 +157,21 @@ export class ElchiLeadWebhookService {
             `Elchi webhook ${event.eventId}: ${event.status}`,
             manager,
           );
+          if (
+            SOLD.has(from) &&
+            (target === LeadOrderStatus.REFUSED ||
+              target === LeadOrderStatus.RETURNING)
+          )
+            rollback = {
+              orderId,
+              shipmentId: event.shipmentId,
+              orderStatus: from,
+              elchiStatus: event.status,
+              eventId: event.eventId,
+              occurredAt: event.occurredAt,
+            };
         } else {
+          path = found;
           for (const to of path) {
             const applied = await this.statuses.applyTransition(manager, {
               orderId,
@@ -146,7 +187,9 @@ export class ElchiLeadWebhookService {
         }
       }
 
-      await this.recordMoney(manager, orderId, event, status);
+      // rad etilgan o‘tishda pul yozilmaydi: moliyada mos keladigan buyurtma hodisasi bo‘lmaydi
+      if (result !== 'REJECTED')
+        await this.recordMoney(manager, orderId, event, status, path);
       await manager.query(
         `INSERT INTO checkout.elchi_webhook_event
            (event_id, shipment_id, sales_order_seller_id, status, occurred_at, payload, result, detail, order_id)
@@ -168,22 +211,20 @@ export class ElchiLeadWebhookService {
     // bekor qilinganda band bo‘shaydi (BE-18): commit dan keyin darhol, o‘tmasa relay qayta yuboradi
     for (const command of commands)
       await this.statuses.sendInventoryNow(command);
+    if (rollback) await this.notifyRollback(rollback);
     return outcome;
   }
 
   /**
-   * Elchi holati → T5 maqsadi (null — buyurtma holatiga ta’siri yo‘q). «Bekor»: topshirilgunga qadar — bekor qilindi
-   * (band bo‘shaydi), topshirilgandan keyin — mijoz rad etdi [taklif, egaga savol 1].
+   * Elchi holati → T5 maqsadi (null — buyurtma holatiga ta’siri yo‘q, jurnalda NOOP).
+   * «Bekor»: topshirilgunga qadar — bekor qilindi (band bo‘shaydi), topshirilgandan keyin — mijoz rad etdi
+   * [taklif, egaga savol 1]; allaqachon bekor yoki rad etilgan — takror.
    */
   private targetOf(
     elchiStatus: ElchiWebhookDto['status'],
     current: LeadOrderStatus,
   ): LeadOrderStatus | null {
     switch (elchiStatus) {
-      case 'shipment_created':
-      case 'received':
-        // akt qo‘yadi; akt yopilmagan bo‘lsa — oldinga yo‘l yo‘q (rad, jurnalda)
-        return LeadOrderStatus.HANDED_TO_ELCHI;
       case 'on_the_road':
         return LeadOrderStatus.IN_TRANSIT;
       case 'delivered':
@@ -191,15 +232,24 @@ export class ElchiLeadWebhookService {
       case 'partly_paid':
         return LeadOrderStatus.DELIVERED;
       case 'paid':
-      case 'settled':
         return LeadOrderStatus.REMITTED;
       case 'returned':
-        return LeadOrderStatus.RETURNING;
+        return CLOSED_WITHOUT_SALE.has(current) &&
+          current !== LeadOrderStatus.REFUSED
+          ? null
+          : LeadOrderStatus.RETURNING;
       case 'cancelled':
       case 'canceled':
-        return LEAD_ORDER_CANCELLABLE.includes(current)
-          ? LeadOrderStatus.CANCELLED
+        if (LEAD_ORDER_CANCELLABLE.includes(current))
+          return LeadOrderStatus.CANCELLED;
+        return CLOSED_WITHOUT_SALE.has(current)
+          ? null
           : LeadOrderStatus.REFUSED;
+      // «Elchi’ga topshirildi» ni topshirish akti qo‘yadi (BE-19); `settled` — marketplace shaklidagi eski nom,
+      // pul summalarisiz; `closed` — asosan bekor qilingan tovarning yakuniy holati (pul — recordMoney da)
+      case 'shipment_created':
+      case 'received':
+      case 'settled':
       case 'closed':
       default:
         return null;
@@ -207,14 +257,15 @@ export class ElchiLeadWebhookService {
   }
 
   /**
-   * Elchi pul ma’lumoti moliyaga (`finance.cod.settled` 2-versiya, outbox — buyurtma hodisalari bilan bir oqimda,
-   * shuning uchun «Yetkazildi» dan keyin keladi). Moliya buyurtma jurnali bilan solishtiradi (BE-22).
+   * Elchi pul ma’lumoti moliyaga (`finance.cod.settled` 2-versiya, outbox — buyurtma hodisalari bilan bir oqimda).
+   * Moliya buyurtma jurnali bilan solishtiradi (BE-22); bir xil summa takrori — mos.
    */
   private async recordMoney(
     manager: EntityManager,
     orderId: string,
     event: ElchiWebhookDto,
     status: LeadOrderStatus,
+    path: LeadOrderStatus[],
   ): Promise<void> {
     let remittance: FinanceRemittanceEvent | null = null;
     const base = {
@@ -230,14 +281,12 @@ export class ElchiLeadWebhookService {
     if (event.status === 'paid' || event.status === 'partly_paid') {
       remittance = { ...base, elchiStatus: event.status, refusalFee: null };
     } else if (
-      (event.status === 'cancelled' ||
-        event.status === 'canceled' ||
-        event.status === 'returned' ||
-        event.status === 'closed') &&
-      event.extraCost !== undefined &&
-      REFUSAL_BRANCH.has(status)
+      (event.extraCost ?? 0) > 0 &&
+      // rad etilgan posilka: Elchi ushlagan xarajat — rad to‘lovi [taklif, egaga savol 2]. Elchi `extra_cost` ni
+      // har xabarda yuboradi (odatda 0) — faqat musbat summa, faqat rad etilgan paytda yoki yakuniy `closed` da.
+      (path.includes(LeadOrderStatus.REFUSED) ||
+        (event.status === 'closed' && CLOSED_WITHOUT_SALE.has(status)))
     ) {
-      // rad etilgan posilka: Elchi ushlagan xarajat — rad to‘lovi [taklif, egaga savol 2]; moliya 20 000 bilan solishtiradi
       remittance = {
         ...base,
         elchiStatus: 'closed',
@@ -254,6 +303,23 @@ export class ElchiLeadWebhookService {
         payload: remittance as unknown as Record<string, unknown>,
       },
       manager,
+    );
+  }
+
+  /** Elchi yetkazilgan sotuvni bekor qildi — moliya va nazoratchiga (webhook jurnalida REJECTED ham turadi). */
+  private async notifyRollback(event: ElchiSaleRollbackEvent): Promise<void> {
+    this.logger.warn(
+      `Elchi sotuvni orqaga qaytardi: buyurtma ${event.orderId} (${event.orderStatus}), Elchi ${event.elchiStatus}`,
+    );
+    await firstValueFrom(
+      this.notifications
+        .emit(ELCHI_SALE_ROLLBACK_EVENT, event)
+        .pipe(timeout(NOTIFY_TIMEOUT_MS)),
+      { defaultValue: undefined },
+    ).catch((error: unknown) =>
+      this.logger.error(
+        `Sotuv qaytarilgani haqida xabar yuborilmadi (${event.orderId}): ${(error as Error)?.message}`,
+      ),
     );
   }
 }

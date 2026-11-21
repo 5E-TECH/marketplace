@@ -99,15 +99,27 @@ describe('normalizeElchiWebhook', () => {
     }
   });
 
-  it('BE-21: lid buyurtmasi `mp-order:` kaliti saqlanadi; noto‘g‘ri summa — 400 (jim tashlanmaydi)', () => {
+  it('BE-21: lid buyurtmasi `mp-order:` kaliti saqlanadi; tiyin so‘mga yaxlitlanadi, noto‘g‘ri summa holatni to‘smaydi', () => {
     expect(
       normalizeElchiWebhook(elchiBody({ external_order_id: 'mp-order:42' }))
         .event?.externalOrderId,
     ).toBe('mp-order:42');
-    for (const bad of [-1, 10.5, 'abc'])
-      expect(() =>
-        normalizeElchiWebhook(elchiBody({ market_paid_amount: bad })),
-      ).toThrow(BadRequestException);
+    expect(
+      normalizeElchiWebhook(
+        elchiBody({
+          status: 'sold',
+          elchi_fee: '40000.40',
+          market_paid_amount: 0.5,
+        }),
+      ).event,
+    ).toMatchObject({ status: 'sold', elchiFee: 40000, marketPaidAmount: 1 });
+    for (const bad of [-1, 'abc'] as const) {
+      const { event } = normalizeElchiWebhook(
+        elchiBody({ status: 'sold', market_paid_amount: bad }),
+      );
+      expect(event?.status).toBe('sold');
+      expect(event).not.toHaveProperty('marketPaidAmount');
+    }
   });
 
   it('Elchi\u2019ning sinov ping\u2019i (webhook.test) 200 bilan e\u2019tiborsiz qoldiriladi', () => {

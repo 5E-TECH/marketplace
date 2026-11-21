@@ -118,22 +118,20 @@ function asString(value: unknown): string {
 }
 
 /**
- * Pul maydoni (butun so‘m, ≥ 0). Yo‘q — undefined. Noto‘g‘ri qiymat jim tashlanmaydi — 400 (Elchi qayta yuboradi,
- * biz bilamiz): noto‘g‘ri summa noto‘g‘ri pul harakati degani.
+ * Pul maydoni, butun so‘m. Elchi summalarni `numeric(14,2)` da saqlaydi — tiyin so‘mga yaxlitlanadi. Noto‘g‘ri
+ * qiymat (manfiy, son emas) tashlanadi: pul maydoni holat o‘zgarishini to‘smasin (400 bo‘lsa Elchi ~21 daqiqa
+ * urinib to‘xtaydi va hodisa yo‘qoladi). Tashlangan summa moliyada 0 bo‘ladi — kunlik sverkada farq va xabar.
  */
 function money(
   raw: Record<string, unknown>,
-  field: string,
   ...keys: string[]
 ): number | undefined {
   const value = pick(raw, ...keys);
   if (value === undefined) return undefined;
   const amount = typeof value === 'number' ? value : Number(asString(value));
-  if (!Number.isSafeInteger(amount) || amount < 0)
-    throw new BadRequestException(
-      `Webhook \`${field}\` butun so‘m bo‘lishi kerak: ${asString(value)}`,
-    );
-  return amount;
+  if (!Number.isFinite(amount) || amount < 0) return undefined;
+  const rounded = Math.round(amount);
+  return Number.isSafeInteger(rounded) ? rounded : undefined;
 }
 
 export interface NormalizedElchiWebhook {
@@ -222,18 +220,12 @@ export function normalizeElchiWebhook(body: unknown): NormalizedElchiWebhook {
   const amounts = {
     collectedFromCustomer: money(
       raw,
-      'collected_from_customer',
       'collectedFromCustomer',
       'collected_from_customer',
     ),
-    marketPaidAmount: money(
-      raw,
-      'market_paid_amount',
-      'marketPaidAmount',
-      'market_paid_amount',
-    ),
-    elchiFee: money(raw, 'elchi_fee', 'elchiFee', 'elchi_fee'),
-    extraCost: money(raw, 'extra_cost', 'extraCost', 'extra_cost'),
+    marketPaidAmount: money(raw, 'marketPaidAmount', 'market_paid_amount'),
+    elchiFee: money(raw, 'elchiFee', 'elchi_fee'),
+    extraCost: money(raw, 'extraCost', 'extra_cost'),
   };
 
   const event: ElchiWebhookDto = {

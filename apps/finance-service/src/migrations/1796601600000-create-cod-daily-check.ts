@@ -19,9 +19,22 @@ export class CreateCodDailyCheck1796601600000 implements MigrationInterface {
         "alerted_at" TIMESTAMPTZ
       )
     `);
+    // kunlik oraliq so‘rovi (kelgan yoki holati o‘zgargan o‘tkazmalar)
+    await q.query(
+      'CREATE INDEX IF NOT EXISTS "idx_finance_remittance_created" ON "finance"."remittance_item" ("created_at")',
+    );
+    await q.query(
+      'CREATE INDEX IF NOT EXISTS "idx_finance_remittance_updated" ON "finance"."remittance_item" ("updated_at")',
+    );
   }
 
   async down(q: QueryRunner): Promise<void> {
+    await q.query(
+      'DROP INDEX IF EXISTS "finance"."idx_finance_remittance_updated"',
+    );
+    await q.query(
+      'DROP INDEX IF EXISTS "finance"."idx_finance_remittance_created"',
+    );
     await q.query('DROP TABLE IF EXISTS "finance"."cod_daily_check"');
   }
 }
