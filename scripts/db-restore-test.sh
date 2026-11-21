@@ -34,12 +34,20 @@ done
 docker cp "$backup" "$container:/tmp/backup.dump"
 docker exec "$container" pg_restore --exit-on-error -U postgres -d restore_test --no-owner --no-acl /tmp/backup.dump
 # A blank database already has the public schema; count(*) on schemas is not proof.
+# BE-13 TC9: lid-sotuv jadvallari ham — lidlar (BE-10), posilka (BE-19), yangi moliya hisoblari (BE-22, BE-23, BE-33, BE-35).
 docker exec "$container" psql -U postgres -d restore_test -v ON_ERROR_STOP=1 -Atqc '
   SELECT count(*) FROM identity.users;
   SELECT count(*) FROM catalog.shop;
   SELECT count(*) FROM catalog.product;
   SELECT count(*) FROM checkout.sales_order;
+  SELECT count(*) FROM checkout.parcel;
   SELECT count(*) FROM payment.payment;
   SELECT count(*) FROM finance.payout;
+  SELECT count(*) FROM lead.lead;
+  SELECT count(*) FROM finance.journal;
+  SELECT count(*) FROM finance.ledger_entry;
+  SELECT count(*) FROM finance.withdrawal_request;
+  SELECT count(*) FROM finance.wholesaler_settlement;
+  SELECT count(*) FROM finance.fee_hold;
 ' >/dev/null
 printf 'Restore testi muvaffaqiyatli: %s\n' "$backup"
