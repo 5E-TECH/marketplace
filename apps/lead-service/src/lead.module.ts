@@ -34,6 +34,8 @@ import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadStatsController } from './lead-stats.controller';
 import { LeadStatsService } from './lead-stats.service';
+import { PlatformStatsController } from './platform-stats.controller';
+import { PlatformStatsService } from './platform-stats.service';
 import { OfferService } from './offer.service';
 import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
@@ -122,6 +124,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     TypeOrmModule.forFeature(LEAD_ENTITIES),
   ],
   controllers: [
+    PlatformStatsController,
     LeadAddressController,
     LeadOfferController,
     LeadIntakeController,
@@ -147,6 +150,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     PostbackService,
     ApiKeyService,
     LeadStatsService,
+    PlatformStatsService,
     LeadOrderService,
     CapiService,
     AffiliateIdentityClient,
