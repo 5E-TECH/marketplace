@@ -7001,6 +7001,313 @@
         ]
       }
     },
+    "/api/v1/admin/inventory/shipments": {
+      "post": {
+        "description": "CPA mahsulotlarining yagona varianti; mahsulot shu optovikniki bo‘lishi shart. Holat «E’lon qilindi».",
+        "operationId": "AdminInventoryController_declareShipment",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclareInboundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mahsulot topilmadi yoki boshqa optovikniki"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavkani e’lon qilish (optovik nomidan)",
+        "tags": [
+          "admin-inventory"
+        ]
+      },
+      "get": {
+        "operationId": "AdminInventoryController_shipments",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DECLARED",
+                "IN_TRANSIT",
+                "RECEIVED",
+                "DISCREPANCY"
+              ]
+            }
+          },
+          {
+            "name": "wholesalerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "15",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavkalar ro‘yxati",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/shipments/{id}": {
+      "get": {
+        "operationId": "AdminInventoryController_shipment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Postavka topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavka kartasi",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/shipments/{id}/in-transit": {
+      "post": {
+        "operationId": "AdminInventoryController_shipmentInTransit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Postavka holati boshqa"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavka «Yo‘lda» [taklif — ixtiyoriy]",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/shipments/{id}/receive": {
+      "post": {
+        "description": "Har qator: qabul qilingan va brak soni, partiya, yaroqlilik muddati (BAD, kosmetika, oziq-ovqat), yacheyka. Qoldiqqa yaroqli soni kiradi; muddatga 60 kundan kam qolgan partiya sotilmaydi. Farq yoki brak — «Farq bor» va akt.",
+        "operationId": "AdminInventoryController_receiveShipment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiveInboundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavkani qabul qilish",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/shipments/{id}/act.pdf": {
+      "get": {
+        "operationId": "AdminInventoryController_shipmentAct",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "409": {
+            "description": "Postavka hali qabul qilinmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qabul (farq va brak) akti PDF — optovikka qo‘lda",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
+    "/api/v1/admin/inventory/lots": {
+      "get": {
+        "operationId": "AdminInventoryController_lots",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "BLOCKED — sotuvdan chiqqan (60 kundan kam qolgan)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BLOCKED",
+                "SELLABLE",
+                "ALL"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StockLotDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yaroqlilik partiyalari",
+        "tags": [
+          "admin-inventory"
+        ]
+      }
+    },
     "/api/v1/admin/inventory/stock": {
       "get": {
         "operationId": "AdminInventoryController_stock",
@@ -10543,6 +10850,104 @@
           }
         ],
         "summary": "Topshirish akti PDF (imzo uchun)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/returns": {
+      "get": {
+        "operationId": "WarehouseReturnsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Omborga qaytayotgan posilkalar (saralanadi)",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/returns/{orderId}/grade": {
+      "post": {
+        "operationId": "WarehouseReturnsController_grade",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GradeReturnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnInspectionDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Buyurtma «Qaytmoqda» holatida emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytgan posilkani saralash",
+        "tags": [
+          "warehouse"
+        ]
+      }
+    },
+    "/api/v1/warehouse/returns/{orderId}/defect-act.pdf": {
+      "get": {
+        "operationId": "WarehouseReturnsController_defectAct",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "409": {
+            "description": "Bu posilkada brak yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Brak akti PDF (har posilka uchun) — optovikka qo‘lda",
         "tags": [
           "warehouse"
         ]
@@ -15921,6 +16326,302 @@
           "reason"
         ]
       },
+      "DeclareInboundItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "42",
+            "description": "CPA mahsulot"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 100
+          }
+        },
+        "required": [
+          "productId",
+          "quantity"
+        ]
+      },
+      "DeclareInboundDto": {
+        "type": "object",
+        "properties": {
+          "wholesalerId": {
+            "type": "string",
+            "example": "15",
+            "description": "Optovik (komitent)"
+          },
+          "expectedAt": {
+            "type": "string",
+            "example": "2026-12-01",
+            "description": "Kutilgan kelish sanasi"
+          },
+          "note": {
+            "type": "string",
+            "example": "Haftalik postavka"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclareInboundItemDto"
+            }
+          }
+        },
+        "required": [
+          "wholesalerId",
+          "expectedAt",
+          "items"
+        ]
+      },
+      "InboundShipmentItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "productName": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "barcode": {
+            "type": "object",
+            "nullable": true
+          },
+          "declaredQty": {
+            "type": "number"
+          },
+          "receivedQty": {
+            "type": "object",
+            "nullable": true
+          },
+          "defectiveQty": {
+            "type": "object",
+            "nullable": true
+          },
+          "batch": {
+            "type": "object",
+            "nullable": true
+          },
+          "expiryDate": {
+            "type": "object",
+            "nullable": true
+          },
+          "cell": {
+            "type": "object",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "productName",
+          "variantId",
+          "sku",
+          "declaredQty"
+        ]
+      },
+      "InboundShipmentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "wholesalerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DECLARED",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY"
+            ]
+          },
+          "expectedAt": {
+            "type": "string"
+          },
+          "note": {
+            "type": "object",
+            "nullable": true
+          },
+          "declaredBy": {
+            "type": "string"
+          },
+          "receivedBy": {
+            "type": "object",
+            "nullable": true
+          },
+          "receivedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "receiveComment": {
+            "type": "object",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboundShipmentItemDto"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "wholesalerId",
+          "status",
+          "expectedAt",
+          "declaredBy",
+          "items",
+          "createdAt"
+        ]
+      },
+      "InboundShipmentPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboundShipmentDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "ReceiveInboundItemDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "example": "7",
+            "description": "Postavka qatori"
+          },
+          "receivedQty": {
+            "type": "number",
+            "example": 98,
+            "description": "Kelgan (brak bilan birga)"
+          },
+          "defectiveQty": {
+            "type": "number",
+            "example": 2,
+            "description": "Shundan brak"
+          },
+          "batch": {
+            "type": "string",
+            "example": "P-2026-11"
+          },
+          "expiryDate": {
+            "type": "string",
+            "example": "2027-06-30",
+            "description": "Yaroqlilik muddati (BAD, kosmetika, oziq-ovqat)"
+          },
+          "cell": {
+            "type": "string",
+            "example": "B-02-1",
+            "description": "Yacheyka manzili"
+          }
+        },
+        "required": [
+          "itemId",
+          "receivedQty",
+          "defectiveQty",
+          "cell"
+        ]
+      },
+      "ReceiveInboundDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiveInboundItemDto"
+            }
+          },
+          "comment": {
+            "type": "string",
+            "example": "2 dona qadog‘i yirtilgan"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "StockLotDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "productName": {
+            "type": "string"
+          },
+          "batch": {
+            "type": "object",
+            "nullable": true
+          },
+          "expiryDate": {
+            "type": "string"
+          },
+          "sellableUntil": {
+            "type": "string",
+            "description": "Muddat − 60 kun; shundan keyin sotilmaydi"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "blocked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "variantId",
+          "sku",
+          "productName",
+          "expiryDate",
+          "sellableUntil",
+          "quantity",
+          "blocked"
+        ]
+      },
       "AdminStockItemDto": {
         "type": "object",
         "properties": {
@@ -19708,6 +20409,94 @@
         },
         "required": [
           "qrTokens"
+        ]
+      },
+      "GradeReturnItemDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "example": "901"
+          },
+          "sellable": {
+            "type": "number",
+            "example": 1,
+            "description": "Sotiladigan (qoldiqqa qaytadi)"
+          },
+          "defective": {
+            "type": "number",
+            "example": 0,
+            "description": "Brak (optovikka qaytariladi)"
+          }
+        },
+        "required": [
+          "variantId",
+          "sellable",
+          "defective"
+        ]
+      },
+      "GradeReturnDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GradeReturnItemDto"
+            }
+          },
+          "comment": {
+            "type": "string",
+            "example": "Qadog‘i ezilgan"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ReturnInspectionDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string"
+          },
+          "parcelId": {
+            "type": "object",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "variantId": {
+                  "type": "string"
+                },
+                "sellable": {
+                  "type": "number"
+                },
+                "defective": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "comment": {
+            "type": "object",
+            "nullable": true
+          },
+          "inspectedBy": {
+            "type": "string"
+          },
+          "inspectedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "orderId",
+          "items",
+          "inspectedBy",
+          "inspectedAt"
         ]
       },
       "AdminLeadListItemDto": {
