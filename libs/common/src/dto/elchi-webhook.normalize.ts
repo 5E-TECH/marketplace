@@ -65,34 +65,27 @@ export const ELCHI_STATUS_ALIASES: Readonly<Record<string, string>> = {
   'cancelled (sent)': 'cancelled',
   returned_to_market: 'returned',
   returned: 'returned',
+
+  // — Pul holatlari (BE-21, TZ T9-7) —
+  // Elchi `paid` — Elchi’ning marketga qarzi to‘liq to‘landi, `partly_paid` — qisman
+  // (`order-lifecycle.service.ts`); summalar pul maydonlarida. `closed` — asosan bekor
+  // qilingan tovarning yakuniy holati (`partner-money.ts`). Buyurtma holatiga ta’siri
+  // checkout’da: lid buyurtmasi T5 bo‘yicha faqat oldinga, eski yo‘lda faqat `paid`.
+  paid: 'paid',
+  partly_paid: 'partly_paid',
+  closed: 'closed',
 };
 
 /**
  * ATAYLAB e'tiborsiz qoldiriladigan statuslar: 200 qaytariladi (Elchi outbox
  * qayta urinmasin), lekin buyurtma holati ham, pul ham QIMIRLAMAYDI.
  *
- * Uchalasi ham PUL bilan bog'liq va ma'no tengligi TASDIQLANMAGAN — noto'g'ri
- * xarita noto'g'ri pul harakati degani, shuning uchun biznes qarori kelguncha
- * tegmaymiz:
- *
- *   `closed`      -> bizning `settled` ga tushsa `finance.cod.settled` ni
- *                    uyg'otadi va COD hisob-kitobini `collectedAmount`
- *                    bo'yicha YOPADI.
- *   `partly_paid` -> `sold` ga tushsa DELIVERED bo'ladi; naqd bo'lmagan
- *                    buyurtmada `finance.payout.requested` TO'LIQ subtotal
- *                    bilan otiladi, holbuki pul QISMAN to'langan.
- *   `paid`        -> Elchi lug'atida bu Elchi↔market hisob-kitobini
- *                    bildiradi, xaridor to'lovini emas; `sold` bilan tenglashi
- *                    tekshirilmagan.
- *
- * Qaror qabul qilingach qiymatni shu to'plamdan `ELCHI_STATUS_ALIASES` ga
- * ko'chirish kifoya — boshqa hech qayerga tegmaydi.
+ * BE-21 gacha bu yerda `closed`, `paid`, `partly_paid` turardi — pul maydonlari
+ * tashlab yuborilar va `finance.cod.settled` hech qachon ishlamas edi (TZ T9-7).
+ * Endi ular `ELCHI_STATUS_ALIASES` da; pulga ta'siri checkout'da aniq belgilangan
+ * (`paid` — o'tkazma, `partly_paid` — qisman, `closed` — holat o'zgarmaydi).
  */
-export const ELCHI_IGNORED_STATUSES: ReadonlySet<string> = new Set([
-  'closed',
-  'paid',
-  'partly_paid',
-]);
+export const ELCHI_IGNORED_STATUSES: ReadonlySet<string> = new Set<string>();
 
 /**
  * Elchi'ning NOL TA'SIRLI diagnostika vositasi: hamkor panelidagi «sinov
@@ -122,6 +115,25 @@ function pick(raw: Record<string, unknown>, ...keys: string[]): unknown {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : String(value ?? '');
+}
+
+/**
+ * Pul maydoni (butun so‘m, ≥ 0). Yo‘q — undefined. Noto‘g‘ri qiymat jim tashlanmaydi — 400 (Elchi qayta yuboradi,
+ * biz bilamiz): noto‘g‘ri summa noto‘g‘ri pul harakati degani.
+ */
+function money(
+  raw: Record<string, unknown>,
+  field: string,
+  ...keys: string[]
+): number | undefined {
+  const value = pick(raw, ...keys);
+  if (value === undefined) return undefined;
+  const amount = typeof value === 'number' ? value : Number(asString(value));
+  if (!Number.isSafeInteger(amount) || amount < 0)
+    throw new BadRequestException(
+      `Webhook \`${field}\` butun so‘m bo‘lishi kerak: ${asString(value)}`,
+    );
+  return amount;
 }
 
 export interface NormalizedElchiWebhook {
@@ -181,11 +193,13 @@ export function normalizeElchiWebhook(body: unknown): NormalizedElchiWebhook {
   // Eski posilkalar Elchi'da `seller-order-9` shaklida ro'yxatdan o'tgan
   // (seller-orders.service.ts o'sha paytda shunday yozardi). Prefiksni shu
   // yerda yechamiz, aks holda DTO regex'i ham, `WHERE s.id=$1` ham mos kelmaydi.
+  // Lid buyurtmasi `mp-order:<id>` bilan keladi (BE-20) — prefiks saqlanadi: checkout shu bo'yicha yo'lni tanlaydi.
   const externalOrderId = asString(
     pick(raw, 'externalOrderId', 'external_order_id'),
   )
     .trim()
-    .replace(SELLER_ORDER_PREFIX, '');
+    .replace(SELLER_ORDER_PREFIX, '')
+    .replace(/^mp-order:/i, 'mp-order:');
 
   const occurredAt = asString(pick(raw, 'occurredAt', 'occurred_at')).trim();
 
@@ -204,6 +218,24 @@ export function normalizeElchiWebhook(body: unknown): NormalizedElchiWebhook {
   const codCollected =
     codCollectedRaw === undefined ? undefined : Number(codCollectedRaw);
 
+  // BE-21: pul maydonlari (Elchi shartnomasi `MARKETPLACE_API.md` §6)
+  const amounts = {
+    collectedFromCustomer: money(
+      raw,
+      'collected_from_customer',
+      'collectedFromCustomer',
+      'collected_from_customer',
+    ),
+    marketPaidAmount: money(
+      raw,
+      'market_paid_amount',
+      'marketPaidAmount',
+      'market_paid_amount',
+    ),
+    elchiFee: money(raw, 'elchi_fee', 'elchiFee', 'elchi_fee'),
+    extraCost: money(raw, 'extra_cost', 'extraCost', 'extra_cost'),
+  };
+
   const event: ElchiWebhookDto = {
     eventId,
     type,
@@ -214,6 +246,9 @@ export function normalizeElchiWebhook(body: unknown): NormalizedElchiWebhook {
     ...(codCollected !== undefined && Number.isFinite(codCollected)
       ? { codCollected }
       : {}),
+    ...Object.fromEntries(
+      Object.entries(amounts).filter(([, value]) => value !== undefined),
+    ),
   };
 
   // O'girishdan KEYIN baribir DTO qoidalari qo'llanadi (regex, sana, enum).

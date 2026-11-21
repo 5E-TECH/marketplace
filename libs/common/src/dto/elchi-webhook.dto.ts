@@ -2,11 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -20,6 +22,10 @@ export const ELCHI_WEBHOOK_STATUSES = [
   'canceled',
   'returned',
   'settled',
+  // BE-21 (TZ T9-7): pul holatlari endi tashlab yuborilmaydi
+  'paid',
+  'partly_paid',
+  'closed',
 ] as const;
 
 export class ElchiWebhookDto {
@@ -38,8 +44,12 @@ export class ElchiWebhookDto {
   @Matches(/^[1-9]\d*$/)
   shipmentId: string;
 
-  @ApiProperty({ example: '55' })
-  @Matches(/^[1-9]\d*$/)
+  @ApiProperty({
+    example: 'mp-order:55',
+    description:
+      'Lid buyurtmasi — `mp-order:<buyurtma>` (BE-20); eski do‘kon buyurtmasi — posilka raqami',
+  })
+  @Matches(/^(mp-order:)?[1-9]\d{0,18}$/)
   externalOrderId: string;
 
   @ApiProperty({ enum: ELCHI_WEBHOOK_STATUSES, example: 'sold' })
@@ -54,6 +64,46 @@ export class ElchiWebhookDto {
   @ApiProperty({ example: '2026-08-27T08:00:00.000Z' })
   @IsDateString()
   occurredAt: string;
+
+  // BE-21 (TZ ELC-4, T9-7): Elchi pul maydonlari — butun so‘m.
+
+  @ApiPropertyOptional({
+    example: 499000,
+    description: 'Kuryer mijozdan yig‘gan naqd (`collected_from_customer`)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  collectedFromCustomer?: number;
+
+  @ApiPropertyOptional({
+    example: 449000,
+    description:
+      'Elchi marketga shu paytgacha to‘lagan jami (`market_paid_amount`, snapshot)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  marketPaidAmount?: number;
+
+  @ApiPropertyOptional({
+    example: 50000,
+    description: 'Elchi haqi (`elchi_fee`)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  elchiFee?: number;
+
+  @ApiPropertyOptional({
+    example: 20000,
+    description:
+      'Kuryer yozgan qo‘shimcha xarajat (`extra_cost`), masalan bekor qilishda',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  extraCost?: number;
 }
 
 export interface ReturnOrderItemsDto {

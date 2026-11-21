@@ -209,9 +209,11 @@ export class LeadOrderStatusService {
     rejected: TransitionRejected,
     actor: LeadOrderActor,
     reason: string | null,
+    // BE-21: chaqiruvchi tranzaksiyasida (webhook rad etilgan o‘tishni 200 bilan qaytaradi — qaytarilmaydi)
+    manager: EntityManager = this.dataSource.manager,
   ): Promise<void> {
     await this.journal(
-      this.dataSource.manager,
+      manager,
       rejected.orderId,
       rejected.from,
       rejected.to,
