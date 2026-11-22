@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Optional,
   ForbiddenException,
   Inject,
   Injectable,
@@ -27,8 +28,12 @@ import {
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
+import { TwoFactorGate } from '../two-factor/two-factor.gate';
 
 const BCRYPT_ROUNDS = 10;
+
+/** Sessiya natijasi (`buildAuthResult`). */
+export type AuthResult = Awaited<ReturnType<AuthService['buildAuthResult']>>;
 
 @Injectable()
 export class AuthService {
@@ -43,7 +48,12 @@ export class AuthService {
     private readonly dataSource: DataSource,
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
-  ) {}
+    @Optional() twoFactor?: TwoFactorGate,
+  ) {
+    this.twoFactor = twoFactor ?? new TwoFactorGate(jwt, config);
+  }
+
+  private readonly twoFactor: TwoFactorGate;
 
   async register(dto: RegisterDto) {
     const exists = await this.users.findOne({ where: { phone: dto.phone } });
@@ -96,6 +106,8 @@ export class AuthService {
     if (user.isBlocked) {
       throw new UnauthorizedException('Hisobingiz bloklangan');
     }
+    // BE-26: admin va moliya — sessiya o‘rniga 2FA bosqichi (bayroq yoqilganda)
+    if (this.twoFactor.required(user)) return this.twoFactor.challenge(user);
     return this.buildAuthResult(user);
   }
 
@@ -471,7 +483,8 @@ export class AuthService {
     return row;
   }
 
-  private async buildAuthResult(user: User) {
+  /** BE-26: 2FA tasdig‘idan keyin ham shu sessiya ochiladi (`TwoFactorService`). */
+  async buildAuthResult(user: User) {
     // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
     const payload = {
       sub: user.id,

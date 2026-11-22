@@ -152,6 +152,29 @@ export class AdminUsersController {
     return res;
   }
 
+  /** BE-26: xodimning 2FA sini nolga tushirish (telefon va tiklash kodlari yo‘qolgan) — sessiyalari yopiladi. */
+  @Post('admin/users/:id/2fa/reset')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xodim 2FA sini nolga tushirish (keyingi kirishda qayta ulaydi)',
+  })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  async resetTwoFactor(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Ip() ip: string,
+  ) {
+    const res = await sendRpc(
+      this.identity,
+      { cmd: 'identity.2fa.reset' },
+      { actorId: admin.sub, userId: id },
+    );
+    this.audit(admin.sub, 'user.2fa.reset', 'User', id, ip);
+    return res;
+  }
+
   /** C1.31 — audit sink'ga best-effort yozadi (xatoda amalни buzmaydi). */
   private audit(
     actorId: string,

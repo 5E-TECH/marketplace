@@ -177,4 +177,24 @@ describe('AuthController — AUTH_TOKENS_IN_BODY=false', () => {
 
     expect(body).toEqual({ user: { id: '42' } });
   });
+
+  it('BE-26: 2FA kerak bo‘lsa login sessiya ochmaydi — cookie yo‘q, challengeToken qaytadi', async () => {
+    const challenge = {
+      twoFactorRequired: true,
+      twoFactorSetupRequired: false,
+      challengeToken: 'challenge-1',
+    };
+    const controller = new AuthController(
+      { send: jest.fn(() => of(challenge)) } as never,
+      jwt,
+    );
+    const res = response();
+    const body = await controller.login(
+      { phone: '+998901234567', password: 'secret123' },
+      request,
+      res as never,
+    );
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(body).toMatchObject(challenge);
+  });
 });

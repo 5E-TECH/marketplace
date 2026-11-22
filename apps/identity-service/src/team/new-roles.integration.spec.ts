@@ -7,7 +7,7 @@ import { Role, STAFF_ROLES } from '@app/common';
 import { IDENTITY_DB } from '../database';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
-import { AuthService } from '../auth/auth.service';
+import { AuthResult, AuthService } from '../auth/auth.service';
 import { AdminUserAccessService } from '../admin-user-access/admin-user-access.service';
 import { AdminTeamService } from './admin-team.service';
 import { NewRoles1795996800000 } from '../migrations/1795996800000-new-roles';
@@ -136,10 +136,10 @@ describeWithPostgres('BE-05 yangi rollar (PostgreSQL)', () => {
         password: 'Secret123',
       });
       expect(member.role).toBe(role);
-      const { accessToken, refreshToken, user } = await auth.login({
+      const { accessToken, refreshToken, user } = (await auth.login({
         phone,
         password: 'Secret123',
-      });
+      })) as AuthResult;
       expect(user.role).toBe(role);
       const payload = jwt.decode(accessToken) as Record<string, unknown>;
       expect(payload).toMatchObject({ sub: String(member.id), role });
@@ -193,10 +193,10 @@ describeWithPostgres('BE-05 yangi rollar (PostgreSQL)', () => {
   });
 
   it('bloklangan foydalanuvchi: eski token shu zahoti rad (authVersion), login ham 401', async () => {
-    const login = await auth.login({
+    const login = (await auth.login({
       phone: '+998900000101',
       password: 'Secret123',
-    });
+    })) as AuthResult;
     const payload = jwt.decode(login.accessToken) as {
       sub: string;
       role: Role;

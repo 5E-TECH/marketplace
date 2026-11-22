@@ -39,4 +39,8 @@ export class User extends BaseEntity {
   /** Rol/parol/blok holati o‘zgarganda eski access tokenlarni bekor qiladi. */
   @Column({ name: 'auth_version', type: 'integer', default: 1 })
   authVersion: number;
+
+  /** BE-26: 2FA (TOTP) ulangan vaqt; sir va tiklash kodlari alohida ustunlarda (faqat `TwoFactorService`). */
+  @Column({ name: 'totp_enabled_at', type: 'timestamptz', nullable: true })
+  totpEnabledAt: Date | null;
 }

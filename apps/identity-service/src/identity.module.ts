@@ -18,6 +18,9 @@ import {
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { AuditController } from './audit/audit.controller';
+import { TwoFactorController } from './two-factor/two-factor.controller';
+import { TwoFactorGate } from './two-factor/two-factor.gate';
+import { TwoFactorService } from './two-factor/two-factor.service';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AdminTeamController } from './team/admin-team.controller';
 import { AdminTeamService } from './team/admin-team.service';
@@ -62,6 +65,7 @@ const entities = IDENTITY_DB.entities;
   controllers: [
     AuthController,
     AuditController,
+    TwoFactorController,
     AdminTeamController,
     PlatformSettingsController,
     AdminUserAccessController,
@@ -69,6 +73,8 @@ const entities = IDENTITY_DB.entities;
   ],
   providers: [
     AuthService,
+    TwoFactorGate,
+    TwoFactorService,
     AdminSeeder,
     ActivityLogService,
     AdminTeamService,
