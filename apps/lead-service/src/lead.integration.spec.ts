@@ -1667,6 +1667,48 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       });
       expect((await outbox.find())[0].status).toBe(OutboxStatus.PROCESSED);
     });
+
+    it('BE-18 TC1: tasdiqlangan lid 1 s ichida checkout’ga — cron (10 s) kutilmaydi', async () => {
+      const [l] = await seed(1);
+      await addressService().confirmByOperator(l.id, '41', {
+        regionSoato: '1726',
+        districtSoato: '1726266',
+        addressLine: 'Turkiston 27',
+        whereDeliver: CheckoutDeliveryDestination.CENTER,
+      });
+      await online('41');
+      let delivered!: () => void;
+      const emitted = new Promise<void>((resolve) => (delivered = resolve));
+      const checkout = {
+        emit: jest.fn(() => {
+          delivered();
+          return of(undefined);
+        }),
+      };
+      const relay = new LeadOutboxRelayService(
+        db.getRepository(OutboxEvent),
+        checkout as never,
+        { emit: jest.fn(() => of(undefined)) } as never,
+        new ConfigService({ LEAD_OUTBOX_RELAY: 'on' }),
+      );
+      const fast = new LeadQueueService(db, addressService(), undefined, relay);
+      await fast.takeNext('41');
+      const started = Date.now();
+      await fast.submitResult('41', l.id, { outcome: LeadOutcome.CONFIRMED });
+      await Promise.race([
+        emitted,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('1 s ichida yuborilmadi')), 1_000),
+        ),
+      ]);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(checkout.emit).toHaveBeenCalledWith(
+        LEAD_EVENTS.CONFIRMED,
+        expect.objectContaining({ leadId: l.id }),
+      );
+      // relay tugashini kutamiz (keyingi testga qulf qoldirmasin)
+      await relay.relay();
+    });
   });
 
   describe('BE-42: admin va nazoratchi lidlari', () => {

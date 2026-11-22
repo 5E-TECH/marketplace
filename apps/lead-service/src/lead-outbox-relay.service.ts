@@ -26,6 +26,15 @@ export class LeadOutboxRelayService {
     private readonly finance?: ClientProxy,
   ) {}
 
+  /**
+   * BE-18 TC1 (tasdiqdan buyurtmagacha 1 s): tranzaksiya commit bo‘lgach darhol yuborish. Cron (10 s) — zaxira:
+   * navbat yoki checkout ishlamasa hodisa PENDING da qoladi va keyingi urinishda ketadi. Parallel ishga tushsa ham
+   * xavfsiz — qatorlar `SKIP LOCKED` bilan olinadi, har hodisa bir marta yuboriladi.
+   */
+  trigger(): void {
+    void this.relay().catch(() => undefined);
+  }
+
   @Cron(CronExpression.EVERY_10_SECONDS, {
     name: 'lead-outbox',
     waitForCompletion: true,

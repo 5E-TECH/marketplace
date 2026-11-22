@@ -33,6 +33,7 @@ import {
 } from '@app/common';
 import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
+import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { PostbackService } from './postback.service';
 import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
@@ -71,6 +72,8 @@ export class LeadQueueService {
     private readonly db: DataSource,
     private readonly address: LeadAddressService,
     @Optional() private readonly postback?: PostbackService,
+    // BE-18 TC1: tasdiqlangan lid commit dan keyin darhol checkout’ga (cron 10 s — zaxira)
+    @Optional() private readonly relay?: LeadOutboxRelayService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -158,7 +161,7 @@ export class LeadQueueService {
     leadId: string,
     dto: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
-    return this.db.transaction(async (manager) => {
+    const accepted = await this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
       const lead = await leads.findOne({
         where: { id: leadId, isDeleted: false },
@@ -277,6 +280,8 @@ export class LeadQueueService {
         nextAttemptAt: lead.nextAttemptAt?.toISOString() ?? null,
       };
     });
+    if (accepted.status === LeadStatus.CONFIRMED) this.relay?.trigger();
+    return accepted;
   }
 
   /** Nazoratchi: navbat hajmi va operatorlar holati (BE-13). Ism — identity bilan (BE-05 dan keyin). */
