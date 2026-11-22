@@ -17,6 +17,7 @@ import {
 import { EmailAdapter } from './adapters/email.adapter';
 import { NOTIFICATION_ADAPTERS } from './adapters/notification-adapter';
 import { SmsAdapter } from './adapters/sms.adapter';
+import { SiteOrderSmsController } from './site-order-sms.controller';
 import { TelegramAdapter } from './adapters/telegram.adapter';
 import { DeliveryRetryService } from './delivery-retry.service';
 import { NotificationAdminController } from './notification-admin.controller';
@@ -63,6 +64,7 @@ const entities = NOTIFICATION_DB.entities;
     NotificationController,
     NotificationEventsController,
     NotificationAdminController,
+    SiteOrderSmsController,
   ],
   providers: [
     NotificationService,

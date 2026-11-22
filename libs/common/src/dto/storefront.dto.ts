@@ -290,3 +290,53 @@ export class SiteOrderConfirmDto {
 export class SiteOrderConfirmedDto {
   @ApiProperty({ example: 'CONFIRMED' }) status: 'CONFIRMED';
 }
+
+// ─── Mehmon savati (BE-34) ──────────────────────────────────────────────────
+
+export class StorefrontCartItemDto {
+  @ApiProperty({ example: '12' })
+  @Matches(/^[1-9]\d{0,18}$/, {
+    message: 'productId musbat son bo‘lishi kerak',
+  })
+  productId: string;
+
+  @ApiPropertyOptional({ example: 1, default: 1, minimum: 1, maximum: 1000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  // BE-18: bitta tovar qatori 1 000 donagacha
+  @Max(1000)
+  quantity = 1;
+}
+
+export class UpdateStorefrontCartItemDto {
+  @ApiProperty({ example: 2, minimum: 1, maximum: 1000 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  quantity: number;
+}
+
+export class StorefrontCartLineDto {
+  @ApiProperty({ example: '31' }) id: string;
+  @ApiProperty({ example: '12' }) productId: string;
+  @ApiProperty({ example: 'Simsiz quloqchin X1' }) productName: string;
+  @ApiProperty({ example: null, nullable: true }) imageUrl: string | null;
+  @ApiProperty({ example: 1 }) quantity: number;
+  @ApiProperty({
+    example: 249000,
+    description: 'Savatga qo‘shilgandagi tasdiqlangan narx',
+  })
+  unitPrice: number;
+  @ApiProperty({ example: 249000 }) lineTotal: number;
+}
+
+/** Mehmon savati (ochiq): ichki maydonlarsiz — optovik, variant va egasi yo‘q. */
+export class StorefrontCartDto {
+  @ApiProperty({ type: [StorefrontCartLineDto] })
+  items: StorefrontCartLineDto[];
+  @ApiProperty({ example: 249000 }) totalAmount: number;
+  @ApiProperty({ example: 1 }) totalQuantity: number;
+}
