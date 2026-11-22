@@ -33,8 +33,11 @@ yaratiladi — yangi volume’da bu foydalanuvchi superuser bo‘ladi. Rollarni 
 3. Rollar yoqilganda (kamida bitta `DB_USERNAME_<SXEMA>`) servislar o‘zi migratsiya qilmaydi (`DB_AUTO_MIGRATE`
    e’tiborsiz) va **o‘z roli yoki paroli berilmagan servis ishga tushmaydi** (umumiy foydalanuvchiga jim o‘tmaydi).
    `scripts/validate-production-env.sh` hamma 10 juftni va noto‘g‘ri yozilgan kalitni tekshiradi.
-   Deploydan oldin: `docker compose run --rm api-gateway node scripts/migrate.mjs run --dist`, keyin
-   `… migrate.mjs check --dist`. CLI har sxemada servis rolidan `migrations` jadvaliga yozishni oladi.
+   Deploydan oldin migratsiya bir martalik konteynerda, migrator sirlari bilan (servis konteynerida ular yo‘q):
+   `docker compose run --rm -e DB_USERNAME -e DB_PASSWORD api-gateway node scripts/migrate.mjs run --dist`
+   (qiymatlar migratsiya qadamining o‘z muhitidan, buyruq qatoriga parol yozilmaydi), keyin `… migrate.mjs check
+   --dist`. `validate-production-env.sh` hozir bitta umumiy faylni tekshiradi — fayllar ajratilgach, migratsiya
+   faylini (hamma `DB_USERNAME_<SXEMA>` bilan) tekshiring. CLI har sxemada servis rolidan `migrations` jadvaliga yozishni oladi.
 4. Tekshiruv: `psql -U mkt_catalog -c "INSERT INTO checkout.parcel DEFAULT VALUES"` → `permission denied`.
 
 Eski bazada (jadvallar `DB_USERNAME` egaligida) rollarni yoqish uchun egalikni `mkt_migrator` ga o‘tkazish kerak.

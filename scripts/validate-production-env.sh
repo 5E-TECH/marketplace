@@ -49,7 +49,7 @@ if grep -Eq '^DB_USERNAME_[A-Z_]+=.+' "$env_file"; then
   for schema in $schemas; do
     for key in "DB_USERNAME_$schema" "DB_PASSWORD_$schema"; do
       value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
-      if [ -z "$value" ]; then
+      if [ -z "$value" ] || [ "$value" = '""' ] || [ "$value" = "''" ]; then
         printf 'Servis DB rollari yoqilgan, lekin qiymat yo‘q: %s (docs/BE-36-KOP-NUSXA.md)\n' "$key" >&2
         exit 1
       fi
