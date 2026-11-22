@@ -242,7 +242,8 @@ export class AdminPricingController {
     this.audit(
       admin.sub,
       'pricing.policy.update',
-      'PricePolicy',
+      // mahsulot darajasidagi o‘zgarish «shu mahsulot auditi» da ko‘rinsin (FE-12, entityType=Product)
+      scope === 'PRODUCT' ? 'Product' : 'PricePolicy',
       scopeId ?? 'GLOBAL',
       ip,
       {

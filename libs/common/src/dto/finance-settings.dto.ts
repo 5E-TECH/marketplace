@@ -27,6 +27,7 @@ export enum FinanceSettingKey {
 export const FINANCE_SETTINGS_RPC = {
   LIST: 'finance.settings.list',
   SET: 'finance.settings.set',
+  CANCEL: 'finance.settings.cancel',
 } as const;
 
 export class FinanceSettingValueDto {
@@ -73,7 +74,8 @@ export class UpdateFinanceSettingDto {
 
   @ApiPropertyOptional({
     example: '2026-12-01T00:00:00+05:00',
-    description: 'Kuchga kirish vaqti; berilmasa — hozir. O‘tmish vaqti — 400',
+    description:
+      'Kuchga kirish vaqti; berilmasa — hozir. Faqat sana — Toshkent kuni boshi. O‘tmish vaqti — 400',
   })
   @IsOptional()
   @IsDateString({ strict: true })
@@ -95,6 +97,27 @@ export interface FinanceSettingSetInput {
   value: number;
   effectiveFrom?: string;
   actorId: string;
+  /** Kim so‘radi va sabab — sozlama qatorida ham saqlanadi (audit yo‘qolsa ham qoladi). */
+  comment: string;
+}
+
+/** `POST /admin/finance/settings/{key}/cancel` — hali kuchga kirmagan rejalashtirilgan qiymatni bekor qilish. */
+export class CancelFinanceSettingDto {
+  @ApiProperty({ example: '2026-12-01T00:00:00.000Z' })
+  @IsDateString({ strict: true })
+  effectiveFrom: string;
+
+  @ApiProperty({ example: 'Xato kiritilgan (Dilnoza, 2026-11-22)' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  comment: string;
+}
+
+export interface FinanceSettingCancelInput {
+  key: string;
+  effectiveFrom: string;
 }
 
 export interface FinanceSettingSetResult {
@@ -103,4 +126,6 @@ export interface FinanceSettingSetResult {
   before: number | null;
   after: number;
   effectiveFrom: string;
+  /** Shu vaqtdan keyin rejalashtirilgan qiymatlar — ular kuchga kirganda bu qiymatni almashtiradi. */
+  laterScheduled: FinanceSettingValueDto[];
 }

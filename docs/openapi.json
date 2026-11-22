@@ -10393,6 +10393,79 @@
         ]
       }
     },
+    "/api/v1/admin/finance/settings/{key}/cancel": {
+      "post": {
+        "operationId": "AdminFinanceSettingsController_cancel",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "refusal_fee",
+                "withdrawal_min"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelFinanceSettingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceSettingValueDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rejalashtirilgan qiymat topilmadi yoki allaqachon kuchga kirgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hali kuchga kirmagan rejalashtirilgan qiymatni bekor qilish; izoh majburiy — auditga",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
     "/api/v1/admin/moderation/summary": {
       "get": {
         "operationId": "AdminModerationController_summary",
@@ -20316,7 +20389,7 @@
           "effectiveFrom": {
             "type": "string",
             "example": "2026-12-01T00:00:00+05:00",
-            "description": "Kuchga kirish vaqti; berilmasa — hozir. O‘tmish vaqti — 400"
+            "description": "Kuchga kirish vaqti; berilmasa — hozir. Faqat sana — Toshkent kuni boshi. O‘tmish vaqti — 400"
           },
           "comment": {
             "type": "string",
@@ -20326,6 +20399,23 @@
         },
         "required": [
           "value",
+          "comment"
+        ]
+      },
+      "CancelFinanceSettingDto": {
+        "type": "object",
+        "properties": {
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-12-01T00:00:00.000Z"
+          },
+          "comment": {
+            "type": "string",
+            "example": "Xato kiritilgan (Dilnoza, 2026-11-22)"
+          }
+        },
+        "required": [
+          "effectiveFrom",
           "comment"
         ]
       },

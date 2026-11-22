@@ -258,7 +258,7 @@ export class CatalogOfferService {
     }
     return {
       productsPending: byStatus.PENDING_REVIEW,
-      pricesPending: priced.filter((p) => !this.pricing.approvalCurrent(p, ctx))
+      pricesPending: priced.filter((p) => !this.approvalCurrentSafe(p, ctx))
         .length,
       byStatus,
       outOfStock: stockValues.some((v) => v === null)
@@ -266,6 +266,18 @@ export class CatalogOfferService {
         : stockValues.filter((v) => (v ?? 0) <= 0).length,
       expirySoon,
     };
+  }
+
+  /** Bitta mahsulotning buzilgan narx sozlamasi hisoblagichni yiqitmasin — u narx qarorini kutadi deb sanaladi. */
+  private approvalCurrentSafe(product: Product, ctx: PricingContext): boolean {
+    try {
+      return this.pricing.approvalCurrent(product, ctx);
+    } catch (error) {
+      this.logger.warn(
+        `Narx holati hisoblanmadi (${product.id}): ${(error as Error).message}`,
+      );
+      return false;
+    }
   }
 
   private base() {

@@ -5,8 +5,11 @@ import {
   Inject,
   Ip,
   Logger,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseEnumPipe,
+  Post,
   Put,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -15,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -23,11 +27,13 @@ import {
 } from '@nestjs/swagger';
 import {
   AuthErrorResponseDto,
+  CancelFinanceSettingDto,
   CurrentUser,
   FINANCE_SETTINGS_RPC,
   FinanceSettingKey,
   FinanceSettingSetResult,
   FinanceSettingStateDto,
+  FinanceSettingValueDto,
   JwtUser,
   Role,
   Roles,
@@ -101,31 +107,81 @@ export class AdminFinanceSettingsController {
         value: dto.value,
         effectiveFrom: dto.effectiveFrom,
         actorId: user.sub,
+        comment: dto.comment,
       },
     );
     // TC1: kim (actor), qachon (yozuv vaqti), eski va yangi qiymat, kuchga kirish va izoh
-    await sendRpc(
-      this.identity,
-      { cmd: 'identity.audit.log' },
-      {
-        actorId: user.sub,
-        action: 'finance.setting.update',
-        entityType: 'FinanceSetting',
-        entityId: key,
-        meta: {
-          before: result.before,
-          after: result.after,
-          effectiveFrom: result.effectiveFrom,
-          comment: dto.comment,
-          ip: ip ?? null,
-        },
-      },
-    ).catch((error: Error) =>
-      // sozlama saqlangan — audit yozilmasa ham javob qaytadi, lekin logda qoladi
-      this.logger.error(
-        `Audit yozilmadi (finance.setting.update ${key}): ${error.message}`,
-      ),
-    );
+    await this.audit(user.sub, 'finance.setting.update', key, {
+      before: result.before,
+      after: result.after,
+      effectiveFrom: result.effectiveFrom,
+      comment: dto.comment,
+      ip: ip ?? null,
+    });
     return result;
+  }
+
+  @Post(':key/cancel')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.SUPERADMIN)
+  @ApiOperation({
+    summary:
+      'Hali kuchga kirmagan rejalashtirilgan qiymatni bekor qilish; izoh majburiy — auditga',
+  })
+  @ApiParam({ name: 'key', enum: FinanceSettingKey })
+  @ApiOkResponse({ type: FinanceSettingValueDto })
+  @ApiNotFoundResponse({
+    description:
+      'Rejalashtirilgan qiymat topilmadi yoki allaqachon kuchga kirgan',
+  })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  async cancel(
+    @CurrentUser() user: JwtUser,
+    @Param('key', new ParseEnumPipe(FinanceSettingKey)) key: FinanceSettingKey,
+    @Body() dto: CancelFinanceSettingDto,
+    @Ip() ip: string,
+  ): Promise<FinanceSettingValueDto> {
+    const cancelled = await sendRpc<FinanceSettingValueDto>(
+      this.finance,
+      { cmd: FINANCE_SETTINGS_RPC.CANCEL },
+      { key, effectiveFrom: dto.effectiveFrom },
+    );
+    await this.audit(user.sub, 'finance.setting.cancel', key, {
+      cancelled,
+      comment: dto.comment,
+      ip: ip ?? null,
+    });
+    return cancelled;
+  }
+
+  /**
+   * Audit — sozlama saqlangandan keyin (eski/yangi qiymat moliyadan). Bir marta qayta uriniladi; baribir yozilmasa
+   * sozlama javobi qaytadi (izoh moliya qatorida saqlangan), xato logda.
+   */
+  private async audit(
+    actorId: string,
+    action: string,
+    key: string,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const payload = {
+      actorId,
+      action,
+      entityType: 'FinanceSetting',
+      entityId: key,
+      meta,
+    };
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await sendRpc(this.identity, { cmd: 'identity.audit.log' }, payload);
+        return;
+      } catch (error) {
+        if (attempt === 2)
+          this.logger.error(
+            `Audit yozilmadi (${action} ${key}): ${(error as Error).message}`,
+          );
+      }
+    }
   }
 }

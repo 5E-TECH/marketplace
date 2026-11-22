@@ -2,6 +2,7 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   FINANCE_SETTINGS_RPC,
+  FinanceSettingCancelInput,
   FinanceSettingSetInput,
   RpcHttpExceptionFilter,
 } from '@app/common';
@@ -21,5 +22,10 @@ export class FinanceSettingsController {
   @MessagePattern({ cmd: FINANCE_SETTINGS_RPC.SET })
   set(@Payload() data: FinanceSettingSetInput) {
     return this.settings.set(data);
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTINGS_RPC.CANCEL })
+  cancel(@Payload() data: FinanceSettingCancelInput) {
+    return this.settings.cancelScheduled(data);
   }
 }

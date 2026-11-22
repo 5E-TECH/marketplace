@@ -130,10 +130,10 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: true },
     );
+    // audit sahifalardan oldin: lead-service xato bersa ham blok auditda qoladi
+    this.audit(admin.sub, 'user.block', 'User', id, ip);
     // BE-27 (BE-11 TC11): bloklangan sotuvchining hamma sahifasi to‘xtaydi — lid qabul qilinmaydi
     await this.affiliateStreams(res, AffiliateStreamStatus.STOPPED);
-    // C1.31 — audit (best-effort): amal muvaffaqiyatidan so'ng yoziladi.
-    this.audit(admin.sub, 'user.block', 'User', id, ip);
     return res;
   }
 
@@ -152,9 +152,10 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: false },
     );
+    // audit sahifalardan oldin: lead-service xato bersa ham blok auditda qoladi
+    this.audit(admin.sub, 'user.unblock', 'User', id, ip);
     // BE-27: blokdan chiqsa sahifalari qayta ochiladi (firibgarlik sababli to‘xtatilgani — yo‘q, BE-35)
     await this.affiliateStreams(res, AffiliateStreamStatus.ACTIVE);
-    this.audit(admin.sub, 'user.unblock', 'User', id, ip);
     return res;
   }
 

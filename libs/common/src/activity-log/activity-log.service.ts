@@ -78,7 +78,8 @@ export class ActivityLogService {
       qb.andWhere('log.action = :action', { action: query.action.trim() });
     }
     if (query?.entityType?.trim()) {
-      qb.andWhere('LOWER(log.entity_type) = LOWER(:entityType)', {
+      // aniq moslik — (entity_type, entity_id) indeksi ishlaydi; turlar gateway’dagi kabi: Product, User, FinanceSetting
+      qb.andWhere('log.entity_type = :entityType', {
         entityType: query.entityType.trim(),
       });
     }

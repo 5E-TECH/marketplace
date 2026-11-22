@@ -21,9 +21,27 @@ export class ActivityLogImmutable1797292800000 implements MigrationInterface {
       CREATE TRIGGER "trg_activity_log_immutable"
         BEFORE UPDATE OR DELETE ON "identity"."activity_log"
         FOR EACH ROW EXECUTE FUNCTION "identity"."activity_log_immutable"()`);
+    await q.query(`
+      CREATE OR REPLACE FUNCTION "identity"."activity_log_no_truncate"() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'Audit jurnalini tozalab bo‘lmaydi (activity_log)'
+          USING ERRCODE = 'insufficient_privilege';
+      END
+      $$`);
+    await q.query(`
+      CREATE TRIGGER "trg_activity_log_no_truncate"
+        BEFORE TRUNCATE ON "identity"."activity_log"
+        FOR EACH STATEMENT EXECUTE FUNCTION "identity"."activity_log_no_truncate"()`);
   }
 
   async down(q: QueryRunner): Promise<void> {
+    await q.query(
+      `DROP TRIGGER IF EXISTS "trg_activity_log_no_truncate" ON "identity"."activity_log"`,
+    );
+    await q.query(
+      `DROP FUNCTION IF EXISTS "identity"."activity_log_no_truncate"()`,
+    );
     await q.query(
       `DROP TRIGGER IF EXISTS "trg_activity_log_immutable" ON "identity"."activity_log"`,
     );
