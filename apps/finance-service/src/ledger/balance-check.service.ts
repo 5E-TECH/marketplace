@@ -98,7 +98,7 @@ export class BalanceCheckService {
         }));
         const openRemittances = (await m.query(
           `SELECT DISTINCT order_id AS "orderId", match_state AS match
-           FROM finance.remittance_item WHERE match_state <> 'MATCHED' ORDER BY 1`,
+           FROM finance.remittance_item WHERE match_state <> 'MATCHED' AND resolved_at IS NULL ORDER BY 1`,
         )) as Array<{ orderId: string; match: string }>;
         let diff = 0;
         for (const a of accounts) {

@@ -113,8 +113,14 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   [Role.AFFILIATE]: routeKeys.filter((key) =>
     /^[A-Z]+ \/affiliate\//.test(key),
   ),
-  // Optovik kabineti BE-30 da; hozircha faqat umumiy yo‘llar.
-  [Role.WHOLESALER]: [],
+  // BE-46: o‘z akt-sverkalari — qabul va e’tiroz (FE-24).
+  [Role.WHOLESALER]: [
+    'GET /wholesaler/settlements',
+    'GET /wholesaler/settlements/:id',
+    'GET /wholesaler/settlements/:id/act.pdf',
+    'POST /wholesaler/settlements/:id/accept',
+    'POST /wholesaler/settlements/:id/dispute',
+  ],
   // Lidni bron qilish va natija kiritish; buyurtmani topshirilgunga qadar bekor qilish (BE-18, BUY-3).
   [Role.OPERATOR_LEAD]: [
     'GET /operator/leads',
@@ -176,7 +182,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   ],
   // To‘lovni tasdiqlash va Elchi sverkasi.
   [Role.FINANCE]: [
+    'GET /admin/finance/act-responses/acts/:id',
+    'GET /admin/finance/act-responses/disputes',
     'GET /admin/finance/ledger',
+    'GET /admin/finance/reconciliation/days',
+    'GET /admin/finance/reconciliation/items',
     'GET /admin/finance/reports',
     'GET /admin/finance/reports/reconciliation',
     'GET /admin/finance/settlements',
@@ -184,6 +194,8 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /admin/finance/settlements/:id/act.pdf',
     'GET /admin/finance/settlements/bank-file',
     'GET /admin/finance/withdrawals',
+    'POST /admin/finance/act-responses/disputes/:id/answer',
+    'POST /admin/finance/reconciliation/items/:id/resolve',
     'POST /admin/finance/settlements/:id/paid',
     'POST /admin/finance/settlements/run',
     'POST /admin/finance/withdrawals/:id/approve',

@@ -46,6 +46,10 @@ import { AffiliateStreamsController } from './leads/affiliate-streams.controller
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
+import { AdminReconciliationController } from './withdrawals/admin-reconciliation.controller';
+import { AdminActResponsesController } from './withdrawals/admin-act-responses.controller';
+import { WholesalerSettlementsController } from './withdrawals/wholesaler-settlements.controller';
+import { AdminMetricsController } from './metrics/admin-metrics.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { WarehouseController } from './warehouse/warehouse.controller';
@@ -182,6 +186,10 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminWithdrawalsController,
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
+    AdminReconciliationController,
+    AdminActResponsesController,
+    WholesalerSettlementsController,
+    AdminMetricsController,
     OperatorLeadsController,
     OperatorOrdersController,
     WarehouseController,

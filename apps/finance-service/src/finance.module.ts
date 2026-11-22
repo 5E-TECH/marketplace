@@ -17,6 +17,11 @@ import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
 import { SettlementController } from './ledger/settlement.controller';
 import { SettlementService } from './ledger/settlement.service';
+import { PlatformMetricsService } from './ledger/platform-metrics.service';
+import { ReconciliationController } from './ledger/reconciliation.controller';
+import { RemittanceService } from './ledger/remittance.service';
+import { SettlementResponseController } from './ledger/settlement-response.controller';
+import { SettlementResponseService } from './ledger/settlement-response.service';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
 import { LedgerQueryService } from './ledger/ledger-query.service';
@@ -48,6 +53,8 @@ const entities = FINANCE_DB.entities;
     LedgerController,
     WithdrawalController,
     SettlementController,
+    ReconciliationController,
+    SettlementResponseController,
   ],
   providers: [
     FinanceService,
@@ -57,6 +64,9 @@ const entities = FINANCE_DB.entities;
     BalanceCheckService,
     WithdrawalService,
     SettlementService,
+    PlatformMetricsService,
+    RemittanceService,
+    SettlementResponseService,
   ],
 })
 export class FinanceModule {}

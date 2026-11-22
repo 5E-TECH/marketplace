@@ -7778,6 +7778,658 @@
         ]
       }
     },
+    "/api/v1/admin/finance/reconciliation/days": {
+      "get": {
+        "operationId": "AdminReconciliationController_days",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2027-01-11",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2027-01-14",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RemittanceDayDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi o‘tkazmasi kunlari: holat va kun jami (yangisi birinchi)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/reconciliation/items": {
+      "get": {
+        "operationId": "AdminReconciliationController_items",
+        "parameters": [
+          {
+            "name": "day",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent kuni",
+            "schema": {
+              "example": "2027-01-13",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DIFF",
+                "RESOLVED",
+                "MATCHED",
+                "PENDING"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Buyurtma ID si yoki raqami (aniq)",
+            "schema": {
+              "example": "1049",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceItemPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Posilkalar: kun, holat (Farq bor, Hal qilindi, Mos, Kutilmoqda), buyurtma bo‘yicha qidiruv",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/reconciliation/items/{id}/resolve": {
+      "post": {
+        "description": "Buyurtmaning ochiq farqi yopiladi; pul harakati yo‘q — yozuvlar HOLD da qoladi [taklif]. Keyin yangi o‘tkazma kelsa, farq yana ochiladi.",
+        "operationId": "AdminReconciliationController_resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRemittanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceItemDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "O‘tkazma qatori topilmadi"
+          },
+          "409": {
+            "description": "Farq yo‘q yoki allaqachon hal qilingan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "«Hal qilindi deb yopish» — izoh majburiy",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/act-responses/disputes": {
+      "get": {
+        "operationId": "AdminActResponsesController_disputes",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "ANSWERED"
+              ]
+            }
+          },
+          {
+            "name": "settlementId",
+            "required": false,
+            "in": "query",
+            "description": "Akt ID si",
+            "schema": {
+              "example": "12",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementDisputePageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik e’tirozlari (ochiqlari birinchi)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/act-responses/acts/{id}": {
+      "get": {
+        "operationId": "AdminActResponsesController_act",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerActDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Akt topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt, optovik qabuli va e’tirozlar",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/act-responses/disputes/{id}/answer": {
+      "post": {
+        "operationId": "AdminActResponsesController_answer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementDisputeDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "E’tiroz topilmadi"
+          },
+          "409": {
+            "description": "Allaqachon javob berilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "E’tirozga javob — optovik aktida ko‘rinadi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/settlements": {
+      "get": {
+        "operationId": "WholesalerSettlementsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "READY",
+                "EXPORTED",
+                "PAID",
+                "NETTED",
+                "VOID"
+              ]
+            }
+          },
+          {
+            "name": "periodEnd",
+            "required": false,
+            "in": "query",
+            "description": "Davr oxiri (yakshanba)",
+            "schema": {
+              "example": "2027-01-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerSettlementPageDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Foydalanuvchi optovikka bog‘lanmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘z akt-sverkalarim",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/settlements/{id}": {
+      "get": {
+        "operationId": "WholesalerSettlementsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerActDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa optovik akti"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt, qabul holati va e’tirozlar (moliya javobi bilan)",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/settlements/{id}/act.pdf": {
+      "get": {
+        "operationId": "WholesalerSettlementsController_actPdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Boshqa optovik akti"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Akt-sverka PDF",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/settlements/{id}/accept": {
+      "post": {
+        "description": "Bir marta; takror — o‘sha natija. Ochiq e’tiroz bo‘lsa — 409. To‘lov qabulni kutmaydi [taklif].",
+        "operationId": "WholesalerSettlementsController_accept",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerActDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa optovik akti"
+          },
+          "409": {
+            "description": "Ochiq e’tiroz bor yoki tovarlar qaytgan akt (VOID)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Aktni qabul qilish",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/settlements/{id}/dispute": {
+      "post": {
+        "operationId": "WholesalerSettlementsController_dispute",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerActDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa optovik akti"
+          },
+          "409": {
+            "description": "Akt qabul qilingan, ochiq e’tiroz bor yoki tovarlar qaytgan akt (VOID)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "E’tiroz bildirish — moliyaga boradi, javobi shu aktda ko‘rinadi",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/admin/metrics": {
+      "get": {
+        "description": "Davr — Toshkent kunlari, `to` kiradi, ko‘pi bilan 366 kun. Har ko‘rsatkich o‘z hodisasi kuni bo‘yicha (lid — kelgan, tasdiq — tasdiqlangan, sotuv — yetkazilgan kuni). Moliya qismi faqat kun kesimida, boshqa kesimda null.",
+        "operationId": "AdminMetricsController_metrics",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Toshkent kuni (kiradi)",
+            "schema": {
+              "example": "2026-12-07",
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DAY",
+                "AFFILIATE",
+                "OPERATOR",
+                "OFFER"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformMetricsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ADMIN va SUPERADMIN dan boshqa rol"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Platforma ko‘rsatkichlari (TZ 9): kun, sotuvchi, operator yoki offer kesimida",
+        "tags": [
+          "admin-metrics"
+        ]
+      }
+    },
     "/api/v1/operator/leads/next": {
       "post": {
         "description": "Vaqti kelgan qayta qo‘ng‘iroqlar, keyin eng yangi lidlar. 5 tadan ortiq bron yoki tanaffus holatida rad (OPR-1, BE-13).",
@@ -16027,6 +16679,654 @@
           "skipped",
           "settlements",
           "items"
+        ]
+      },
+      "RemittanceDayDto": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "example": "2027-01-13"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DIFF",
+              "RESOLVED",
+              "MATCHED",
+              "PENDING"
+            ],
+            "description": "Kun holati: ochiq farq bo‘lsa DIFF, aks holda kutilayotgan bo‘lsa PENDING, hal qilingan bo‘lsa RESOLVED, aks holda MATCHED"
+          },
+          "orders": {
+            "type": "number",
+            "example": 16,
+            "description": "Buyurtmalar (posilkalar) soni"
+          },
+          "diffCount": {
+            "type": "number",
+            "example": 1
+          },
+          "resolvedCount": {
+            "type": "number",
+            "example": 1
+          },
+          "matchedCount": {
+            "type": "number",
+            "example": 14
+          },
+          "pendingCount": {
+            "type": "number",
+            "example": 0
+          },
+          "collected": {
+            "type": "number",
+            "example": 3303000,
+            "description": "Yig‘ilgan (Elchi), so‘m"
+          },
+          "elchiFee": {
+            "type": "number",
+            "example": 504000,
+            "description": "Elchi haqi, so‘m"
+          },
+          "refusalFee": {
+            "type": "number",
+            "example": 80000,
+            "description": "Rad to‘lovi, so‘m"
+          },
+          "elchiTotal": {
+            "type": "number",
+            "example": 2719000,
+            "description": "Elchi hisobi: o‘tkazma (yetkazilgan) − rad to‘lovi, so‘m"
+          },
+          "systemTotal": {
+            "type": "number",
+            "example": 2723000,
+            "description": "Tizim hisobi: kutilgan o‘tkazma (yetkazilgan) − rad to‘lovi, so‘m"
+          },
+          "openDiff": {
+            "type": "number",
+            "example": -4000,
+            "description": "Ochiq (hal qilinmagan) farq, so‘m: Elchi − tizim"
+          }
+        },
+        "required": [
+          "day",
+          "state",
+          "orders",
+          "diffCount",
+          "resolvedCount",
+          "matchedCount",
+          "pendingCount",
+          "collected",
+          "elchiFee",
+          "refusalFee",
+          "elchiTotal",
+          "systemTotal",
+          "openDiff"
+        ]
+      },
+      "RemittanceResolutionDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Elchi 1 kg ortiqcha hisoblagan — Elchi bilan kelishildi"
+          },
+          "by": {
+            "type": "string",
+            "example": "17",
+            "description": "Kim yopdi (foydalanuvchi ID)"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-14T06:20:00.000Z"
+          }
+        },
+        "required": [
+          "comment",
+          "by",
+          "at"
+        ]
+      },
+      "RemittanceItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "311",
+            "description": "O‘tkazma qatori ID si"
+          },
+          "orderId": {
+            "type": "string",
+            "example": "9001"
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "L-1049",
+            "nullable": true
+          },
+          "shipmentId": {
+            "type": "string",
+            "example": "55102",
+            "nullable": true
+          },
+          "elchiStatus": {
+            "type": "string",
+            "example": "paid",
+            "description": "Elchi holati"
+          },
+          "kind": {
+            "type": "string",
+            "example": "DELIVERED",
+            "nullable": true,
+            "description": "DELIVERED — yetkazilgan (o‘tkazma), REFUSED — rad (rad to‘lovi); jurnal hali yo‘q bo‘lsa null"
+          },
+          "collectedFromCustomer": {
+            "type": "number",
+            "example": 292000,
+            "nullable": true
+          },
+          "elchiFee": {
+            "type": "number",
+            "example": 44000,
+            "nullable": true
+          },
+          "marketPaidAmount": {
+            "type": "number",
+            "example": 248000,
+            "nullable": true,
+            "description": "Elchi o‘tkazgan"
+          },
+          "refusalFee": {
+            "type": "number",
+            "example": null,
+            "nullable": true
+          },
+          "expectedAmount": {
+            "type": "number",
+            "example": 252000,
+            "nullable": true,
+            "description": "Tizim hisobi"
+          },
+          "diff": {
+            "type": "number",
+            "example": -4000,
+            "nullable": true,
+            "description": "Elchi − tizim, o‘tkazma ma’nosida: rad to‘lovi ko‘p ushlansa manfiy (DZ-07)"
+          },
+          "matchState": {
+            "type": "string",
+            "example": "MISMATCH",
+            "description": "BE-22 holati: PENDING, MATCHED, PARTIAL, MISMATCH"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DIFF",
+              "RESOLVED",
+              "MATCHED",
+              "PENDING"
+            ]
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-13T11:05:00.000Z"
+          },
+          "resolution": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemittanceResolutionDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "orderNumber",
+          "shipmentId",
+          "elchiStatus",
+          "kind",
+          "collectedFromCustomer",
+          "elchiFee",
+          "marketPaidAmount",
+          "refusalFee",
+          "expectedAmount",
+          "diff",
+          "matchState",
+          "state",
+          "receivedAt",
+          "resolution"
+        ]
+      },
+      "RemittanceItemPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RemittanceItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 16
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 10
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 2
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "ResolveRemittanceDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Elchi 1 kg ortiqcha hisoblagan — Elchi bilan kelishildi",
+            "description": "Izoh majburiy (FE-19 TC2)"
+          }
+        },
+        "required": [
+          "comment"
+        ]
+      },
+      "SettlementDisputeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "3"
+          },
+          "settlementId": {
+            "type": "string",
+            "example": "12"
+          },
+          "settlementNumber": {
+            "type": "string",
+            "example": "AS-000012"
+          },
+          "wholesalerId": {
+            "type": "string",
+            "example": "501"
+          },
+          "comment": {
+            "type": "string",
+            "example": "Quloqchin 2 donasi aktda yo‘q"
+          },
+          "createdBy": {
+            "type": "string",
+            "example": "77",
+            "description": "Optovik foydalanuvchisi"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2027-01-11T06:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "ANSWERED"
+            ]
+          },
+          "answer": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "answeredBy": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "answeredAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "settlementId",
+          "settlementNumber",
+          "wholesalerId",
+          "comment",
+          "createdBy",
+          "createdAt",
+          "status",
+          "answer",
+          "answeredBy",
+          "answeredAt"
+        ]
+      },
+      "SettlementDisputePageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettlementDisputeDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "WholesalerActDto": {
+        "type": "object",
+        "properties": {
+          "settlement": {
+            "$ref": "#/components/schemas/WholesalerSettlementDto"
+          },
+          "acceptedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Optovik aktni qabul qilgan vaqt"
+          },
+          "acceptedBy": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "acceptedAmount": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Qabul qilingan summa, so‘m. Bank faylida summa o‘zgarsa qabul amalda emas (null) — qayta qabul yoki e’tiroz"
+          },
+          "disputes": {
+            "description": "Eskisi birinchi",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettlementDisputeDto"
+            }
+          }
+        },
+        "required": [
+          "settlement",
+          "acceptedAt",
+          "acceptedBy",
+          "acceptedAmount",
+          "disputes"
+        ]
+      },
+      "SettlementCommentDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Quloqchin 2 donasi aktda yo‘q"
+          }
+        },
+        "required": [
+          "comment"
+        ]
+      },
+      "PlatformLeadMetricsRowDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Kun, sotuvchi, operator yoki offer (mahsulot) ID si; jami — TOTAL"
+          },
+          "clicks": {
+            "type": "number",
+            "nullable": true,
+            "description": "Operator kesimida null"
+          },
+          "leads": {
+            "type": "number",
+            "nullable": true
+          },
+          "invalid": {
+            "type": "number",
+            "nullable": true
+          },
+          "duplicates": {
+            "type": "number",
+            "nullable": true,
+            "description": "Dublikat (birlashtirilgan)"
+          },
+          "validLeads": {
+            "type": "number",
+            "nullable": true
+          },
+          "noContact": {
+            "type": "number",
+            "nullable": true,
+            "description": "«Aloqa bo‘lmadi»"
+          },
+          "attempts": {
+            "type": "number",
+            "nullable": true,
+            "description": "Operator kesimida: urinishlar"
+          },
+          "confirmed": {
+            "type": "number"
+          },
+          "delivered": {
+            "type": "number",
+            "description": "Kunlik sotuv: mijoz olgan buyurtmalar"
+          },
+          "refused": {
+            "type": "number"
+          },
+          "validLeadRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "(barcha − yaroqsiz − dublikat) / barcha, %"
+          },
+          "approveRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "Tasdiqlangan / yaroqli, % (operatorda — ishlagan yaroqli)"
+          },
+          "saleRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "Olgan / (olgan + rad), %"
+          },
+          "lostLeadRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "«Aloqa bo‘lmadi» / yaroqli, %"
+          },
+          "firstCallMedianMinutes": {
+            "type": "number",
+            "nullable": true,
+            "description": "Birinchi qo‘ng‘iroq, median, daqiqa"
+          },
+          "averageCheck": {
+            "type": "number",
+            "nullable": true,
+            "description": "O‘rtacha chek: tovar narxi (yetkazishsiz), so‘m"
+          },
+          "affiliateIncome": {
+            "type": "number",
+            "nullable": true,
+            "description": "Sotuvchi daromadi, so‘m — ledgerdan (BE-28 bilan bir xil): yetkazilgan kunda +, qaytarilgan kunda −; asosiy sayt sotuvi kirmaydi"
+          },
+          "epc": {
+            "type": "number",
+            "nullable": true,
+            "description": "EPC: daromad / kliklar, so‘m"
+          }
+        },
+        "required": [
+          "key",
+          "clicks",
+          "leads",
+          "invalid",
+          "duplicates",
+          "validLeads",
+          "noContact",
+          "attempts",
+          "confirmed",
+          "delivered",
+          "refused",
+          "validLeadRate",
+          "approveRate",
+          "saleRate",
+          "lostLeadRate",
+          "firstCallMedianMinutes",
+          "averageCheck",
+          "affiliateIncome",
+          "epc"
+        ]
+      },
+      "PlatformLeadMetricsDto": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformLeadMetricsRowDto"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PlatformLeadMetricsRowDto"
+          }
+        },
+        "required": [
+          "rows",
+          "totals"
+        ]
+      },
+      "PlatformFinanceMetricsRowDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "contributionPerSale": {
+            "type": "number",
+            "nullable": true,
+            "description": "Hissa bitta sotuvdan [taklif]: platforma ulushi / sotuvlar"
+          },
+          "platformShare": {
+            "type": "number",
+            "description": "Platforma ulushi yig‘indisi (yetkazilgan, rad to‘lovi, qaytarish), so‘m"
+          },
+          "reconciliationDiff": {
+            "type": "number",
+            "description": "Sverka farqi: hal qilinmagan, so‘m (Elchi − tizim)"
+          },
+          "withdrawalMedianHours": {
+            "type": "number",
+            "nullable": true,
+            "description": "Pul yechish: so‘rovdan to‘lovgacha, median, soat"
+          }
+        },
+        "required": [
+          "key",
+          "contributionPerSale",
+          "platformShare",
+          "reconciliationDiff",
+          "withdrawalMedianHours"
+        ]
+      },
+      "PlatformFinanceMetricsDto": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformFinanceMetricsRowDto"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PlatformFinanceMetricsRowDto"
+          }
+        },
+        "required": [
+          "rows",
+          "totals"
+        ]
+      },
+      "PlatformMetricsDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "DAY",
+              "AFFILIATE",
+              "OPERATOR",
+              "OFFER"
+            ]
+          },
+          "leads": {
+            "$ref": "#/components/schemas/PlatformLeadMetricsDto"
+          },
+          "finance": {
+            "nullable": true,
+            "description": "Faqat kun kesimida",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformFinanceMetricsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "groupBy",
+          "leads",
+          "finance"
         ]
       },
       "LeadProductRefDto": {
