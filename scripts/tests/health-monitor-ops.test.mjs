@@ -147,8 +147,12 @@ test('BE-36: rate limit Redis’siz qolsa ketma-ket chegaradan keyin ogohlantiri
   assert.deepEqual(sent, [
     'rate_limit_redis_firing: Rate limit Redis’ga ulanmagan (gateway, lead-service) — har nusxa o‘z xotirasida sanaydi',
   ]);
+  // lead-service javob bermadi (null) — noma'lum: ogohlantirish yopilmaydi
   rateLimit = redis;
   leadRateLimit = null;
+  await checkOps();
+  assert.equal(sent.length, 1);
+  leadRateLimit = redis;
   await checkOps();
   assert.deepEqual(sent.slice(1), [
     'rate_limit_redis_resolved: Rate limit yana Redis’da (umumiy)',

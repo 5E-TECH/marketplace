@@ -234,14 +234,21 @@ export async function checkOps() {
     );
   // BE-36: REDIS_URL berilgan, lekin Redis'ga ulanmagan — limit nusxalar orasida bo'linmaydi. Gateway (so'rov tushgan
   // nusxa) va lead-service (lid API kaliti). Qayta ulanishdagi bir necha soniya ogohlantirmasin — ketma-ket
-  // `threshold` marta buzilsa (MONITOR_FAILURE_THRESHOLD, API uzilishi kabi).
-  const offRedis = [
+  // `threshold` marta buzilsa (MONITOR_FAILURE_THRESHOLD, API uzilishi kabi). Javob bo'lmagan maydon (servis javob
+  // bermadi — null, eski versiya — yo'q) noma'lum: hisob va ochiq ogohlantirish o'zgarmaydi, «sog'lom» sanalmaydi.
+  const health = [
     ['gateway', data?.rateLimit],
     ['lead-service', data?.leadRateLimit],
-  ]
-    .filter(([, h]) => h?.redisConfigured === true && h.store !== 'redis')
+  ];
+  const known = health.filter(
+    ([, h]) => typeof h?.redisConfigured === 'boolean',
+  );
+  const offRedis = known
+    .filter(([, h]) => h.redisConfigured && h.store !== 'redis')
     .map(([name]) => name);
-  rateLimitBreaches = offRedis.length ? rateLimitBreaches + 1 : 0;
+  if (offRedis.length) rateLimitBreaches += 1;
+  else if (known.length === health.length) rateLimitBreaches = 0;
+  else return;
   await condition(
     'rate_limit_redis',
     rateLimitBreaches >= threshold,

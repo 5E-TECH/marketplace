@@ -76,8 +76,9 @@ tanlang.
 - `rateLimit` — so‘rov tushgan gateway nusxasi;
 - `leadRateLimit` — lead-service.
 
-Biri ketma-ket `MONITOR_FAILURE_THRESHOLD` marta Redis’siz bo‘lsa — `rate_limit_redis_firing`, tiklansa
-`…_resolved`. Gateway bir necha nusxada bo‘lsa, har tekshiruvda ulardan bittasi ko‘riladi.
+Ketma-ket `MONITOR_FAILURE_THRESHOLD` tekshiruvda ikkalasidan biri Redis’siz bo‘lsa — `rate_limit_redis_firing`,
+ikkalasi Redis’da bo‘lsa — `…_resolved`. Servis javob bermagan tekshiruv hisobga olinmaydi. Gateway bir necha nusxada
+bo‘lsa, har tekshiruvda ulardan bittasi ko‘riladi.
 
 **Yoqish (prod, Dilshod).**
 1. `.env.production` ga quyidagilar qo‘shiladi:
