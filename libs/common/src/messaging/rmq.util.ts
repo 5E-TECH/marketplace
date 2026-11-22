@@ -8,7 +8,6 @@ import { RmqOptions, Transport } from '@nestjs/microservices';
  * `scripts/rmq-migrate-v2.mjs` bilan ko‘chiriladi va eski navbat o‘chiriladi.
  */
 export const RmqQueue = {
-  ECHO: 'echo_queue_v2',
   IDENTITY: 'identity_queue_v2',
   CATALOG: 'catalog_queue_v2',
   INVENTORY: 'inventory_queue_v2',
@@ -24,7 +23,6 @@ export const RmqQueue = {
 
 /** Injection token'lari (gateway ClientsModule uchun). */
 export const RmqClient = {
-  ECHO: 'ECHO_SERVICE',
   IDENTITY: 'IDENTITY_SERVICE',
   CATALOG: 'CATALOG_SERVICE',
   INVENTORY: 'INVENTORY_SERVICE',

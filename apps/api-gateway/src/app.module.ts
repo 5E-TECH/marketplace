@@ -15,16 +15,9 @@ import {
 } from '@app/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
-import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
-import { ProductsController } from './products/products.controller';
-import { ProductVariantsController } from './products/product-variants.controller';
-import { FilesController } from './files/files.controller';
-import { SellerOrdersController } from './sellers/seller-orders.controller';
 import { NotificationsController } from './notifications/notifications.controller';
-import { AdminShopsController } from './shops/admin-shops.controller';
 import { AdminDashboardController } from './admin/admin-dashboard.controller';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { AdminOrdersController } from './admin/admin-orders.controller';
@@ -43,12 +36,8 @@ import { AdminIntegrationController } from './admin/admin-integration.controller
 import { AdminContentController } from './admin/admin-content.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
-import { BuyerOrdersController } from './orders/buyer-orders.controller';
 import { CurrentRoleGuard } from './auth/current-role.guard';
 import { AdminInventoryController } from './admin/admin-inventory.controller';
-import { BuyerReturnsController } from './returns/buyer-returns.controller';
-import { SellerReturnsController } from './sellers/seller-returns.controller';
-import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminVariantReportController } from './leads/admin-variant-report.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
@@ -83,14 +72,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
         ],
       }),
     }),
-    // Servislarga RMQ client'lari (echo demo + identity; keyin catalog/...)
+    // Servislarga RMQ client'lari
     ClientsModule.registerAsync([
-      {
-        name: RmqClient.ECHO,
-        inject: [ConfigService],
-        useFactory: (config: ConfigService) =>
-          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.ECHO),
-      },
       {
         name: RmqClient.IDENTITY,
         inject: [ConfigService],
@@ -167,16 +150,9 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
   ],
   controllers: [
     AppController,
-    EchoController,
     AuthController,
-    SellersController,
     CategoriesController,
-    ProductsController,
-    ProductVariantsController,
-    FilesController,
-    SellerOrdersController,
     NotificationsController,
-    AdminShopsController,
     AdminDashboardController,
     AdminUsersController,
     AdminOrdersController,
@@ -194,12 +170,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminIntegrationController,
     AdminContentController,
     RegionsController,
-    BuyerOrdersController,
     AdminInventoryController,
-    BuyerReturnsController,
-    SellerReturnsController,
     AdminReturnsController,
-    SellerFinanceController,
     AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,

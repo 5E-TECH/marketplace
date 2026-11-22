@@ -9,7 +9,6 @@ import { RmqClient, sendRpc } from '@app/common';
 @Injectable()
 export class ReadinessService {
   constructor(
-    @Inject(RmqClient.ECHO) private readonly echo: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
@@ -25,7 +24,6 @@ export class ReadinessService {
 
   async check() {
     const clients: Array<[string, ClientProxy]> = [
-      ['echo-service', this.echo],
       ['identity-service', this.identity],
       ['catalog-service', this.catalog],
       ['inventory-service', this.inventory],

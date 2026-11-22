@@ -37,15 +37,6 @@
         "tsConfigPath": "libs/common/tsconfig.lib.json"
       }
     },
-    "echo-service": {
-      "type": "application",
-      "root": "apps/echo-service",
-      "entryFile": "main",
-      "sourceRoot": "apps/echo-service/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/echo-service/tsconfig.app.json"
-      }
-    },
     "file-service": {
       "type": "application",
       "root": "apps/file-service",

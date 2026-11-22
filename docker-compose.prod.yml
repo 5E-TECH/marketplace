@@ -92,10 +92,6 @@ services:
       - backend
       - frontend
 
-  echo-service:
-    <<: *app
-    command: node dist/apps/echo-service/apps/echo-service/src/main.js
-
   identity-service:
     <<: *app
     command: node dist/apps/identity-service/apps/identity-service/src/main.js
