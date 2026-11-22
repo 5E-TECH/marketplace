@@ -468,6 +468,30 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       });
       expect(second.external_order_id).toBe(first.external_order_id);
       expect(await parcel()).toMatchObject({ status: 'CREATED' });
+
+      // qayta yuborilgan so‘rov — sozlama o‘chiq bo‘lgandagi so‘rovning aynan o‘zi
+      await ds.query(
+        'TRUNCATE integration.parcel_request, integration.processed_event',
+      );
+      elchi.createShipment.mockClear();
+      delete settings.ELCHI_FISCAL_RECEIPT;
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+      expect(elchi.createShipment.mock.calls[0][0]).toEqual(second);
+    });
+
+    it('Elchi rad etguncha buyurtma bekor qilingan bo‘lsa — qayta yuborilmaydi', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment.mockImplementationOnce(async () => {
+        // birinchi so‘rov yo‘lda — shu orada «Bekor qilindi» keladi
+        await ds.query(
+          `UPDATE integration.parcel_request SET status = 'CANCEL_PENDING' WHERE order_id = '501'`,
+        );
+        throw new ElchiApiError(400, 'fiscal');
+      });
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+      expect(elchi.createShipment).toHaveBeenCalledTimes(1);
     });
 
     it('chek maydonlarisiz so‘rov ham rad etilsa — bugungidek FAILED (uchinchi urinish yo‘q)', async () => {

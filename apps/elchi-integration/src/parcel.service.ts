@@ -363,6 +363,21 @@ export class ParcelService {
         await this.createFailed(row, error as Error);
         return;
       }
+      // Qator hali PENDING bo‘lsin (shu orada bekor qilinmagan) va band muddati yangilansin — ikkinchi so‘rov
+      // ham to‘liq kutish vaqtini olsin, boshqa ishchi parallel yaratmasin.
+      const still = returningRows(
+        await this.dataSource.query(
+          `UPDATE integration.parcel_request
+              SET next_attempt_at = clock_timestamp() + make_interval(secs => $2)
+            WHERE id = $1 AND status = 'PENDING'
+            RETURNING id`,
+          [row.id, CLAIM_LEASE_S],
+        ),
+      ) as unknown[];
+      if (!still.length) {
+        await this.createFailed(row, error);
+        return;
+      }
       this.logger.warn(
         `Buyurtma ${row.orderId}: Elchi chek ma’lumotini rad etdi (${error.status}: ${error.message}) — chek maydonlarisiz qayta yuborildi`,
       );

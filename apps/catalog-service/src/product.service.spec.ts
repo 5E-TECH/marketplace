@@ -387,6 +387,26 @@ describe('ProductService', () => {
       );
     });
 
+    it('BE-41: STIRsiz optovikda CPA emas mahsulot tasdiqlanadi, lekin keyin CPA ni yoqib bo‘lmaydi — 409', async () => {
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        tin: null,
+        ...CONTRACT,
+      });
+      productRepo.findOne.mockResolvedValue(pending({ cpaEnabled: false }));
+      await expect(service.adminApprove('10')).resolves.toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+      productRepo.findOne.mockResolvedValue(
+        pending({ status: ProductStatus.ACTIVE, cpaEnabled: false }),
+      );
+      await expect(
+        service.adminUpdate('10', { cpaEnabled: true }),
+      ).rejects.toThrow('Optovik STIR i kiritilmagan — CPA ni yoqib bo‘lmaydi');
+    });
+
     it('BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab bo‘lmaydi; kodsiz eskisida CPA ni o‘chirish va kod kiritish mumkin', async () => {
       const active = () => pending({ status: ProductStatus.ACTIVE });
       productRepo.findOne.mockResolvedValue(active());

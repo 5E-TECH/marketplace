@@ -277,6 +277,7 @@ export class ProductService {
   async adminUpdate(id: string, dto: AdminUpdateProductDto): Promise<Product> {
     const product = await this.getAdminProduct(id);
     await this.applyChanges(product, dto);
+    const cpaTurnedOn = dto.cpaEnabled === true && !product.cpaEnabled;
     if (dto.cpaEnabled !== undefined && dto.cpaEnabled !== product.cpaEnabled) {
       if (dto.cpaEnabled) await this.assertSingleActiveVariant(product.id);
       product.cpaEnabled = dto.cpaEnabled;
@@ -286,7 +287,13 @@ export class ProductService {
     if (dto.packageCode !== undefined)
       product.packageCode = dto.packageCode ?? null;
     // BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab yoki kodsiz CPA ni yoqib bo‘lmaydi — chek qatori buziladi
-    if (product.status === ProductStatus.ACTIVE) assertFiscalCodes(product);
+    if (product.status === ProductStatus.ACTIVE) {
+      assertFiscalCodes(product);
+      if (cpaTurnedOn && !(await this.shopTin(product.shopId)))
+        throw new ConflictException(
+          'Optovik STIR i kiritilmagan — CPA ni yoqib bo‘lmaydi (fiskal chek)',
+        );
+    }
     const saved = await this.save(product);
     await this.publish(saved);
     return saved;
@@ -463,7 +470,6 @@ export class ProductService {
     return shop;
   }
 
-  /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
   /** BE-41: optovik STIR i (`select: false`) — faqat tekshiruv uchun, shop obyektiga yuklanmaydi (hodisalarga chiqmasin). */
   private async shopTin(shopId: string): Promise<string | null> {
     const row = await this.shops
@@ -475,6 +481,7 @@ export class ProductService {
     return row?.tin ?? null;
   }
 
+  /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
   private async getShopById(shopId: string): Promise<Shop> {
     const shop = /^\d+$/.test(String(shopId ?? ''))
       ? await this.shops
