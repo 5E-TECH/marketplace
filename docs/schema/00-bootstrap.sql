@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Elchi Marketplace — DB BOOTSTRAP (provisioning)
--- Topologiya: 1 ta PostgreSQL instance + 9 ta SCHEMA (bounded context har biriga).
+-- Topologiya: 1 ta PostgreSQL instance + 10 ta SCHEMA (bounded context har biriga; lead — BE-36 da qo'shildi).
 --
 -- Bu fayl drawSQL uchun EMAS — bu real bazani sozlash uchun (DDL provisioning).
 -- Ketma-ketlik:
@@ -41,6 +41,7 @@ CREATE SCHEMA IF NOT EXISTS finance       AUTHORIZATION mkt_migrator;
 CREATE SCHEMA IF NOT EXISTS integration   AUTHORIZATION mkt_migrator;
 CREATE SCHEMA IF NOT EXISTS notification  AUTHORIZATION mkt_migrator;
 CREATE SCHEMA IF NOT EXISTS search        AUTHORIZATION mkt_migrator;
+CREATE SCHEMA IF NOT EXISTS lead          AUTHORIZATION mkt_migrator;
 
 -- ── 3. HAR SERVISGA ALOHIDA APP USER (least-privilege) ──────────────────────
 -- Har user FAQAT o'z schema'sida DML (SELECT/INSERT/UPDATE/DELETE) qila oladi.
@@ -51,7 +52,7 @@ DECLARE
   usr   TEXT;
   svcs  TEXT[] := ARRAY[
     'identity','catalog','inventory','checkout','payment',
-    'finance','integration','notification','search'
+    'finance','integration','notification','search','lead'
   ];
 BEGIN
   FOREACH svc IN ARRAY svcs LOOP
@@ -85,7 +86,7 @@ END $$;
 -- ── 4. MIGRATOR search_path (barcha schema ko'rinadi, tartib bilan) ──────────
 ALTER ROLE mkt_migrator SET search_path =
   identity, catalog, inventory, checkout, payment,
-  finance, integration, notification, search, public;
+  finance, integration, notification, search, lead, public;
 
 -- ============================================================================
 -- ESLATMA — 01..09 fayllar boshida allaqachon `SET search_path = <svc>;` bor,
