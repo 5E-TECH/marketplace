@@ -17,6 +17,9 @@ WORKDIR /app
 
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
+# PDF shriftlari (kirill, ʻ/ʼ): registerPdfFonts dist ichidan yuqoriga qarab
+# libs/common/assets/fonts ni topadi — /app/libs/common/assets/fonts.
+COPY --chown=node:node libs/common/assets/fonts ./libs/common/assets/fonts
 COPY --chown=node:node scripts/health-monitor.mjs ./scripts/health-monitor.mjs
 # BE-04: migratsiya CLI (DB_AUTO_MIGRATE=false bo‘lganda deploy qadami) — dist dagi migrate.js larni yurgizadi
 COPY --chown=node:node scripts/migrate.mjs ./scripts/migrate.mjs

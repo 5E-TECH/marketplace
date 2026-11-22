@@ -13,6 +13,7 @@ import {
   moneyFromDb,
   returningRows,
   runAsLeader,
+  registerPdfFonts,
   SettlementRunResultDto,
   WholesalerSettlementDto,
   WholesalerSettlementPageDto,
@@ -569,7 +570,7 @@ export class SettlementService {
   /** Akt-sverka PDF (dizayn `hujjat-akt-sverka` chizilmagan — tarkib [taklif]). Rekvizitlar BE-07 dan keyin. */
   async actPdf(input: { id: string }): Promise<SettlementFile> {
     const s = await this.get(input);
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const doc = registerPdfFonts(new PDFDocument({ size: 'A4', margin: 40 }));
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
     const done = new Promise<Buffer>((resolve, reject) => {

@@ -9,6 +9,8 @@ import { ClientProxy } from '@nestjs/microservices';
 import PDFDocument from 'pdfkit';
 import { DataSource } from 'typeorm';
 import {
+  PDF_FONT,
+  registerPdfFonts,
   ReservationStatus,
   ReturnInspectionDto,
   RmqClient,
@@ -20,7 +22,7 @@ import { Reservation } from './entities/reservation.entity';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
 import { PdfFile } from './inbound.service';
-import { tashkentTime, uzbekText } from './pdf-text';
+import { tashkentTime } from './pdf-text';
 
 const ID = /^[1-9]\d{0,18}$/;
 
@@ -221,13 +223,14 @@ export class ReturnInspectionService {
     const names = new Map<string, { productName: string; sku: string }>(
       details.map((d) => [String(d.variantId), d] as const),
     );
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 40,
-      compress: false,
-      info: { Title: `Brak akti ${inspection.orderId}` },
-    });
-    uzbekText(doc);
+    const doc = registerPdfFonts(
+      new PDFDocument({
+        size: 'A4',
+        margin: 40,
+        compress: false,
+        info: { Title: `Brak akti ${inspection.orderId}` },
+      }),
+    );
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -235,11 +238,11 @@ export class ReturnInspectionService {
       doc.on('error', reject);
     });
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(14)
       .text(`Brak akti — buyurtma ${inspection.orderId}`);
     doc
-      .font('Helvetica')
+      .font(PDF_FONT.regular)
       .fontSize(10)
       .text(`Elchi posilkasi: ${input?.shipmentId ?? '—'}`)
       .text(
@@ -247,10 +250,10 @@ export class ReturnInspectionService {
       )
       .moveDown();
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(9)
       .text('No  Mahsulot | SKU | Soni | Baho');
-    doc.font('Helvetica').fontSize(9);
+    doc.font(PDF_FONT.regular).fontSize(9);
     defective.forEach((item, index) => {
       const detail = names.get(item.variantId);
       doc.text(
