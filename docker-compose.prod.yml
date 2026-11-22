@@ -70,6 +70,36 @@ services:
     networks:
       - backend
 
+  # ── Redis (BE-36): bir nechta gateway nusxasi uchun umumiy rate limit ────────
+  # Ixtiyoriy: ishga tushishda bitta gateway — Redis kerak emas (limit nusxa
+  # xotirasida). Yoqish: `.env.production` ga `COMPOSE_PROFILES=redis` (tunnel
+  # bilan: `tunnel,redis`), `REDIS_PASSWORD` va
+  # `REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379`. Diskka yozmaydi —
+  # hisoblagichlar bir daqiqalik. Redis uzilsa API ishlayveradi (har nusxa o'z
+  # xotirasida sanaydi), monitor ogohlantiradi. docs/BE-36-KOP-NUSXA.md
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    profiles:
+      - redis
+    environment:
+      # `:?` emas — cloudflared'dagi sabab bilan (profil o'chiq paytda ham
+      # compose butun faylni interpolatsiya qiladi).
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - >-
+        test -n "$$REDIS_PASSWORD" || { echo 'REDIS_PASSWORD kerak' >&2; exit 1; };
+        exec redis-server --save '' --appendonly no --requirepass "$$REDIS_PASSWORD"
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
   api-gateway:
     <<: *app
     build:

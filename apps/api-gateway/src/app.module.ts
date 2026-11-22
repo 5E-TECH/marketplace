@@ -71,6 +71,8 @@ import { AdminLeadsController } from './leads/admin-leads.controller';
 import { AdminFraudController } from './leads/admin-fraud.controller';
 import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
 import { AdminOfferContentController } from './leads/admin-offer-content.controller';
+import { RateLimitModule } from './rate-limit/rate-limit.module';
+import { SharedThrottlerStorage } from './rate-limit/shared-throttler.storage';
 
 @Module({
   imports: [
@@ -78,9 +80,12 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     CommonAuthModule, // JWT + guardlar (global)
     // Rate limiting — umumiy chegara. Auth kabi nozik endpointlarda
     // controller darajasida @Throttle bilan qattiqroq limit qo'yiladi.
+    // BE-36: REDIS_URL berilsa hisob Redis'da — bir nechta gateway nusxasida umumiy.
+    RateLimitModule,
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
+      imports: [RateLimitModule],
+      inject: [ConfigService, SharedThrottlerStorage],
+      useFactory: (config: ConfigService, storage: SharedThrottlerStorage) => ({
         throttlers: [
           {
             name: 'default',
@@ -88,6 +93,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
             limit: config.get<number>('RATE_LIMIT_MAX', 300),
           },
         ],
+        storage,
       }),
     }),
     // Servislarga RMQ client'lari
