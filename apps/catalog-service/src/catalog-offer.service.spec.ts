@@ -55,6 +55,7 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never, // BE-08 (PR 127): kreativlar
     );
 
   it('ID lar bo‘yicha do‘kon nomi, mahsulot va variant rasmi; noto‘g‘ri va takroriy ID tashlanadi', async () => {
