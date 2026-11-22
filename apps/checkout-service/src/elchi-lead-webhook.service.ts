@@ -251,6 +251,14 @@ export class ElchiLeadWebhookService {
     elchiStatus: ElchiWebhookDto['status'],
     current: LeadOrderStatus,
   ): LeadOrderStatus | null {
+    // qaytarish so‘rovi ochiq (BE-44): buyurtma allaqachon yetkazilgan, keyingi holatni xodim qarori belgilaydi —
+    // «sotildi»/«to‘landi» holatni o‘zgartirmaydi (zid emas, xabar yo‘q), lekin pul moliyaga yoziladi (recordMoney):
+    // mijoz pulni yetkazishda to‘lagan, qaytarish tasdiqlansa moliya `order.returned` bilan qaytaradi
+    if (
+      current === LeadOrderStatus.RETURN_REQUESTED &&
+      SALE_OR_MONEY.has(elchiStatus)
+    )
+      return null;
     switch (elchiStatus) {
       case 'on_the_road':
         return LeadOrderStatus.IN_TRANSIT;

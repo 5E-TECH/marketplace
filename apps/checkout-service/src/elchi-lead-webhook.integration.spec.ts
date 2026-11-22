@@ -426,6 +426,42 @@ describeWithPostgres(
       ).resolves.toMatchObject({ result: 'NOOP', status: 'RETURNING' });
     });
 
+    it('qaytarish so‘rovi ochiq: «sotildi»/«to‘landi» — holat o‘zgarmaydi (NOOP), pul moliyaga yoziladi, zid xabar yo‘q', async () => {
+      const target = await order('8110');
+      await webhook.process(hook(target, 'sold'));
+      await checkoutDs.transaction((manager) =>
+        status.applyTransition(manager, {
+          orderId: target.id,
+          to: LeadOrderStatus.RETURN_REQUESTED,
+          actor: { type: LeadOrderActorType.USER, id: '1' },
+          reason: 'Mijoz qaytarmoqchi (test)',
+        }),
+      );
+      notifications.emit.mockClear();
+      await expect(
+        webhook.process(hook(target, 'delivered')),
+      ).resolves.toMatchObject({ result: 'NOOP', status: 'RETURN_REQUESTED' });
+      await expect(
+        webhook.process(
+          hook(target, 'paid', {
+            collectedFromCustomer: 306_000,
+            elchiFee: 40_000,
+            marketPaidAmount: 266_000,
+          }),
+        ),
+      ).resolves.toMatchObject({ result: 'NOOP', status: 'RETURN_REQUESTED' });
+      expect(await statusOf(target.id)).toBe('RETURN_REQUESTED');
+      const money = await outboxOf(target.id, 'finance.cod.settled');
+      expect(money.map((m) => m.payload)).toEqual([
+        expect.objectContaining({
+          elchiStatus: 'paid',
+          marketPaidAmount: 266_000,
+          refusalFee: null,
+        }),
+      ]);
+      expect(notifications.emit).not.toHaveBeenCalled();
+    });
+
     it('zid xabar: rad etilgan posilkaga «sotildi»/«to‘landi» — o‘zgarmaydi, pul yozilmaydi, buyurtma uchun bir marta xabar', async () => {
       const target = await order('8109');
       await webhook.process(hook(target, 'on_the_road'));
