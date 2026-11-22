@@ -6,6 +6,7 @@ import {
 } from '@app/common';
 import { StorefrontService } from './storefront.service';
 
+/** BE-34: asosiy sayt katalogi (ochiq). Eski do‘kon sahifalari (`storefront.shops.*`) BE-34 da olib tashlandi. */
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class StorefrontController {
@@ -13,38 +14,20 @@ export class StorefrontController {
 
   @MessagePattern({ cmd: 'storefront.products.list' })
   list(@Payload() query: StorefrontProductsQueryDto) {
-    return this.storefront.listProducts(query);
+    return this.storefront.listProducts(query ?? {});
   }
 
   @MessagePattern({ cmd: 'storefront.products.get' })
   getProduct(@Payload() data: { id: string }) {
-    return this.storefront.getProduct(data.id);
+    return this.storefront.getProduct(String(data?.id ?? ''));
   }
 
-  @MessagePattern({ cmd: 'storefront.shops.featured' })
-  featuredShops() {
-    return this.storefront.getFeaturedShops();
-  }
-
-  @MessagePattern({ cmd: 'storefront.shops.get' })
-  getShop(
-    @Payload()
-    data: {
-      slug: string;
-      query: StorefrontProductsQueryDto;
-    },
-  ) {
-    return this.storefront.getShop(data.slug, data.query);
-  }
-
-  @MessagePattern({ cmd: 'storefront.shops.products.list' })
-  getShopProducts(
-    @Payload()
-    data: {
-      shopId: string;
-      query: StorefrontProductsQueryDto;
-    },
-  ) {
-    return this.storefront.getShopProducts(data.shopId, data.query);
+  /** checkout savati: tasdiqlangan narx bilan (BE-34). */
+  @MessagePattern({ cmd: 'cart.variant.get' })
+  cartVariant(@Payload() data: { productId: string; variantId?: string }) {
+    return this.storefront.cartVariant(
+      String(data?.productId ?? ''),
+      data?.variantId ? String(data.variantId) : undefined,
+    );
   }
 }
