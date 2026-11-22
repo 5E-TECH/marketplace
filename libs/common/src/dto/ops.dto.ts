@@ -15,6 +15,14 @@ export interface LeadQueueStats {
   oldestMinutes: number | null;
 }
 
+/** BE-36: gateway so‘rov chegarasi qayerda sanalmoqda. */
+export interface RateLimitHealth {
+  /** `REDIS_URL` berilganmi (bir nechta gateway nusxasi uchun umumiy limit). */
+  redisConfigured: boolean;
+  /** `redis` — umumiy hisob; `memory` — shu nusxa xotirasi (Redis berilmagan yoki uzilgan). */
+  store: 'redis' | 'memory';
+}
+
 export class OpsHealthDto {
   @ApiProperty({
     example: 2,
@@ -31,4 +39,11 @@ export class OpsHealthDto {
     description: 'Operator navbati; null — servis javob bermadi',
   })
   leadQueue: LeadQueueStats | null;
+
+  @ApiProperty({
+    example: { redisConfigured: true, store: 'redis' },
+    description:
+      'BE-36: so‘rov chegarasi; Redis berilgan, lekin `memory` — nusxalar limitni bo‘lishmayapti',
+  })
+  rateLimit: RateLimitHealth;
 }

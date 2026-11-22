@@ -30,6 +30,7 @@ import {
   LeadSource,
   LeadStatus,
   LeadVariant,
+  SharedRateLimiter,
 } from '@app/common';
 import {
   AffiliateApiKey,
@@ -2091,6 +2092,42 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         NotFoundException,
       );
     });
+
+    (process.env.TEST_REDIS_URL ? it : it.skip)(
+      'BE-36: ikki lead-service nusxasida kalit chegarasi umumiy (Redis) — 61-so‘rov qaysi nusxaga tushmasin 429',
+      async () => {
+        // ikkala nusxa bir xil prefiks (prod: `mp:rl:apikey:`); ishga tushirish bo‘yicha alohida — oldingi hisob aralashmasin
+        const prefix = `test:apikey:${Date.now()}:`;
+        const limiters = [0, 1].map(
+          () =>
+            new SharedRateLimiter({
+              url: process.env.TEST_REDIS_URL,
+              prefix,
+              name: 'lead-test',
+            }),
+        );
+        try {
+          for (const l of limiters)
+            for (let i = 0; i < 100 && l.store !== 'redis'; i++)
+              await new Promise((r) => setTimeout(r, 20));
+          expect(limiters.map((l) => l.store)).toEqual(['redis', 'redis']);
+          const [a, b] = limiters.map(
+            (l) => new ApiKeyService(db.getRepository(AffiliateApiKey), l),
+          );
+          const k = await a.create('77');
+          for (let i = 0; i < 60; i++)
+            await (i % 2 ? b : a).authenticate(k.key);
+          await expect(b.authenticate(k.key)).rejects.toMatchObject({
+            status: 429,
+          });
+          await expect(a.authenticate(k.key)).rejects.toMatchObject({
+            status: 429,
+          });
+        } finally {
+          await Promise.all(limiters.map((l) => l.close()));
+        }
+      },
+    );
 
     it('TC1: kalit egasiga, navbatga, variant bo‘sh; TC2: takror Idempotency-Key — o‘sha lid', async () => {
       await mkStream('77', 'apiapi');

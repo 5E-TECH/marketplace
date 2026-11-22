@@ -47,6 +47,56 @@ baza) bilan birga qiling.
 
 ## 2. Umumiy rate limit (TC1)
 
-Gateway bir necha nusxada bo‘lsa, IP limiti nusxalar orasida umumiy bo‘lishi kerak — Redis. **Ega ruxsatini kutadi:**
-Redis klienti (`ioredis`, npm) va lokal sinov uchun Redis o‘rnatish (yuklab olish). Ruxsat bo‘lgach: gateway
-`REDIS_URL` bilan Redis’da sanaydi (bo‘lmasa — hozirgidek xotirada), compose’ga `redis` servisi, CI ga Redis.
+Gateway bir necha nusxada bo‘lsa, IP limiti nusxalar orasida umumiy bo‘lishi kerak. `REDIS_URL` berilsa hisob Redis’da:
+- gateway throttler — umumiy chegara `RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_MS` va kodda `@Throttle` bilan qo‘yilgan
+  auth limitlari;
+- sotuvchining lid API kaliti chegarasi (lead-service, `rate_limit_per_minute`, BE-43).
+
+`REDIS_URL` berilmasa — avvalgidek har nusxa o‘z xotirasida sanaydi. **Ishga tushishda bitta gateway nusxasi — Redis
+shart emas.**
+
+**Qanday sanaladi.** Oyna birinchi so‘rovdan boshlanadi (`RATE_LIMIT_WINDOW_MS`). Hisoblagich va blok bitta Lua
+skriptida yangilanadi, shuning uchun nusxalar orasida poyga yo‘q. Kalitlar `mp:rl:gw:` va `mp:rl:apikey:` prefiksi
+bilan, muddati oyna bilan teng; diskka yozish kerak emas.
+
+Xotira saqlagichidan farqi: u sirpanuvchi oyna, Redis esa qat’iy oyna. Oyna chegarasida qisqa vaqtda limitdan 2
+baravargacha so‘rov o‘tishi mumkin (masalan, oyna oxirida 300 va yangisi boshida 300). Kerak bo‘lsa limitni shunga qarab
+tanlang.
+
+**Redis uzilsa** API to‘xtamaydi:
+- so‘rov xotiradagi hisob bilan o‘tadi — limit yo‘qolmaydi, faqat nusxalar orasida bo‘linmaydi;
+- buyruq kutish chegarasi 250 ms [taklif];
+- jurnalda ogohlantirish daqiqasiga ko‘pi bilan bir marta;
+- Redis qaytsa klient o‘zi qayta ulanadi;
+- monitor (`health-monitor.mjs`, `MONITOR_OPS_TOKEN` bilan) `GET /health/ops` → `rateLimit` dan
+  `rate_limit_redis_firing` ogohlantirishini beradi, tiklansa `…_resolved`.
+
+**Yoqish (prod, Dilshod).**
+1. `.env.production` ga quyidagilar qo‘shiladi:
+   - `COMPOSE_PROFILES=redis` (tunnel bilan: `tunnel,redis`);
+   - `REDIS_PASSWORD` — faqat harf, raqam, `_` va `-`, masalan `openssl rand -hex 24`;
+   - `REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379`.
+
+   `docker-compose.prod.yml` dagi `redis` servisi (`redis:7.4-alpine`, faqat `backend` tarmog‘ida, port ochilmaydi,
+   diskka yozmaydi) shu profil bilan ko‘tariladi.
+2. `scripts/validate-production-env.sh` quyidagilarni tekshiradi:
+   - `REDIS_URL` parol bilan;
+   - profil yoqilganda `REDIS_PASSWORD` bor va URL dagisi bilan bir xil;
+   - URL `redis` servisiga qarab, profil yoqilmagan bo‘lsa — ogohlantiradi.
+
+   Tashqi (boshqariladigan) Redis ham bo‘ladi: `rediss://…`, profil shart emas.
+3. Deploydan keyin: `GET /api/v1/health/ops` (`x-monitor-token`) → `"rateLimit":{"redisConfigured":true,"store":"redis"}`;
+   gateway jurnalida `Redis ulandi — limit hamma nusxada umumiy`.
+4. Bir nechta gateway nusxasi (`docker compose up -d --scale api-gateway=2`) — Caddy upstream’i va healthcheck — deploy
+   ishi.
+
+**Tekshirilgan (2026-11-23, lokal, Redis 8.10):**
+- Ikki gateway jarayoni (`dist`) bitta Redis bilan, `RATE_LIMIT_MAX=5`, bitta IP, so‘rovlar navbat bilan A, B, A, B, A
+  ga — 401 (tokensiz). 6-so‘rov B da 429, 7-si A da 429. Boshqa IP — 401.
+- Redis to‘xtatilganda bitta nusxada 5 ta so‘rov 401, 6-si 429, 500 yo‘q. Redis qaytgach klient qayta ulandi.
+- Avtomat testlar:
+  - `apps/api-gateway/src/rate-limit/shared-throttler.integration.spec.ts` — TC1, haqiqiy HTTP;
+  - `libs/common/src/rate-limit/shared-rate-limiter.spec.ts`;
+  - lid API kaliti — `lead.integration.spec.ts`.
+
+  Hammasi `TEST_REDIS_URL` bilan, CI da `redis:7.4-alpine` servisi.

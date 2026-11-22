@@ -26,6 +26,8 @@ const {
   TRUST_PROXY_HOPS: _hops,
   COMPOSE_PROFILES: _profiles,
   AUTH_TOKENS_IN_BODY: _authInBody,
+  REDIS_URL: _redisUrl,
+  REDIS_PASSWORD: _redisPassword,
   ...baseEnv
 } = process.env;
 
@@ -83,4 +85,54 @@ test('AUTH_TOKENS_IN_BODY false bo‘lmasa deploy to‘xtamaydi, lekin eslatilad
   });
   assert.equal(cookieOnly.status, 0, cookieOnly.stderr);
   assert.doesNotMatch(cookieOnly.stderr, /AUTH_TOKENS_IN_BODY/);
+});
+
+test('BE-36: Redis ixtiyoriy; REDIS_URL parol bilan, profil yoqilsa parol URL bilan bir xil', async (t) => {
+  const password = 'a1b2c3d4e5f6a7b8c9d0e1f2';
+  const enabled = {
+    ...validEnv,
+    COMPOSE_PROFILES: 'tunnel,redis',
+    REDIS_PASSWORD: password,
+    REDIS_URL: `redis://:${password}@redis:6379`,
+  };
+  const ok = await run(t, enabled);
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.doesNotMatch(ok.stderr, /REDIS/);
+
+  const noPassword = await run(t, {
+    ...validEnv,
+    REDIS_URL: 'redis://redis:6379',
+  });
+  assert.notEqual(noPassword.status, 0);
+  assert.match(noPassword.stderr, /REDIS_URL parol bilan/);
+
+  const mismatch = await run(t, {
+    ...enabled,
+    REDIS_URL: 'redis://:boshqa-parol@redis:6379',
+  });
+  assert.notEqual(mismatch.status, 0);
+  assert.match(mismatch.stderr, /bir xil emas/);
+
+  const profileWithoutPassword = await run(t, {
+    ...validEnv,
+    COMPOSE_PROFILES: 'redis',
+  });
+  assert.notEqual(profileWithoutPassword.status, 0);
+  assert.match(profileWithoutPassword.stderr, /REDIS_PASSWORD kerak/);
+
+  // Profil yoqilmagan — deploy to'xtamaydi, faqat eslatiladi (limit nusxa xotirasida).
+  const noProfile = await run(t, {
+    ...validEnv,
+    REDIS_URL: `redis://:${password}@redis:6379`,
+  });
+  assert.equal(noProfile.status, 0, noProfile.stderr);
+  assert.match(noProfile.stderr, /COMPOSE_PROFILES da redis yo‘q/);
+
+  // Tashqi (boshqariladigan) Redis — profil shart emas.
+  const external = await run(t, {
+    ...validEnv,
+    REDIS_URL: `rediss://default:${password}@cache.internal:6380`,
+  });
+  assert.equal(external.status, 0, external.stderr);
+  assert.doesNotMatch(external.stderr, /REDIS/);
 });

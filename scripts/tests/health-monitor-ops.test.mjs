@@ -92,3 +92,48 @@ test('BE-26: health/ops o‘qilmasa (masalan, noto‘g‘ri token — 404) — c
     'ops_unavailable_resolved',
   ]);
 });
+
+// BE-36: REDIS_URL berilgan, lekin gateway Redis'ga ulanmagan — ogohlantirish; Redis tiklansa yopiladi.
+// Redis berilmagan (bitta nusxa) — ogohlantirish yo'q.
+test('BE-36: rate limit Redis’siz qolsa ogohlantirish, tiklansa yopiladi', async (t) => {
+  process.env.MONITOR_API_URL = 'http://monitor3.test/api/v1/health/readiness';
+  process.env.ALERT_WEBHOOK_URL = 'http://alerts3.test';
+  process.env.MONITOR_OPS_TOKEN = 'monitor-token-0123456789';
+  let rateLimit = { redisConfigured: false, store: 'memory' };
+  const sent = [];
+  t.mock.method(globalThis, 'fetch', async (url, options = {}) => {
+    if (url === process.env.ALERT_WEBHOOK_URL) {
+      const body = JSON.parse(options.body);
+      sent.push(`${body.status}: ${body.detail}`);
+      return { ok: true, status: 200 };
+    }
+    if (url.endsWith('/health/ops'))
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            elchiApiErrors5m: 0,
+            leadQueue: { waiting: 0, oldestMinutes: null },
+            rateLimit,
+          },
+        }),
+      };
+    return { ok: true, json: async () => [] };
+  });
+  const { checkOps } = await import(
+    `../health-monitor.mjs?redis=${Date.now()}`
+  );
+  await checkOps();
+  assert.deepEqual(sent, []);
+  rateLimit = { redisConfigured: true, store: 'memory' };
+  await checkOps();
+  await checkOps(); // takror — yangi ogohlantirish yo'q
+  assert.deepEqual(sent, [
+    'rate_limit_redis_firing: Rate limit Redis’ga ulanmagan — har gateway nusxasi o‘z xotirasida sanaydi',
+  ]);
+  rateLimit = { redisConfigured: true, store: 'redis' };
+  await checkOps();
+  assert.deepEqual(sent.slice(1), [
+    'rate_limit_redis_resolved: Rate limit yana Redis’da (umumiy)',
+  ]);
+});

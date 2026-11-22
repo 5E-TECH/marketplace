@@ -230,6 +230,15 @@ export async function checkOps() {
       `Navbatda lid ${queue.oldestMinutes} daqiqadan beri qo‘ng‘iroqsiz (kutyapti: ${queue.waiting}; chegara ${leadQueueMaxAge} daq)`,
       'Lid navbati me’yorda',
     );
+  // BE-36: REDIS_URL berilgan, lekin gateway Redis'ga ulanmagan — limit nusxalar orasida bo'linmaydi.
+  const rateLimit = data?.rateLimit;
+  if (rateLimit && typeof rateLimit.redisConfigured === 'boolean')
+    await condition(
+      'rate_limit_redis',
+      rateLimit.redisConfigured && rateLimit.store !== 'redis',
+      'Rate limit Redis’ga ulanmagan — har gateway nusxasi o‘z xotirasida sanaydi',
+      'Rate limit yana Redis’da (umumiy)',
+    );
 }
 
 export async function tick() {
