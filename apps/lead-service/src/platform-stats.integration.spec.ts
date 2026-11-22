@@ -6,6 +6,8 @@ import {
   CheckoutDeliveryDestination,
   LeadSource,
   LeadStatus,
+  PLATFORM_METRICS_RPC,
+  PlatformAffiliateIncomeQuery,
   PlatformMetricsGroupBy,
 } from '@app/common';
 import { LEAD_ENTITIES, Lead, Stream } from './entities';
@@ -28,7 +30,7 @@ let schemaLock: Client | undefined;
 /**
  * BE-46 — admin ko‘rsatkichlari, lid qismi (TZ 9-bo‘lim), haqiqiy PostgreSQL. Ma’lumot (Toshkent, 2026-12-01/02):
  * - sotuvchi 42: 20 klik, 10 lid — 1 yaroqsiz, 2 dublikat, 1 «Aloqa bo‘lmadi», 3 tasdiqlangan (L1, L2 — operator 41;
- *   L3 — 51), L1 va L3 yetkazildi, L2 rad (02.12);
+ *   L3 — 51), L1 va L3 yetkazildi, L2 rad (02.12); L3 keyin qaytarilgan — ledgerda sotuvchi 42 ga net 65 000;
  * - sotuvchi 43 (boshqa offer): 5 klik, 2 lid, M1 tasdiqlangan (51) va yetkazildi;
  * - urinishlar: L1 — 41 (10 daq), 51 (30 daq); L2 — 41 (20 daq); L3 — 51 (40 daq); yaroqsiz — 41 (5 daq).
  */
@@ -36,7 +38,29 @@ describeWithPostgres(
   'BE-46 platforma ko‘rsatkichlari — lid qismi (PostgreSQL)',
   () => {
     let db: DataSource;
-    const svc = () => new PlatformStatsService(db);
+    // Sotuvchi daromadi ledgerdan (finance.metrics.affiliate-income namunasi; so‘rov finance testida tekshirilgan).
+    const INCOME: Record<
+      PlatformAffiliateIncomeQuery['groupBy'],
+      Array<{ key: string; amount: number }>
+    > = {
+      DAY: [{ key: '2026-12-02', amount: 130000 }],
+      AFFILIATE: [
+        { key: '42', amount: 65000 },
+        { key: '43', amount: 65000 },
+      ],
+      OFFER: [
+        { key: '501', amount: 65000 },
+        { key: '502', amount: 65000 },
+      ],
+    };
+    const financeSend = jest.fn(
+      (_pattern: unknown, q: PlatformAffiliateIncomeQuery) =>
+        q.from > '2026-12-02'
+          ? of({ rows: [], total: 0 }) // davrda ledger yozuvi yo‘q
+          : of({ rows: INCOME[q.groupBy], total: 130000 }),
+    );
+    const svc = () =>
+      new PlatformStatsService(db, { send: financeSend } as never);
     const be28 = () =>
       new LeadStatsService(db, {
         send: jest.fn(() => of({ lines: [] })),
@@ -239,8 +263,8 @@ describeWithPostgres(
         lostLeadRate: 11, // 1 / 9
         firstCallMedianMinutes: 15, // 5, 10, 20, 40
         averageCheck: 189000,
-        affiliateIncome: 195000,
-        epc: 7800, // 195 000 / 25
+        affiliateIncome: 130000, // ledger: qaytarilgan L3 ayirilgan
+        epc: 5200, // 130 000 / 25
       });
     });
 
@@ -317,7 +341,7 @@ describeWithPostgres(
       expect(
         rows.map((r) => [r.key, r.clicks, r.leads, r.delivered, r.epc]),
       ).toEqual([
-        ['501', 20, 10, 2, 6500], // 2 × 65 000 / 20
+        ['501', 20, 10, 2, 3250], // 65 000 / 20
         ['502', 5, 2, 1, 13000],
       ]);
     });
@@ -334,6 +358,26 @@ describeWithPostgres(
       await expect(
         svc().platform({ from: '2025-01-01', to: TO }),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('daromad finance dan so‘raladi (kun, sotuvchi, offer); operator kesimida so‘ralmaydi', async () => {
+      financeSend.mockClear();
+      await svc().platform({
+        from: FROM,
+        to: TO,
+        groupBy: PlatformMetricsGroupBy.AFFILIATE,
+      });
+      await svc().platform({
+        from: FROM,
+        to: TO,
+        groupBy: PlatformMetricsGroupBy.OPERATOR,
+      });
+      expect(financeSend.mock.calls).toEqual([
+        [
+          { cmd: PLATFORM_METRICS_RPC.AFFILIATE_INCOME },
+          { from: FROM, to: TO, groupBy: 'AFFILIATE' },
+        ],
+      ]);
     });
   },
 );

@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
   moneyFromDb,
+  PlatformAffiliateIncomeQuery,
+  PlatformAffiliateIncomeResult,
   PlatformFinanceMetricsDto,
   PlatformFinanceMetricsRowDto,
 } from '@app/common';
-import { latestRemittanceSql, validRange } from './remittance.service';
+import { remittanceOrdersSql, validRange } from './remittance.service';
 
 const TASHKENT_DAY = (col: string) =>
   `to_char((${col} AT TIME ZONE 'Asia/Tashkent')::date, 'YYYY-MM-DD')`;
@@ -24,7 +26,8 @@ type Part = {
  * BE-46: TZ 9-bo‘lim ko‘rsatkichlarining moliya qismi (10–12-qatorlar), kun bo‘yicha (Toshkent).
  * - platformShare — PLATFORM_SERVICE hisobi yozuvlari yig‘indisi (yetkazilgan, rad to‘lovi, qaytarish ko‘zgusi),
  *   jurnal kuni bo‘yicha; contributionPerSale = platformShare / shu kuni yetkazilgan buyurtmalar [taklif, savol 1];
- * - reconciliationDiff — Elchi sverkasining hal qilinmagan farqi (buyurtma bo‘yicha, Elchi − tizim), o‘tkazma kelgan kuni;
+ * - reconciliationDiff — Elchi sverkasining hal qilinmagan farqi (buyurtma bo‘yicha, Elchi − tizim), buyurtmaning
+ *   oxirgi o‘tkazmasi kelgan kuni;
  * - withdrawalMedianHours — so‘rovdan to‘lovgacha, shu kuni to‘langan so‘rovlar mediani, soat (1 kasr).
  */
 @Injectable()
@@ -73,16 +76,15 @@ export class PlatformMetricsService {
     )) as Array<{ key: string; sales: number }>;
     for (const r of sales) part(r.key).sales = Number(r.sales);
 
-    // Sverka farqi buyurtma bo‘yicha (oxirgi o‘tkazma qatori) — sverka ekrani bilan bir xil (remittance.service).
+    // Sverka farqi buyurtma bo‘yicha, buyurtmaning oxirgi o‘tkazma kunida — sverka ekrani bilan bir xil hisob
+    // (remittance.service); har buyurtma bir marta, jami = kunlar yig‘indisi.
     const diffs = (await this.dataSource.query(
-      `SELECT to_char(day, 'YYYY-MM-DD') AS key, SUM(view_diff)::text AS diff
-         FROM (${latestRemittanceSql(true)}) v WHERE view_state = 'DIFF' GROUP BY day
-       UNION ALL
-       SELECT 'TOTAL', COALESCE(SUM(view_diff), 0)::text
-         FROM (${latestRemittanceSql(false)}) v WHERE view_state = 'DIFF'`,
+      `SELECT COALESCE(to_char(day, 'YYYY-MM-DD'), 'TOTAL') AS key, COALESCE(SUM(view_diff), 0)::text AS diff
+         FROM (${remittanceOrdersSql()}) v WHERE view_state = 'DIFF'
+        GROUP BY GROUPING SETS ((day), ())`,
       [from, to],
-    )) as Array<{ key: string; diff: string | null }>;
-    for (const r of diffs) part(r.key).diff = moneyFromDb(r.diff ?? '0');
+    )) as Array<{ key: string; diff: string }>;
+    for (const r of diffs) part(r.key).diff = moneyFromDb(r.diff);
 
     const withdrawals = (await this.dataSource.query(
       `SELECT COALESCE(${TASHKENT_DAY('w.paid_at')}, 'TOTAL') AS key,
@@ -112,7 +114,51 @@ export class PlatformMetricsService {
       totals: row('TOTAL'),
     };
   }
+
+  /**
+   * Sotuvchi daromadi (9-bo‘lim, EPC) — BE-28 `finance.affiliate.income` bilan bir xil qoida: AFFILIATE hisobidagi
+   * sotuvchi haqi va ustama ulushi; yetkazilgan kunda asl yozuv (+), qaytarilgan kunda ko‘zgu yozuv (−). Asosiy sayt
+   * sotuvida bu qatorlar platformaga yoziladi — kirmaydi. Kalit: kun (Toshkent), sotuvchi yoki mahsulot (offer).
+   */
+  async affiliateIncome(
+    input: PlatformAffiliateIncomeQuery,
+  ): Promise<PlatformAffiliateIncomeResult> {
+    const [from, to] = validRange(input?.from, input?.to);
+    const key =
+      input?.groupBy === 'DAY'
+        ? TASHKENT_DAY('j.occurred_at')
+        : input?.groupBy === 'AFFILIATE'
+          ? 'a.owner_id'
+          : input?.groupBy === 'OFFER'
+            ? `COALESCE(e.product_id, '')`
+            : null;
+    if (!key) throw new BadRequestException('groupBy noto‘g‘ri');
+    const rows = (await this.dataSource.query(
+      `SELECT CASE WHEN GROUPING(k) = 1 THEN NULL ELSE k END AS key, COALESCE(SUM(amount), 0)::text AS amount
+         FROM (
+           SELECT ${key} AS k, e.amount
+             FROM finance.account a
+             JOIN finance.ledger_entry e ON e.account_id = a.id
+             JOIN finance.journal j ON j.id = e.journal_id
+            WHERE a.type = 'AFFILIATE' AND e.line_kind IN ${AFFILIATE_LINES}
+              AND ((j.kind = 'ORDER_DELIVERED' AND e.reverses_entry_id IS NULL) OR j.kind = 'ORDER_REVERSAL')
+              AND ${RANGE('j.occurred_at')}
+         ) x
+        GROUP BY GROUPING SETS ((k), ())`,
+      [from, to],
+    )) as Array<{ key: string | null; amount: string }>;
+    let total = 0;
+    const out: PlatformAffiliateIncomeResult['rows'] = [];
+    for (const r of rows) {
+      if (r.key === null) total = moneyFromDb(r.amount);
+      else out.push({ key: r.key, amount: moneyFromDb(r.amount) });
+    }
+    return { rows: out.sort((a, b) => a.key.localeCompare(b.key)), total };
+  }
 }
+
+/** Sotuvchi qatorlari — BE-28 `affiliateIncome` bilan bir xil (ledger-query.service). */
+const AFFILIATE_LINES = `('AFFILIATE_FEE', 'AFFILIATE_MARKUP')`;
 
 function dayKeys(from: string, to: string): string[] {
   const out: string[] = [];

@@ -22,6 +22,7 @@ import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-f
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
 import { BalanceCheckService } from './balance-check.service';
+import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
 import { PlatformMetricsService } from './platform-metrics.service';
@@ -592,6 +593,201 @@ describePostgres(
             comment: ' a ',
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
+      });
+    });
+
+    describe('tekshiruv topilmalari: buyurtma bo‘yicha bitta qator, ko‘rilmagan farq, ledger daromadi, qabul summasi', () => {
+      it('ko‘rilgandan keyin yangi farqli o‘tkazma kelsa — eski qatordan yopish 409; yangisidan yopilsa ikkalasi yopiladi', async () => {
+        const order = await deliver('2027-01-12T10:00:00.000Z');
+        await remit(order, '2027-01-13T06:00:00.000Z', { paid: 247000 });
+        const seen = await itemId(order);
+        await remit(order, '2027-01-13T07:00:00.000Z', { paid: 200000 });
+        await expect(
+          remittances.resolve({
+            id: seen,
+            comment: 'Kelishildi',
+            userId: '17',
+          }),
+        ).rejects.toBeInstanceOf(ConflictException);
+        const page = await remittances.items({ query: { search: order } });
+        expect(page.items).toHaveLength(1);
+        expect(page.items[0]).toMatchObject({
+          id: await itemId(order),
+          state: RemittanceViewState.DIFF,
+          diff: -51000,
+        });
+        await remittances.resolve({
+          id: page.items[0].id,
+          comment: 'Elchi qolganini keyin o‘tkazadi',
+          userId: '17',
+        });
+        expect(
+          (
+            await ds.query(
+              `SELECT count(*)::int AS n FROM finance.remittance_item WHERE order_id = $1 AND resolved_at IS NULL`,
+              [order],
+            )
+          )[0].n,
+        ).toBe(0);
+      });
+
+      it('bir buyurtma ikki kunda o‘tkazma olsa — faqat oxirgi kunida, Elchi summasi oxirgi snapshot; kunlar yig‘indisi = jami', async () => {
+        const order = await deliver('2027-01-11T10:00:00.000Z');
+        await remit(order, '2027-01-12T06:00:00.000Z', {
+          paid: 100000,
+          status: 'partly_paid',
+        });
+        await remit(order, '2027-01-13T06:00:00.000Z', {
+          paid: 200000,
+          status: 'partly_paid',
+        });
+        const days = await remittances.days({
+          from: '2027-01-12',
+          to: '2027-01-13',
+        });
+        expect(days).toEqual([
+          expect.objectContaining({
+            day: '2027-01-13',
+            orders: 1,
+            elchiTotal: 200000,
+            systemTotal: 251000,
+            openDiff: -51000,
+          }),
+        ]);
+        const r = await metrics.platform({
+          from: '2027-01-12',
+          to: '2027-01-13',
+        });
+        expect(r.rows.map((x) => x.reconciliationDiff)).toEqual([0, -51000]);
+        expect(r.totals.reconciliationDiff).toBe(-51000);
+      });
+
+      it('hisob-kitobdan keyin ortiqcha to‘lov, keyin takror — farq ekranda ko‘rinadi va yopiladi; kechki tekshiruv ham yopilganini ko‘rmaydi', async () => {
+        const order = await deliver('2027-01-12T10:00:00.000Z');
+        await remit(order, '2027-01-13T06:00:00.000Z'); // MATCHED
+        await remit(order, '2027-01-13T07:00:00.000Z', { paid: 260000 }); // ortiqcha
+        const extra = await itemId(order);
+        await remit(order, '2027-01-13T08:00:00.000Z'); // takror, MATCHED
+        const [row] = (await remittances.items({ query: { search: order } }))
+          .items;
+        expect(row).toMatchObject({
+          id: extra,
+          state: RemittanceViewState.DIFF,
+          diff: 9000,
+        });
+        await remittances.resolve({
+          id: extra,
+          comment: 'Elchi ortiqchasini qaytardi',
+          userId: '17',
+        });
+        expect(
+          (await remittances.items({ query: { search: order } })).items[0]
+            .state,
+        ).toBe(RemittanceViewState.RESOLVED);
+        expect(
+          (await check.run()).details.openRemittances.filter(
+            (x: { orderId: string }) => x.orderId === order,
+          ),
+        ).toEqual([]);
+      });
+
+      it('sotuvchi daromadi ledgerdan: qaytarilgan kunda minus; sotuvchi kesimi BE-28 finance.affiliate.income bilan bir xil', async () => {
+        const kept = await deliver('2027-01-12T05:00:00.000Z');
+        const returned = await deliver('2027-01-12T06:00:00.000Z');
+        await ledger.onOrderReturned({
+          eventId: `ret-${returned}`,
+          orderId: returned,
+          returnRequestId: `RR-${returned}`,
+          items: [{ productId: '88', quantity: 1 }],
+          occurredAt: '2027-01-13T06:00:00.000Z',
+        });
+        const q = { from: '2027-01-12', to: '2027-01-13' };
+        expect(await metrics.affiliateIncome({ ...q, groupBy: 'DAY' })).toEqual(
+          {
+            rows: [
+              { key: '2027-01-12', amount: 130000 },
+              { key: '2027-01-13', amount: -65000 },
+            ],
+            total: 65000,
+          },
+        );
+        expect(
+          await metrics.affiliateIncome({ ...q, groupBy: 'OFFER' }),
+        ).toEqual({ rows: [{ key: '88', amount: 65000 }], total: 65000 });
+        const byAffiliate = await metrics.affiliateIncome({
+          ...q,
+          groupBy: 'AFFILIATE',
+        });
+        const be28 = await new LedgerQueryService(ds).affiliateIncome({
+          affiliateId: '42',
+          ...q,
+        });
+        expect(byAffiliate.rows).toEqual([
+          { key: '42', amount: be28.lines.reduce((a, l) => a + l.amount, 0) },
+        ]);
+        expect(byAffiliate.total).toBe(65000);
+        expect(kept).toBeDefined();
+        await expect(
+          metrics.affiliateIncome({ ...q, groupBy: 'X' as never }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('qabul summaga bog‘liq: bank faylida summa o‘zgarsa qabul amalda emas — e’tiroz yoki qayta qabul; optovikka xodim ID lari ko‘rinmaydi', async () => {
+        const [{ id }] = (await ds.query(
+          `INSERT INTO finance.wholesaler_settlement
+             (wholesaler_id, period_start, period_end, return_window_days, status, total_amount)
+           VALUES ('501', '2027-01-18', '2027-01-24', 10, 'READY', 1000000) RETURNING id::text`,
+        )) as Array<{ id: string }>;
+        const accepted = await responses.accept({
+          id,
+          wholesalerId: '501',
+          userId: '77',
+        });
+        expect(accepted.acceptedAmount).toBe(1000000);
+        // BE-33 bank fayli: qaytgan tovar chiqdi, summa muzladi — 700 000
+        await ds.query(
+          `UPDATE finance.wholesaler_settlement
+              SET status = 'EXPORTED', exported_total = 700000, exported_at = now() WHERE id = $1`,
+          [id],
+        );
+        const stale = await responses.wholesalerGet({
+          id,
+          wholesalerId: '501',
+        });
+        expect(stale).toMatchObject({
+          acceptedAt: null,
+          acceptedBy: null,
+          acceptedAmount: null,
+        });
+        const disputed = await responses.dispute({
+          id,
+          wholesalerId: '501',
+          userId: '77',
+          comment: 'Nega 700 000?',
+        });
+        await responses.answer({
+          id: disputed.disputes[0].id,
+          userId: '17',
+          comment: 'Ikki dona qaytdi',
+        });
+        const viewed = await responses.wholesalerGet({
+          id,
+          wholesalerId: '501',
+        });
+        expect(viewed.disputes[0]).toMatchObject({
+          answer: 'Ikki dona qaytdi',
+          answeredBy: null,
+        });
+        expect(viewed.settlement.paidBy).toBeNull();
+        expect((await responses.adminGet({ id })).disputes[0].answeredBy).toBe(
+          '17',
+        );
+        const again = await responses.accept({
+          id,
+          wholesalerId: '501',
+          userId: '77',
+        });
+        expect(again.acceptedAmount).toBe(700000);
       });
     });
   },

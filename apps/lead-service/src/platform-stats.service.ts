@@ -1,10 +1,15 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { DataSource } from 'typeorm';
 import {
   LeadStatus,
+  PLATFORM_METRICS_RPC,
+  PlatformAffiliateIncomeResult,
   PlatformLeadMetricsDto,
   PlatformLeadMetricsRowDto,
   PlatformMetricsGroupBy,
+  RmqClient,
+  sendRpc,
 } from '@app/common';
 import { tashkentDayStart } from './lead-schedule';
 import { percent } from './offer-math';
@@ -69,7 +74,10 @@ function validDay(value: unknown, field: string): string {
  */
 @Injectable()
 export class PlatformStatsService {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+  ) {}
 
   async platform(input: {
     from: string;
@@ -99,6 +107,21 @@ export class PlatformStatsService {
         ? await this.operators(range, false)
         : await this.funnel(range, groupBy, false);
     const operator = groupBy === PlatformMetricsGroupBy.OPERATOR;
+    const total = totals.get(TOTAL) ?? empty();
+    if (!operator) {
+      // Sotuvchi daromadi — faqat ledgerdan (BE-28 qoidasi: yetkazilgan kunda +, qaytarilgan kunda −).
+      const income = await sendRpc<PlatformAffiliateIncomeResult>(
+        this.finance,
+        { cmd: PLATFORM_METRICS_RPC.AFFILIATE_INCOME },
+        { from, to, groupBy },
+      );
+      for (const r of income.rows) {
+        let counts = grouped.get(r.key);
+        if (!counts) grouped.set(r.key, (counts = empty()));
+        counts.income = r.amount;
+      }
+      total.income = income.total;
+    }
     // Kun kesimida bo‘sh kunlar ham qator (grafik uchun; moliya qismi bilan bir xil).
     if (groupBy === PlatformMetricsGroupBy.DAY)
       for (
@@ -118,7 +141,7 @@ export class PlatformStatsService {
       .map(([key, counts]) => this.row(key, counts, operator));
     return {
       rows,
-      totals: this.row(TOTAL, totals.get(TOTAL) ?? empty(), operator),
+      totals: this.row(TOTAL, total, operator),
     };
   }
 
@@ -142,7 +165,7 @@ export class PlatformStatsService {
           ? `to_char((${ts} AT TIME ZONE 'Asia/Tashkent')::date, 'YYYY-MM-DD')`
           : groupBy === PlatformMetricsGroupBy.AFFILIATE
             ? `COALESCE(${affiliate}::text, '')`
-            : `${product}::text`;
+            : `COALESCE(${product}::text, '')`;
 
     for (const row of (await this.db.query(
       `SELECT ${key('c.created_at', 's.affiliate_id', 's.product_id')} AS key, count(*)::int AS n
@@ -188,20 +211,18 @@ export class PlatformStatsService {
     for (const ts of ['confirmed_at', 'delivered_at', 'refused_at'] as const)
       for (const row of (await this.db.query(
         `SELECT ${key(`l.${ts}`, 'l.affiliate_id', 'l.product_id')} AS key, count(*)::int AS n,
-                COALESCE(sum(l.sale_price * l.quantity), 0)::text AS goods,
-                COALESCE(sum(l.expected_commission), 0)::text AS income
+                COALESCE(sum(l.sale_price * l.quantity), 0)::text AS goods
            FROM lead.lead l
           WHERE l.is_deleted = false AND l.${ts} >= $1 AND l.${ts} < $2
           GROUP BY 1`,
         range,
-      )) as Array<{ key: string; n: number; goods: string; income: string }>) {
+      )) as Array<{ key: string; n: number; goods: string }>) {
         const counts = at(row.key);
         if (ts === 'confirmed_at') counts.confirmed = row.n;
         if (ts === 'refused_at') counts.refused = row.n;
         if (ts === 'delivered_at') {
           counts.delivered = row.n;
           counts.goodsTotal = Number(row.goods);
-          counts.income = Number(row.income);
         }
       }
 
@@ -219,6 +240,7 @@ export class PlatformStatsService {
     )) as Array<{ key: string; median: string | number | null }>)
       at(row.key).firstCall =
         row.median === null ? null : Math.round(Number(row.median));
+
     return result;
   }
 

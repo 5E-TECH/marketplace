@@ -74,6 +74,15 @@ export class WholesalerActDto {
   @ApiProperty({ example: null, nullable: true, type: String })
   acceptedBy: string | null;
 
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description:
+      'Qabul qilingan summa, so‘m. Bank faylida summa o‘zgarsa qabul amalda emas (null) — qayta qabul yoki e’tiroz',
+  })
+  acceptedAmount: number | null;
+
   @ApiProperty({ type: [SettlementDisputeDto], description: 'Eskisi birinchi' })
   disputes: SettlementDisputeDto[];
 }

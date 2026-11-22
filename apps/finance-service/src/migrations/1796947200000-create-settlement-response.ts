@@ -2,7 +2,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * BE-46 (FE-24, OPT-3, DZ-08 «Aktni qabul qilish» · «E’tiroz bildirish»): optovikning akt-sverkaga javobi.
- * - wholesaler_settlement.accepted_* — optovik aktni qabul qildi (bir marta);
+ * - wholesaler_settlement.accepted_* — optovik aktni qabul qildi; qabul qilingan summa saqlanadi: bank faylida summa
+ *   o‘zgarsa (BE-33), qabul amalda emas;
  * - settlement_dispute — e’tiroz va moliya javobi; bitta aktda bir vaqtda bitta ochiq e’tiroz.
  * To‘lov qabulni kutmaydi [taklif, BE-46 savol 4] — akt holatiga (READY → … → PAID) ta’sir qilmaydi.
  */
@@ -14,8 +15,10 @@ export class CreateSettlementResponse1796947200000 implements MigrationInterface
       ALTER TABLE "finance"."wholesaler_settlement"
         ADD COLUMN "accepted_by" VARCHAR(64),
         ADD COLUMN "accepted_at" TIMESTAMPTZ,
+        ADD COLUMN "accepted_total" BIGINT,
         ADD CONSTRAINT "chk_finance_settlement_accepted"
-          CHECK (("accepted_at" IS NULL) = ("accepted_by" IS NULL))
+          CHECK (("accepted_at" IS NULL) = ("accepted_by" IS NULL)
+             AND ("accepted_at" IS NULL) = ("accepted_total" IS NULL))
     `);
     await queryRunner.query(`
       CREATE TABLE "finance"."settlement_dispute" (
@@ -51,6 +54,7 @@ export class CreateSettlementResponse1796947200000 implements MigrationInterface
     await queryRunner.query(`
       ALTER TABLE "finance"."wholesaler_settlement"
         DROP CONSTRAINT IF EXISTS "chk_finance_settlement_accepted",
+        DROP COLUMN IF EXISTS "accepted_total",
         DROP COLUMN IF EXISTS "accepted_at",
         DROP COLUMN IF EXISTS "accepted_by"
     `);

@@ -47,37 +47,63 @@ export function validRange(from: unknown, to: unknown): [string, string] {
   return [f, t];
 }
 
+const PROBLEM = (a: string) => `${a}.match_state IN ('PARTIAL','MISMATCH')`;
+const RANGE_FROM = (col: string) =>
+  `($1::date IS NULL OR ${col} >= ($1::date)::timestamp AT TIME ZONE 'Asia/Tashkent')`;
+const RANGE_TO = (col: string) =>
+  `($2::date IS NULL OR ${col} < ($2::date + 1)::timestamp AT TIME ZONE 'Asia/Tashkent')`;
+
 /**
- * Buyurtma bo‘yicha oxirgi o‘tkazma qatori. BE-22 farqni buyurtma bo‘yicha hisoblab, buyurtmaning hamma qatorlariga
- * bir xil yozadi — shuning uchun qatorlar yig‘ilmaydi, buyurtmaning oxirgisi olinadi (`perDay` — kun ichida oxirgisi).
+ * Sverka — buyurtma bo‘yicha bitta qator. Buyurtma o‘zining **oxirgi** o‘tkazma kunida chiqadi (bir buyurtma bir
+ * nechta kunda takror sanalmaydi; Elchi summalari — jami snapshot, oxirgi qatordan).
+ * - Farq va holat «e’tibordagi» qatordan: avval hal qilinmagan PARTIAL/MISMATCH (eng yangisi), keyin hal
+ *   qilingani, bo‘lmasa oxirgi qator. BE-22 odatda farqni buyurtmaning hamma qatorlariga bir xil yozadi; buyurtma
+ *   MATCHED bo‘lgandan keyin kelgan qatorlarga esa alohida (ortiqcha to‘lov, takror rad to‘lovi) — shuning uchun
+ *   oxirgi qatorga emas, hamma qatorlarga qaraladi.
  * - kind: yetkazilgan jurnali bo‘lsa DELIVERED, faqat rad jurnali bo‘lsa REFUSED (BE-22 `applyRemittance` tartibi);
- * - view_diff: Elchi − tizim o‘tkazma ma’nosida (DZ-07): yetkazilganda kelgan − kutilgan, radda kutilgan − ushlangan;
- * - state: PARTIAL/MISMATCH — hal qilinmagan bo‘lsa DIFF, aks holda RESOLVED; MATCHED; qolgani PENDING.
- * `$1`, `$2` — Toshkent kunlari (kiradi); `null` — chegara yo‘q.
+ * - view_diff: Elchi − tizim o‘tkazma ma’nosida (DZ-07): o‘tkazmada kelgan − kutilgan; rad to‘lovida kutilgan −
+ *   ushlangan (BE-22 bu qatorlarda ushlangan − kutilgan yozadi — ishora almashtiriladi);
+ * - state: hal qilinmagan farq — DIFF, hal qilingan — RESOLVED, oxirgi qator MATCHED — MATCHED, qolgani PENDING.
+ * `$1`, `$2` — Toshkent kunlari (kiradi) yoki `null`: buyurtmaning oxirgi o‘tkazmasi shu oraliqda bo‘lsa kiradi.
  */
-export function latestRemittanceSql(perDay: boolean): string {
+export function remittanceOrdersSql(): string {
   return `
-    SELECT l.*, j.order_number,
+    WITH items AS (
+      SELECT ri.* FROM finance.remittance_item ri
+       WHERE ri.order_id IN (
+         SELECT order_id FROM finance.remittance_item
+          WHERE ${RANGE_FROM('created_at')} AND ${RANGE_TO('created_at')})
+    ),
+    latest AS (SELECT DISTINCT ON (order_id) * FROM items ORDER BY order_id, id DESC),
+    focus AS (
+      SELECT DISTINCT ON (i.order_id) i.*
+        FROM items i
+       ORDER BY i.order_id, (${PROBLEM('i')} AND i.resolved_at IS NULL) DESC, ${PROBLEM('i')} DESC, i.id DESC
+    ),
+    expected AS (SELECT order_id, MAX(expected_amount) AS amount FROM items GROUP BY order_id)
+    SELECT f.id, l.order_id, j.order_number, l.shipment_id, l.elchi_status,
            CASE WHEN j.delivered THEN 'DELIVERED' WHEN j.refused THEN 'REFUSED' END AS kind,
-           CASE WHEN l.diff IS NULL THEN NULL
-                WHEN NOT j.delivered AND j.refused THEN -l.diff ELSE l.diff END AS view_diff,
-           CASE WHEN l.match_state IN ('PARTIAL','MISMATCH') AND l.resolved_at IS NULL THEN 'DIFF'
-                WHEN l.match_state IN ('PARTIAL','MISMATCH') THEN 'RESOLVED'
-                WHEN l.match_state = 'MATCHED' THEN 'MATCHED' ELSE 'PENDING' END AS view_state
-      FROM (
-        SELECT DISTINCT ON (ri.order_id${perDay ? `, ${TASHKENT_DATE('ri.created_at')}` : ''})
-               ri.*, ${TASHKENT_DATE('ri.created_at')} AS day
-          FROM finance.remittance_item ri
-         WHERE ($1::date IS NULL OR ri.created_at >= ($1::date)::timestamp AT TIME ZONE 'Asia/Tashkent')
-           AND ($2::date IS NULL OR ri.created_at < ($2::date + 1)::timestamp AT TIME ZONE 'Asia/Tashkent')
-         ORDER BY ri.order_id${perDay ? `, ${TASHKENT_DATE('ri.created_at')}` : ''}, ri.id DESC
-      ) l
+           l.collected_from_customer, l.elchi_fee, l.market_paid_amount, l.refusal_fee,
+           COALESCE(f.expected_amount, e.amount) AS expected_amount,
+           CASE WHEN f.diff IS NULL THEN NULL
+                WHEN (NOT j.delivered AND j.refused) OR (j.delivered AND f.refusal_fee IS NOT NULL) THEN -f.diff
+                ELSE f.diff END AS view_diff,
+           f.match_state,
+           CASE WHEN ${PROBLEM('f')} AND f.resolved_at IS NULL THEN 'DIFF'
+                WHEN ${PROBLEM('f')} THEN 'RESOLVED'
+                WHEN l.match_state = 'MATCHED' THEN 'MATCHED' ELSE 'PENDING' END AS view_state,
+           l.created_at, ${TASHKENT_DATE('l.created_at')} AS day,
+           f.resolution_comment, f.resolved_by, f.resolved_at
+      FROM latest l
+      JOIN focus f ON f.order_id = l.order_id
+      JOIN expected e ON e.order_id = l.order_id
       LEFT JOIN LATERAL (
         SELECT MAX(order_number) AS order_number,
                COALESCE(bool_or(kind = 'ORDER_DELIVERED'), false) AS delivered,
                COALESCE(bool_or(kind = 'ORDER_REFUSED'), false) AS refused
           FROM finance.journal WHERE order_id = l.order_id
-      ) j ON true`;
+      ) j ON true
+     WHERE ${RANGE_FROM('l.created_at')} AND ${RANGE_TO('l.created_at')}`;
 }
 
 type ItemRow = {
@@ -155,7 +181,7 @@ export class RemittanceService {
               COALESCE(SUM(CASE WHEN kind = 'REFUSED' THEN -COALESCE(expected_amount, 0)
                                 ELSE COALESCE(expected_amount, 0) END), 0)::text AS "systemTotal",
               COALESCE(SUM(view_diff) FILTER (WHERE view_state = 'DIFF'), 0)::text AS "openDiff"
-         FROM (${latestRemittanceSql(true)}) v
+         FROM (${remittanceOrdersSql()}) v
         GROUP BY day ORDER BY day DESC`,
       [from, to],
     )) as Array<Record<string, string | number>>;
@@ -213,12 +239,12 @@ export class RemittanceService {
        AND ($4::text IS NULL OR order_id = $4 OR order_number = $4)`;
     const params = [day, day, q.state ?? null, search];
     const [{ total }] = (await this.dataSource.query(
-      `SELECT COUNT(*)::int AS total FROM (${latestRemittanceSql(false)}) v WHERE ${where}`,
+      `SELECT COUNT(*)::int AS total FROM (${remittanceOrdersSql()}) v WHERE ${where}`,
       params,
     )) as Array<{ total: number }>;
     // Farq bor qatorlar birinchi (DZ-07: qizil qator yuqorida), keyin yangisi.
     const rows = (await this.dataSource.query(
-      `SELECT * FROM (${latestRemittanceSql(false)}) v WHERE ${where}
+      `SELECT * FROM (${remittanceOrdersSql()}) v WHERE ${where}
         ORDER BY (view_state = 'DIFF') DESC, id DESC
         LIMIT ${limit} OFFSET ${offset}`,
       params,
@@ -234,8 +260,9 @@ export class RemittanceService {
 
   /**
    * Farqni izoh bilan yopish (FE-19 TC2). Pul harakati yo‘q — yozuvlar HOLD da qoladi [taklif, BE-46 savol 2].
-   * Buyurtmaning hamma ochiq farqli qatorlari yopiladi (farq buyurtma bo‘yicha). Keyin yangi o‘tkazma kelsa,
-   * uning qatori yana ochiq farq bo‘lib chiqadi.
+   * Shu qator va buyurtmaning undan oldingi ochiq farqli qatorlari yopiladi (BE-22 farqni buyurtma bo‘yicha yozadi).
+   * Moliya ko‘rgandan keyin yangi farqli o‘tkazma kelgan bo‘lsa — 409 (ko‘rilmagan farq yopilmaydi); yopilgandan
+   * keyin kelgan o‘tkazma qatori yana ochiq farq bo‘lib chiqadi.
    */
   async resolve(input: {
     id?: string;
@@ -268,16 +295,28 @@ export class RemittanceService {
         throw new ConflictException('Bu qatorda farq yo‘q');
       if (self.resolvedAt)
         throw new ConflictException('Farq allaqachon hal qilingan');
+      if (
+        locked.some(
+          (r) =>
+            BigInt(r.id) > BigInt(id) &&
+            ['PARTIAL', 'MISMATCH'].includes(r.match) &&
+            !r.resolvedAt,
+        )
+      )
+        throw new ConflictException(
+          'Bu buyurtmaga yangi o‘tkazma keldi — ro‘yxatni yangilab, farqni qayta ko‘ring',
+        );
+      // `id <= $4`: qulfdan keyin kelgan (hali ko‘rilmagan) qator yopilmaydi.
       await m.query(
         `UPDATE finance.remittance_item
             SET resolution_comment = $2, resolved_by = $3, resolved_at = now(), updated_at = now()
-          WHERE order_id = $1 AND match_state IN ('PARTIAL','MISMATCH') AND resolved_at IS NULL`,
-        [item.orderId, comment, userId],
+          WHERE order_id = $1 AND id <= $4 AND match_state IN ('PARTIAL','MISMATCH') AND resolved_at IS NULL`,
+        [item.orderId, comment, userId, id],
       );
       return item.orderId;
     });
     const [row] = (await this.dataSource.query(
-      `SELECT * FROM (${latestRemittanceSql(false)}) v WHERE order_id = $3`,
+      `SELECT * FROM (${remittanceOrdersSql()}) v WHERE order_id = $3`,
       [null, null, orderId],
     )) as ItemRow[];
     return toItem(row);

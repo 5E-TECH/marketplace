@@ -15,7 +15,21 @@ export enum PlatformMetricsGroupBy {
 export const PLATFORM_METRICS_RPC = {
   LEADS: 'lead.stats.platform',
   FINANCE: 'finance.metrics.platform',
+  /** Sotuvchi daromadi ledgerdan (BE-28 bilan bir xil manba): kun, sotuvchi yoki offer bo‘yicha. */
+  AFFILIATE_INCOME: 'finance.metrics.affiliate-income',
 } as const;
+
+/** `finance.metrics.affiliate-income` so‘rovi va javobi (lead-service chaqiradi). */
+export interface PlatformAffiliateIncomeQuery {
+  from: string;
+  to: string;
+  groupBy: 'DAY' | 'AFFILIATE' | 'OFFER';
+}
+export interface PlatformAffiliateIncomeResult {
+  /** Guruh kaliti → summa (so‘m); `total` — davr jami. */
+  rows: Array<{ key: string; amount: number }>;
+  total: number;
+}
 
 export class PlatformMetricsQueryDto {
   @ApiProperty({ example: '2026-12-01', description: 'Toshkent kuni (kiradi)' })
@@ -109,7 +123,8 @@ export class PlatformLeadMetricsRowDto {
   @ApiProperty({
     nullable: true,
     type: Number,
-    description: 'Sotuvchi daromadi (yetkazilgan lidlar haqi), so‘m',
+    description:
+      'Sotuvchi daromadi, so‘m — ledgerdan (BE-28 bilan bir xil): yetkazilgan kunda +, qaytarilgan kunda −; asosiy sayt sotuvi kirmaydi',
   })
   affiliateIncome: number | null;
   @ApiProperty({

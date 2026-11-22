@@ -19943,6 +19943,12 @@
             "example": null,
             "nullable": true
           },
+          "acceptedAmount": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Qabul qilingan summa, so‘m. Bank faylida summa o‘zgarsa qabul amalda emas (null) — qayta qabul yoki e’tiroz"
+          },
           "disputes": {
             "description": "Eskisi birinchi",
             "type": "array",
@@ -19955,6 +19961,7 @@
           "settlement",
           "acceptedAt",
           "acceptedBy",
+          "acceptedAmount",
           "disputes"
         ]
       },
@@ -20052,7 +20059,7 @@
           "affiliateIncome": {
             "type": "number",
             "nullable": true,
-            "description": "Sotuvchi daromadi (yetkazilgan lidlar haqi), so‘m"
+            "description": "Sotuvchi daromadi, so‘m — ledgerdan (BE-28 bilan bir xil): yetkazilgan kunda +, qaytarilgan kunda −; asosiy sayt sotuvi kirmaydi"
           },
           "epc": {
             "type": "number",

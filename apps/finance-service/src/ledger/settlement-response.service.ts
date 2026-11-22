@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  moneyFromDb,
   SettlementDisputeDto,
   SettlementDisputePageDto,
   SettlementDisputeQueryDto,
@@ -32,10 +33,22 @@ const toDispute = (r: DisputeRow): SettlementDisputeDto => ({
   settlementNumber: `AS-${r.settlementId.padStart(6, '0')}`,
 });
 
+/** Qabul faqat qabul qilingan summa hozirgi summaga teng bo‘lsa amalda (bank faylida summa qayta hisoblanadi — BE-33). */
+const ACCEPTED_VALID = `s.accepted_at IS NOT NULL AND s.accepted_total = COALESCE(s.exported_total, s.total_amount)`;
+
 function validId(value: unknown, field = 'id'): string {
   const s = String(value ?? '');
   if (!ID.test(s)) throw new BadRequestException(`${field} noto‘g‘ri`);
   return s;
+}
+
+/** Optovikka platforma xodimlarining ichki ID lari ko‘rsatilmaydi (kim to‘ladi, kim javob berdi). */
+function forWholesaler(act: WholesalerActDto): WholesalerActDto {
+  return {
+    ...act,
+    settlement: { ...act.settlement, paidBy: null },
+    disputes: act.disputes.map((d) => ({ ...d, answeredBy: null })),
+  };
 }
 
 function validComment(value: unknown): string {
@@ -50,6 +63,8 @@ function validComment(value: unknown): string {
  * - Optovik faqat o‘z aktini ko‘radi va javob beradi — boshqasi 403 (TC4). Optovik ID si gateway da foydalanuvchidan
  *   (catalog.shop.owner_user_id) olinadi, so‘rovdan emas.
  * - Qabul — bir marta (takror — o‘sha natija); ochiq e’tiroz bo‘lsa qabul qilinmaydi; qabul qilingan aktga e’tiroz yo‘q.
+ *   Qabul summaga bog‘liq: bank faylida summa o‘zgarsa (BE-33 `freeze` — qaytgan tovar, qarz), eski qabul amalda emas —
+ *   optovik yangi summani qayta qabul qiladi yoki e’tiroz bildiradi.
  * - Bir aktda bir vaqtda bitta ochiq e’tiroz; javobdan keyin optovik qabul qiladi yoki yana e’tiroz bildiradi.
  * - «Tovarlar qaytdi» (VOID) aktida javob yo‘q — o‘tkazma ham yo‘q.
  * - To‘lov qabulni kutmaydi [taklif, BE-46 savol 4]: akt holati (READY → … → PAID) bu yerda o‘zgarmaydi.
@@ -69,7 +84,7 @@ export class SettlementResponseService {
     const id = validId(input?.id);
     const wholesalerId = validId(input?.wholesalerId, 'wholesalerId');
     await this.owned(this.dataSource.manager, id, wholesalerId, false);
-    return this.act(id);
+    return forWholesaler(await this.act(id));
   }
 
   async accept(input: {
@@ -82,7 +97,7 @@ export class SettlementResponseService {
     const userId = validId(input?.userId, 'userId');
     await this.dataSource.transaction(async (m) => {
       const s = await this.owned(m, id, wholesalerId, true);
-      if (s.acceptedAt) return; // takror — o‘sha natija
+      if (s.accepted) return; // takror — o‘sha natija
       this.assertNotVoid(s.status);
       const [open] = (await m.query(
         `SELECT 1 FROM finance.settlement_dispute WHERE settlement_id = $1 AND status = 'OPEN'`,
@@ -94,12 +109,13 @@ export class SettlementResponseService {
         );
       await m.query(
         `UPDATE finance.wholesaler_settlement
-            SET accepted_by = $2, accepted_at = now(), updated_at = now()
+            SET accepted_by = $2, accepted_at = now(), updated_at = now(),
+                accepted_total = COALESCE(exported_total, total_amount)
           WHERE id = $1`,
         [id, userId],
       );
     });
-    return this.act(id);
+    return forWholesaler(await this.act(id));
   }
 
   async dispute(input: {
@@ -114,7 +130,7 @@ export class SettlementResponseService {
     const comment = validComment(input?.comment);
     await this.dataSource.transaction(async (m) => {
       const s = await this.owned(m, id, wholesalerId, true);
-      if (s.acceptedAt)
+      if (s.accepted)
         throw new ConflictException('Akt qabul qilingan — e’tiroz yo‘q');
       this.assertNotVoid(s.status);
       const [open] = (await m.query(
@@ -131,7 +147,7 @@ export class SettlementResponseService {
         [id, wholesalerId, comment, userId],
       );
     });
-    return this.act(id);
+    return forWholesaler(await this.act(id));
   }
 
   /** Moliya uchun e’tirozlar ro‘yxati (ochiqlari birinchi, eskisi oldin). */
@@ -214,10 +230,14 @@ export class SettlementResponseService {
   private async act(id: string): Promise<WholesalerActDto> {
     const settlement = await this.settlements.get({ id });
     const [s] = (await this.dataSource.query(
-      `SELECT accepted_at AS "acceptedAt", accepted_by AS "acceptedBy"
-         FROM finance.wholesaler_settlement WHERE id = $1`,
+      `SELECT s.accepted_at AS "acceptedAt", s.accepted_by AS "acceptedBy", s.accepted_total::text AS "acceptedAmount"
+         FROM finance.wholesaler_settlement s WHERE s.id = $1 AND ${ACCEPTED_VALID}`,
       [id],
-    )) as Array<{ acceptedAt: Date | null; acceptedBy: string | null }>;
+    )) as Array<{
+      acceptedAt: Date;
+      acceptedBy: string;
+      acceptedAmount: string;
+    }>;
     const disputes = (await this.dataSource.query(
       `${DISPUTE_SELECT} WHERE d.settlement_id = $1 ORDER BY d.created_at, d.id`,
       [id],
@@ -226,6 +246,7 @@ export class SettlementResponseService {
       settlement,
       acceptedAt: s?.acceptedAt ?? null,
       acceptedBy: s?.acceptedBy ?? null,
+      acceptedAmount: s ? moneyFromDb(s.acceptedAmount) : null,
       disputes: disputes.map(toDispute),
     };
   }
@@ -236,18 +257,15 @@ export class SettlementResponseService {
     id: string,
     wholesalerId: string,
     lock: boolean,
-  ): Promise<{
-    status: WholesalerSettlementStatus;
-    acceptedAt: Date | null;
-  }> {
+  ): Promise<{ status: WholesalerSettlementStatus; accepted: boolean }> {
     const [s] = (await m.query(
-      `SELECT wholesaler_id AS "wholesalerId", status, accepted_at AS "acceptedAt"
-         FROM finance.wholesaler_settlement WHERE id = $1${lock ? ' FOR UPDATE' : ''}`,
+      `SELECT s.wholesaler_id AS "wholesalerId", s.status, (${ACCEPTED_VALID}) AS accepted
+         FROM finance.wholesaler_settlement s WHERE s.id = $1${lock ? ' FOR UPDATE' : ''}`,
       [id],
     )) as Array<{
       wholesalerId: string;
       status: WholesalerSettlementStatus;
-      acceptedAt: Date | null;
+      accepted: boolean;
     }>;
     if (!s) throw new NotFoundException('Akt topilmadi');
     if (s.wholesalerId !== wholesalerId)

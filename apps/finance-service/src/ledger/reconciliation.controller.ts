@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   FINANCE_RECONCILIATION_RPC,
   PLATFORM_METRICS_RPC,
+  PlatformAffiliateIncomeQuery,
   RemittanceItemsQueryDto,
   RpcHttpExceptionFilter,
 } from '@app/common';
@@ -21,6 +22,11 @@ export class ReconciliationController {
   @MessagePattern({ cmd: PLATFORM_METRICS_RPC.FINANCE })
   platformMetrics(@Payload() input: { from?: string; to?: string }) {
     return this.metrics.platform(input);
+  }
+
+  @MessagePattern({ cmd: PLATFORM_METRICS_RPC.AFFILIATE_INCOME })
+  affiliateIncome(@Payload() input: PlatformAffiliateIncomeQuery) {
+    return this.metrics.affiliateIncome(input);
   }
 
   @MessagePattern({ cmd: FINANCE_RECONCILIATION_RPC.DAYS })
