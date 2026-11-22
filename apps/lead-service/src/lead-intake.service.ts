@@ -444,12 +444,9 @@ export class LeadIntakeService {
   }
 
   /** Qora ro‘yxat (7-bo‘lim: 2 marta rad). Ishga tushishdagi chora EQ-04 javobida; hozircha belgi lid tarixida. */
-  private async markBlacklisted(
-    manager: EntityManager,
-    phone: string,
-    target: Lead,
-  ): Promise<void> {
-    const rejections = await manager.getRepository(Lead).count({
+  /** Raqamning rad etilgan asosiy lidlari soni (qora ro‘yxat, 7-bo‘lim). BE-34: SMS tanlovi shu bilan o‘chadi. */
+  rejectionsOf(manager: EntityManager, phone: string): Promise<number> {
+    return manager.getRepository(Lead).count({
       where: {
         phoneE164: phone,
         status: LeadStatus.REJECTED,
@@ -457,6 +454,15 @@ export class LeadIntakeService {
         isDeleted: false,
       },
     });
+  }
+
+  /** BE-34: sayt buyurtmasi ham ishlatadi. */
+  async markBlacklisted(
+    manager: EntityManager,
+    phone: string,
+    target: Lead,
+  ): Promise<void> {
+    const rejections = await this.rejectionsOf(manager, phone);
     if (rejections < LEAD_RULES.blacklistRejections) return;
     const history = manager.getRepository(LeadHistory);
     await history.save(
@@ -477,7 +483,8 @@ export class LeadIntakeService {
    * 30 kun ichidagi eng so‘nggi ariza → uning asosiy lidi. Faol asosiy lid (yangi, bron, qayta qo‘ng‘iroq)
    * yoshidan qat’i nazar topiladi — bitta raqam+mahsulotga ikkita faol lid ochilmaydi (LID-4).
    */
-  private async previousLead(
+  /** BE-34: sayt buyurtmasi ham ishlatadi. */
+  async previousLead(
     manager: EntityManager,
     phone: string,
     productId: string,
@@ -505,7 +512,8 @@ export class LeadIntakeService {
   }
 
   /** Rad etilgan vaqt: faqat haqiqiy o‘tish (izoh va belgi qatorlari emas) — 10-qoidaning 3 kuni siljimaydi. */
-  private async rejectedAt(manager: EntityManager, lead: Lead): Promise<Date> {
+  /** BE-34: sayt buyurtmasi ham ishlatadi. */
+  async rejectedAt(manager: EntityManager, lead: Lead): Promise<Date> {
     const row = await manager.getRepository(LeadHistory).findOne({
       where: {
         leadId: lead.id,

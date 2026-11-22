@@ -64,6 +64,12 @@ export enum LeadErrorCode {
   LANDING_NOT_OPEN = 'LANDING_NOT_OPEN',
   /** O‘tkazish: lid navbatda yoki operatorda emas (yopilgan, tekshiruvda, dublikat) — 409 (BE-35). */
   LEAD_NOT_TRANSFERABLE = 'LEAD_NOT_TRANSFERABLE',
+  /** POST /storefront/orders: savatdagi mahsulot saytda sotuvda emas (narxi tasdiqlanmagan, olib tashlangan) — 409 (BE-34). */
+  SITE_PRODUCT_UNAVAILABLE = 'SITE_PRODUCT_UNAVAILABLE',
+  /** POST /storefront/orders: savat bo‘sh — 400 (BE-34). */
+  SITE_CART_EMPTY = 'SITE_CART_EMPTY',
+  /** SMS havola muddati o‘tgan yoki lidni operator olgan — 409, operator qo‘ng‘iroq qiladi (BE-34). */
+  SITE_CONFIRM_EXPIRED = 'SITE_CONFIRM_EXPIRED',
   /** Qayta ochish faqat «Rad etildi» lidga — 409 (BE-35). */
   LEAD_NOT_REJECTED = 'LEAD_NOT_REJECTED',
   /** Shu raqam va mahsulotda faol lid bor — ikkinchisi ochilmaydi (LID-4) — 409 (BE-35). */

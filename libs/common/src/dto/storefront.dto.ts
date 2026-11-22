@@ -1,7 +1,10 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  Allow,
   IsBoolean,
+  IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
@@ -10,6 +13,8 @@ import {
   Min,
 } from 'class-validator';
 import { MAX_MONEY } from '../database/money.transformer';
+import { CheckoutDeliveryDestination } from './cart.dto';
+import { PHONE_UZ_PATTERN, trimLeadText } from './lead.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** BE-34: sayt mahsulotining kategoriyasi. */
@@ -157,4 +162,131 @@ export class StorefrontProductsPageDto {
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 2 }) totalPages: number;
+}
+
+// ─── Saytdan buyurtma (BE-34) ───────────────────────────────────────────────
+
+/** Tasdiqlash usuli (ega qarori 2026-11-10): operator qo‘ng‘iroq qiladi yoki mijoz SMS havola bilan tasdiqlaydi. */
+export enum SiteConfirmMode {
+  CALL = 'CALL',
+  SMS = 'SMS',
+}
+
+/** Bitta buyurtmadagi tovar qatorlari chegarasi (savat qatorlari) [taklif]. */
+export const SITE_ORDER_MAX_LINES = 50;
+
+export const SITE_ORDER_RPC = {
+  /** gateway → lead-service: savatdan lid (source SITE). */
+  CREATE: 'lead.site.create',
+  /** gateway → lead-service: SMS havola bosildi. */
+  CONFIRM: 'lead.site.confirm',
+} as const;
+
+/** Savat qatori lid uchun: mahsulot va soni (narx lead-service da katalogdan — tasdiqlangan narx). */
+export interface SiteOrderLine {
+  productId: string;
+  quantity: number;
+}
+
+/** POST /storefront/orders — mehmon buyurtmasi: hamma maydon majburiy (ega qarori 2026-11-10), manzil BE-38 qoidalari. */
+export class SiteOrderDto {
+  @ApiProperty({ example: 'Aziza' })
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
+
+  @ApiProperty({ example: '+998901234567' })
+  @Matches(PHONE_UZ_PATTERN, {
+    message: "phone +998XXXXXXXXX formatida bo'lishi kerak",
+  })
+  phone: string;
+
+  @ApiProperty({ example: '1726', description: 'Viloyat SOATO kodi' })
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  regionSoato: string;
+
+  @ApiProperty({
+    example: '1726266',
+    description: 'Tuman yoki shahar SOATO kodi',
+  })
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  districtSoato: string;
+
+  @ApiProperty({
+    example: 'Turkiston ko‘chasi, 27-uy',
+    description:
+      'Ko‘cha, uy; faqat bo‘shliq — bo‘sh hisoblanadi (TC2: 400, maydon nomi bilan)',
+  })
+  @Transform(trimLeadText)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  addressLine: string;
+
+  @ApiProperty({
+    enum: CheckoutDeliveryDestination,
+    example: CheckoutDeliveryDestination.ADDRESS,
+  })
+  @IsEnum(CheckoutDeliveryDestination)
+  whereDeliver: CheckoutDeliveryDestination;
+
+  @ApiProperty({
+    enum: SiteConfirmMode,
+    example: SiteConfirmMode.CALL,
+    description:
+      'CALL — operator qo‘ng‘iroq qiladi; SMS — havola bosilgach buyurtma operatorsiz. Qora ro‘yxat yoki dublikat ' +
+      'bo‘lsa server CALL qiladi',
+  })
+  @IsEnum(SiteConfirmMode)
+  confirmMode: SiteConfirmMode;
+
+  @ApiProperty({
+    example: '2026-11-16',
+    description: 'Oferta va maxfiylik matni versiyasi',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  consentVersion: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Yashirin maydon (bot himoyasi): to‘ldirilsa lid yozilmaydi, javob baribir 201',
+  })
+  @IsOptional()
+  @Allow()
+  website?: unknown;
+}
+
+export class SiteOrderCreatedDto {
+  @ApiProperty({ example: '7001' }) leadId: string;
+  @ApiProperty({
+    enum: SiteConfirmMode,
+    description:
+      'Haqiqiy usul: SMS so‘ralgan bo‘lsa ham qora ro‘yxat yoki dublikatda — CALL',
+  })
+  confirmMode: SiteConfirmMode;
+}
+
+export class SiteOrderConfirmDto {
+  @ApiProperty({
+    example: 'q3Jf…',
+    description: 'SMS havoladagi bir martalik kod',
+  })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/, { message: 'token noto‘g‘ri' })
+  token: string;
+}
+
+export class SiteOrderConfirmedDto {
+  @ApiProperty({ example: 'CONFIRMED' }) status: 'CONFIRMED';
 }

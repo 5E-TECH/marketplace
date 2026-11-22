@@ -18,7 +18,7 @@ import {
 import {
   AffiliatePostbackEvent,
   LEAD_EVENTS,
-  LeadConfirmedEvent,
+  LeadConfirmedVia,
   LeadErrorCode,
   LeadOutcome,
   LeadResultAcceptedDto,
@@ -62,7 +62,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *   keyin boshqasiga ham beriladi (4-qoida), 5 ta chegaraga kirmaydi (6-qoida), eslatma keladi (8-qoida);
  * - egasiz — avtomatik qayta urinish («javob bermadi», «band», «o‘chiq», vaqtsiz «o‘ylab ko‘radi»): navbatdagi har
  *   operatorga, 5 ta chegaraga kiradi.
- */
+ */ import { enqueueLeadConfirmed } from './lead-confirmed.event';
+
 @Injectable()
 export class LeadQueueService {
   constructor(
@@ -196,6 +197,7 @@ export class LeadQueueService {
           lead.stockShortageAt = null;
           lead.confirmedAt = now; // BE-28: tasdiq kuni va operatori (statistika)
           lead.confirmedBy = operatorId;
+          lead.confirmedVia = LeadConfirmedVia.OPERATOR;
           note = 'Tasdiqlandi';
           await this.enqueueConfirmed(manager, lead, operatorId, now);
           await this.postback?.enqueue(
@@ -580,40 +582,17 @@ export class LeadQueueService {
       });
   }
 
-  private async enqueueConfirmed(
+  private enqueueConfirmed(
     manager: EntityManager,
     lead: Lead,
     operatorId: string,
     now: Date,
   ): Promise<void> {
-    const payload: LeadConfirmedEvent = {
-      eventId: randomUUID(),
-      leadId: lead.id,
-      source: lead.source,
-      streamId: lead.streamId,
-      affiliateId: lead.affiliateId,
-      productId: lead.productId,
-      quantity: lead.quantity,
-      salePrice: Number(lead.salePrice),
-      customerName: lead.name,
-      customerPhone: lead.phoneE164,
-      regionSoato: lead.regionSoato!,
-      districtSoato: lead.districtSoato!,
-      addressLine: lead.addressLine!,
-      whereDeliver: lead.whereDeliver!,
+    return enqueueLeadConfirmed(manager, lead, {
       confirmedBy: operatorId,
-      addressConfirmedBy: lead.addressConfirmedBy,
-      confirmedAt: now.toISOString(),
-    };
-    const outbox = manager.getRepository(OutboxEvent);
-    await outbox.save(
-      outbox.create({
-        aggregateType: 'lead',
-        aggregateId: lead.id,
-        eventType: LEAD_EVENTS.CONFIRMED,
-        payload,
-      }),
-    );
+      via: LeadConfirmedVia.OPERATOR,
+      now,
+    });
   }
 
   private async history(
