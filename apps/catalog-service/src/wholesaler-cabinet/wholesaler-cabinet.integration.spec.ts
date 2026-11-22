@@ -172,6 +172,66 @@ describeWithPostgres('BE-30 optovik kabineti — catalog (PostgreSQL)', () => {
     await expect(
       cabinet.review({ wholesalerId: own.id, decision: 'REJECT', note: 'x' }),
     ).rejects.toMatchObject({ status: 409 });
+    // eski marketplace do‘koni (PENDING, elektron shartnomasiz) bu yo‘l bilan faollashmaydi
+    const [legacy] = (await ds.query(
+      `INSERT INTO catalog.shop (owner_user_id, name, slug, status) VALUES (8001, 'Eski', 'eski-8001', 'PENDING') RETURNING id::text`,
+    )) as Array<{ id: string }>;
+    await expect(
+      cabinet.review({ wholesalerId: legacy.id, decision: 'APPROVE' }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('rad etilgan ariza STIR ni band qilmaydi: boshqa ariza va admin kiritishi o‘tadi; rad etilgan qayta yuboradi (yana PENDING)', async () => {
+    const squatter = await cabinet.selfRegister({
+      ...PROFILE,
+      tin: '305999010',
+      ownerUserId: '7060',
+      phone: '+998901117060',
+      contractVersion: '1.0',
+    });
+    await cabinet.review({
+      wholesalerId: squatter.id,
+      decision: 'REJECT',
+      note: 'STIR boshqa kompaniyaniki',
+    });
+    await expect(cabinet.tinFree('305999010')).resolves.toEqual({ free: true });
+    const real = await wholesalers.create({
+      ...PROFILE,
+      tin: '305999010',
+      contractNumber: 'K-2026/040',
+      contractDate: '2026-11-22',
+    });
+    expect(real.status).toBe(ShopStatus.ACTIVE);
+    // rad etilgan foydalanuvchi o‘z STIR i bilan qayta yuboradi
+    const again = await cabinet.selfRegister({
+      ...PROFILE,
+      tin: '305999011',
+      ownerUserId: '7060',
+      phone: '+998901117060',
+      contractVersion: '1.1',
+    });
+    expect(again).toMatchObject({
+      id: squatter.id,
+      status: ShopStatus.PENDING,
+      tin: '305999011',
+      contractVersion: '1.1',
+      moderationNote: null,
+    });
+    // band STIR bilan qayta yuborish — 409
+    await cabinet.review({
+      wholesalerId: again.id,
+      decision: 'REJECT',
+      note: 'x',
+    });
+    await expect(
+      cabinet.selfRegister({
+        ...PROFILE,
+        tin: '305999010',
+        ownerUserId: '7060',
+        phone: '+998901117060',
+        contractVersion: '1.1',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 
   it('admin kiritgan optovikka kabinet egasi: egasiz mahsulotlari ham bog‘lanadi; boshqa egaga — 409', async () => {
@@ -241,6 +301,7 @@ describeWithPostgres('BE-30 optovik kabineti — catalog (PostgreSQL)', () => {
       ownerUserId: '7021',
       isBad: false,
       cpaEnabled: true,
+      affiliateFee: null, // sotuvchi haqini platforma belgilaydi
     });
     await cabinet.review({
       wholesalerId: own.id,
@@ -261,6 +322,8 @@ describeWithPostgres('BE-30 optovik kabineti — catalog (PostgreSQL)', () => {
       contractVersion: '1.0',
     });
     const product = await cabinet.createProduct('7030', PRODUCT);
+    // sotuvchi haqini admin belgilaydi (BE-07 tahriri)
+    await products.adminUpdate(String(product.id), { affiliateFee: 65_000 });
     const view = await cabinet.pricingView('7030', String(product.id));
     expect(view.calculation).toMatchObject({
       recommendedBase: 251_000,
@@ -339,6 +402,14 @@ describeWithPostgres('BE-30 optovik kabineti — catalog (PostgreSQL)', () => {
       wholesalerId: own.id,
       productId: String(product.id),
     });
+    // qayta tasdiq (javob yetib kelmagan) — o‘sha yozuv, 500 emas
+    await expect(
+      cabinet.addDocument({
+        ...base,
+        kind: WholesalerDocumentKind.KYC,
+        objectKey: `private/wholesaler/${own.id}/00000000-0000-0000-0000-000000000002.pdf`,
+      }),
+    ).resolves.toMatchObject({ id: kyc.id });
     expect((await cabinet.listDocuments(own.id)).map((d) => d.id)).toEqual([
       cert.id,
       kyc.id,

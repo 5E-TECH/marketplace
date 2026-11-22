@@ -69,7 +69,11 @@ export async function wholesalerContractPdf(
   doc.end();
   const pdf = await done;
   return {
-    fileName: `shartnoma-${wholesaler.contractNumber ?? wholesaler.id}.pdf`,
+    // sarlavhaga faqat ASCII (admin kiritgan raqamda «№» yoki qo‘shtirnoq bo‘lishi mumkin)
+    fileName: `shartnoma-${String(wholesaler.contractNumber ?? wholesaler.id)
+      .normalize('NFKD')
+      .replace(/[^A-Za-z0-9._-]+/g, '_')
+      .slice(0, 80)}.pdf`,
     contentType: 'application/pdf',
     base64: pdf.toString('base64'),
   };

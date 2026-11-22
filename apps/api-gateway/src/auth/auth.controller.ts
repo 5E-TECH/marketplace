@@ -1,11 +1,11 @@
 import {
   Body,
-  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Inject,
   Ip,
@@ -273,7 +273,17 @@ export class AuthController {
     summary:
       'Optovik ro‘yxati (OPT-1): SMS tasdig‘idan keyin rekvizitlar, komissiya shartnomasi va rozilik; sessiya ochiladi, holat PENDING (admin tasdiqlaydi)',
   })
-  @ApiCreatedResponse({ schema: { example: { accessToken: null } } })
+  @ApiCreatedResponse({
+    description:
+      'profileCompleted false — foydalanuvchi yaratildi, optovik yozuvi ochilmadi (masalan, STIR band): kabinetda POST /wholesaler/profile',
+    schema: {
+      example: {
+        accessToken: null,
+        profileCompleted: true,
+        profileError: null,
+      },
+    },
+  })
   @ApiBadRequestResponse({
     description:
       'OFFER_NOT_ACCEPTED — shartnoma yoki rozilikning joriy versiyasi qabul qilinmagan',
@@ -281,7 +291,7 @@ export class AuthController {
   })
   @ApiConflictResponse({
     description:
-      'PHONE_ALREADY_REGISTERED; STIR band; shartnoma matni hali e’lon qilinmagan',
+      'PHONE_ALREADY_REGISTERED; shartnoma matni hali e’lon qilinmagan',
     type: AuthErrorResponseDto,
   })
   @ApiResponse({
@@ -294,16 +304,9 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    // STIR band bo‘lsa foydalanuvchi yaratilmasin
-    const { free } = await sendRpc<{ free: boolean }>(
-      this.catalog!,
-      { cmd: WHOLESALER_CABINET_RPC.TIN_FREE },
-      { tin: dto.tin },
-    );
-    if (!free)
-      throw new ConflictException('Bu STIR bilan optovik allaqachon bor');
     const { registrationToken, contractVersion, consentVersion, ...profile } =
       dto;
+    // avval SMS token (identity tekshiradi) — STIR bandligini tokensiz so‘rab bo‘lmasin
     const result = await sendRpc<{
       accessToken: string;
       refreshToken: string;
@@ -321,20 +324,28 @@ export class AuthController {
         ip: ip ?? null,
       },
     );
-    // sessiya darhol: optovik yozuvi ochilmay qolsa ham kabinetda POST /wholesaler/profile bilan yakunlaydi
     this.setAuthCookies(request, response, result);
-    await sendRpc(
-      this.catalog!,
-      { cmd: WHOLESALER_CABINET_RPC.SELF_REGISTER },
-      {
-        ...profile,
-        ownerUserId: String(result.user.id),
-        phone: result.user.phone,
-        contractVersion,
-      },
-    );
+    // optovik yozuvi ochilmasa (STIR band va h.k.) — sessiya baribir beriladi, kabinetda POST /wholesaler/profile
+    let profileError: string | null = null;
+    try {
+      await sendRpc(
+        this.catalog!,
+        { cmd: WHOLESALER_CABINET_RPC.SELF_REGISTER },
+        {
+          ...profile,
+          ownerUserId: String(result.user.id),
+          phone: result.user.phone,
+          contractVersion,
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      profileError = error.message;
+    }
     return rawResponse({
       accessToken: this.tokensInBody ? result.accessToken : null,
+      profileCompleted: profileError === null,
+      profileError,
     });
   }
 

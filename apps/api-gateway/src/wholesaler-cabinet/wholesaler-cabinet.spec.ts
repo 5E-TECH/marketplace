@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { of } from 'rxjs';
 import { Role, ShopStatus } from '@app/common';
@@ -108,8 +108,20 @@ describe('BE-30 TC4: imzolangan havola', () => {
 
 describe('BE-30 postavka: faqat o‘z postavkasi, e’lon — faqat tasdiqlangan optovik', () => {
   const profile = (status: ShopStatus) => ({ id: '15', status });
-  const make = (status: ShopStatus, shipmentOwner = '15') => {
-    const catalog = { send: jest.fn(() => of(profile(status))) };
+  const make = (
+    status: ShopStatus,
+    shipmentOwner = '15',
+    productStatus = 'ACTIVE',
+  ) => {
+    const catalog = {
+      send: jest.fn((pattern: { cmd: string }) =>
+        of(
+          pattern.cmd === 'catalog.wholesaler.product.get'
+            ? { status: productStatus, name: 'Termos' }
+            : profile(status),
+        ),
+      ),
+    };
     const inventory = {
       send: jest.fn((pattern: { cmd: string }, data: Record<string, unknown>) =>
         of(
@@ -147,6 +159,25 @@ describe('BE-30 postavka: faqat o‘z postavkasi, e’lon — faqat tasdiqlangan
       { cmd: 'inventory.inbound.declare' },
       expect.objectContaining({ wholesalerId: '15', actorId: '501' }),
     );
+  });
+
+  it('tasdiqlanmagan mahsulotga postavka — 400, ombor so‘rovi yo‘q', async () => {
+    const { controller, inventory } = make(
+      ShopStatus.ACTIVE,
+      '15',
+      'PENDING_REVIEW',
+    );
+    await expect(
+      controller.declare(
+        {
+          expectedAt: '2026-12-02',
+          items: [{ productId: '42', quantity: 10 }],
+        } as never,
+        user,
+        '',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(inventory.send).not.toHaveBeenCalled();
   });
 
   it('tasdiqlanmagan optovik e’lon qila olmaydi — 403; boshqa optovik postavkasi — 403', async () => {

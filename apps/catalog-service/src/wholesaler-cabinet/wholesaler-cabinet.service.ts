@@ -52,7 +52,7 @@ export class WholesalerCabinetService {
   /** Ro‘yxatdan oldin: STIR bandmi (foydalanuvchi yaratilmasidan oldin 409). */
   async tinFree(tin: string): Promise<{ free: boolean }> {
     const rows = (await this.dataSource.query(
-      `SELECT 1 FROM catalog.shop WHERE tin = $1 AND is_deleted = FALSE LIMIT 1`,
+      `SELECT 1 FROM catalog.shop WHERE tin = $1 AND is_deleted = FALSE AND status <> 'REJECTED' LIMIT 1`,
       [String(tin ?? '')],
     )) as unknown[];
     return { free: rows.length === 0 };
@@ -69,7 +69,27 @@ export class WholesalerCabinetService {
     if (!/^\d+$/.test(ownerUserId))
       throw new BadRequestException('ownerUserId noto‘g‘ri');
     const existing = await this.ownShop(ownerUserId, false);
-    if (existing) return this.profileView(existing);
+    // rad etilgan ariza — yangi rekvizitlar bilan qayta yuboriladi (yana PENDING); boshqa holatda — o‘sha yozuv
+    if (existing && existing.status !== ShopStatus.REJECTED)
+      return this.profileView(existing);
+    if (existing) {
+      Object.assign(existing, {
+        name: input.name.trim(),
+        description: input.description ?? null,
+        status: ShopStatus.PENDING,
+        phone: input.phone,
+        address: input.address ?? null,
+        legalType: input.legalType,
+        tin: input.tin,
+        bankName: input.bankName,
+        bankAccount: input.bankAccount,
+        bankMfo: input.bankMfo,
+        contractVersion: input.contractVersion,
+        contractAcceptedAt: new Date(),
+        moderationNote: null,
+      });
+      return this.profileView(await this.save(existing));
+    }
     return this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Shop);
       const shop = repo.create({
@@ -98,20 +118,38 @@ export class WholesalerCabinetService {
     });
   }
 
-  /** Admin: o‘zi ro‘yxatdan o‘tgan optovik — tasdiq (ACTIVE) yoki rad (REJECTED, izoh majburiy). */
+  /**
+   * Admin: o‘zi ro‘yxatdan o‘tgan optovik — tasdiq (ACTIVE) yoki rad (REJECTED, izoh majburiy). Faqat elektron
+   * shartnomali PENDING ariza (eski marketplace do‘konlari bu yo‘l bilan faollashmaydi); qator qulfi bilan — ikki
+   * admin bir vaqtda qaror qilsa, ikkinchisi 409.
+   */
   async review(input: ReviewWholesalerInput): Promise<WholesalerProfileDto> {
-    const shop = await this.byId(input?.wholesalerId);
-    if (shop.status !== ShopStatus.PENDING)
-      throw new ConflictException(
-        `${shop.status} holatidagi optovikni ko‘rib bo‘lmaydi — faqat PENDING`,
-      );
-    const note = input.note?.trim() || null;
-    if (input.decision === 'REJECT' && !note)
+    const note = input?.note?.trim() || null;
+    if (input?.decision === 'REJECT' && !note)
       throw new BadRequestException('Rad etish sababi majburiy');
-    shop.status =
-      input.decision === 'APPROVE' ? ShopStatus.ACTIVE : ShopStatus.REJECTED;
-    shop.moderationNote = input.decision === 'REJECT' ? note : null;
-    return this.profileView(await this.save(shop));
+    const id = (await this.byId(input?.wholesalerId)).id;
+    await this.dataSource.transaction(async (manager) => {
+      const [row] = (await manager.query(
+        `SELECT status, contract_version AS "contractVersion" FROM catalog.shop
+          WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
+        [id],
+      )) as Array<{ status: ShopStatus; contractVersion: string | null }>;
+      if (row?.status !== ShopStatus.PENDING || !row.contractVersion)
+        throw new ConflictException(
+          `${row?.status ?? '—'} holatidagi yozuvni ko‘rib bo‘lmaydi — faqat o‘zi ro‘yxatdan o‘tgan PENDING optovik`,
+        );
+      await manager.query(
+        `UPDATE catalog.shop SET status = $2, moderation_note = $3, updated_at = now() WHERE id = $1`,
+        [
+          id,
+          input.decision === 'APPROVE'
+            ? ShopStatus.ACTIVE
+            : ShopStatus.REJECTED,
+          input.decision === 'REJECT' ? note : null,
+        ],
+      );
+    });
+    return this.profileView(await this.byId(id));
   }
 
   /**
@@ -125,19 +163,37 @@ export class WholesalerCabinetService {
     const ownerUserId = String(input?.ownerUserId ?? '');
     if (!/^\d+$/.test(ownerUserId))
       throw new BadRequestException('ownerUserId noto‘g‘ri');
-    const shop = await this.byId(input?.wholesalerId);
-    if (shop.ownerUserId && shop.ownerUserId !== ownerUserId)
-      throw new ConflictException('Optovikning kabinet egasi allaqachon bor');
-    return this.dataSource.transaction(async (manager) => {
-      shop.ownerUserId = ownerUserId;
-      const saved = await this.save(shop, manager.getRepository(Shop));
-      await manager.query(
-        `UPDATE catalog.product SET owner_user_id = $1
-          WHERE shop_id = $2 AND owner_user_id IS NULL`,
-        [ownerUserId, saved.id],
-      );
-      return this.profileView(saved);
-    });
+    const id = (await this.byId(input?.wholesalerId)).id;
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const [row] = (await manager.query(
+          `SELECT owner_user_id::text AS owner FROM catalog.shop WHERE id = $1 FOR UPDATE`,
+          [id],
+        )) as Array<{ owner: string | null }>;
+        if (row?.owner && row.owner !== ownerUserId)
+          throw new ConflictException(
+            'Optovikning kabinet egasi allaqachon bor',
+          );
+        await manager.query(
+          `UPDATE catalog.shop SET owner_user_id = $1, updated_at = now() WHERE id = $2`,
+          [ownerUserId, id],
+        );
+        await manager.query(
+          `UPDATE catalog.product SET owner_user_id = $1
+            WHERE shop_id = $2 AND owner_user_id IS NULL`,
+          [ownerUserId, id],
+        );
+      });
+    } catch (error) {
+      const driver = (error as QueryFailedError).driverError as
+        { code?: string } | undefined;
+      if (error instanceof QueryFailedError && driver?.code === '23505')
+        throw new ConflictException(
+          'Bu foydalanuvchi boshqa optovikka bog‘langan',
+        );
+      throw error;
+    }
+    return this.profileView(await this.byId(id));
   }
 
   async me(ownerUserId: string): Promise<WholesalerProfileDto> {
@@ -160,13 +216,14 @@ export class WholesalerCabinetService {
       throw new ForbiddenException(
         'Komissiya shartnomasi yo‘q — mahsulot taklif qilib bo‘lmaydi (OPT-1)',
       );
-    // admin belgilari (CPA, BAD) optovikdan olinmaydi — sukut; admin tasdiqda o‘zgartiradi
+    // admin belgilari (CPA, BAD) va sotuvchi haqi optovikdan olinmaydi — sukut; admin tasdiqda belgilaydi
     const proposal: CreateProductDto = {
       name: dto.name,
       categoryId: dto.categoryId,
       description: dto.description,
       basePrice: dto.basePrice,
-      affiliateFee: dto.affiliateFee,
+      // sotuvchi haqi (A) — platforma belgilaydi (TZ 2-bo‘lim), optovik faqat bazaviy narx (B) beradi
+      affiliateFee: null,
       weightGrams: dto.weightGrams,
       lengthMm: dto.lengthMm,
       widthMm: dto.widthMm,
@@ -276,6 +333,7 @@ export class WholesalerCabinetService {
       `INSERT INTO catalog.wholesaler_document
          (shop_id, kind, product_id, object_key, file_name, content_type, size_bytes, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (object_key) DO NOTHING
        RETURNING ${DOCUMENT_COLUMNS}`,
       [
         shop.id,
@@ -288,7 +346,14 @@ export class WholesalerCabinetService {
         input.ownerUserId,
       ],
     )) as DocumentRow[];
-    return documentRecord(row);
+    if (row) return documentRecord(row);
+    // qayta tasdiq (javob yetib kelmagan) — o‘sha yozuv; kalit optovik papkasida, shuning uchun boshqa optovikniki emas
+    const [existing] = (await this.dataSource.query(
+      `SELECT ${DOCUMENT_COLUMNS} FROM catalog.wholesaler_document WHERE object_key = $1 AND shop_id = $2`,
+      [input.objectKey, shop.id],
+    )) as DocumentRow[];
+    if (!existing) throw new ConflictException('Hujjat allaqachon yozilgan');
+    return documentRecord(existing);
   }
 
   async listDocuments(

@@ -3,11 +3,15 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * BE-30 (OPT-1, OPT-2): optovik o‘zi ro‘yxatdan o‘tadi — qabul qilingan elektron shartnoma versiyasi va vaqti,
  * ro‘yxatni rad etish izohi; yopiq hujjatlar (KYC, mahsulot sertifikati) — fayl yopiq saqlashda, bu yerda kaliti.
+ * Rad etilgan ariza STIR ni band qilmaydi (begona odam kompaniya STIR ini egallab qololmasin; rad etilgan qayta yuboradi).
  */
 export class WholesalerCabinet1798329600000 implements MigrationInterface {
   name = 'WholesalerCabinet1798329600000';
 
   async up(q: QueryRunner): Promise<void> {
+    await q.query(`DROP INDEX "catalog"."uq_catalog_shop_tin"`);
+    await q.query(`CREATE UNIQUE INDEX "uq_catalog_shop_tin" ON "catalog"."shop" ("tin")
+      WHERE "tin" IS NOT NULL AND "is_deleted" = FALSE AND "status" <> 'REJECTED'`);
     await q.query(`ALTER TABLE "catalog"."shop"
       ADD COLUMN "contract_version" VARCHAR(20),
       ADD COLUMN "contract_accepted_at" TIMESTAMPTZ,
@@ -41,5 +45,8 @@ export class WholesalerCabinet1798329600000 implements MigrationInterface {
       DROP COLUMN "moderation_note",
       DROP COLUMN "contract_accepted_at",
       DROP COLUMN "contract_version"`);
+    await q.query(`DROP INDEX "catalog"."uq_catalog_shop_tin"`);
+    await q.query(`CREATE UNIQUE INDEX "uq_catalog_shop_tin" ON "catalog"."shop" ("tin")
+      WHERE "tin" IS NOT NULL AND "is_deleted" = FALSE`);
   }
 }

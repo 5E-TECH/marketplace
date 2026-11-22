@@ -221,12 +221,14 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "profileCompleted false — foydalanuvchi yaratildi, optovik yozuvi ochilmadi (masalan, STIR band): kabinetda POST /wholesaler/profile",
             "content": {
               "application/json": {
                 "schema": {
                   "example": {
-                    "accessToken": null
+                    "accessToken": null,
+                    "profileCompleted": true,
+                    "profileError": null
                   }
                 }
               }
@@ -243,7 +245,7 @@
             }
           },
           "409": {
-            "description": "PHONE_ALREADY_REGISTERED; STIR band; shartnoma matni hali e’lon qilinmagan",
+            "description": "PHONE_ALREADY_REGISTERED; shartnoma matni hali e’lon qilinmagan",
             "content": {
               "application/json": {
                 "schema": {

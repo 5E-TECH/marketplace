@@ -227,9 +227,10 @@ export class AffiliateAuthService {
     dto: EnsureWholesalerUserInput,
   ): Promise<{ userId: string; created: boolean }> {
     const phone = String(dto?.phone ?? '').trim();
-    if (!/^\+998\d{9}$/.test(phone))
+    // SMS kod bilan kira oladigan raqam bo‘lsin (lid qoidasi bilan bir xil operator kodlari)
+    if (!this.operatorAllowed(phone))
       throw new BadRequestException(
-        'Telefon +998XXXXXXXXX formatida bo‘lishi kerak',
+        'Telefon +998XXXXXXXXX formatida va ruxsat etilgan operatorda bo‘lishi kerak',
       );
     return this.dataSource.transaction(async (m) => {
       await m.query(

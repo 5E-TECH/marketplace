@@ -126,6 +126,12 @@ export class PrivateFileService {
     const finalKey = `${PRIVATE_FOLDER}/${wholesalerId}/${match[2]}.${match[3]}`;
     const upload = await this.statOrNull(uploadKey);
     if (!upload) return this.alreadyCopied(finalKey);
+    // yakuniy fayl allaqachon bor (tasdiqlangan, admin ko‘rgan bo‘lishi mumkin) — almashtirilmaydi: imzo 15 daqiqa
+    // amal qiladi, shu kalitga qayta yuklangan yangi fayl o‘chiriladi, natija — avvalgi fayl
+    if (await this.statOrNull(finalKey)) {
+      await this.removeQuietly(uploadKey);
+      return this.alreadyCopied(finalKey);
+    }
     const contentType = mimeTypeOf(upload);
     const allowed = PRIVATE_DOCUMENT_TYPES.includes(contentType);
     const head = allowed ? await this.head(uploadKey, upload.etag) : null;

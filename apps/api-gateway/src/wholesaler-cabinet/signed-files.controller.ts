@@ -78,14 +78,16 @@ export class SignedFilesController {
           version: wholesaler.contractVersion,
         },
       );
-      return labelPdf(
-        res,
-        await sendRpc(
-          this.catalog,
-          { cmd: RPC.CONTRACT_PDF },
-          { wholesalerId: target.w, contract },
-        ),
+      const pdf = await sendRpc<{
+        fileName: string;
+        contentType: string;
+        base64: string;
+      }>(
+        this.catalog,
+        { cmd: RPC.CONTRACT_PDF },
+        { wholesalerId: target.w, contract },
       );
+      return labelPdf(res, { ...pdf, fileName: safeFileName(pdf.fileName) });
     }
     const doc = await sendRpc<WholesalerDocumentRecord>(
       this.catalog,
@@ -98,12 +100,19 @@ export class SignedFilesController {
       { objectKey: doc.objectKey },
     );
     return labelPdf(res, {
-      fileName: safeFileName(doc.fileName),
+      // kengaytma saqlangan turdan (foydalanuvchi nomidagi «.html» emas)
+      fileName: `${safeFileName(doc.fileName.replace(/\.[^.]*$/, ''))}${EXTENSION[file.contentType] ?? ''}`,
       contentType: file.contentType,
       base64: file.base64,
     });
   }
 }
+
+const EXTENSION: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+};
 
 /** Content-Disposition uchun — faqat ASCII xavfsiz belgilar. */
 export function safeFileName(name: string): string {

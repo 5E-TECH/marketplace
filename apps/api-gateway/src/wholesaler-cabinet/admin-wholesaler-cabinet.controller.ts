@@ -103,13 +103,13 @@ export class AdminWholesalerCabinetController {
       { cmd: 'catalog.wholesaler.admin-get' },
       { id },
     );
+    if (current.ownerUserId)
+      throw new ConflictException('Optovikning kabinet egasi allaqachon bor');
     const { userId } = await sendRpc<{ userId: string }>(
       this.identity,
       { cmd: RPC.ENSURE_USER },
       dto,
     );
-    if (current.ownerUserId && current.ownerUserId !== userId)
-      throw new ConflictException('Optovikning kabinet egasi allaqachon bor');
     const result = await sendRpc<WholesalerProfileDto>(
       this.catalog,
       { cmd: RPC.LINK_OWNER },

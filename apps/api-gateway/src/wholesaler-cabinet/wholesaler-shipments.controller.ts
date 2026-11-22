@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -27,10 +28,12 @@ import {
   InboundShipmentDto,
   InboundShipmentQueryDto,
   JwtUser,
+  ProductStatus,
   RmqClient,
   Role,
   Roles,
   sendRpc,
+  WHOLESALER_CABINET_RPC,
   WholesalerShipmentDeclareDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
@@ -39,7 +42,7 @@ import { ownWholesaler } from './own-wholesaler';
 
 /**
  * BE-30 (OMB-1, OPT-4): optovik postavka arizasini o‘zi yuboradi (omborda DECLARED — TC5), holatini va qabul aktini
- * panelda ko‘radi (TC3). Faqat tasdiqlangan optovik; faqat o‘z mahsulotlari (BE-17 tekshiradi); boshqa optovik
+ * panelda ko‘radi (TC3). Faqat tasdiqlangan optovik va admin tasdiqlagan o‘z mahsulotlari; boshqa optovik
  * postavkasi — 403. Qabulda farq yoki brak bo‘lsa optovik kabinetiga xabar boradi (BE-47).
  */
 @ApiTags('wholesaler')
@@ -69,6 +72,18 @@ export class WholesalerShipmentsController {
     const wholesaler = await ownWholesaler(this.catalog, user, {
       active: true,
     });
+    // faqat admin tasdiqlagan o‘z mahsuloti (boshqa optovikniki — 403); tasdiqlanmagan tovar omborga yuborilmaydi
+    for (const productId of new Set(dto.items.map((item) => item.productId))) {
+      const product = await sendRpc<{ status: ProductStatus; name: string }>(
+        this.catalog,
+        { cmd: WHOLESALER_CABINET_RPC.PRODUCT_GET },
+        { ownerUserId: user.sub, productId },
+      );
+      if (product.status !== ProductStatus.ACTIVE)
+        throw new BadRequestException(
+          `«${product.name}» hali tasdiqlanmagan (${product.status}) — postavka faqat tasdiqlangan mahsulotga`,
+        );
+    }
     const shipment = await sendRpc<InboundShipmentDto>(
       this.inventory,
       { cmd: INBOUND_RPC.DECLARE },

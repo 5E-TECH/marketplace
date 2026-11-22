@@ -77,8 +77,11 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       type: 'postgres',
       url,
       schema: 'catalog',
+      // faqat BE-07 dan oldingilari (keyingi migratsiyalar BE-07 jadvallariga tayanadi — BE-30 STIR indeksi)
       migrations: CATALOG_DB.migrations.filter(
-        (m) => m !== WholesalerCpaProduct1796083200000,
+        (m) =>
+          Number(/\d{13}$/.exec(m.name)?.[0]) <
+          Number(/\d{13}$/.exec(WholesalerCpaProduct1796083200000.name)?.[0]),
       ),
       migrationsRun: true,
       synchronize: false,
