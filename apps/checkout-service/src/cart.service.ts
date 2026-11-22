@@ -10,16 +10,14 @@ import { ClientProxy } from '@nestjs/microservices';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   AddCartItemDto,
-  CATALOG_DISPLAY_LOOKUP,
   CartCatalogVariantDto,
   CartDto,
   CartOwnerDto,
-  CatalogDisplayLookupResult,
   RmqClient,
-  sendRpc,
 } from '@app/common';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
+import { catalogDisplayLookup } from './catalog-display.util';
 
 @Injectable()
 export class CartService {
@@ -225,11 +223,9 @@ export class CartService {
   ): Promise<Map<string, { name: string | null; imageUrl: string | null }>> {
     if (!variantIds.length || !this.catalog) return new Map();
     try {
-      const result = await sendRpc<CatalogDisplayLookupResult>(
-        this.catalog,
-        { cmd: CATALOG_DISPLAY_LOOKUP },
-        { variantIds: [...new Set(variantIds)] },
-      );
+      const result = await catalogDisplayLookup(this.catalog, {
+        variantIds: [...new Set(variantIds)],
+      });
       return new Map(
         (result?.variants ?? []).map((row) => [
           String(row.id),

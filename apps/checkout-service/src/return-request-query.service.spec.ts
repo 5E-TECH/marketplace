@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { CATALOG_DISPLAY_LOOKUP, ReturnRequestStatus } from '@app/common';
+import { CATALOG_DISPLAY_TIMEOUT_MS } from './catalog-display.util';
 import { ReturnRequestQueryService } from './return-request-query.service';
 
 describe('ReturnRequestQueryService (C4.2)', () => {
@@ -135,5 +136,19 @@ describe('ReturnRequestQueryService (C4.2)', () => {
       shopName: null,
       items: [{ productId: '7', imageUrl: null }],
     });
+  });
+
+  it('BE-29: katalog javob bermasa 1,5 s dan keyin nomsiz javob — gateway 10 s kutib qolmaydi', async () => {
+    jest.useFakeTimers();
+    try {
+      const { service } = setup([row], { send: jest.fn(() => NEVER) });
+      const pending = service.list({});
+      await jest.advanceTimersByTimeAsync(CATALOG_DISPLAY_TIMEOUT_MS);
+      await expect(pending).resolves.toMatchObject({
+        items: [{ shopName: null, items: [{ imageUrl: null }] }],
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

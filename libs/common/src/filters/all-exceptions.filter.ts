@@ -62,7 +62,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ) {
         status = HttpStatus.PAYLOAD_TOO_LARGE;
         message =
-          'Request hajmi juda katta. Rasmlarni /api/v1/files/upload orqali yuboring';
+          'Request hajmi juda katta. Fayllarni alohida yuklash yo‘li orqali yuboring';
         errorCode = ErrorCode.PAYLOAD_TOO_LARGE;
       } else {
         message = 'Ichki xato';

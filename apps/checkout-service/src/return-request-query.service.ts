@@ -9,10 +9,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { DataSource } from 'typeorm';
 import {
   AdminReturnRequestsQueryDto,
-  CATALOG_DISPLAY_LOOKUP,
-  CatalogDisplayLookupResult,
   RmqClient,
-  sendRpc,
   ReturnRequestDetailsDto,
   ReturnRequestDto,
   ReturnRequestHistoryDto,
@@ -53,6 +50,7 @@ const SELECT_RETURN = `
          r.updated_at AS "updatedAt"
     FROM checkout.return_request r
     JOIN checkout.sales_order o ON o.id = r.sales_order_id`;
+import { catalogDisplayLookup } from './catalog-display.util';
 
 @Injectable()
 export class ReturnRequestQueryService {
@@ -198,14 +196,10 @@ export class ReturnRequestQueryService {
     if (!this.catalog || (!shopIds.length && !productIds.length))
       return { shops, images };
     try {
-      const result = await sendRpc<CatalogDisplayLookupResult>(
-        this.catalog,
-        { cmd: CATALOG_DISPLAY_LOOKUP },
-        {
-          shopIds: [...new Set(shopIds)],
-          productIds: [...new Set(productIds)],
-        },
-      );
+      const result = await catalogDisplayLookup(this.catalog, {
+        shopIds: [...new Set(shopIds)],
+        productIds: [...new Set(productIds)],
+      });
       for (const shop of result?.shops ?? [])
         if (shop.name) shops.set(String(shop.id), shop.name);
       for (const product of result?.products ?? [])

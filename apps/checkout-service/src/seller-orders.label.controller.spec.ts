@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SellerOrdersController } from './seller-orders.controller';
 import { SellerOrdersService } from './seller-orders.service';
 import { ShippingLabelService } from './shipping-label.service';
@@ -49,6 +49,64 @@ describe('SellerOrdersController label RPC (C1.45)', () => {
 
     expect(collectShippingLabels).toHaveBeenCalledWith(targets);
     expect(generateBatch).toHaveBeenCalledWith(expect.any(Array), missing);
+  });
+
+  it('admin partiya qisman: chiqqanlari PDF, chiqmaganlari skipped da', async () => {
+    const skipped = [{ orderId: '7', reason: 'QR tokeni mavjud emas' }];
+    const { controller } = batchController({
+      adminShippingLabelTargets: jest.fn().mockResolvedValue({
+        targets: [
+          { sellerOrderId: '9', orderId: '9', shopId: '4' },
+          { sellerOrderId: '7', orderId: '7', shopId: '4' },
+        ],
+        missing: [],
+      }),
+      collectShippingLabels: jest.fn().mockResolvedValue({
+        labels: [{ sellerOrderId: '9', salesOrderId: '9' }],
+        skipped,
+      }),
+    });
+
+    await expect(
+      controller.adminLabelsBatch({ orderIds: ['9', '7'] }),
+    ).resolves.toMatchObject({ fileName: 'shipments-1.pdf', skipped });
+  });
+
+  it('admin partiyada birortasi ham chiqmasa 409 — har biri sababi bilan, id takrorlanmaydi', async () => {
+    const { controller, generateBatch } = batchController({
+      adminShippingLabelTargets: jest.fn().mockResolvedValue({
+        targets: [{ sellerOrderId: '6', orderId: '6', shopId: '4' }],
+        missing: [],
+      }),
+      collectShippingLabels: jest.fn().mockResolvedValue({
+        labels: [],
+        skipped: [
+          {
+            orderId: '6',
+            reason: 'Yorliq uchun avval Elchi shipment yaratish kerak',
+          },
+          { orderId: '7', reason: 'Elchi shipment QR tokeni mavjud emas' },
+          { orderId: '8', reason: 'Elchi shipment QR tokeni mavjud emas' },
+          // bitta buyurtmaning ikki posilkasi — id takrorlanmaydi
+          {
+            orderId: '8',
+            sellerOrderId: '15',
+            reason: 'Elchi shipment QR tokeni mavjud emas',
+          },
+        ],
+      }),
+    });
+
+    const error = await controller
+      .adminLabelsBatch({ orderIds: ['6', '7', '8'] })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).message).toBe(
+      'Yorliq chiqmadi — Yorliq uchun avval Elchi shipment yaratish kerak: #6; ' +
+        'Elchi shipment QR tokeni mavjud emas: #7, #8',
+    );
+    expect(generateBatch).not.toHaveBeenCalled();
   });
 
   it('admin bitta buyurtma topilmasa 404', async () => {
