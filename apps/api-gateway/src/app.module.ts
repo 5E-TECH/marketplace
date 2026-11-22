@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   CommonAuthModule,
   CommonConfigModule,
@@ -72,30 +72,15 @@ import { AdminFraudController } from './leads/admin-fraud.controller';
 import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
 import { AdminOfferContentController } from './leads/admin-offer-content.controller';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
-import { SharedThrottlerStorage } from './rate-limit/shared-throttler.storage';
+import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
 
 @Module({
   imports: [
     CommonConfigModule, // .env + Joi (global)
     CommonAuthModule, // JWT + guardlar (global)
-    // Rate limiting — umumiy chegara. Auth kabi nozik endpointlarda
-    // controller darajasida @Throttle bilan qattiqroq limit qo'yiladi.
-    // BE-36: REDIS_URL berilsa hisob Redis'da — bir nechta gateway nusxasida umumiy.
+    // Rate limiting — umumiy chegara va saqlagich (BE-36: REDIS_URL bilan nusxalar orasida umumiy).
     RateLimitModule,
-    ThrottlerModule.forRootAsync({
-      imports: [RateLimitModule],
-      inject: [ConfigService, SharedThrottlerStorage],
-      useFactory: (config: ConfigService, storage: SharedThrottlerStorage) => ({
-        throttlers: [
-          {
-            name: 'default',
-            ttl: config.get<number>('RATE_LIMIT_WINDOW_MS', 60_000),
-            limit: config.get<number>('RATE_LIMIT_MAX', 300),
-          },
-        ],
-        storage,
-      }),
-    }),
+    gatewayThrottlerModule(),
     // Servislarga RMQ client'lari
     ClientsModule.registerAsync([
       {
