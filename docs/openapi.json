@@ -205,6 +205,63 @@
         ]
       }
     },
+    "/api/v1/auth/register/wholesaler": {
+      "post": {
+        "operationId": "AuthController_registerWholesaler",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterWholesalerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "accessToken": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OFFER_NOT_ACCEPTED — shartnoma yoki rozilikning joriy versiyasi qabul qilinmagan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHONE_ALREADY_REGISTERED; STIR band; shartnoma matni hali e’lon qilinmagan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "REGISTRATION_EXPIRED — telefonni qayta tasdiqlang"
+          }
+        },
+        "summary": "Optovik ro‘yxati (OPT-1): SMS tasdig‘idan keyin rekvizitlar, komissiya shartnomasi va rozilik; sessiya ochiladi, holat PENDING (admin tasdiqlaydi)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/register/affiliate": {
       "post": {
         "operationId": "AuthController_registerAffiliate",
@@ -7829,7 +7886,8 @@
             "schema": {
               "enum": [
                 "affiliate-offer",
-                "personal-data-consent"
+                "personal-data-consent",
+                "wholesaler-contract"
               ],
               "type": "string"
             }
@@ -7874,7 +7932,8 @@
             "schema": {
               "enum": [
                 "affiliate-offer",
-                "personal-data-consent"
+                "personal-data-consent",
+                "wholesaler-contract"
               ],
               "type": "string"
             }
@@ -8773,6 +8832,826 @@
         "summary": "E’tiroz bildirish — moliyaga boradi, javobi shu aktda ko‘rinadi",
         "tags": [
           "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/profile": {
+      "get": {
+        "operationId": "WholesalerCabinetController_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerProfileDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Optovik yozuvi yo‘q — POST /wholesaler/profile"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik profili: rekvizitlar, holat (PENDING — admin ko‘rmoqda), shartnoma",
+        "tags": [
+          "wholesaler"
+        ]
+      },
+      "post": {
+        "operationId": "WholesalerCabinetController_complete",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteWholesalerProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerProfileDto"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerProfileDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ro‘yxatni yakunlash: rekvizitlar, shartnoma va rozilik (yozuv bor bo‘lsa — o‘sha qaytadi, o‘zgarmaydi)",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/dashboard": {
+      "get": {
+        "operationId": "WholesalerCabinetController_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerDashboardDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Panel (OPT-3): mahsulotlar bo‘yicha omborda, bandda, yo‘lda, sotilgan, qaytgan, brak; pul holati",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/contract/link": {
+      "post": {
+        "operationId": "WholesalerCabinetController_contractLink",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Optovik yozuvi yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elektron komissiya shartnomasi PDF — 10 daqiqalik imzolangan havola (TC4)",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/documents/upload-policy": {
+      "post": {
+        "operationId": "WholesalerCabinetController_uploadPolicy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrivateUploadPolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateUploadPolicyResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hujjat yuklash (KYC, sertifikat): imzolangan POST — fayl yopiq joyga, PDF/JPEG/PNG, 10 MB gacha",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/documents": {
+      "post": {
+        "operationId": "WholesalerCabinetController_confirmDocument",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmWholesalerDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerDocumentDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuklangan hujjatni tasdiqlash: tur va tarkib tekshiriladi, yopiq joyga ko‘chiriladi, yozuv ochiladi",
+        "tags": [
+          "wholesaler"
+        ]
+      },
+      "get": {
+        "operationId": "WholesalerCabinetController_documents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WholesalerDocumentDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘z hujjatlarim",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/documents/{id}/link": {
+      "post": {
+        "operationId": "WholesalerCabinetController_documentLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa optovikning hujjati"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hujjatga 10 daqiqalik imzolangan havola",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/products": {
+      "post": {
+        "operationId": "WholesalerProductsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "403": {
+            "description": "Komissiya shartnomasi yo‘q yoki optovik rad etilgan/to‘xtatilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot taklifi: nom, tavsif, rasm, og‘irlik va o‘lcham, bazaviy narx (sertifikat — /wholesaler/documents)",
+        "tags": [
+          "wholesaler"
+        ]
+      },
+      "get": {
+        "operationId": "WholesalerProductsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘z mahsulotlarim (holat va admin izohi bilan)",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/products/{id}": {
+      "get": {
+        "operationId": "WholesalerProductsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Boshqa optovikning mahsuloti"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot kartasi",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/products/{id}/pricing": {
+      "get": {
+        "operationId": "WholesalerProductsController_pricing",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "price",
+            "required": false,
+            "in": "query",
+            "description": "Shu narxda taqsimot (sukut: tasdiqlangan yoki tavsiya)",
+            "schema": {
+              "example": 251000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Boshqa optovikning mahsuloti"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Narx hisobi (NRX-2): tavsiya narx, zararsizlik, qat’iy pastki chegara, taqsimot, platforma natijasi",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/shipments": {
+      "post": {
+        "operationId": "WholesalerShipmentsController_declare",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WholesalerShipmentDeclareDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Optovik tasdiqlanmagan yoki boshqa optovik mahsuloti"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavka arizasi: tovar, miqdor, kelish sanasi (OMB-1)",
+        "tags": [
+          "wholesaler"
+        ]
+      },
+      "get": {
+        "operationId": "WholesalerShipmentsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DECLARED",
+                "IN_TRANSIT",
+                "RECEIVED",
+                "DISCREPANCY"
+              ]
+            }
+          },
+          {
+            "name": "wholesalerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "15",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘z postavkalarim va holati",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/shipments/{id}": {
+      "get": {
+        "operationId": "WholesalerShipmentsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundShipmentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa optovik postavkasi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Postavka kartasi",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/shipments/{id}/act.pdf": {
+      "get": {
+        "operationId": "WholesalerShipmentsController_act",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Boshqa optovik postavkasi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qabul akti PDF (farq va brak bilan) — qabul qilingandan keyin",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}/review": {
+      "post": {
+        "operationId": "AdminWholesalerCabinetController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewWholesalerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerProfileDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Optovik PENDING holatida emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘zi ro‘yxatdan o‘tgan optovik: tasdiq (ACTIVE) yoki rad (REJECTED, sabab majburiy)",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}/owner": {
+      "post": {
+        "operationId": "AdminWholesalerCabinetController_linkOwner",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkWholesalerOwnerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WholesalerProfileDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Raqam boshqa foydalanuvchiniki yoki optovikning boshqa egasi bor"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Admin kiritgan optovikka kabinet: shu raqamga optovik foydalanuvchisi (SMS kod bilan kiradi)",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}/documents": {
+      "get": {
+        "operationId": "AdminWholesalerCabinetController_documents",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WholesalerDocumentDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Optovik hujjatlari (KYC, sertifikatlar)",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}/documents/{documentId}/link": {
+      "post": {
+        "operationId": "AdminWholesalerCabinetController_documentLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "documentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Hujjatga 10 daqiqalik imzolangan havola",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/admin/wholesalers/{id}/contract/link": {
+      "post": {
+        "operationId": "AdminWholesalerCabinetController_contractLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elektron komissiya shartnomasi PDF — imzolangan havola",
+        "tags": [
+          "admin-wholesalers"
+        ]
+      }
+    },
+    "/api/v1/signed-files/{token}": {
+      "get": {
+        "operationId": "SignedFilesController_get",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Imzosiz, buzilgan yoki muddati o‘tgan havola"
+          }
+        },
+        "summary": "Yopiq hujjat (imzolangan havola, 10 daqiqa)",
+        "tags": [
+          "files"
         ]
       }
     },
@@ -10630,6 +11509,75 @@
           "phone",
           "purpose",
           "code"
+        ]
+      },
+      "RegisterWholesalerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "example": "LEGAL_ENTITY"
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "description": "STIR, 9 raqam"
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank"
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "description": "Hisob raqami, 20 raqam"
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "description": "Bank MFO, 5 raqam"
+          },
+          "address": {
+            "type": "string",
+            "example": "Toshkent, Chilonzor 5"
+          },
+          "description": {
+            "type": "string",
+            "example": "Maishiy texnika optovigi"
+          },
+          "registrationToken": {
+            "type": "string",
+            "description": "OTP tasdig‘idan keyingi bir martalik token"
+          },
+          "contractVersion": {
+            "type": "string",
+            "example": "1.0",
+            "description": "Qabul qilingan komissiya shartnomasi versiyasi"
+          },
+          "consentVersion": {
+            "type": "string",
+            "example": "1.0",
+            "description": "Shaxsiy ma’lumotlarga rozilik versiyasi"
+          }
+        },
+        "required": [
+          "name",
+          "legalType",
+          "tin",
+          "bankName",
+          "bankAccount",
+          "bankMfo",
+          "registrationToken",
+          "contractVersion",
+          "consentVersion"
         ]
       },
       "RegisterAffiliateDto": {
@@ -12566,6 +13514,21 @@
             "nullable": true,
             "description": "Optovik kabineti foydalanuvchisi (BE-30)"
           },
+          "contractVersion": {
+            "type": "string",
+            "example": "1.0",
+            "nullable": true,
+            "description": "Elektron shartnoma versiyasi (o‘zi ro‘yxatdan o‘tgan optovik, BE-30); qog‘oz shartnomada null"
+          },
+          "contractAcceptedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "moderationNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ro‘yxat rad etilgan sabab (BE-30)"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -12587,6 +13550,9 @@
           "address",
           "description",
           "ownerUserId",
+          "contractVersion",
+          "contractAcceptedAt",
+          "moderationNote",
           "createdAt"
         ]
       },
@@ -16971,7 +17937,8 @@
             "type": "string",
             "enum": [
               "affiliate-offer",
-              "personal-data-consent"
+              "personal-data-consent",
+              "wholesaler-contract"
             ]
           },
           "version": {
@@ -17107,7 +18074,8 @@
             "type": "string",
             "enum": [
               "affiliate-offer",
-              "personal-data-consent"
+              "personal-data-consent",
+              "wholesaler-contract"
             ]
           },
           "version": {
@@ -17166,7 +18134,8 @@
             "type": "string",
             "enum": [
               "affiliate-offer",
-              "personal-data-consent"
+              "personal-data-consent",
+              "wholesaler-contract"
             ],
             "example": "affiliate-offer"
           },
@@ -17881,6 +18850,629 @@
         },
         "required": [
           "comment"
+        ]
+      },
+      "WholesalerProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "15"
+          },
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "slug": {
+            "type": "string",
+            "example": "gadget-trade-mchj-15"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "SUSPENDED",
+              "REJECTED"
+            ]
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "nullable": true
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "nullable": true
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank",
+            "nullable": true
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "nullable": true
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "nullable": true
+          },
+          "contractNumber": {
+            "type": "string",
+            "example": "K-2026/014",
+            "nullable": true
+          },
+          "contractDate": {
+            "type": "string",
+            "example": "2026-11-20",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerUserId": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Optovik kabineti foydalanuvchisi (BE-30)"
+          },
+          "contractVersion": {
+            "type": "string",
+            "example": "1.0",
+            "nullable": true,
+            "description": "Elektron shartnoma versiyasi (o‘zi ro‘yxatdan o‘tgan optovik, BE-30); qog‘oz shartnomada null"
+          },
+          "contractAcceptedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "moderationNote": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ro‘yxat rad etilgan sabab (BE-30)"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "legalType",
+          "tin",
+          "bankName",
+          "bankAccount",
+          "bankMfo",
+          "contractNumber",
+          "contractDate",
+          "phone",
+          "address",
+          "description",
+          "ownerUserId",
+          "contractVersion",
+          "contractAcceptedAt",
+          "moderationNote",
+          "createdAt"
+        ]
+      },
+      "CompleteWholesalerProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Gadget Trade MChJ"
+          },
+          "legalType": {
+            "type": "string",
+            "enum": [
+              "LEGAL_ENTITY",
+              "SOLE_PROPRIETOR"
+            ],
+            "example": "LEGAL_ENTITY"
+          },
+          "tin": {
+            "type": "string",
+            "example": "305123456",
+            "description": "STIR, 9 raqam"
+          },
+          "bankName": {
+            "type": "string",
+            "example": "Kapitalbank"
+          },
+          "bankAccount": {
+            "type": "string",
+            "example": "20208000900123456001",
+            "description": "Hisob raqami, 20 raqam"
+          },
+          "bankMfo": {
+            "type": "string",
+            "example": "01158",
+            "description": "Bank MFO, 5 raqam"
+          },
+          "address": {
+            "type": "string",
+            "example": "Toshkent, Chilonzor 5"
+          },
+          "description": {
+            "type": "string",
+            "example": "Maishiy texnika optovigi"
+          },
+          "contractVersion": {
+            "type": "string",
+            "example": "1.0"
+          },
+          "consentVersion": {
+            "type": "string",
+            "example": "1.0"
+          }
+        },
+        "required": [
+          "name",
+          "legalType",
+          "tin",
+          "bankName",
+          "bankAccount",
+          "bankMfo",
+          "contractVersion",
+          "consentVersion"
+        ]
+      },
+      "WholesalerStockRowDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "42"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Simsiz quloqchin"
+          },
+          "variantId": {
+            "type": "string",
+            "example": "901"
+          },
+          "sku": {
+            "type": "string",
+            "example": "Q-1"
+          },
+          "onHand": {
+            "type": "number",
+            "example": 120,
+            "description": "Omborda (jismonan)"
+          },
+          "reserved": {
+            "type": "number",
+            "example": 8,
+            "description": "Bandda"
+          },
+          "available": {
+            "type": "number",
+            "example": 110,
+            "description": "Sotuvda bor (omborda − band − muddati sabab to‘silgan)"
+          },
+          "inTransit": {
+            "type": "number",
+            "example": 50,
+            "description": "Yo‘lda — e’lon qilingan, hali qabul qilinmagan postavka"
+          },
+          "sold": {
+            "type": "number",
+            "example": 34,
+            "description": "Sotilgan (Elchi’ga topshirilgan)"
+          },
+          "returned": {
+            "type": "number",
+            "example": 3,
+            "description": "Qaytgan (saralangan)"
+          },
+          "defective": {
+            "type": "number",
+            "example": 2,
+            "description": "Brak (qabulda va qaytgan saralashda)"
+          }
+        },
+        "required": [
+          "productId",
+          "productName",
+          "variantId",
+          "sku",
+          "onHand",
+          "reserved",
+          "available",
+          "inTransit",
+          "sold",
+          "returned",
+          "defective"
+        ]
+      },
+      "WholesalerMoneyDto": {
+        "type": "object",
+        "properties": {
+          "held": {
+            "type": "number",
+            "example": 1250000,
+            "description": "Ushlab turilgan — Elchi puli hali kelmagan sotuvlar"
+          },
+          "payable": {
+            "type": "number",
+            "example": 980000,
+            "description": "To‘lanadigan"
+          },
+          "paid": {
+            "type": "number",
+            "example": 4300000,
+            "description": "To‘langan"
+          }
+        },
+        "required": [
+          "held",
+          "payable",
+          "paid"
+        ]
+      },
+      "WholesalerDashboardDto": {
+        "type": "object",
+        "properties": {
+          "stock": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WholesalerStockRowDto"
+            }
+          },
+          "stockTotals": {
+            "type": "object"
+          },
+          "money": {
+            "$ref": "#/components/schemas/WholesalerMoneyDto"
+          }
+        },
+        "required": [
+          "stock",
+          "stockTotals",
+          "money"
+        ]
+      },
+      "SignedLinkDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "/api/v1/signed-files/eyJ….c2ln"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt"
+        ]
+      },
+      "PrivateUploadPolicyDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "KYC",
+              "CERTIFICATE"
+            ]
+          },
+          "fileName": {
+            "type": "string",
+            "example": "guvohnoma.pdf"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ]
+          },
+          "size": {
+            "type": "number",
+            "example": 524288,
+            "description": "Bayt"
+          }
+        },
+        "required": [
+          "kind",
+          "fileName",
+          "contentType",
+          "size"
+        ]
+      },
+      "PrivateUploadPolicyResultDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "objectKey": {
+            "type": "string",
+            "example": "private-uploads/15/1f0c….pdf"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "maxSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "url",
+          "fields",
+          "objectKey",
+          "expiresAt",
+          "maxSize"
+        ]
+      },
+      "ConfirmWholesalerDocumentDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "KYC",
+              "CERTIFICATE"
+            ]
+          },
+          "objectKey": {
+            "type": "string",
+            "example": "private-uploads/15/1f0c….pdf"
+          },
+          "fileName": {
+            "type": "string",
+            "example": "guvohnoma.pdf"
+          },
+          "productId": {
+            "type": "string",
+            "example": "42",
+            "description": "Sertifikat qaysi mahsulotga (CERTIFICATE da majburiy)"
+          }
+        },
+        "required": [
+          "kind",
+          "objectKey",
+          "fileName"
+        ]
+      },
+      "WholesalerDocumentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "7"
+          },
+          "wholesalerId": {
+            "type": "string",
+            "example": "15"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "KYC",
+              "CERTIFICATE"
+            ]
+          },
+          "productId": {
+            "type": "string",
+            "example": "42",
+            "nullable": true
+          },
+          "fileName": {
+            "type": "string",
+            "example": "guvohnoma.pdf"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ]
+          },
+          "size": {
+            "type": "number",
+            "example": 524288
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "wholesalerId",
+          "kind",
+          "productId",
+          "fileName",
+          "contentType",
+          "size",
+          "createdAt"
+        ]
+      },
+      "CreateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "iPhone 16 Pro"
+          },
+          "categoryId": {
+            "type": "object",
+            "example": "1",
+            "nullable": true
+          },
+          "description": {
+            "type": "object",
+            "example": "Titanium, 256 GB"
+          },
+          "price": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "minimum": 0,
+            "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
+          },
+          "affiliateFee": {
+            "type": "object",
+            "example": 65000,
+            "minimum": 0,
+            "nullable": true,
+            "description": "Sotuvchi haqi (A), so‘m, har offer uchun (TZ 1-bo‘lim 8-qaror)"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "minimum": 1,
+            "description": "Bir dona og‘irligi, gramm (OPT-2, BUY-4)"
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "minimum": 1,
+            "description": "Uzunlik, mm"
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "minimum": 1,
+            "description": "Kenglik, mm"
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "minimum": 1,
+            "description": "Balandlik, mm"
+          },
+          "oldPrice": {
+            "type": "object",
+            "example": 15999000,
+            "minimum": 0,
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": "https://cdn.example.com/iphone.jpg",
+            "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
+          },
+          "images": {
+            "example": [
+              "https://cdn.example.com/iphone-1.jpg"
+            ],
+            "description": "Mahsulot rasmlari (agar imageUrl bo‘sh bo‘lsa, kamida bitta rasm talab qilinadi)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "example": {
+              "brand": "Apple",
+              "storage": "256 GB"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "basePrice",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm"
+        ]
+      },
+      "WholesalerShipmentDeclareDto": {
+        "type": "object",
+        "properties": {
+          "expectedAt": {
+            "type": "string",
+            "example": "2026-12-01",
+            "description": "Kutilgan kelish sanasi"
+          },
+          "note": {
+            "type": "string",
+            "example": "Haftalik postavka"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclareInboundItemDto"
+            }
+          }
+        },
+        "required": [
+          "expectedAt",
+          "items"
+        ]
+      },
+      "ReviewWholesalerDto": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVE",
+              "REJECT"
+            ],
+            "example": "APPROVE"
+          },
+          "note": {
+            "type": "string",
+            "example": "STIR soliq bazasida topilmadi",
+            "description": "Rad etishda majburiy"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "LinkWholesalerOwnerDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "+998901110015",
+            "description": "Optovik kabinetiga SMS kod bilan kiradigan raqam"
+          },
+          "name": {
+            "type": "string",
+            "example": "Akmal Karimov"
+          }
+        },
+        "required": [
+          "phone",
+          "name"
         ]
       },
       "PlatformLeadMetricsRowDto": {
