@@ -211,17 +211,24 @@ export class ElchiTariffDto {
   effectiveFrom?: string;
 }
 
+/** Misol: TZ 2.6 chegaralari (B = 140 000, A = 65 000, qisman) — 249 000 to‘q sariq (235 828 dan 251 183 gacha). */
 export class PriceDecisionViewDto {
-  @ApiProperty() id: string;
-  @ApiProperty() productId: string;
-  @ApiProperty() price: number;
-  @ApiProperty() basePrice: number;
-  @ApiProperty() affiliateFee: number;
-  @ApiProperty() recommended: number;
-  @ApiProperty({ enum: PriceStatus }) status: PriceStatus;
-  @ApiProperty({ nullable: true, type: String }) reason: string | null;
-  @ApiProperty() decidedBy: string;
-  @ApiProperty() createdAt: Date;
+  @ApiProperty({ example: '58' }) id: string;
+  @ApiProperty({ example: '42' }) productId: string;
+  @ApiProperty({ example: 249000 }) price: number;
+  @ApiProperty({ example: 140000 }) basePrice: number;
+  @ApiProperty({ example: 65000 }) affiliateFee: number;
+  @ApiProperty({ example: 262000 }) recommended: number;
+  @ApiProperty({ enum: PriceStatus, example: PriceStatus.ORANGE })
+  status: PriceStatus;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: 'Raqobatchi narxi past, pilot uchun',
+  })
+  reason: string | null;
+  @ApiProperty({ example: '3' }) decidedBy: string;
+  @ApiProperty({ example: '2026-11-21T10:02:00.000Z' }) createdAt: Date;
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -32,6 +33,15 @@ import {
   sendRpc,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import {
+  CATEGORY_POLICY_EXAMPLE,
+  ELCHI_TARIFF_EXAMPLE,
+  GLOBAL_POLICY_EXAMPLE,
+  MARKET_CHECK_EXAMPLE,
+  PRICE_DECISION_EXAMPLE,
+  PRICING_VIEW_EXAMPLE,
+  PRODUCT_POLICY_EXAMPLE,
+} from './admin-pricing.examples';
 
 /**
  * BE-09: narx kalkulyatori (TZ 2-bo‘lim, 6.13). Mahsulot narxini tasdiqlash — admin (TZ 3: «Mahsulot, narx va
@@ -55,6 +65,7 @@ export class AdminPricingController {
     description:
       '`price` va `affiliateFee` berilsa — shu qiymatlar bilan qayta hisoblanadi (tasdiqlashdan oldin).',
   })
+  @ApiOkResponse({ schema: { example: PRICING_VIEW_EXAMPLE } })
   calculate(
     @Param('id', ParseLeadIdPipe) id: string,
     @Query() query: PricingQueryDto,
@@ -71,6 +82,11 @@ export class AdminPricingController {
   @ApiOperation({
     summary:
       'Narxni tasdiqlash (NRX-6): qizil — 400; to‘q sariq — sabab majburiy, superadminga xabar',
+  })
+  @ApiCreatedResponse({
+    description:
+      '`decision` — saqlangan qaror; qolgan maydonlar — narx hisobi (`evaluation` yuborilgan narx bo‘yicha, `approvedPrice` va `priceStatus` qarordan oldingi holat)',
+    schema: { example: PRICE_DECISION_EXAMPLE },
   })
   async decide(
     @Param('id', ParseLeadIdPipe) id: string,
@@ -109,6 +125,7 @@ export class AdminPricingController {
     summary:
       'Bozor narxi tekshiruvi (NRX-5): «mos»/«qimmat» va optovik uchun eng yuqori bazaviy narx',
   })
+  @ApiCreatedResponse({ schema: { example: MARKET_CHECK_EXAMPLE } })
   async market(
     @Param('id', ParseLeadIdPipe) id: string,
     @Body() dto: MarketCheckDto,
@@ -130,6 +147,7 @@ export class AdminPricingController {
     summary:
       'Mahsulot darajasidagi sozlama: faqat yetkazish rejimi va ko‘rinadigan summa (TZ 2.4, NRX-8); null — yuqori darajadan. Pul parametrlari — superadmin',
   })
+  @ApiOkResponse({ schema: { example: PRODUCT_POLICY_EXAMPLE } })
   setProductPolicy(
     @Param('id', ParseLeadIdPipe) id: string,
     @Body() dto: ProductPricePolicyDto,
@@ -145,6 +163,7 @@ export class AdminPricingController {
     summary:
       'Global narx sozlamasi (K, M, foizlar, sotuvchi haqi koeffitsienti, yetkazish)',
   })
+  @ApiOkResponse({ schema: { example: GLOBAL_POLICY_EXAMPLE } })
   getGlobal() {
     return sendRpc(
       this.catalog,
@@ -156,6 +175,7 @@ export class AdminPricingController {
   @Put('pricing/policy')
   @Roles(Role.SUPERADMIN)
   @ApiOperation({ summary: 'Global narx sozlamasini o‘zgartirish (ADM-2)' })
+  @ApiOkResponse({ schema: { example: GLOBAL_POLICY_EXAMPLE } })
   setGlobal(
     @Body() dto: PricePolicyDto,
     @CurrentUser() admin: JwtUser,
@@ -167,6 +187,10 @@ export class AdminPricingController {
   @Get('pricing/policy/categories/:id')
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Kategoriya darajasidagi narx sozlamasi' })
+  @ApiOkResponse({
+    description: 'Daraja hali saqlanmagan bo‘lsa — hamma maydon `null`',
+    schema: { example: CATEGORY_POLICY_EXAMPLE },
+  })
   getCategory(@Param('id', ParseLeadIdPipe) id: string) {
     return sendRpc(
       this.catalog,
@@ -180,6 +204,7 @@ export class AdminPricingController {
   @ApiOperation({
     summary: 'Kategoriya darajasidagi narx sozlamasi (null — globaldan)',
   })
+  @ApiOkResponse({ schema: { example: CATEGORY_POLICY_EXAMPLE } })
   setCategory(
     @Param('id', ParseLeadIdPipe) id: string,
     @Body() dto: PricePolicyDto,
@@ -192,6 +217,10 @@ export class AdminPricingController {
   @Get('pricing/elchi-tariffs')
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Elchi tariflari tarixi (NRX-7)' })
+  @ApiOkResponse({
+    description: 'Yangisi birinchi (`effectiveFrom` kamayish tartibida)',
+    schema: { example: [ELCHI_TARIFF_EXAMPLE] },
+  })
   tariffs() {
     return sendRpc(this.catalog, { cmd: 'catalog.pricing.tariff-list' }, {});
   }
@@ -202,6 +231,7 @@ export class AdminPricingController {
     summary:
       'Yangi Elchi tarifi kuchga kirish vaqti bilan (NRX-7); yaratilgan buyurtmalarga ta’sir qilmaydi',
   })
+  @ApiCreatedResponse({ schema: { example: ELCHI_TARIFF_EXAMPLE } })
   async addTariff(
     @Body() dto: ElchiTariffDto,
     @CurrentUser() admin: JwtUser,

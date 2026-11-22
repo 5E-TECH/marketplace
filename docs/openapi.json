@@ -4875,7 +4875,77 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "productId": "42",
+                    "approvalCurrent": true,
+                    "params": {
+                      "kSale70": 29688,
+                      "kSale100": 15232,
+                      "targetMargin": 9000,
+                      "taxRate": 0.04,
+                      "paymentRate": 0.0185,
+                      "callCenterFee": 12000,
+                      "affiliateCoef": 1.29,
+                      "adCost": 50420,
+                      "markupCapPercent": 10,
+                      "deliveryMode": "PARTIAL",
+                      "visibleCenter": 30000,
+                      "visibleAddress": 50000
+                    },
+                    "tariff": {
+                      "centerBase": 40000,
+                      "baseWeightGrams": 3000,
+                      "perExtraKg": 4000,
+                      "addressExtra": 20000
+                    },
+                    "recommendedAffiliateFee": 65000,
+                    "calculation": {
+                      "basePrice": 140000,
+                      "affiliateFee": 65000,
+                      "recommendedBase": 251000,
+                      "breakevenBase": 240561,
+                      "hardFloorBase": 225206,
+                      "delivery": {
+                        "tariffCenter": 40000,
+                        "tariffAddress": 60000,
+                        "visibleCenter": 30000,
+                        "visibleAddress": 50000,
+                        "hidden": 10000,
+                        "hiddenPriceAdd": 11000
+                      },
+                      "recommended": 262000,
+                      "yellowFrom": 251183,
+                      "orangeFrom": 235828,
+                      "platformSharePercent": 18.3
+                    },
+                    "evaluation": {
+                      "status": "GREEN",
+                      "price": 262000,
+                      "split": {
+                        "wholesaler": 140000,
+                        "affiliate": 65000,
+                        "callCenter": 12000,
+                        "platformService": 34000,
+                        "hiddenDelivery": 11000
+                      },
+                      "platformResult70": 10185,
+                      "platformResult100": 24641,
+                      "affiliateResult": 14580,
+                      "belowRecommended": 0,
+                      "safeAffiliateFee": null
+                    },
+                    "approvedPrice": 262000,
+                    "priceStatus": "GREEN",
+                    "marketTotal": 299000,
+                    "maxSalePrice": 269000
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4914,7 +4984,89 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "`decision` — saqlangan qaror; qolgan maydonlar — narx hisobi (`evaluation` yuborilgan narx bo‘yicha, `approvedPrice` va `priceStatus` qarordan oldingi holat)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "decision": {
+                      "id": "57",
+                      "productId": "42",
+                      "price": 262000,
+                      "basePrice": 140000,
+                      "affiliateFee": 65000,
+                      "recommended": 262000,
+                      "status": "GREEN",
+                      "reason": null,
+                      "decidedBy": "3",
+                      "createdAt": "2026-11-20T09:15:00.000Z"
+                    },
+                    "productId": "42",
+                    "approvalCurrent": false,
+                    "params": {
+                      "kSale70": 29688,
+                      "kSale100": 15232,
+                      "targetMargin": 9000,
+                      "taxRate": 0.04,
+                      "paymentRate": 0.0185,
+                      "callCenterFee": 12000,
+                      "affiliateCoef": 1.29,
+                      "adCost": 50420,
+                      "markupCapPercent": 10,
+                      "deliveryMode": "PARTIAL",
+                      "visibleCenter": 30000,
+                      "visibleAddress": 50000
+                    },
+                    "tariff": {
+                      "centerBase": 40000,
+                      "baseWeightGrams": 3000,
+                      "perExtraKg": 4000,
+                      "addressExtra": 20000
+                    },
+                    "recommendedAffiliateFee": 65000,
+                    "calculation": {
+                      "basePrice": 140000,
+                      "affiliateFee": 65000,
+                      "recommendedBase": 251000,
+                      "breakevenBase": 240561,
+                      "hardFloorBase": 225206,
+                      "delivery": {
+                        "tariffCenter": 40000,
+                        "tariffAddress": 60000,
+                        "visibleCenter": 30000,
+                        "visibleAddress": 50000,
+                        "hidden": 10000,
+                        "hiddenPriceAdd": 11000
+                      },
+                      "recommended": 262000,
+                      "yellowFrom": 251183,
+                      "orangeFrom": 235828,
+                      "platformSharePercent": 18.3
+                    },
+                    "evaluation": {
+                      "status": "GREEN",
+                      "price": 262000,
+                      "split": {
+                        "wholesaler": 140000,
+                        "affiliate": 65000,
+                        "callCenter": 12000,
+                        "platformService": 34000,
+                        "hiddenDelivery": 11000
+                      },
+                      "platformResult70": 10185,
+                      "platformResult100": 24641,
+                      "affiliateResult": 14580,
+                      "belowRecommended": 0,
+                      "safeAffiliateFee": null
+                    },
+                    "approvedPrice": null,
+                    "priceStatus": null,
+                    "marketTotal": null,
+                    "maxSalePrice": null
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4992,7 +5144,19 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "ourTotal": 292000,
+                    "competitorTotal": 299000,
+                    "verdict": "MOS",
+                    "maxBasePrice": 148099
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5031,7 +5195,31 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "scope": "PRODUCT",
+                    "scopeId": "42",
+                    "kSale70": null,
+                    "kSale100": null,
+                    "targetMargin": null,
+                    "taxRate": null,
+                    "paymentRate": null,
+                    "callCenterFee": null,
+                    "affiliateCoef": null,
+                    "adCost": null,
+                    "markupCapPercent": null,
+                    "deliveryMode": "FREE",
+                    "visibleCenter": null,
+                    "visibleAddress": null,
+                    "updatedBy": "3",
+                    "updatedAt": "2026-11-21T11:45:00.000Z"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5051,7 +5239,31 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "scope": "GLOBAL",
+                    "scopeId": null,
+                    "kSale70": 29688,
+                    "kSale100": 15232,
+                    "targetMargin": 9000,
+                    "taxRate": 0.04,
+                    "paymentRate": 0.0185,
+                    "callCenterFee": 12000,
+                    "affiliateCoef": 1.29,
+                    "adCost": 50420,
+                    "markupCapPercent": 10,
+                    "deliveryMode": "PARTIAL",
+                    "visibleCenter": 30000,
+                    "visibleAddress": 50000,
+                    "updatedBy": "1",
+                    "updatedAt": "2026-11-20T08:30:00.000Z"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5079,7 +5291,31 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "scope": "GLOBAL",
+                    "scopeId": null,
+                    "kSale70": 29688,
+                    "kSale100": 15232,
+                    "targetMargin": 9000,
+                    "taxRate": 0.04,
+                    "paymentRate": 0.0185,
+                    "callCenterFee": 12000,
+                    "affiliateCoef": 1.29,
+                    "adCost": 50420,
+                    "markupCapPercent": 10,
+                    "deliveryMode": "PARTIAL",
+                    "visibleCenter": 30000,
+                    "visibleAddress": 50000,
+                    "updatedBy": "1",
+                    "updatedAt": "2026-11-20T08:30:00.000Z"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5108,7 +5344,31 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Daraja hali saqlanmagan bo‘lsa — hamma maydon `null`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "scope": "CATEGORY",
+                    "scopeId": "5",
+                    "kSale70": null,
+                    "kSale100": null,
+                    "targetMargin": null,
+                    "taxRate": null,
+                    "paymentRate": null,
+                    "callCenterFee": null,
+                    "affiliateCoef": null,
+                    "adCost": null,
+                    "markupCapPercent": 15,
+                    "deliveryMode": null,
+                    "visibleCenter": null,
+                    "visibleAddress": null,
+                    "updatedBy": "1",
+                    "updatedAt": "2026-11-21T07:10:00.000Z"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5145,7 +5405,31 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "scope": "CATEGORY",
+                    "scopeId": "5",
+                    "kSale70": null,
+                    "kSale100": null,
+                    "targetMargin": null,
+                    "taxRate": null,
+                    "paymentRate": null,
+                    "callCenterFee": null,
+                    "affiliateCoef": null,
+                    "adCost": null,
+                    "markupCapPercent": 15,
+                    "deliveryMode": null,
+                    "visibleCenter": null,
+                    "visibleAddress": null,
+                    "updatedBy": "1",
+                    "updatedAt": "2026-11-21T07:10:00.000Z"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5165,7 +5449,27 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Yangisi birinchi (`effectiveFrom` kamayish tartibida)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": [
+                    {
+                      "id": "2",
+                      "centerBase": 40000,
+                      "baseWeightGrams": 3000,
+                      "perExtraKg": 4000,
+                      "addressExtra": 20000,
+                      "effectiveFrom": "2026-11-30T19:00:00.000Z",
+                      "createdBy": "1",
+                      "createdAt": "2026-11-21T12:00:00.000Z",
+                      "updatedAt": "2026-11-21T12:00:00.000Z",
+                      "isDeleted": false
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5193,7 +5497,25 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "2",
+                    "centerBase": 40000,
+                    "baseWeightGrams": 3000,
+                    "perExtraKg": 4000,
+                    "addressExtra": 20000,
+                    "effectiveFrom": "2026-11-30T19:00:00.000Z",
+                    "createdBy": "1",
+                    "createdAt": "2026-11-21T12:00:00.000Z",
+                    "updatedAt": "2026-11-21T12:00:00.000Z",
+                    "isDeleted": false
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6957,7 +7279,19 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "operation": "INBOUND",
+                    "stockId": "31",
+                    "onHand": 120,
+                    "reserved": 4
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6987,7 +7321,19 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "operation": "ADJUST",
+                    "stockId": "31",
+                    "onHand": 119,
+                    "reserved": 4
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -7017,7 +7363,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
             "content": {
               "application/json": {
@@ -7248,6 +7594,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "PDF fayl: `qabul-akti_PS-000014.pdf`",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Postavka hali qabul qilinmagan"
           }
@@ -8711,7 +9068,15 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "CSV fayl (UTF-8 BOM, «;»): `s1-s3-sinov_<from>_<to>.csv`, qatorlari JSON hisobotdagi `rows` bilan bir xil",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -10041,6 +10406,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "CSV fayl (UTF-8 BOM, «;»): `bank-topshiriqnoma_<sana>.csv`, har akt — bitta qator",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Bu davrda to‘lanadigan akt yo‘q"
           }
@@ -10147,6 +10523,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "PDF fayl: `akt-sverka_<akt raqami>_<davr oxiri>.pdf`",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Akt topilmadi"
           }
@@ -10648,7 +11035,63 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Sahifalashsiz, 1 000 qatorgacha; oshsa `truncated: true`. Topshirilgan va bekor qilingan vazifalar chiqmaydi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "date": "2026-12-08",
+                    "items": [
+                      {
+                        "taskId": "305",
+                        "orderId": "1281",
+                        "orderNumber": "L-1281",
+                        "status": "PACKED",
+                        "pickDate": "2026-12-07",
+                        "overdue": true,
+                        "productName": "Kollagen kukuni, 300 g",
+                        "sku": "KOL-300",
+                        "barcode": null,
+                        "quantity": 1,
+                        "pickedQty": 1,
+                        "parcel": {
+                          "elchiState": "FAILED",
+                          "shipmentId": null,
+                          "labelReady": false,
+                          "error": "DISTRICT_NOT_FOUND: Tuman topilmadi: SOATO 1726266 (viloyat 1726)"
+                        }
+                      },
+                      {
+                        "taskId": "311",
+                        "orderId": "1290",
+                        "orderNumber": "L-1290",
+                        "status": "TO_PICK",
+                        "pickDate": "2026-12-08",
+                        "overdue": false,
+                        "productName": "Vitamin D3 2000 IU, 60 kapsula",
+                        "sku": "VIT-D3-60",
+                        "barcode": "4780012345678",
+                        "quantity": 2,
+                        "pickedQty": 0,
+                        "parcel": {
+                          "elchiState": "CREATED",
+                          "shipmentId": "987",
+                          "labelReady": true,
+                          "error": null
+                        }
+                      }
+                    ],
+                    "counts": {
+                      "toPick": 1,
+                      "picked": 0,
+                      "packed": 1,
+                      "overdue": 1
+                    },
+                    "truncated": false
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -10687,6 +11130,22 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "taskId": "311",
+                    "orderId": "1290",
+                    "status": "TO_PICK",
+                    "pickedQty": 1,
+                    "quantity": 2
+                  }
+                }
+              }
+            }
+          },
           "409": {
             "description": "WRONG_ITEM — boshqa tovar; INVALID_STATE — vazifa holati"
           }
@@ -10716,6 +11175,20 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "taskId": "311",
+                    "orderId": "1290",
+                    "status": "PACKED"
+                  }
+                }
+              }
+            }
+          },
           "409": {
             "description": "INVALID_STATE — hali yig‘ilmagan"
           }
@@ -10745,6 +11218,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Chop etishga tayyor PDF yorliq",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Buyurtma topilmadi"
           },
@@ -10779,8 +11263,29 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Akt: raqam, sana, posilkalar"
+          "201": {
+            "description": "Akt: raqam, sana, posilkalar. Xuddi shu QR to‘plami qayta yuborilsa — o‘sha akt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "27",
+                    "parcelCount": 1,
+                    "createdBy": "5",
+                    "createdAt": "2026-12-08 16:20",
+                    "items": [
+                      {
+                        "parcelId": "1196",
+                        "orderId": "1290",
+                        "shipmentId": "987",
+                        "qrCodeToken": "3e3a70f78d54064348bde43a",
+                        "orderNumber": "L-1290"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Akt tuzilmadi: qaysi posilka va nima uchun"
@@ -10811,6 +11316,30 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "27",
+                    "parcelCount": 1,
+                    "createdBy": "5",
+                    "createdAt": "2026-12-08 16:20",
+                    "items": [
+                      {
+                        "parcelId": "1196",
+                        "orderId": "1290",
+                        "shipmentId": "987",
+                        "qrCodeToken": "3e3a70f78d54064348bde43a",
+                        "orderNumber": "L-1290"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
           "404": {
             "description": "Akt topilmadi"
           }
@@ -10840,6 +11369,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "PDF fayl (imzo uchun)",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Akt topilmadi"
           }
@@ -10861,7 +11401,32 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "«Qaytmoqda» holatidagi lid buyurtmalari, eng eskisi birinchi, 200 tagacha",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": [
+                    {
+                      "orderId": "1284",
+                      "status": "RETURNING",
+                      "parcelId": "1190",
+                      "shipmentId": "975",
+                      "trackingUrl": "https://elchi.uz/track/975",
+                      "updatedAt": "2026-12-07T13:05:00.000Z",
+                      "items": [
+                        {
+                          "variantId": "901",
+                          "productName": "Vitamin D3 2000 IU, 60 kapsula",
+                          "sku": "VIT-D3-60",
+                          "barcode": "4780012345678",
+                          "quantity": 2
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -10938,6 +11503,17 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "PDF fayl: `brak-akti_<buyurtma ID>.pdf`",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Bu posilkada brak yo‘q"
           }
@@ -14712,22 +15288,28 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "example": "58"
           },
           "productId": {
-            "type": "string"
+            "type": "string",
+            "example": "42"
           },
           "price": {
-            "type": "number"
+            "type": "number",
+            "example": 249000
           },
           "basePrice": {
-            "type": "number"
+            "type": "number",
+            "example": 140000
           },
           "affiliateFee": {
-            "type": "number"
+            "type": "number",
+            "example": 65000
           },
           "recommended": {
-            "type": "number"
+            "type": "number",
+            "example": 262000
           },
           "status": {
             "type": "string",
@@ -14736,18 +15318,22 @@
               "YELLOW",
               "ORANGE",
               "RED"
-            ]
+            ],
+            "example": "ORANGE"
           },
           "reason": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "example": "Raqobatchi narxi past, pilot uchun"
           },
           "decidedBy": {
-            "type": "string"
+            "type": "string",
+            "example": "3"
           },
           "createdAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "example": "2026-11-21T10:02:00.000Z"
           }
         },
         "required": [
@@ -15121,7 +15707,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "example": "12"
           },
           "audience": {
             "type": "string",
@@ -15129,10 +15716,14 @@
               "all",
               "sellers",
               "buyers"
-            ]
+            ],
+            "example": "sellers"
           },
           "channels": {
             "type": "array",
+            "example": [
+              "sms"
+            ],
             "items": {
               "type": "string",
               "enum": [
@@ -15142,16 +15733,20 @@
             }
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "example": "Yangi aksiya"
           },
           "body": {
-            "type": "string"
+            "type": "string",
+            "example": "Bugundan 20% chegirma!"
           },
           "recipientsCount": {
-            "type": "number"
+            "type": "number",
+            "example": 42
           },
           "sentCount": {
-            "type": "number"
+            "type": "number",
+            "example": 42
           },
           "status": {
             "type": "string",
@@ -15160,22 +15755,27 @@
               "SENDING",
               "DONE",
               "FAILED"
-            ]
+            ],
+            "example": "DONE"
           },
           "createdBy": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "example": "1"
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "example": "2026-11-20T08:00:00.000Z"
           },
           "finishedAt": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "example": "2026-11-20T08:00:41.000Z"
           },
           "lastError": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "example": null
           },
           "idempotent": {
             "type": "boolean",
@@ -15207,16 +15807,20 @@
             }
           },
           "total": {
-            "type": "number"
+            "type": "number",
+            "example": 1
           },
           "page": {
-            "type": "number"
+            "type": "number",
+            "example": 1
           },
           "limit": {
-            "type": "number"
+            "type": "number",
+            "example": 20
           },
           "totalPages": {
-            "type": "number"
+            "type": "number",
+            "example": 1
           }
         },
         "required": [
@@ -16386,46 +16990,58 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "example": "7"
           },
           "productId": {
-            "type": "string"
+            "type": "string",
+            "example": "42"
           },
           "productName": {
-            "type": "string"
+            "type": "string",
+            "example": "Vitamin D3 2000 IU, 60 kapsula"
           },
           "variantId": {
-            "type": "string"
+            "type": "string",
+            "example": "901"
           },
           "sku": {
-            "type": "string"
+            "type": "string",
+            "example": "VIT-D3-60"
           },
           "barcode": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "4780012345678"
           },
           "declaredQty": {
-            "type": "number"
+            "type": "number",
+            "example": 100
           },
           "receivedQty": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": 98
           },
           "defectiveQty": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": 2
           },
           "batch": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "P-2026-11"
           },
           "expiryDate": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "2027-06-30"
           },
           "cell": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "B-02-1"
           }
         },
         "required": [
@@ -16441,13 +17057,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "example": "14"
           },
           "number": {
-            "type": "string"
+            "type": "string",
+            "example": "PS-000014"
           },
           "wholesalerId": {
-            "type": "string"
+            "type": "string",
+            "example": "15"
           },
           "status": {
             "type": "string",
@@ -16456,29 +17075,36 @@
               "IN_TRANSIT",
               "RECEIVED",
               "DISCREPANCY"
-            ]
+            ],
+            "example": "DISCREPANCY"
           },
           "expectedAt": {
-            "type": "string"
+            "type": "string",
+            "example": "2026-12-01"
           },
           "note": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "Haftalik postavka"
           },
           "declaredBy": {
-            "type": "string"
+            "type": "string",
+            "example": "3"
           },
           "receivedBy": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "5"
           },
           "receivedAt": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "2026-12-01T06:40:00.000Z"
           },
           "receiveComment": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "2 dona qadog‘i yirtilgan"
           },
           "items": {
             "type": "array",
@@ -16488,7 +17114,8 @@
           },
           "createdAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "example": "2026-11-28T10:05:00.000Z"
           }
         },
         "required": [
@@ -16512,13 +17139,16 @@
             }
           },
           "total": {
-            "type": "number"
+            "type": "number",
+            "example": 1
           },
           "page": {
-            "type": "number"
+            "type": "number",
+            "example": 1
           },
           "limit": {
-            "type": "number"
+            "type": "number",
+            "example": 20
           }
         },
         "required": [
@@ -16590,33 +17220,42 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "example": "31"
           },
           "variantId": {
-            "type": "string"
+            "type": "string",
+            "example": "901"
           },
           "sku": {
-            "type": "string"
+            "type": "string",
+            "example": "VIT-D3-60"
           },
           "productName": {
-            "type": "string"
+            "type": "string",
+            "example": "Vitamin D3 2000 IU, 60 kapsula"
           },
           "batch": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "P-2026-11"
           },
           "expiryDate": {
-            "type": "string"
+            "type": "string",
+            "example": "2027-06-30"
           },
           "sellableUntil": {
             "type": "string",
-            "description": "Muddat − 60 kun; shundan keyin sotilmaydi"
+            "description": "Muddat − 60 kun; shundan keyin sotilmaydi",
+            "example": "2027-05-01"
           },
           "quantity": {
-            "type": "number"
+            "type": "number",
+            "example": 96
           },
           "blocked": {
-            "type": "boolean"
+            "type": "boolean",
+            "example": false
           }
         },
         "required": [
@@ -20476,11 +21115,13 @@
         "type": "object",
         "properties": {
           "orderId": {
-            "type": "string"
+            "type": "string",
+            "example": "1284"
           },
           "parcelId": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "1190"
           },
           "items": {
             "type": "array",
@@ -20497,18 +21138,28 @@
                   "type": "number"
                 }
               }
-            }
+            },
+            "example": [
+              {
+                "variantId": "901",
+                "sellable": 1,
+                "defective": 1
+              }
+            ]
           },
           "comment": {
             "type": "object",
-            "nullable": true
+            "nullable": true,
+            "example": "Qadog‘i ezilgan"
           },
           "inspectedBy": {
-            "type": "string"
+            "type": "string",
+            "example": "5"
           },
           "inspectedAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "example": "2026-12-08T09:30:00.000Z"
           }
         },
         "required": [

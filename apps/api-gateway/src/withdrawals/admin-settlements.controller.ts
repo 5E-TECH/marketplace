@@ -74,6 +74,11 @@ export class AdminSettlementsController {
       'Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).',
   })
   @ApiProduces('text/csv')
+  @ApiOkResponse({
+    description:
+      'CSV fayl (UTF-8 BOM, «;»): `bank-topshiriqnoma_<sana>.csv`, har akt — bitta qator',
+    content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+  })
   @ApiNotFoundResponse({ description: 'Bu davrda to‘lanadigan akt yo‘q' })
   async bankFile(
     @Query() query: BankFileQueryDto,
@@ -119,6 +124,12 @@ export class AdminSettlementsController {
   @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Akt-sverka PDF' })
   @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    description: 'PDF fayl: `akt-sverka_<akt raqami>_<davr oxiri>.pdf`',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
   async actPdf(
     @Param('id', ParseLeadIdPipe) id: string,

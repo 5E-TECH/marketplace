@@ -19,6 +19,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiProduces,
@@ -54,6 +55,14 @@ import {
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
+/** inventory `stockResult`: amal, HQ qoldiq qatori va undan keyingi qoldiq (takror kalit — o‘sha javob). */
+const stockResultExample = (
+  operation: 'INBOUND' | 'ADJUST',
+  onHand: number,
+) => ({
+  schema: { example: { operation, stockId: '31', onHand, reserved: 4 } },
+});
+
 @ApiTags('admin-inventory')
 @ApiBearerAuth()
 // TZ 3: qoldiqni ko‘rish — omborchi va admin (BE-05)
@@ -69,6 +78,7 @@ export class AdminInventoryController {
   @ApiOperation({
     summary: 'HQ omborga kirim (omborchi) — BE-16; to‘liq qabul akti BE-17 da',
   })
+  @ApiCreatedResponse(stockResultExample('INBOUND', 120))
   async inbound(
     @Body() dto: AdminStockInboundDto,
     @CurrentUser() user: JwtUser,
@@ -94,6 +104,7 @@ export class AdminInventoryController {
     summary:
       'HQ qoldig‘ini tuzatish (inventarizatsiya); band qilingandan kam bo‘lmaydi',
   })
+  @ApiCreatedResponse(stockResultExample('ADJUST', 119))
   async adjust(
     @Body() dto: AdminStockAdjustDto,
     @CurrentUser() user: JwtUser,
@@ -143,7 +154,7 @@ export class AdminInventoryController {
     description:
       'CPA mahsulotlarining yagona varianti; mahsulot shu optovikniki bo‘lishi shart. Holat «E’lon qilindi».',
   })
-  @ApiOkResponse({ type: InboundShipmentDto })
+  @ApiCreatedResponse({ type: InboundShipmentDto })
   @ApiBadRequestResponse({
     description: 'Mahsulot topilmadi yoki boshqa optovikniki',
   })
@@ -219,6 +230,12 @@ export class AdminInventoryController {
   @Get('shipments/:id/act.pdf')
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Qabul (farq va brak) akti PDF — optovikka qo‘lda' })
+  @ApiOkResponse({
+    description: 'PDF fayl: `qabul-akti_PS-000014.pdf`',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiConflictResponse({ description: 'Postavka hali qabul qilinmagan' })
   async shipmentAct(
     @Param('id', ParseLeadIdPipe) id: string,

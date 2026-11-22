@@ -201,55 +201,79 @@ export class LotsQueryDto {
   state?: 'BLOCKED' | 'SELLABLE' | 'ALL';
 }
 
+/**
+ * Javob misollari (BE-25 TC3) bitta postavka bo‘yicha: e’londa 100 dona, qabulda 98 keldi, 2 tasi brak — «Farq bor»;
+ * qoldiqqa va partiyaga 96 dona. Qabulgacha `received*`, `batch`, `expiryDate`, `cell` — `null`.
+ */
 export class InboundShipmentItemDto {
-  @ApiProperty() id: string;
-  @ApiProperty() productId: string;
-  @ApiProperty() productName: string;
-  @ApiProperty() variantId: string;
-  @ApiProperty() sku: string;
-  @ApiPropertyOptional({ nullable: true }) barcode: string | null;
-  @ApiProperty() declaredQty: number;
-  @ApiPropertyOptional({ nullable: true }) receivedQty: number | null;
-  @ApiPropertyOptional({ nullable: true }) defectiveQty: number | null;
-  @ApiPropertyOptional({ nullable: true }) batch: string | null;
-  @ApiPropertyOptional({ nullable: true }) expiryDate: string | null;
-  @ApiPropertyOptional({ nullable: true }) cell: string | null;
+  @ApiProperty({ example: '7' }) id: string;
+  @ApiProperty({ example: '42' }) productId: string;
+  @ApiProperty({ example: 'Vitamin D3 2000 IU, 60 kapsula' })
+  productName: string;
+  @ApiProperty({ example: '901' }) variantId: string;
+  @ApiProperty({ example: 'VIT-D3-60' }) sku: string;
+  @ApiPropertyOptional({ nullable: true, example: '4780012345678' })
+  barcode: string | null;
+  @ApiProperty({ example: 100 }) declaredQty: number;
+  @ApiPropertyOptional({ nullable: true, example: 98 })
+  receivedQty: number | null;
+  @ApiPropertyOptional({ nullable: true, example: 2 })
+  defectiveQty: number | null;
+  @ApiPropertyOptional({ nullable: true, example: 'P-2026-11' })
+  batch: string | null;
+  @ApiPropertyOptional({ nullable: true, example: '2027-06-30' })
+  expiryDate: string | null;
+  @ApiPropertyOptional({ nullable: true, example: 'B-02-1' })
+  cell: string | null;
 }
 
 export class InboundShipmentDto {
-  @ApiProperty() id: string;
-  @ApiProperty() number: string;
-  @ApiProperty() wholesalerId: string;
-  @ApiProperty({ enum: InboundShipmentStatus }) status: InboundShipmentStatus;
-  @ApiProperty() expectedAt: string;
-  @ApiPropertyOptional({ nullable: true }) note: string | null;
-  @ApiProperty() declaredBy: string;
-  @ApiPropertyOptional({ nullable: true }) receivedBy: string | null;
-  @ApiPropertyOptional({ nullable: true }) receivedAt: Date | null;
-  @ApiPropertyOptional({ nullable: true }) receiveComment: string | null;
+  @ApiProperty({ example: '14' }) id: string;
+  @ApiProperty({ example: 'PS-000014' }) number: string;
+  @ApiProperty({ example: '15' }) wholesalerId: string;
+  @ApiProperty({
+    enum: InboundShipmentStatus,
+    example: InboundShipmentStatus.DISCREPANCY,
+  })
+  status: InboundShipmentStatus;
+  @ApiProperty({ example: '2026-12-01' }) expectedAt: string;
+  @ApiPropertyOptional({ nullable: true, example: 'Haftalik postavka' })
+  note: string | null;
+  @ApiProperty({ example: '3' }) declaredBy: string;
+  @ApiPropertyOptional({ nullable: true, example: '5' })
+  receivedBy: string | null;
+  @ApiPropertyOptional({ nullable: true, example: '2026-12-01T06:40:00.000Z' })
+  receivedAt: Date | null;
+  @ApiPropertyOptional({ nullable: true, example: '2 dona qadog‘i yirtilgan' })
+  receiveComment: string | null;
   @ApiProperty({ type: [InboundShipmentItemDto] })
   items: InboundShipmentItemDto[];
-  @ApiProperty() createdAt: Date;
+  @ApiProperty({ example: '2026-11-28T10:05:00.000Z' }) createdAt: Date;
 }
 
 export class InboundShipmentPageDto {
   @ApiProperty({ type: [InboundShipmentDto] }) items: InboundShipmentDto[];
-  @ApiProperty() total: number;
-  @ApiProperty() page: number;
-  @ApiProperty() limit: number;
+  @ApiProperty({ example: 1 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
 }
 
 export class StockLotDto {
-  @ApiProperty() id: string;
-  @ApiProperty() variantId: string;
-  @ApiProperty() sku: string;
-  @ApiProperty() productName: string;
-  @ApiPropertyOptional({ nullable: true }) batch: string | null;
-  @ApiProperty() expiryDate: string;
-  @ApiProperty({ description: 'Muddat − 60 kun; shundan keyin sotilmaydi' })
+  @ApiProperty({ example: '31' }) id: string;
+  @ApiProperty({ example: '901' }) variantId: string;
+  @ApiProperty({ example: 'VIT-D3-60' }) sku: string;
+  @ApiProperty({ example: 'Vitamin D3 2000 IU, 60 kapsula' })
+  productName: string;
+  @ApiPropertyOptional({ nullable: true, example: 'P-2026-11' })
+  batch: string | null;
+  @ApiProperty({ example: '2027-06-30' }) expiryDate: string;
+  @ApiProperty({
+    description: 'Muddat − 60 kun; shundan keyin sotilmaydi',
+    example: '2027-05-01',
+  })
   sellableUntil: string;
-  @ApiProperty() quantity: number;
-  @ApiProperty() blocked: boolean;
+  @ApiProperty({ example: 96 }) quantity: number;
+  @ApiProperty({ example: false }) blocked: boolean;
 }
 
 export class GradeReturnItemDto {
@@ -286,8 +310,9 @@ export class GradeReturnDto {
 }
 
 export class ReturnInspectionDto {
-  @ApiProperty() orderId: string;
-  @ApiPropertyOptional({ nullable: true }) parcelId: string | null;
+  @ApiProperty({ example: '1284' }) orderId: string;
+  @ApiPropertyOptional({ nullable: true, example: '1190' })
+  parcelId: string | null;
   @ApiProperty({
     type: 'array',
     items: {
@@ -298,9 +323,11 @@ export class ReturnInspectionDto {
         defective: { type: 'number' },
       },
     },
+    example: [{ variantId: '901', sellable: 1, defective: 1 }],
   })
   items: Array<{ variantId: string; sellable: number; defective: number }>;
-  @ApiPropertyOptional({ nullable: true }) comment: string | null;
-  @ApiProperty() inspectedBy: string;
-  @ApiProperty() inspectedAt: Date;
+  @ApiPropertyOptional({ nullable: true, example: 'Qadog‘i ezilgan' })
+  comment: string | null;
+  @ApiProperty({ example: '5' }) inspectedBy: string;
+  @ApiProperty({ example: '2026-12-08T09:30:00.000Z' }) inspectedAt: Date;
 }
