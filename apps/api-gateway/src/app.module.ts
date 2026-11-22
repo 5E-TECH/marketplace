@@ -51,6 +51,12 @@ import { AdminSettlementsController } from './withdrawals/admin-settlements.cont
 import { AdminReconciliationController } from './withdrawals/admin-reconciliation.controller';
 import { AdminActResponsesController } from './withdrawals/admin-act-responses.controller';
 import { WholesalerSettlementsController } from './withdrawals/wholesaler-settlements.controller';
+import { AdminWholesalerCabinetController } from './wholesaler-cabinet/admin-wholesaler-cabinet.controller';
+import { SignedFilesController } from './wholesaler-cabinet/signed-files.controller';
+import { SignedLinkService } from './wholesaler-cabinet/signed-link';
+import { WholesalerCabinetController } from './wholesaler-cabinet/wholesaler-cabinet.controller';
+import { WholesalerProductsController } from './wholesaler-cabinet/wholesaler-products.controller';
+import { WholesalerShipmentsController } from './wholesaler-cabinet/wholesaler-shipments.controller';
 import { AdminMetricsController } from './metrics/admin-metrics.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
@@ -194,6 +200,12 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminReconciliationController,
     AdminActResponsesController,
     WholesalerSettlementsController,
+    // BE-30: optovik kabineti
+    WholesalerCabinetController,
+    WholesalerProductsController,
+    WholesalerShipmentsController,
+    AdminWholesalerCabinetController,
+    SignedFilesController,
     AdminMetricsController,
     OperatorLeadsController,
     OperatorOrdersController,
@@ -207,6 +219,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
   providers: [
     AppService,
     ReadinessService,
+    SignedLinkService, // BE-30: yopiq hujjatlarga imzolangan havola
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },
