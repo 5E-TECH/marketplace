@@ -62,13 +62,20 @@ export class ProductService {
     return this.createForShop(shop, dto, {
       cpaEnabled: dto.cpaEnabled,
       isBad: dto.isBad,
+      mxikCode: dto.mxikCode,
+      packageCode: dto.packageCode,
     });
   }
 
   private async createForShop(
     shop: Shop,
     dto: CreateProductDto,
-    flags: { cpaEnabled?: boolean; isBad?: boolean } = {},
+    flags: {
+      cpaEnabled?: boolean;
+      isBad?: boolean;
+      mxikCode?: string | null;
+      packageCode?: string | null;
+    } = {},
   ): Promise<Product> {
     // OPT-1: shartnomasiz mahsulot qo‘shib bo‘lmaydi
     if (!hasContract(shop))
@@ -116,6 +123,8 @@ export class ProductService {
       heightMm: dto.heightMm,
       cpaEnabled: flags.cpaEnabled ?? true,
       isBad: flags.isBad ?? false,
+      mxikCode: flags.mxikCode ?? null,
+      packageCode: flags.packageCode ?? null,
     });
     const createdProduct = await this.save(product);
     const defaultVariant = this.variants.create({
@@ -268,11 +277,23 @@ export class ProductService {
   async adminUpdate(id: string, dto: AdminUpdateProductDto): Promise<Product> {
     const product = await this.getAdminProduct(id);
     await this.applyChanges(product, dto);
+    const cpaTurnedOn = dto.cpaEnabled === true && !product.cpaEnabled;
     if (dto.cpaEnabled !== undefined && dto.cpaEnabled !== product.cpaEnabled) {
       if (dto.cpaEnabled) await this.assertSingleActiveVariant(product.id);
       product.cpaEnabled = dto.cpaEnabled;
     }
     if (dto.isBad !== undefined) product.isBad = dto.isBad;
+    if (dto.mxikCode !== undefined) product.mxikCode = dto.mxikCode ?? null;
+    if (dto.packageCode !== undefined)
+      product.packageCode = dto.packageCode ?? null;
+    // BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab yoki kodsiz CPA ni yoqib bo‘lmaydi — chek qatori buziladi
+    if (product.status === ProductStatus.ACTIVE) {
+      assertFiscalCodes(product);
+      if (cpaTurnedOn && !(await this.shopTin(product.shopId)))
+        throw new ConflictException(
+          'Optovik STIR i kiritilmagan — CPA ni yoqib bo‘lmaydi (fiskal chek)',
+        );
+    }
     const saved = await this.save(product);
     await this.publish(saved);
     return saved;
@@ -311,6 +332,12 @@ export class ProductService {
         'Optovik faol emas yoki shartnomasi kiritilmagan — tasdiqlab bo‘lmaydi',
       );
     if (product.cpaEnabled) await this.assertSingleActiveVariant(product.id);
+    assertFiscalCodes(product);
+    // BE-41: chekdagi komitent — optovik STIR i; eski optovikda bo‘lmasligi mumkin
+    if (product.cpaEnabled && !(await this.shopTin(shop.id)))
+      throw new ConflictException(
+        'Optovik STIR i kiritilmagan — CPA mahsulotini tasdiqlab bo‘lmaydi (fiskal chek)',
+      );
     product.status = ProductStatus.ACTIVE;
     product.moderationNote = null;
     const saved = await this.save(product);
@@ -443,6 +470,17 @@ export class ProductService {
       .getOne();
     if (!shop) throw new NotFoundException('Sotuvchining do‘koni topilmadi');
     return shop;
+  }
+
+  /** BE-41: optovik STIR i (`select: false`) — faqat tekshiruv uchun, shop obyektiga yuklanmaydi (hodisalarga chiqmasin). */
+  private async shopTin(shopId: string): Promise<string | null> {
+    const row = await this.shops
+      .createQueryBuilder('shop')
+      .select('shop.id')
+      .addSelect('shop.tin')
+      .where('shop.id = :id', { id: String(shopId) })
+      .getOne();
+    return row?.tin ?? null;
   }
 
   /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
@@ -598,4 +636,17 @@ export class ProductService {
       );
     }
   }
+}
+
+/**
+ * BE-41 (EQ-09): CPA mahsuloti chekka chiqadi — Elchi kuryeri chekni MXIK va qadoq kodi bilan chiqaradi.
+ * Kodsiz CPA mahsuloti sotuvga chiqmaydi (ega qarori 2026-11-22, [taklif]); asosiy sayt mahsulotiga (CPA emas) shart emas.
+ */
+export function assertFiscalCodes(
+  product: Pick<Product, 'cpaEnabled' | 'mxikCode' | 'packageCode'>,
+): void {
+  if (product.cpaEnabled && (!product.mxikCode || !product.packageCode))
+    throw new BadRequestException(
+      'CPA mahsuloti uchun MXIK va qadoq kodini kiriting (fiskal chek)',
+    );
 }

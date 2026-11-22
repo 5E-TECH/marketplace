@@ -29,7 +29,24 @@ export interface CreateElchiShipmentInput {
     external_product_id?: string;
     /** Bir dona og'irligi, kg (Elchi `items[].weight_kg`, ixtiyoriy) — BE-20 TC3. */
     weight_kg?: number;
+    /**
+     * BE-41: bir dona sotuv narxi, butun so'm — fiskal chek qatori. Faqat `ELCHI_FISCAL_RECEIPT=on` da
+     * (Elchi gateway noma'lum maydonni 400 bilan rad etadi; nomlar Elchi bilan kelishiladi [taklif]).
+     */
+    price?: number;
+    /** BE-41: chek qatori — komissiya tovari, komitent — optovik. */
+    fiscal?: {
+      /** Chekdagi nom — tovar nomi (`name` dagi `#ID` qo'shimchasisiz). */
+      name: string;
+      mxik_code: string;
+      package_code: string;
+      commitent_tin: string;
+      /** Komissioner belgisi: platforma optovik tovarini komissiya shartnomasi bilan sotadi (OPT-1). */
+      commission: true;
+    };
   }>;
+  /** BE-41: mijozga ko'rinadigan yetkazish, butun so'm — chekdagi yetkazish qatori (0 — qator yo'q). */
+  delivery_price?: number;
   cod_amount: number;
 }
 

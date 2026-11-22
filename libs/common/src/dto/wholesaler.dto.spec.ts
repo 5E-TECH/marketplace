@@ -73,6 +73,30 @@ describe('BE-07 DTO: optovik va mahsulot', () => {
     expect(parsed.isBad).toBe(true);
   });
 
+  it('BE-41: MXIK — 17 raqam, qadoq kodi — faqat raqam; bo‘shliqlar olinadi; PATCH da null — kodni o‘chirish', async () => {
+    for (const bad of [
+      { mxikCode: '0851700100100000' },
+      { mxikCode: '0851700100100000A' },
+      { packageCode: '15-00' },
+      { packageCode: '' },
+    ])
+      await expect(
+        check(AdminCreateProductDto, { ...product, ...bad }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    const parsed = (await check(AdminCreateProductDto, {
+      ...product,
+      mxikCode: ' 08517001001000000 ',
+      packageCode: '1500012',
+    })) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
+    });
+    await expect(
+      check(AdminUpdateProductDto, { mxikCode: null, packageCode: null }),
+    ).resolves.toMatchObject({ mxikCode: null, packageCode: null });
+  });
+
   it.each(['weightGrams', 'lengthMm', 'basePrice', 'name'])(
     'PATCH bilan %s ni null qilib bo‘lmaydi — 400',
     async (field) => {

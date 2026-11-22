@@ -355,8 +355,10 @@ export class LeadOrderService {
           `INSERT INTO checkout.sales_order_item
              (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
               line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
-              affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode, wholesaler_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+              affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode, wholesaler_id,
+              mxik_code, package_code, wholesaler_tin)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                   $20, $21, $22)`,
           [
             seller.id,
             offer.productId,
@@ -377,6 +379,10 @@ export class LeadOrderService {
             offer.platformService,
             offer.barcode?.trim() || null,
             offer.wholesalerId,
+            // BE-41: fiskal chek nusxasi (katalog eski bo‘lsa `fiscal` yo‘q — null)
+            offer.fiscal?.mxikCode ?? null,
+            offer.fiscal?.packageCode ?? null,
+            offer.fiscal?.wholesalerTin ?? null,
           ],
         );
       }

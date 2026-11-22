@@ -161,6 +161,34 @@ class AdminProductFlagsDto {
   @IsOptional()
   @IsBoolean()
   isBad?: boolean;
+
+  @ApiPropertyOptional({
+    example: '03304001001000000',
+    nullable: true,
+    type: String,
+    description:
+      'BE-41: MXIK (IKPU) kodi, 17 raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Matches(/^\d{17}$/, {
+    message: 'MXIK kodi 17 raqamdan iborat bo‘lishi kerak',
+  })
+  mxikCode?: string | null;
+
+  @ApiPropertyOptional({
+    example: '1500012',
+    nullable: true,
+    type: String,
+    description:
+      'BE-41: qadoq (o‘lchov birligi) kodi, faqat raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Matches(/^\d{1,20}$/, {
+    message: 'Qadoq kodi faqat raqamlardan iborat bo‘lishi kerak (1–20 belgi)',
+  })
+  packageCode?: string | null;
 }
 
 export class AdminCreateProductDto extends IntersectionType(
@@ -302,6 +330,20 @@ export class ProductDto {
     description: 'BE-27: yashirish sababi',
   })
   blockReason: string | null;
+  @ApiProperty({
+    example: '03304001001000000',
+    nullable: true,
+    type: String,
+    description: 'BE-41: MXIK (IKPU) kodi — fiskal chek qatori',
+  })
+  mxikCode: string | null;
+  @ApiProperty({
+    example: '1500012',
+    nullable: true,
+    type: String,
+    description: 'BE-41: qadoq kodi — fiskal chek qatori',
+  })
+  packageCode: string | null;
   @ApiProperty({ example: 4.75 }) rating: number;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) createdAt: Date;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) updatedAt: Date;

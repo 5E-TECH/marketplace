@@ -164,6 +164,14 @@ export class Product extends BaseEntity {
   })
   blockReason: string | null;
 
+  /** BE-41 (EQ-09): MXIK (IKPU) kodi, 17 raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy. */
+  @Column({ name: 'mxik_code', type: 'varchar', length: 17, nullable: true })
+  mxikCode: string | null;
+
+  /** BE-41 (EQ-09): qadoq (o‘lchov birligi) kodi — fiskal chek qatori. */
+  @Column({ name: 'package_code', type: 'varchar', length: 20, nullable: true })
+  packageCode: string | null;
+
   @Column({
     type: 'numeric',
     precision: 3,

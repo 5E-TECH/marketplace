@@ -115,6 +115,8 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       lengthMm: 200,
       widthMm: 120,
       heightMm: 80,
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
     });
     productId = String(p.id);
     await products.adminApprove(productId);
@@ -272,6 +274,12 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       affiliateFee: 65_000,
       hiddenDelivery: 11_000,
       delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+      // BE-41: chek qatori — kodlar va optovik (komitent) STIR i (`select: false` ustun faqat shu nusxada)
+      fiscal: {
+        mxikCode: '08517001001000000',
+        packageCode: '1500012',
+        wholesalerTin: '305123456',
+      },
     });
     // to‘rt qator + yashirilgan yetkazish = tasdiqlangan narx (TZ 2.2; platforma xizmati — qoldiq)
     const s = snapshot!;

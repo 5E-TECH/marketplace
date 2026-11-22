@@ -188,7 +188,9 @@ export class CatalogOfferService {
     whereDeliver: string,
   ): Promise<CatalogOrderSnapshot | null> {
     if (!/^\d+$/.test(String(productId ?? ''))) return null;
+    // BE-41: optovik STIR i (`select: false`) faqat shu ichki nusxada o‘qiladi — chekdagi komitent
     const product = await this.base()
+      .addSelect('shop.tin')
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
@@ -262,6 +264,11 @@ export class CatalogOfferService {
       cpaAvailable: isCpaAvailable(product),
       withdrawn: isWithdrawn(product),
       ...pricing,
+      fiscal: {
+        mxikCode: product.mxikCode ?? null,
+        packageCode: product.packageCode ?? null,
+        wholesalerTin: product.shop.tin ?? null,
+      },
     };
   }
 
