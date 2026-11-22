@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -39,6 +40,7 @@ import {
   OtpPurpose,
   OtpSendResultDto,
   RegisterAffiliateDto,
+  RegisterWholesalerDto,
   SendOtpDto,
   VerifyOtpDto,
   AuthSuccessResponseDto,
@@ -59,6 +61,7 @@ import {
   rawResponse,
   readCookie,
   sendRpc,
+  WHOLESALER_CABINET_RPC,
 } from '@app/common';
 
 @ApiTags('auth')
@@ -73,6 +76,10 @@ export class AuthController {
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     private readonly jwt: JwtService,
     @Optional() private readonly config?: ConfigService,
+    // BE-30: optovik ro‘yxati optovik yozuvini catalog da ochadi
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
   ) {}
 
   /**
@@ -253,6 +260,79 @@ export class AuthController {
     if (dto.purpose === OtpPurpose.REGISTER || 'registrationToken' in result)
       return result;
     this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register/wholesaler')
+  @ApiOperation({
+    summary:
+      'Optovik ro‘yxati (OPT-1): SMS tasdig‘idan keyin rekvizitlar, komissiya shartnomasi va rozilik; sessiya ochiladi, holat PENDING (admin tasdiqlaydi)',
+  })
+  @ApiCreatedResponse({ schema: { example: { accessToken: null } } })
+  @ApiBadRequestResponse({
+    description:
+      'OFFER_NOT_ACCEPTED — shartnoma yoki rozilikning joriy versiyasi qabul qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description:
+      'PHONE_ALREADY_REGISTERED; STIR band; shartnoma matni hali e’lon qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'REGISTRATION_EXPIRED — telefonni qayta tasdiqlang',
+  })
+  async registerWholesaler(
+    @Body() dto: RegisterWholesalerDto,
+    @Ip() ip: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // STIR band bo‘lsa foydalanuvchi yaratilmasin
+    const { free } = await sendRpc<{ free: boolean }>(
+      this.catalog!,
+      { cmd: WHOLESALER_CABINET_RPC.TIN_FREE },
+      { tin: dto.tin },
+    );
+    if (!free)
+      throw new ConflictException('Bu STIR bilan optovik allaqachon bor');
+    const { registrationToken, contractVersion, consentVersion, ...profile } =
+      dto;
+    const result = await sendRpc<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string | number; phone: string };
+    }>(
+      this.identity,
+      { cmd: WHOLESALER_CABINET_RPC.REGISTER_USER },
+      {
+        dto: {
+          registrationToken,
+          contractVersion,
+          consentVersion,
+          name: profile.name,
+        },
+        ip: ip ?? null,
+      },
+    );
+    // sessiya darhol: optovik yozuvi ochilmay qolsa ham kabinetda POST /wholesaler/profile bilan yakunlaydi
+    this.setAuthCookies(request, response, result);
+    await sendRpc(
+      this.catalog!,
+      { cmd: WHOLESALER_CABINET_RPC.SELF_REGISTER },
+      {
+        ...profile,
+        ownerUserId: String(result.user.id),
+        phone: result.user.phone,
+        contractVersion,
+      },
+    );
     return rawResponse({
       accessToken: this.tokensInBody ? result.accessToken : null,
     });

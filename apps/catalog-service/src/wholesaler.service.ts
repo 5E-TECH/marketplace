@@ -151,25 +151,35 @@ export class WholesalerService {
   }
 
   private view(shop: Shop): WholesalerDto {
-    return {
-      id: String(shop.id),
-      name: shop.name,
-      slug: shop.slug,
-      status: shop.status,
-      legalType: shop.legalType,
-      tin: shop.tin,
-      bankName: shop.bankName,
-      bankAccount: shop.bankAccount,
-      bankMfo: shop.bankMfo,
-      contractNumber: shop.contractNumber,
-      contractDate: shop.contractDate,
-      phone: shop.phone,
-      address: shop.address,
-      description: shop.description,
-      ownerUserId: shop.ownerUserId ?? null,
-      createdAt: shop.createdAt,
-    };
+    return toWholesalerDto(shop);
   }
+}
+
+/** Optovik javobi (admin va optovik kabineti — BE-30): rekvizitlar bilan, shuning uchun faqat yopiq API larda. */
+export function toWholesalerDto(shop: Shop): WholesalerDto {
+  return {
+    id: String(shop.id),
+    name: shop.name,
+    slug: shop.slug,
+    status: shop.status,
+    legalType: shop.legalType,
+    tin: shop.tin,
+    bankName: shop.bankName,
+    bankAccount: shop.bankAccount,
+    bankMfo: shop.bankMfo,
+    contractNumber: shop.contractNumber,
+    contractDate: shop.contractDate,
+    phone: shop.phone,
+    address: shop.address,
+    description: shop.description,
+    ownerUserId: shop.ownerUserId ?? null,
+    contractVersion: shop.contractVersion ?? null,
+    contractAcceptedAt: shop.contractAcceptedAt
+      ? new Date(shop.contractAcceptedAt).toISOString()
+      : null,
+    moderationNote: shop.moderationNote ?? null,
+    createdAt: shop.createdAt,
+  };
 }
 
 /** OPT-1: komissiya shartnomasi kiritilganmi (raqami va sanasi). Shartnomasiz mahsulot qo‘shib bo‘lmaydi. */
@@ -177,7 +187,7 @@ export const hasContract = (
   shop: Pick<Shop, 'contractNumber' | 'contractDate'>,
 ) => !!shop.contractNumber?.trim() && !!shop.contractDate;
 
-function slugify(name: string): string {
+export function slugify(name: string): string {
   return (
     name
       .trim()

@@ -174,6 +174,22 @@ export class WholesalerDto {
     description: 'Optovik kabineti foydalanuvchisi (BE-30)',
   })
   ownerUserId: string | null;
+  @ApiProperty({
+    example: '1.0',
+    nullable: true,
+    type: String,
+    description:
+      'Elektron shartnoma versiyasi (o‘zi ro‘yxatdan o‘tgan optovik, BE-30); qog‘oz shartnomada null',
+  })
+  contractVersion: string | null;
+  @ApiProperty({ nullable: true, type: String })
+  contractAcceptedAt: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'Ro‘yxat rad etilgan sabab (BE-30)',
+  })
+  moderationNote: string | null;
   @ApiProperty() createdAt: Date;
 }
 

@@ -26,6 +26,8 @@ export enum OtpPurpose {
 export enum LegalDocumentType {
   AFFILIATE_OFFER = 'affiliate-offer',
   PERSONAL_DATA_CONSENT = 'personal-data-consent',
+  /** BE-30: optovik bilan elektron komissiya shartnomasi (OPT-1). */
+  WHOLESALER_CONTRACT = 'wholesaler-contract',
 }
 
 export const AFFILIATE_AUTH_RPC = {

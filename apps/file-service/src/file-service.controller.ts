@@ -5,8 +5,10 @@ import {
   CreativeType,
   RpcHttpExceptionFilter,
   UploadFileCommand,
+  WHOLESALER_CABINET_RPC,
 } from '@app/common';
 import { CreativeFileService } from './creative-file.service';
+import { PrivateFileService } from './private-file.service';
 import { FileServiceService } from './file-service.service';
 
 @Controller()
@@ -15,6 +17,7 @@ export class FileServiceController {
   constructor(
     private readonly files: FileServiceService,
     private readonly creatives: CreativeFileService,
+    private readonly privateFiles: PrivateFileService,
   ) {}
 
   @MessagePattern({ cmd: 'file.upload' })
@@ -45,5 +48,28 @@ export class FileServiceController {
   @MessagePattern({ cmd: CREATIVE_RPC.REMOVE })
   creativeRemove(@Payload() data: { objectKey: string }) {
     return this.creatives.remove(data);
+  }
+
+  /** BE-30: optovikning yopiq hujjatlari (KYC, sertifikat). */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.PRIVATE_UPLOAD_POLICY })
+  privateUploadPolicy(
+    @Payload()
+    data: {
+      wholesalerId: string;
+      contentType: string;
+      size: number;
+    },
+  ) {
+    return this.privateFiles.uploadPolicy(data);
+  }
+
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.PRIVATE_VERIFY })
+  privateVerify(@Payload() data: { wholesalerId: string; objectKey: string }) {
+    return this.privateFiles.verify(data);
+  }
+
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.PRIVATE_GET })
+  privateGet(@Payload() data: { objectKey: string }) {
+    return this.privateFiles.get(data);
   }
 }

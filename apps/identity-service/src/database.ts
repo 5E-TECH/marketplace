@@ -10,6 +10,7 @@ import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { NewRoles1795996800000 } from './migrations/1795996800000-new-roles';
 import { AffiliateSmsRegistration1797465600000 } from './migrations/1797465600000-affiliate-sms-registration';
+import { WholesalerContract1798329600000 } from './migrations/1798329600000-wholesaler-contract';
 import { User } from './entities/user.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { ActivityLog } from '@app/common';
@@ -34,5 +35,6 @@ export const IDENTITY_DB: DatabaseDefinition = {
     MoneyToBigint1795219200000,
     NewRoles1795996800000,
     AffiliateSmsRegistration1797465600000,
+    WholesalerContract1798329600000,
   ],
 };

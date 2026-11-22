@@ -19,6 +19,7 @@ import {
   SKIPPED_NO_WINDOW,
   SKIPPED_PERIOD_EXPORTED,
 } from './settlement.service';
+import { WholesalerBalanceService } from './wholesaler-balance.service';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
 const describePostgres = url ? describe : describe.skip;
@@ -244,6 +245,13 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       paidBy: '7',
     });
     expect(await balance('WHOLESALER', '501')).toBe(0);
+    // BE-30 (OPT-3): optovik paneli — to‘langan 140 000, to‘lanadigan 0, ushlab turilgan yo‘q; boshqa optovik — 0
+    await expect(
+      new WholesalerBalanceService(ds).balance({ wholesalerId: '501' }),
+    ).resolves.toEqual({ held: 0, payable: 0, paid: 140000 });
+    await expect(
+      new WholesalerBalanceService(ds).balance({ wholesalerId: '999' }),
+    ).resolves.toEqual({ held: 0, payable: 0, paid: 0 });
     expect(
       await ds.query(
         `SELECT e.line_kind AS "lineKind", a.type, e.amount::int AS amount, j.order_id AS "orderId"

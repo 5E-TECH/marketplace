@@ -111,6 +111,33 @@ export class Shop extends BaseEntity {
   })
   contractDate: string | null;
 
+  /** BE-30: o‘zi ro‘yxatdan o‘tgan optovik qabul qilgan elektron shartnoma versiyasi va vaqti. */
+  @Column({
+    name: 'contract_version',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    select: false,
+  })
+  contractVersion: string | null;
+
+  @Column({
+    name: 'contract_accepted_at',
+    type: 'timestamptz',
+    nullable: true,
+    select: false,
+  })
+  contractAcceptedAt: Date | null;
+
+  /** BE-30: ro‘yxat rad etilgani sababi. */
+  @Column({
+    name: 'moderation_note',
+    type: 'text',
+    nullable: true,
+    select: false,
+  })
+  moderationNote: string | null;
+
   @Column({
     type: 'numeric',
     precision: 3,
@@ -142,4 +169,7 @@ export const WHOLESALER_PRIVATE_COLUMNS = [
   'bankMfo',
   'contractNumber',
   'contractDate',
+  'contractVersion',
+  'contractAcceptedAt',
+  'moderationNote',
 ] as const;

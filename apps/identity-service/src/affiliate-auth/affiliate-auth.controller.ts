@@ -3,12 +3,15 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AcceptAgreementDto,
   AFFILIATE_AUTH_RPC,
+  EnsureWholesalerUserInput,
   PublishLegalDocumentDto,
   RegisterAffiliateDto,
   RpcHttpExceptionFilter,
   SendOtpDto,
   UpdateAffiliateProfileDto,
   VerifyOtpDto,
+  WHOLESALER_CABINET_RPC,
+  type RegisterWholesalerUserInput,
 } from '@app/common';
 import { AffiliateAuthService } from './affiliate-auth.service';
 
@@ -33,9 +36,41 @@ export class AffiliateAuthController {
     return this.svc.registerAffiliate(data?.dto, data?.ip ?? null);
   }
 
+  /** BE-30: optovik ro‘yxati (shartnoma va rozilik). */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.REGISTER_USER })
+  registerWholesaler(
+    @Payload() data: { dto: RegisterWholesalerUserInput; ip?: string | null },
+  ) {
+    return this.svc.registerWholesaler(data?.dto, data?.ip ?? null);
+  }
+
+  /** BE-30: admin kiritgan optovikka kabinet foydalanuvchisi. */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.ENSURE_USER })
+  ensureWholesaler(@Payload() dto: EnsureWholesalerUserInput) {
+    return this.svc.ensureWholesalerUser(dto);
+  }
+
+  /** BE-30: kabinetda ro‘yxatni yakunlash — shartnoma va rozilik. */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.ACCEPT_DOCUMENTS })
+  acceptWholesalerDocuments(
+    @Payload()
+    data: {
+      userId: string;
+      contractVersion: string;
+      consentVersion: string;
+      ip?: string | null;
+    },
+  ) {
+    return this.svc.acceptWholesalerDocuments(
+      String(data?.userId ?? ''),
+      data,
+      data?.ip ?? null,
+    );
+  }
+
   @MessagePattern({ cmd: AFFILIATE_AUTH_RPC.LEGAL_GET })
-  legal(@Payload() data: { type: string }) {
-    return this.svc.legalDocument(String(data?.type ?? ''));
+  legal(@Payload() data: { type: string; version?: string }) {
+    return this.svc.legalDocument(String(data?.type ?? ''), data?.version);
   }
 
   @MessagePattern({ cmd: AFFILIATE_AUTH_RPC.LEGAL_PUBLISH })

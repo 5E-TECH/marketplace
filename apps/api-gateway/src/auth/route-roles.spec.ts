@@ -113,14 +113,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   [Role.AFFILIATE]: routeKeys.filter((key) =>
     /^[A-Z]+ \/affiliate\//.test(key),
   ),
-  // BE-46: o‘z akt-sverkalari — qabul va e’tiroz (FE-24).
-  [Role.WHOLESALER]: [
-    'GET /wholesaler/settlements',
-    'GET /wholesaler/settlements/:id',
-    'GET /wholesaler/settlements/:id/act.pdf',
-    'POST /wholesaler/settlements/:id/accept',
-    'POST /wholesaler/settlements/:id/dispute',
-  ],
+  // BE-46: o‘z akt-sverkalari — qabul va e’tiroz (FE-24). BE-30: kabinet — profil, panel, mahsulot taklifi va narx
+  // hisobi, postavka arizasi, yopiq hujjatlar (OPT-1–4). Hammasi `/wholesaler/` ostida, boshqa hech narsa.
+  [Role.WHOLESALER]: routeKeys.filter((key) =>
+    /^[A-Z]+ \/wholesaler\//.test(key),
+  ),
   // Lidni bron qilish va natija kiritish; buyurtmani topshirilgunga qadar bekor qilish (BE-18, BUY-3).
   [Role.OPERATOR_LEAD]: [
     'GET /operator/leads',

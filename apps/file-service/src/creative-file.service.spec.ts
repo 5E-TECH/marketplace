@@ -236,7 +236,7 @@ describe('CreativeFileService (BE-08)', () => {
     expect(minio.removeObject).not.toHaveBeenCalled();
   });
 
-  it('yuklama papkasiga 1 kunlik muddat: boshqa lifecycle qoidalari saqlanadi', async () => {
+  it('yuklama papkalariga 1 kunlik muddat (kreativ va yopiq hujjat): boshqa lifecycle qoidalari saqlanadi', async () => {
     minio.getBucketLifecycle.mockResolvedValue({
       Rule: [{ ID: 'boshqa', Status: 'Enabled', Filter: { Prefix: 'tmp/' } }],
     });
@@ -248,6 +248,13 @@ describe('CreativeFileService (BE-08)', () => {
           ID: 'elchi-creative-uploads-expire',
           Status: 'Enabled',
           Filter: { Prefix: 'creative-uploads/' },
+          Expiration: { Days: 1 },
+        },
+        // BE-30: optovikning yopiq hujjat yuklamalari ham
+        {
+          ID: 'elchi-private-uploads-expire',
+          Status: 'Enabled',
+          Filter: { Prefix: 'private-uploads/' },
           Expiration: { Days: 1 },
         },
       ],

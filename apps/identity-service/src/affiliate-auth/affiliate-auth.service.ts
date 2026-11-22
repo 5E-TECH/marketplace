@@ -17,6 +17,7 @@ import {
   AcceptAgreementDto,
   AffiliateProfileDto,
   BusinessException,
+  EnsureWholesalerUserInput,
   ErrorCode,
   LegalDocumentDto,
   LegalDocumentType,
@@ -25,6 +26,7 @@ import {
   OtpSendResultDto,
   PublishLegalDocumentDto,
   RegisterAffiliateDto,
+  RegisterWholesalerUserInput,
   RmqClient,
   Role,
   SendOtpDto,
@@ -171,10 +173,160 @@ export class AffiliateAuthService {
     dto: RegisterAffiliateDto,
     ip: string | null,
   ): Promise<Awaited<ReturnType<AuthService['buildAuthResult']>>> {
+    return this.registerWithDocuments(
+      dto?.registrationToken,
+      Role.AFFILIATE,
+      '',
+      ip,
+      {
+        documents: [
+          [LegalDocumentType.AFFILIATE_OFFER, dto?.offerVersion],
+          [LegalDocumentType.PERSONAL_DATA_CONSENT, dto?.consentVersion],
+        ],
+        notPublished:
+          'Sotuvchi ofertasi yoki rozilik matni hali e’lon qilinmagan — ro‘yxat ochilmagan',
+        wrongVersion:
+          'Sotuvchi ofertasi va rozilikning joriy versiyasini qabul qiling',
+      },
+    );
+  }
+
+  /**
+   * BE-30 (OPT-1): optovik — SMS tasdiqlangan raqam, elektron komissiya shartnomasi va rozilik (joriy versiyalar).
+   * Optovik yozuvini (rekvizitlar) gateway keyin catalog da ochadi.
+   */
+  async registerWholesaler(
+    dto: RegisterWholesalerUserInput,
+    ip: string | null,
+  ): Promise<Awaited<ReturnType<AuthService['buildAuthResult']>>> {
+    return this.registerWithDocuments(
+      dto?.registrationToken,
+      Role.WHOLESALER,
+      String(dto?.name ?? '')
+        .trim()
+        .slice(0, 100),
+      ip,
+      {
+        documents: [
+          [LegalDocumentType.WHOLESALER_CONTRACT, dto?.contractVersion],
+          [LegalDocumentType.PERSONAL_DATA_CONSENT, dto?.consentVersion],
+        ],
+        notPublished:
+          'Komissiya shartnomasi yoki rozilik matni hali e’lon qilinmagan — optovik ro‘yxati ochilmagan',
+        wrongVersion:
+          'Komissiya shartnomasi va rozilikning joriy versiyasini qabul qiling',
+      },
+    );
+  }
+
+  /**
+   * BE-30: admin kiritgan optovikka kabinet — shu raqamga WHOLESALER foydalanuvchisi (bor bo‘lsa — o‘sha). Raqam
+   * boshqa roldagi foydalanuvchiniki bo‘lsa — 409. Kirish SMS kod bilan (parol yo‘q).
+   */
+  async ensureWholesalerUser(
+    dto: EnsureWholesalerUserInput,
+  ): Promise<{ userId: string; created: boolean }> {
+    const phone = String(dto?.phone ?? '').trim();
+    if (!/^\+998\d{9}$/.test(phone))
+      throw new BadRequestException(
+        'Telefon +998XXXXXXXXX formatida bo‘lishi kerak',
+      );
+    return this.dataSource.transaction(async (m) => {
+      await m.query(
+        `SELECT pg_advisory_xact_lock(hashtext('identity.register:' || $1))`,
+        [phone],
+      );
+      const exists = await m.getRepository(User).findOne({ where: { phone } });
+      if (exists) {
+        if (exists.role !== Role.WHOLESALER || exists.isDeleted)
+          throw new BusinessException(
+            'Bu raqam boshqa foydalanuvchiga tegishli',
+            ErrorCode.PHONE_ALREADY_REGISTERED,
+            HttpStatus.CONFLICT,
+          );
+        return { userId: String(exists.id), created: false };
+      }
+      const created = await m.getRepository(User).save(
+        m.getRepository(User).create({
+          name: String(dto?.name ?? '')
+            .trim()
+            .slice(0, 100),
+          phone,
+          email: null,
+          passwordHash: await bcrypt.hash(
+            randomBytes(32).toString('hex'),
+            BCRYPT_ROUNDS,
+          ),
+          role: Role.WHOLESALER,
+          isActive: true,
+        }),
+      );
+      return { userId: String(created.id), created: true };
+    });
+  }
+
+  /**
+   * BE-30: ro‘yxat kabinetda yakunlanadi (optovik yozuvi ochilmay qolgan bo‘lsa) — shartnoma va rozilikning joriy
+   * versiyasi qabul qilinadi (takror — bir marta yoziladi). Faqat WHOLESALER.
+   */
+  async acceptWholesalerDocuments(
+    userId: string,
+    versions: { contractVersion: unknown; consentVersion: unknown },
+    ip: string | null,
+  ): Promise<{ contractVersion: string; consentVersion: string }> {
+    const user = await this.users.findOne({
+      where: { id: String(userId), isDeleted: false },
+    });
+    if (!user || user.role !== Role.WHOLESALER)
+      throw new NotFoundException('Optovik foydalanuvchisi topilmadi');
+    const contract = await this.currentDocument(
+      LegalDocumentType.WHOLESALER_CONTRACT,
+    );
+    const consent = await this.currentDocument(
+      LegalDocumentType.PERSONAL_DATA_CONSENT,
+    );
+    if (!contract?.sections.length || !consent?.sections.length)
+      throw new BusinessException(
+        'Komissiya shartnomasi yoki rozilik matni hali e’lon qilinmagan',
+        ErrorCode.OFFER_NOT_ACCEPTED,
+        HttpStatus.CONFLICT,
+      );
+    if (
+      versions?.contractVersion !== contract.version ||
+      versions?.consentVersion !== consent.version
+    )
+      throw new BusinessException(
+        'Komissiya shartnomasi va rozilikning joriy versiyasini qabul qiling',
+        ErrorCode.OFFER_NOT_ACCEPTED,
+        HttpStatus.BAD_REQUEST,
+      );
+    for (const doc of [contract, consent])
+      await this.dataSource.query(
+        `INSERT INTO identity.user_agreement (user_id, type, version, ip) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, type, version) DO NOTHING`,
+        [user.id, doc.type, doc.version, ip],
+      );
+    return {
+      contractVersion: contract.version,
+      consentVersion: consent.version,
+    };
+  }
+
+  private async registerWithDocuments(
+    registrationToken: unknown,
+    role: Role.AFFILIATE | Role.WHOLESALER,
+    name: string,
+    ip: string | null,
+    rules: {
+      documents: Array<[LegalDocumentType, unknown]>;
+      notPublished: string;
+      wrongVersion: string;
+    },
+  ): Promise<Awaited<ReturnType<AuthService['buildAuthResult']>>> {
     let phone: string;
     try {
       const payload = this.jwt.verify<{ sub: string; purpose: string }>(
-        String(dto?.registrationToken ?? ''),
+        String(registrationToken ?? ''),
         { secret: this.registrationSecret() },
       );
       if (payload.purpose !== REGISTRATION_PURPOSE) throw new Error('purpose');
@@ -186,26 +338,20 @@ export class AffiliateAuthService {
         HttpStatus.GONE,
       );
     }
-    const offer = await this.currentDocument(LegalDocumentType.AFFILIATE_OFFER);
-    const consent = await this.currentDocument(
-      LegalDocumentType.PERSONAL_DATA_CONSENT,
+    const docs = await Promise.all(
+      rules.documents.map(([type]) => this.currentDocument(type)),
     );
     // Matni yo‘q hujjatni qabul qilib bo‘lmaydi (seed 1.0 bo‘sh — yurist matni EQ-10 dan keyin e’lon qilinadi)
-    if (!offer?.sections.length || !consent?.sections.length)
+    if (docs.some((doc) => !doc?.sections.length))
       throw new BusinessException(
-        'Sotuvchi ofertasi yoki rozilik matni hali e’lon qilinmagan — ro‘yxat ochilmagan',
+        rules.notPublished,
         ErrorCode.OFFER_NOT_ACCEPTED,
         HttpStatus.CONFLICT,
       );
     // «Oferta qabul qilinmasa ro‘yxat tugamaydi» — versiya joriy hujjatga teng bo‘lishi shart
-    if (
-      !offer ||
-      !consent ||
-      dto?.offerVersion !== offer.version ||
-      dto?.consentVersion !== consent.version
-    )
+    if (rules.documents.some(([, version], i) => version !== docs[i]!.version))
       throw new BusinessException(
-        'Sotuvchi ofertasi va rozilikning joriy versiyasini qabul qiling',
+        rules.wrongVersion,
         ErrorCode.OFFER_NOT_ACCEPTED,
         HttpStatus.BAD_REQUEST,
       );
@@ -226,7 +372,7 @@ export class AffiliateAuthService {
         );
       const created = await m.getRepository(User).save(
         m.getRepository(User).create({
-          name: '',
+          name,
           phone,
           email: null,
           // parol yo‘q — kirish SMS kod bilan; tasodifiy xesh parol bilan kirishni yopadi
@@ -234,7 +380,7 @@ export class AffiliateAuthService {
             randomBytes(32).toString('hex'),
             BCRYPT_ROUNDS,
           ),
-          role: Role.AFFILIATE,
+          role,
           isActive: true,
         }),
       );
@@ -242,10 +388,10 @@ export class AffiliateAuthService {
         `UPDATE identity.users SET phone_verified_at = now() WHERE id = $1`,
         [created.id],
       );
-      for (const doc of [offer, consent])
+      for (const doc of docs)
         await m.query(
           `INSERT INTO identity.user_agreement (user_id, type, version, ip) VALUES ($1, $2, $3, $4)`,
-          [created.id, doc.type, doc.version, ip],
+          [created.id, doc!.type, doc!.version, ip],
         );
       return created;
     });
@@ -254,8 +400,12 @@ export class AffiliateAuthService {
 
   // ------------------------------------------------------------------ hujjatlar
 
-  async legalDocument(type: string): Promise<LegalDocumentDto> {
-    const doc = await this.currentDocument(this.documentType(type));
+  /** `version` — aniq versiya (BE-30: optovik qabul qilgan shartnoma matni PDF uchun); yo‘q bo‘lsa — joriy. */
+  async legalDocument(
+    type: string,
+    version?: string,
+  ): Promise<LegalDocumentDto> {
+    const doc = await this.currentDocument(this.documentType(type), version);
     if (!doc) throw new NotFoundException('Hujjat topilmadi');
     return doc;
   }
@@ -395,7 +545,8 @@ export class AffiliateAuthService {
   private documentType(value: unknown): LegalDocumentType {
     if (
       value === LegalDocumentType.AFFILIATE_OFFER ||
-      value === LegalDocumentType.PERSONAL_DATA_CONSENT
+      value === LegalDocumentType.PERSONAL_DATA_CONSENT ||
+      value === LegalDocumentType.WHOLESALER_CONTRACT
     )
       return value;
     throw new NotFoundException('Hujjat topilmadi');
@@ -413,13 +564,17 @@ export class AffiliateAuthService {
 
   private async currentDocument(
     type: LegalDocumentType,
+    version?: string,
   ): Promise<LegalDocumentDto | null> {
     const [row] = (await this.dataSource.query(
-      `SELECT type, version, effective_at AS "effectiveAt", created_at AS "createdAt", summary, sections
-         FROM identity.legal_document
-        WHERE type = $1 AND (effective_at IS NULL OR effective_at <= now())
-        ORDER BY COALESCE(effective_at, created_at) DESC, id DESC LIMIT 1`,
-      [type],
+      version !== undefined
+        ? `SELECT type, version, effective_at AS "effectiveAt", created_at AS "createdAt", summary, sections
+             FROM identity.legal_document WHERE type = $1 AND version = $2`
+        : `SELECT type, version, effective_at AS "effectiveAt", created_at AS "createdAt", summary, sections
+             FROM identity.legal_document
+            WHERE type = $1 AND (effective_at IS NULL OR effective_at <= now())
+            ORDER BY COALESCE(effective_at, created_at) DESC, id DESC LIMIT 1`,
+      version !== undefined ? [type, String(version)] : [type],
     )) as Array<{
       type: LegalDocumentType;
       version: string;

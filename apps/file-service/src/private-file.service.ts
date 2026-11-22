@@ -1,0 +1,296 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Client, CopyConditions } from 'minio';
+import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import {
+  PRIVATE_DOCUMENT_MAX_BYTES,
+  PRIVATE_DOCUMENT_TYPES,
+  PrivateDocumentContentType,
+  PrivateFileVerified,
+  PrivateUploadPolicyResultDto,
+} from '@app/common';
+
+/** Yopiq yuklamalar papkasi — tasdiqlanmagani 1 kunda o‘chadi (lifecycle — CreativeFileService). */
+export const PRIVATE_UPLOAD_FOLDER = 'private-uploads';
+/** Yopiq hujjatlar — bucket siyosatida ochiq emas (ochiq faqat products, banners, creatives). */
+export const PRIVATE_FOLDER = 'private/wholesaler';
+const POLICY_TTL_MS = 15 * 60 * 1000;
+const ID = /^[1-9]\d{0,18}$/;
+const EXTENSIONS: Record<PrivateDocumentContentType, string> = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+};
+const UPLOAD_KEY = new RegExp(
+  `^${PRIVATE_UPLOAD_FOLDER}/(\\d{1,19})/([0-9a-f-]{36})\\.(pdf|jpg|png)$`,
+);
+const FINAL_KEY = new RegExp(
+  `^${PRIVATE_FOLDER}/\\d{1,19}/[0-9a-f-]{36}\\.(?:pdf|jpg|png)$`,
+);
+
+interface ObjectStat {
+  size: number;
+  etag: string;
+  metaData: Record<string, unknown>;
+}
+
+/**
+ * BE-30 (OPT-1 KYC, OPT-2 sertifikat): optovikning yopiq hujjatlari. Yuklash — BE-08 dagi kabi imzolangan POST
+ * policy (`private-uploads/<optovik>/…`), tekshiruv (tur, hajm, bosh baytlar, ETag) va `private/wholesaler/<optovik>/`
+ * ga server nusxasi. O‘qish faqat shu servis orqali (gateway imzolangan havola bilan beradi) — ochiq URL yo‘q.
+ */
+@Injectable()
+export class PrivateFileService {
+  private readonly logger = new Logger(PrivateFileService.name);
+  private readonly client: Client;
+  private readonly bucket: string;
+  private readonly publicBaseUrl: string;
+
+  constructor(config: ConfigService) {
+    this.client = new Client({
+      endPoint: config.getOrThrow<string>('MINIO_ENDPOINT'),
+      port: Number(config.getOrThrow<number>('MINIO_PORT')),
+      useSSL: config.get<boolean>('MINIO_USE_SSL', false),
+      region: config.get<string>('MINIO_REGION', 'us-east-1'),
+      accessKey: config.getOrThrow<string>('MINIO_ACCESS_KEY'),
+      secretKey: config.getOrThrow<string>('MINIO_SECRET_KEY'),
+    });
+    this.bucket = config.getOrThrow<string>('MINIO_BUCKET');
+    this.publicBaseUrl = config
+      .getOrThrow<string>('MINIO_PUBLIC_URL')
+      .replace(/\/+$/, '');
+  }
+
+  async uploadPolicy(input: {
+    wholesalerId: string;
+    contentType: string;
+    size: number;
+  }): Promise<PrivateUploadPolicyResultDto> {
+    const wholesalerId = String(input?.wholesalerId ?? '');
+    if (!ID.test(wholesalerId))
+      throw new BadRequestException('Optovik ID si noto‘g‘ri');
+    const contentType = String(input?.contentType ?? '')
+      .trim()
+      .toLowerCase() as PrivateDocumentContentType;
+    if (!PRIVATE_DOCUMENT_TYPES.includes(contentType))
+      throw new BadRequestException(
+        `Bu fayl turi ruxsat etilmagan: ${contentType || '—'}. Ruxsat: ${PRIVATE_DOCUMENT_TYPES.join(', ')}`,
+      );
+    const size = Number(input?.size);
+    if (
+      !Number.isSafeInteger(size) ||
+      size < 1 ||
+      size > PRIVATE_DOCUMENT_MAX_BYTES
+    )
+      throw new BadRequestException('Fayl hajmi 10 MB dan oshmasligi kerak');
+    const objectKey = `${PRIVATE_UPLOAD_FOLDER}/${wholesalerId}/${randomUUID()}${EXTENSIONS[contentType]}`;
+    const expiresAt = new Date(Date.now() + POLICY_TTL_MS);
+    const policy = this.client.newPostPolicy();
+    policy.setBucket(this.bucket);
+    policy.setKey(objectKey);
+    policy.setContentType(contentType);
+    policy.setContentLengthRange(1, PRIVATE_DOCUMENT_MAX_BYTES);
+    policy.setExpires(expiresAt);
+    const { formData } = await this.client
+      .presignedPostPolicy(policy)
+      .catch((error) => {
+        throw this.unavailable('imzolash', error);
+      });
+    return {
+      url: `${this.publicBaseUrl}/${this.bucket}`,
+      fields: formData,
+      objectKey,
+      expiresAt: expiresAt.toISOString(),
+      maxSize: PRIVATE_DOCUMENT_MAX_BYTES,
+    };
+  }
+
+  /** Yuklamani tekshirib yopiq joyga ko‘chiradi; mos kelmasa — o‘chiriladi va 400. Takror — yakuniy fayl. */
+  async verify(input: {
+    wholesalerId: string;
+    objectKey: string;
+  }): Promise<PrivateFileVerified> {
+    const wholesalerId = String(input?.wholesalerId ?? '');
+    const uploadKey = String(input?.objectKey ?? '');
+    const match = UPLOAD_KEY.exec(uploadKey);
+    if (!ID.test(wholesalerId) || !match || match[1] !== wholesalerId)
+      throw new BadRequestException('Fayl kaliti bu optovikka tegishli emas');
+    const finalKey = `${PRIVATE_FOLDER}/${wholesalerId}/${match[2]}.${match[3]}`;
+    const upload = await this.statOrNull(uploadKey);
+    if (!upload) return this.alreadyCopied(finalKey);
+    const contentType = mimeTypeOf(upload);
+    const allowed = PRIVATE_DOCUMENT_TYPES.includes(contentType);
+    const head = allowed ? await this.head(uploadKey, upload.etag) : null;
+    const problem = !allowed
+      ? `fayl turi ruxsat etilmagan: ${contentType || '—'}`
+      : upload.size < 1 || upload.size > PRIVATE_DOCUMENT_MAX_BYTES
+        ? `fayl hajmi chegaradan tashqarida: ${upload.size}`
+        : EXTENSIONS[contentType] !== `.${match[3]}` ||
+            !signatureMatches(head!, contentType)
+          ? 'fayl tarkibi ko‘rsatilgan turga mos emas'
+          : null;
+    if (problem) {
+      await this.removeQuietly(uploadKey);
+      throw new BadRequestException(`Hujjat qabul qilinmadi: ${problem}`);
+    }
+    const conditions = new CopyConditions();
+    conditions.setMatchETag(upload.etag);
+    try {
+      await this.client.copyObject(
+        this.bucket,
+        finalKey,
+        `/${this.bucket}/${uploadKey}`,
+        conditions,
+      );
+    } catch (error) {
+      if (errorCode(error) === 'PreconditionFailed')
+        throw new ConflictException(
+          'Fayl tekshiruv paytida o‘zgardi — qayta tasdiqlang',
+        );
+      if (isMissing(error)) return this.alreadyCopied(finalKey);
+      throw this.unavailable('ko‘chirish', error);
+    }
+    await this.removeQuietly(uploadKey);
+    return { objectKey: finalKey, contentType, size: upload.size };
+  }
+
+  /** Yopiq hujjat (faqat `private/wholesaler/…`) — base64; gateway imzoni tekshirgandan keyin chaqiradi. */
+  async get(input: {
+    objectKey: string;
+  }): Promise<{ contentType: string; size: number; base64: string }> {
+    const objectKey = String(input?.objectKey ?? '');
+    if (!FINAL_KEY.test(objectKey))
+      throw new BadRequestException('Fayl kaliti noto‘g‘ri');
+    const stat = await this.statOrNull(objectKey);
+    if (!stat) throw new NotFoundException('Fayl topilmadi');
+    if (stat.size > PRIVATE_DOCUMENT_MAX_BYTES)
+      throw new ConflictException('Fayl hajmi chegaradan katta');
+    const stream = await this.client
+      .getObject(this.bucket, objectKey)
+      .catch((error) => {
+        throw this.unavailable('o‘qish', error);
+      });
+    const body = await readAll(stream);
+    return {
+      contentType: mimeTypeOf(stat),
+      size: body.length,
+      base64: body.toString('base64'),
+    };
+  }
+
+  private async alreadyCopied(finalKey: string): Promise<PrivateFileVerified> {
+    const copied = await this.statOrNull(finalKey);
+    const contentType = copied ? mimeTypeOf(copied) : null;
+    if (
+      !copied ||
+      !contentType ||
+      !PRIVATE_DOCUMENT_TYPES.includes(contentType)
+    )
+      throw new BadRequestException('Fayl topilmadi — avval yuklang');
+    return { objectKey: finalKey, contentType, size: copied.size };
+  }
+
+  /** Birinchi baytlar — stat dagi versiyadan (ETag bir xil), aks holda 409. */
+  private async head(objectKey: string, etag: string): Promise<Buffer> {
+    const stream = await this.client
+      .getPartialObject(this.bucket, objectKey, 0, 16)
+      .catch((error) => {
+        throw this.unavailable('o‘qish', error);
+      });
+    const head = await readAll(stream);
+    const readEtag = (
+      stream as Readable & { headers?: Record<string, unknown> }
+    ).headers?.etag;
+    if (unquote(readEtag) !== unquote(etag))
+      throw new ConflictException(
+        'Fayl tekshiruv paytida o‘zgardi — qayta tasdiqlang',
+      );
+    return head;
+  }
+
+  private async statOrNull(objectKey: string): Promise<ObjectStat | null> {
+    try {
+      return (await this.client.statObject(
+        this.bucket,
+        objectKey,
+      )) as ObjectStat;
+    } catch (error) {
+      if (isMissing(error)) return null;
+      throw this.unavailable('tekshirish', error);
+    }
+  }
+
+  private unavailable(action: string, error: unknown) {
+    this.logger.error(
+      `Yopiq hujjatni ${action}da MinIO xatosi: ${(error as Error)?.message}`,
+    );
+    return new ServiceUnavailableException(
+      'Fayl ombori vaqtincha ishlamayapti — birozdan so‘ng qayta urinib ko‘ring',
+    );
+  }
+
+  private async removeQuietly(objectKey: string): Promise<void> {
+    try {
+      await this.client.removeObject(this.bucket, objectKey);
+    } catch (error) {
+      this.logger.warn(
+        `Yuklama o‘chirilmadi (${objectKey}): ${(error as Error).message}`,
+      );
+    }
+  }
+}
+
+/** PDF — `%PDF-`, JPEG — FF D8 FF, PNG — imzosi. */
+export function signatureMatches(
+  head: Buffer,
+  contentType: PrivateDocumentContentType,
+): boolean {
+  if (contentType === 'application/pdf')
+    return head.length >= 5 && head.toString('ascii', 0, 5) === '%PDF-';
+  if (contentType === 'image/jpeg')
+    return (
+      head.length >= 3 &&
+      head[0] === 0xff &&
+      head[1] === 0xd8 &&
+      head[2] === 0xff
+    );
+  return (
+    head.length >= 8 &&
+    head
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  );
+}
+
+function mimeTypeOf(stat: ObjectStat): PrivateDocumentContentType {
+  return String(
+    stat.metaData?.['content-type'] ?? stat.metaData?.['Content-Type'] ?? '',
+  ).toLowerCase() as PrivateDocumentContentType;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string })?.code;
+}
+
+function isMissing(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === 'NotFound' || code === 'NoSuchKey';
+}
+
+function unquote(etag: unknown): string {
+  return String(etag ?? '').replace(/"/g, '');
+}
+
+async function readAll(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks);
+}

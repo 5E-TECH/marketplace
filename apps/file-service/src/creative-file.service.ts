@@ -24,7 +24,10 @@ import {
 const POLICY_TTL_MS = 15 * 60 * 1000;
 /** Tasdiqlanmagan yuklamalar shuncha kundan keyin o‘chadi (MinIO lifecycle) [taklif]. */
 const UPLOAD_EXPIRY_DAYS = 1;
-const UPLOAD_EXPIRY_RULE_ID = 'elchi-creative-uploads-expire';
+const UPLOAD_EXPIRY_RULES = [
+  { id: 'elchi-creative-uploads-expire', prefix: CREATIVE_UPLOAD_FOLDER },
+  { id: 'elchi-private-uploads-expire', prefix: 'private-uploads' },
+] as const;
 const MB = 1024 * 1024;
 const ID = /^[1-9]\d{0,18}$/;
 const FINAL_KEY = new RegExp(
@@ -341,7 +344,10 @@ export class CreativeFileService implements OnApplicationBootstrap {
     }
   }
 
-  /** `creative-uploads/` dagi tasdiqlanmagan fayllar 1 kunda o‘chadi; bucketdagi boshqa qoidalar saqlanadi. */
+  /**
+   * `creative-uploads/` va `private-uploads/` (BE-30 yopiq hujjatlar) dagi tasdiqlanmagan fayllar 1 kunda o‘chadi;
+   * bucketdagi boshqa qoidalar saqlanadi. Ikkala qoida shu yerda — bitta yozuv bilan (bir-birini o‘chirib yubormasin).
+   */
   private async ensureUploadExpiry(): Promise<void> {
     const current = await this.client
       .getBucketLifecycle(this.bucket)
@@ -352,24 +358,24 @@ export class CreativeFileService implements OnApplicationBootstrap {
       });
     // minio klienti bitta qoidani massiv emas, obyekt qilib qaytaradi
     const rules = ([] as LifecycleRule[]).concat(current?.Rule ?? []);
-    const others = rules.filter((rule) => rule.ID !== UPLOAD_EXPIRY_RULE_ID);
-    const mine = rules.find((rule) => rule.ID === UPLOAD_EXPIRY_RULE_ID);
-    if (
-      mine?.Status === 'Enabled' &&
-      mine.Filter?.Prefix === `${CREATIVE_UPLOAD_FOLDER}/` &&
-      Number(mine.Expiration?.Days) === UPLOAD_EXPIRY_DAYS
-    )
-      return;
+    const wanted = UPLOAD_EXPIRY_RULES.map(({ id, prefix }) => ({
+      ID: id,
+      Status: 'Enabled',
+      Filter: { Prefix: `${prefix}/` },
+      Expiration: { Days: UPLOAD_EXPIRY_DAYS },
+    }));
+    const upToDate = wanted.every((rule) => {
+      const mine = rules.find((r) => r.ID === rule.ID);
+      return (
+        mine?.Status === 'Enabled' &&
+        mine.Filter?.Prefix === rule.Filter.Prefix &&
+        Number(mine.Expiration?.Days) === UPLOAD_EXPIRY_DAYS
+      );
+    });
+    if (upToDate) return;
+    const ids = new Set<string>(wanted.map((rule) => rule.ID));
     await this.client.setBucketLifecycle(this.bucket, {
-      Rule: [
-        ...others,
-        {
-          ID: UPLOAD_EXPIRY_RULE_ID,
-          Status: 'Enabled',
-          Filter: { Prefix: `${CREATIVE_UPLOAD_FOLDER}/` },
-          Expiration: { Days: UPLOAD_EXPIRY_DAYS },
-        },
-      ],
+      Rule: [...rules.filter((rule) => !ids.has(rule.ID)), ...wanted],
     });
   }
 

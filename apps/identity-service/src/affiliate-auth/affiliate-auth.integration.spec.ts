@@ -515,4 +515,144 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       ]),
     ).resolves.toHaveLength(2);
   });
+  it('BE-30: optovik ro‘yxati — shartnoma matni yo‘q — 409; e’londan keyin WHOLESALER, shartnoma va rozilik yozildi; aniq versiya matni', async () => {
+    const phone = '+998901119001';
+    const token = await register(phone);
+    const consent = (await svc.legalDocument('personal-data-consent')).version;
+    await expect(
+      errorOf(
+        svc.registerWholesaler(
+          {
+            registrationToken: token,
+            contractVersion: '1.0',
+            consentVersion: consent,
+            name: 'Termos Savdo',
+          },
+          null,
+        ),
+      ),
+    ).resolves.toMatchObject({ status: 409, errorCode: 'OFFER_NOT_ACCEPTED' });
+    await svc.publishLegalDocument(
+      LegalDocumentType.WHOLESALER_CONTRACT,
+      {
+        version: '1.1',
+        summary: [],
+        sections: [
+          {
+            id: 's1',
+            title: '1. Predmet',
+            body: 'Komitent tovarni topshiradi',
+          },
+        ],
+      },
+      '1',
+    );
+    await expect(
+      errorOf(
+        svc.registerWholesaler(
+          {
+            registrationToken: token,
+            contractVersion: '1.0',
+            consentVersion: consent,
+            name: 'Termos Savdo',
+          },
+          null,
+        ),
+      ),
+    ).resolves.toMatchObject({ status: 400, errorCode: 'OFFER_NOT_ACCEPTED' });
+    const result = await svc.registerWholesaler(
+      {
+        registrationToken: token,
+        contractVersion: '1.1',
+        consentVersion: consent,
+        name: 'Termos Savdo',
+      },
+      '10.0.0.7',
+    );
+    expect(result.user).toMatchObject({
+      role: Role.WHOLESALER,
+      phone,
+      name: 'Termos Savdo',
+    });
+    const agreements = (await ds.query(
+      `SELECT type, version, ip FROM identity.user_agreement WHERE user_id = $1 ORDER BY type`,
+      [result.user.id],
+    )) as Array<{ type: string; version: string; ip: string }>;
+    expect(agreements).toEqual([
+      { type: 'personal-data-consent', version: consent, ip: '10.0.0.7' },
+      { type: 'wholesaler-contract', version: '1.1', ip: '10.0.0.7' },
+    ]);
+    // PDF uchun qabul qilingan versiya matni (keyin yangisi e’lon qilinsa ham)
+    await expect(
+      svc.legalDocument('wholesaler-contract', '1.0'),
+    ).resolves.toMatchObject({ version: '1.0', sections: [] });
+    await expect(
+      svc.legalDocument('wholesaler-contract', '1.1'),
+    ).resolves.toMatchObject({ version: '1.1' });
+  });
+
+  it('BE-30: admin bog‘laydigan optovik foydalanuvchisi — yangi yoki bor optovik; boshqa rol — 409; SMS kod bilan kiradi; kabinetda hujjatlarni qabul qiladi', async () => {
+    const created = await svc.ensureWholesalerUser({
+      phone: '+998901119002',
+      name: 'Akmal Karimov',
+    });
+    expect(created.created).toBe(true);
+    await expect(
+      svc.ensureWholesalerUser({ phone: '+998901119002', name: 'Boshqa' }),
+    ).resolves.toEqual({ userId: created.userId, created: false });
+    const offer = (await svc.legalDocument('affiliate-offer')).version;
+    const consent = (await svc.legalDocument('personal-data-consent')).version;
+    await svc.registerAffiliate(
+      {
+        registrationToken: await register('+998901119003'),
+        offerVersion: offer,
+        consentVersion: consent,
+      },
+      null,
+    );
+    await expect(
+      errorOf(
+        svc.ensureWholesalerUser({ phone: '+998901119003', name: 'Sotuvchi' }),
+      ),
+    ).resolves.toMatchObject({
+      status: 409,
+      errorCode: 'PHONE_ALREADY_REGISTERED',
+    });
+    // optovik SMS kod bilan kiradi (parol yo‘q)
+    await svc.sendOtp({ phone: '+998901119002', purpose: OtpPurpose.LOGIN });
+    await expect(
+      svc.verifyOtp({
+        phone: '+998901119002',
+        purpose: OtpPurpose.LOGIN,
+        code: lastCode('+998901119002'),
+      }),
+    ).resolves.toHaveProperty('accessToken');
+    // kabinetda ro‘yxatni yakunlash: joriy versiyalar; takror — bir marta yoziladi; eski versiya — 400
+    const contract = (await svc.legalDocument('wholesaler-contract')).version;
+    for (let i = 0; i < 2; i++)
+      await expect(
+        svc.acceptWholesalerDocuments(
+          created.userId,
+          { contractVersion: contract, consentVersion: consent },
+          null,
+        ),
+      ).resolves.toEqual({
+        contractVersion: contract,
+        consentVersion: consent,
+      });
+    const [{ count }] = (await ds.query(
+      `SELECT count(*)::int AS count FROM identity.user_agreement WHERE user_id = $1`,
+      [created.userId],
+    )) as Array<{ count: number }>;
+    expect(count).toBe(2);
+    await expect(
+      errorOf(
+        svc.acceptWholesalerDocuments(
+          created.userId,
+          { contractVersion: '1.0', consentVersion: consent },
+          null,
+        ),
+      ),
+    ).resolves.toMatchObject({ status: 400 });
+  });
 });

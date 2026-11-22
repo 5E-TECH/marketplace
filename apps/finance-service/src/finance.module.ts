@@ -17,6 +17,7 @@ import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
 import { SettlementController } from './ledger/settlement.controller';
 import { SettlementService } from './ledger/settlement.service';
+import { WholesalerBalanceService } from './ledger/wholesaler-balance.service';
 import { PlatformMetricsService } from './ledger/platform-metrics.service';
 import { ReconciliationController } from './ledger/reconciliation.controller';
 import { RemittanceService } from './ledger/remittance.service';
@@ -64,6 +65,7 @@ const entities = FINANCE_DB.entities;
     BalanceCheckService,
     WithdrawalService,
     SettlementService,
+    WholesalerBalanceService,
     PlatformMetricsService,
     RemittanceService,
     SettlementResponseService,
