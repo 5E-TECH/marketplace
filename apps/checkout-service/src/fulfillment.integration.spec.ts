@@ -22,6 +22,7 @@ import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { SellerOrdersService } from './seller-orders.service';
 import { ShippingLabelService } from './shipping-label.service';
+import { WarehouseReturnsService } from './warehouse-returns.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
 import { Reservation } from '../../inventory-service/src/entities/reservation.entity';
@@ -613,6 +614,43 @@ describeWithPostgres(
       await expect(
         fulfillment.scan(order.taskId, 'Q-1', WAREHOUSE),
       ).resolves.toMatchObject({ status: 'PICKED' });
+    });
+
+    it('BE-17: qaytayotgan posilka saralash ro‘yxatida — Elchi raqami va tovarlar bilan', async () => {
+      await orders.onLeadConfirmed(confirmed('7201', '2026-12-16T05:00:00Z'));
+      const order = await orderOf('7201');
+      await created(order.id, 'tok-7201');
+      const system = { type: LeadOrderActorType.SYSTEM, id: null };
+      for (const to of [
+        'PICKING',
+        'PACKED',
+        'HANDED_TO_ELCHI',
+        'IN_TRANSIT',
+        'REFUSED',
+        'RETURNING',
+      ])
+        await status.transition({
+          orderId: order.id,
+          to,
+          actor: system,
+          reason: null,
+        } as never);
+      const returns = new WarehouseReturnsService(checkoutDs);
+      const listed = (await returns.list()).find(
+        (row) => row.orderId === order.id,
+      );
+      expect(listed).toMatchObject({
+        status: 'RETURNING',
+        shipmentId: String(1_251_100 + Number(order.id)),
+        items: [{ variantId: VARIANT, sku: 'Q-1', quantity: 1 }],
+      });
+      await expect(returns.info({ orderId: order.id })).resolves.toMatchObject({
+        orderId: order.id,
+        status: 'RETURNING',
+      });
+      await expect(returns.info({ orderId: '999999' })).rejects.toMatchObject({
+        status: 404,
+      });
     });
   },
 );

@@ -12,6 +12,7 @@ import { CreateInventoryTables1721822400000 } from './migrations/1721822400000-c
 import { CreateInventoryOperation1721822400001 } from './migrations/1721822400001-create-inventory-operation';
 import { CreateInventoryOutbox1721822400002 } from './migrations/1721822400002-create-inventory-outbox';
 import { AddInventoryBaseColumns1721822400003 } from './migrations/1721822400003-add-inventory-base-columns';
+import { InboundLotReturn1796688000000 } from './migrations/1796688000000-inbound-lot-return';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 /** hq-warehouse.integration.spec.ts bilan bir xil: inventory sxemasini DROP/CREATE qiladigan spec’lar ketma-ket (BE-16). */
@@ -60,6 +61,8 @@ describeWithPostgres('InventoryService PostgreSQL concurrency', () => {
         CreateInventoryOperation1721822400001,
         CreateInventoryOutbox1721822400002,
         AddInventoryBaseColumns1721822400003,
+        // BE-17: stock.cell va partiyalar (reserve/commit ularni o‘qiydi)
+        InboundLotReturn1796688000000,
       ],
       migrationsRun: true,
       synchronize: false,

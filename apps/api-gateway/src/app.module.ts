@@ -59,6 +59,7 @@ import { AdminSettlementsController } from './withdrawals/admin-settlements.cont
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { WarehouseController } from './warehouse/warehouse.controller';
+import { WarehouseReturnsController } from './warehouse/warehouse-returns.controller';
 import { AdminLeadsController } from './leads/admin-leads.controller';
 import { AdminFraudController } from './leads/admin-fraud.controller';
 import { SupervisorLeadsController } from './leads/supervisor-leads.controller';
@@ -210,6 +211,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     OperatorLeadsController,
     OperatorOrdersController,
     WarehouseController,
+    WarehouseReturnsController,
     AdminLeadsController,
     AdminOfferContentController,
     SupervisorLeadsController,

@@ -16,6 +16,7 @@ import {
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Stock } from './entities/stock.entity';
 import { StockMovement } from './entities/stock-movement.entity';
+import { blockedByVariant } from './stock-lots';
 
 interface VariantInventoryDetails {
   /** BE-16: mahsulot optovigi (qoldiq egasi). */
@@ -113,16 +114,38 @@ export class AdminInventoryQueryService {
     const { info, warnings } = await this.variantInfo(
       rows.map((row) => row.variantId),
     );
-    const items = rows.map<AdminStockItemDto>((row) => ({
-      ...info(row.variantId),
-      warehouseId: row.warehouseId,
-      warehouseName: row.warehouse.name,
-      warehouseActive: row.warehouse.isActive,
-      onHand: row.quantityOnHand,
-      reserved: row.quantityReserved,
-      available: row.quantityOnHand - row.quantityReserved,
-      lowStockThreshold: row.lowStockThreshold,
-    }));
+    // BE-17 (OMB-3): sotuvdan chiqqan partiyalar — ombor bo‘yicha
+    const blocked = new Map<string, number>();
+    for (const warehouseId of new Set(
+      rows.map((row) => String(row.warehouseId)),
+    ))
+      for (const [variantId, quantity] of await blockedByVariant(
+        this.stocks.manager,
+        rows
+          .filter((row) => String(row.warehouseId) === warehouseId)
+          .map((row) => String(row.variantId)),
+        warehouseId,
+      ))
+        blocked.set(`${warehouseId}:${variantId}`, quantity);
+    const items = rows.map<AdminStockItemDto>((row) => {
+      const lotBlocked =
+        blocked.get(`${row.warehouseId}:${row.variantId}`) ?? 0;
+      return {
+        ...info(row.variantId),
+        warehouseId: row.warehouseId,
+        warehouseName: row.warehouse.name,
+        warehouseActive: row.warehouse.isActive,
+        onHand: row.quantityOnHand,
+        reserved: row.quantityReserved,
+        available: Math.max(
+          0,
+          row.quantityOnHand - row.quantityReserved - lotBlocked,
+        ),
+        lowStockThreshold: row.lowStockThreshold,
+        cell: row.cell ?? null,
+        blocked: lotBlocked,
+      };
+    });
     return {
       ...this.page(items, total, page, limit),
       warnings,
