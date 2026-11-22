@@ -410,6 +410,7 @@ export class ProductService {
       throw new ConflictException('Mahsulot allaqachon yashirilgan');
     }
     product.isBlocked = true;
+    product.blockReason = reason.trim().slice(0, 500) || null;
     const saved = await this.products.save(product);
     await this.publishRemoved(saved);
     await this.emitProductHidden(saved, reason);
@@ -422,6 +423,7 @@ export class ProductService {
       throw new ConflictException('Mahsulot bloklanmagan');
     }
     product.isBlocked = false;
+    product.blockReason = null;
     const saved = await this.products.save(product);
     const shop = await this.shops.findOne({
       where: { id: saved.shopId, isDeleted: false },

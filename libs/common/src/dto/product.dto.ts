@@ -295,6 +295,13 @@ export class ProductDto {
   @ApiProperty({ example: true }) cpaEnabled: boolean;
   @ApiProperty({ example: false }) isBad: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'BE-27: yashirish sababi',
+  })
+  blockReason: string | null;
   @ApiProperty({ example: 4.75 }) rating: number;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) createdAt: Date;
   @ApiProperty({ example: '2026-08-14T10:00:00.000Z' }) updatedAt: Date;
@@ -307,3 +314,57 @@ export class MyProductsPageDto {
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 2 }) totalPages: number;
 }
+
+/**
+ * BE-27: `GET /admin/moderation/summary` — moderatsiya tablari va mahsulot yorliqlari soni (FE-12 taklifi, 2-bo‘lim).
+ */
+export class ModerationSummaryDto {
+  @ApiProperty({
+    example: 1,
+    description: 'Tasdiq kutayotgan mahsulotlar (PENDING_REVIEW)',
+  })
+  productsPending: number;
+
+  @ApiProperty({
+    example: 3,
+    description:
+      'Narx qarori kutayotgan CPA mahsulotlari: tasdiqlangan narx yo‘q yoki amalda emas (BE-09)',
+  })
+  pricesPending: number;
+
+  @ApiProperty({
+    example: {
+      ALL: 7,
+      PENDING_REVIEW: 1,
+      ACTIVE: 4,
+      REJECTED: 1,
+      BLOCKED: 0,
+      DRAFT: 1,
+    },
+    description:
+      'Holat bo‘yicha (o‘chirilmaganlar); BLOCKED — yashirilgan, ACTIVE — sotuvda va yashirilmagan',
+  })
+  byStatus: Record<string, number>;
+
+  @ApiProperty({
+    example: 1,
+    nullable: true,
+    type: Number,
+    description:
+      'Sotuvdagi CPA mahsulotlari, qoldig‘i 0; null — ombor javob bermadi',
+  })
+  outOfStock: number | null;
+
+  @ApiProperty({
+    example: 0,
+    nullable: true,
+    type: Number,
+    description:
+      'Sotuvdan chiqqan, omborda turgan partiyalar (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif]; null — ombor javob bermadi',
+  })
+  expirySoon: number | null;
+}
+
+export const CATALOG_MODERATION_RPC = {
+  SUMMARY: 'catalog.moderation.summary',
+} as const;

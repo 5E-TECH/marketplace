@@ -456,6 +456,11 @@ export class PricingService {
    * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
    * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
    */
+  /** BE-27: tasdiqlangan narx hozir ham amaldami (moderatsiya hisoblagichi uchun). */
+  approvalCurrent(product: Product, ctx: PricingContext): boolean {
+    return this.isApprovalCurrent(product, this.paramsFor(product, ctx), ctx);
+  }
+
   private isApprovalCurrent(
     product: Product,
     params: PricingParams,

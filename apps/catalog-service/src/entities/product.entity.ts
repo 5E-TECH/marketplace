@@ -155,6 +155,15 @@ export class Product extends BaseEntity {
   @Column({ name: 'is_blocked', type: 'boolean', default: false })
   isBlocked: boolean;
 
+  /** BE-27: yashirish sababi (`POST /admin/products/:id/hide`); qayta ochilganda tozalanadi. */
+  @Column({
+    name: 'block_reason',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  blockReason: string | null;
+
   @Column({
     type: 'numeric',
     precision: 3,

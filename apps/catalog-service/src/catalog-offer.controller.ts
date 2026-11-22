@@ -1,6 +1,7 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  CATALOG_MODERATION_RPC,
   CatalogOfferListQuery,
   LEAD_CATALOG_RPC,
   LEAD_ORDER_RPC,
@@ -34,6 +35,11 @@ export class CatalogOfferController {
       Number(data?.quantity),
       String(data?.whereDeliver ?? ''),
     );
+  }
+
+  @MessagePattern({ cmd: CATALOG_MODERATION_RPC.SUMMARY })
+  moderationSummary() {
+    return this.offers.moderationSummary();
   }
 
   @MessagePattern({ cmd: LEAD_CATALOG_RPC.OFFER_LIST })
