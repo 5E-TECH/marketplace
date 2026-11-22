@@ -183,6 +183,8 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /admin/finance/settlements/:id',
     'GET /admin/finance/settlements/:id/act.pdf',
     'GET /admin/finance/settlements/bank-file',
+    // BE-27: moliya sozlamalarini ko‘radi (o‘zgartirish — faqat SUPERADMIN)
+    'GET /admin/finance/settings',
     'GET /admin/finance/withdrawals',
     'POST /admin/finance/settlements/:id/paid',
     'POST /admin/finance/settlements/run',

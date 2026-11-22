@@ -5414,6 +5414,26 @@
             }
           },
           {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "BE-27: ob’ekt turi (yozuvdagi `entityType`, masalan Product, User, FinanceSetting)",
+            "schema": {
+              "example": "Product",
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityId",
+            "required": false,
+            "in": "query",
+            "description": "BE-27: ob’ekt ID si (`entityType` bilan birga — «shu mahsulot auditi»)",
+            "schema": {
+              "example": "12",
+              "type": "string"
+            }
+          },
+          {
             "name": "dateFrom",
             "required": false,
             "in": "query",
@@ -5495,6 +5515,84 @@
           }
         ],
         "summary": "Audit jurnali (actor/action/sana filtr + sahifalash)",
+        "tags": [
+          "admin-audit"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminAuditController_remove[0]",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Audit jurnali o‘zgartirilmaydi va o‘chirilmaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Audit yozuvini o‘chirish — taqiqlangan (405)",
+        "tags": [
+          "admin-audit"
+        ]
+      }
+    },
+    "/api/v1/admin/audit/{id}": {
+      "delete": {
+        "operationId": "AdminAuditController_remove[1]",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Audit jurnali o‘zgartirilmaydi va o‘chirilmaydi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Audit yozuvini o‘chirish — taqiqlangan (405)",
         "tags": [
           "admin-audit"
         ]
@@ -10164,6 +10262,184 @@
         ]
       }
     },
+    "/api/v1/admin/finance/settings": {
+      "get": {
+        "operationId": "AdminFinanceSettingsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinanceSettingStateDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Moliya sozlamalari: amaldagi, rejalashtirilgan va oldingi qiymatlar",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/settings/{key}": {
+      "put": {
+        "operationId": "AdminFinanceSettingsController_set",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "refusal_fee",
+                "withdrawal_min"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFinanceSettingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "key": "refusal_fee",
+                    "before": 20000,
+                    "after": 25000,
+                    "effectiveFrom": "2026-12-01T00:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Qiymat yoki vaqt noto‘g‘ri, izoh yo‘q"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shu vaqtga allaqachon kiritilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yangi qiymat (kuchga kirish vaqti bilan); izoh majburiy — auditga",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/moderation/summary": {
+      "get": {
+        "operationId": "AdminModerationController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationSummaryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Moderatsiya hisoblagichlari: tasdiq va narx kutayotganlar, holatlar, qoldiq va partiyalar",
+        "tags": [
+          "admin-products"
+        ]
+      }
+    },
     "/api/v1/admin/finance/settlements": {
       "get": {
         "operationId": "AdminSettlementsController_list",
@@ -12831,6 +13107,12 @@
             "type": "boolean",
             "example": false
           },
+          "blockReason": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "BE-27: yashirish sababi"
+          },
           "rating": {
             "type": "number",
             "example": 4.75
@@ -12874,6 +13156,7 @@
           "cpaEnabled",
           "isBad",
           "isBlocked",
+          "blockReason",
           "rating",
           "createdAt",
           "updatedAt"
@@ -15131,6 +15414,11 @@
       "ProductPricePolicyDto": {
         "type": "object",
         "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Superadmin so‘rovi (Shodiyor, 2026-11-22): Elchi tarifi oshdi",
+            "description": "BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi"
+          },
           "deliveryMode": {
             "type": "string",
             "enum": [
@@ -15157,6 +15445,11 @@
       "PricePolicyDto": {
         "type": "object",
         "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Superadmin so‘rovi (Shodiyor, 2026-11-22): Elchi tarifi oshdi",
+            "description": "BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi"
+          },
           "kSale70": {
             "type": "object",
             "example": 29688,
@@ -15233,6 +15526,11 @@
       "ElchiTariffDto": {
         "type": "object",
         "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Superadmin so‘rovi (Shodiyor, 2026-11-22): Elchi tarifi oshdi",
+            "description": "BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi"
+          },
           "centerBase": {
             "type": "number",
             "example": 40000
@@ -19937,6 +20235,144 @@
           "selfEmployed",
           "updatedBy",
           "updatedAt"
+        ]
+      },
+      "FinanceSettingValueDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "example": 20000,
+            "description": "Butun so‘m"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-12-01T00:00:00.000Z"
+          },
+          "changedBy": {
+            "type": "string",
+            "example": "user:7",
+            "nullable": true,
+            "description": "Kim kiritdi (`user:<id>` yoki migratsiya)"
+          }
+        },
+        "required": [
+          "value",
+          "effectiveFrom",
+          "changedBy"
+        ]
+      },
+      "FinanceSettingStateDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "refusal_fee",
+              "withdrawal_min"
+            ],
+            "example": "refusal_fee"
+          },
+          "current": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FinanceSettingValueDto"
+              }
+            ]
+          },
+          "scheduled": {
+            "description": "Kelajakda kuchga kiradiganlar (eng yaqini birinchi)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinanceSettingValueDto"
+            }
+          },
+          "history": {
+            "description": "Oldingi qiymatlar, yangisi birinchi (ko‘pi bilan 20)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinanceSettingValueDto"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "current",
+          "scheduled",
+          "history"
+        ]
+      },
+      "UpdateFinanceSettingDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "example": 20000,
+            "minimum": 0,
+            "description": "Butun so‘m"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "example": "2026-12-01T00:00:00+05:00",
+            "description": "Kuchga kirish vaqti; berilmasa — hozir. O‘tmish vaqti — 400"
+          },
+          "comment": {
+            "type": "string",
+            "example": "Moliya bo‘limi so‘rovi (Dilnoza, 2026-11-22): Elchi tarifi oshdi",
+            "description": "Izoh majburiy: kim so‘radi va sabab"
+          }
+        },
+        "required": [
+          "value",
+          "comment"
+        ]
+      },
+      "ModerationSummaryDto": {
+        "type": "object",
+        "properties": {
+          "productsPending": {
+            "type": "number",
+            "example": 1,
+            "description": "Tasdiq kutayotgan mahsulotlar (PENDING_REVIEW)"
+          },
+          "pricesPending": {
+            "type": "number",
+            "example": 3,
+            "description": "Narx qarori kutayotgan CPA mahsulotlari: tasdiqlangan narx yo‘q yoki amalda emas (BE-09)"
+          },
+          "byStatus": {
+            "type": "object",
+            "example": {
+              "ALL": 7,
+              "PENDING_REVIEW": 1,
+              "ACTIVE": 4,
+              "REJECTED": 1,
+              "BLOCKED": 0,
+              "DRAFT": 1
+            },
+            "description": "Holat bo‘yicha (o‘chirilmaganlar); BLOCKED — yashirilgan, ACTIVE — sotuvda va yashirilmagan"
+          },
+          "outOfStock": {
+            "type": "number",
+            "example": 1,
+            "nullable": true,
+            "description": "Sotuvdagi CPA mahsulotlari, qoldig‘i 0; null — ombor javob bermadi"
+          },
+          "expirySoon": {
+            "type": "number",
+            "example": 0,
+            "nullable": true,
+            "description": "Sotuvdan chiqqan, omborda turgan partiyalar (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif]; null — ombor javob bermadi"
+          }
+        },
+        "required": [
+          "productsPending",
+          "pricesPending",
+          "byStatus",
+          "outOfStock",
+          "expirySoon"
         ]
       },
       "WholesalerSettlementItemDto": {

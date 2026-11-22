@@ -3,6 +3,8 @@
 exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qotirilgan (snapshot): yangi yo‘l yoki rol o‘zgarishi ko‘rib chiqiladi 1`] = `
 {
   "ADMIN": [
+    "DELETE /admin/audit",
+    "DELETE /admin/audit/:id",
     "DELETE /admin/categories/:id",
     "DELETE /admin/content/banners/:id",
     "DELETE /admin/products/:id/creatives/:creativeId",
@@ -16,6 +18,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "GET /admin/finance/payouts",
     "GET /admin/finance/reports",
     "GET /admin/finance/reports/reconciliation",
+    "GET /admin/finance/settings",
     "GET /admin/finance/settlements",
     "GET /admin/finance/settlements/:id",
     "GET /admin/finance/settlements/:id/act.pdf",
@@ -33,6 +36,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "GET /admin/inventory/stock",
     "GET /admin/leads",
     "GET /admin/leads/:id",
+    "GET /admin/moderation/summary",
     "GET /admin/notifications/templates",
     "GET /admin/offer-content/:productId",
     "GET /admin/orders",
@@ -122,6 +126,8 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "PUT /admin/products/:id/price-policy",
   ],
   "SUPERADMIN": [
+    "DELETE /admin/audit",
+    "DELETE /admin/audit/:id",
     "DELETE /admin/categories/:id",
     "DELETE /admin/content/banners/:id",
     "DELETE /admin/products/:id/creatives/:creativeId",
@@ -137,6 +143,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "GET /admin/finance/payouts",
     "GET /admin/finance/reports",
     "GET /admin/finance/reports/reconciliation",
+    "GET /admin/finance/settings",
     "GET /admin/finance/settlements",
     "GET /admin/finance/settlements/:id",
     "GET /admin/finance/settlements/:id/act.pdf",
@@ -155,6 +162,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "GET /admin/inventory/stock",
     "GET /admin/leads",
     "GET /admin/leads/:id",
+    "GET /admin/moderation/summary",
     "GET /admin/notifications/templates",
     "GET /admin/offer-content/:productId",
     "GET /admin/orders",
@@ -273,6 +281,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "POST /warehouse/tasks/:id/pack",
     "POST /warehouse/tasks/:id/scan",
     "PUT /admin/finance/affiliates/:id/self-employed",
+    "PUT /admin/finance/settings/:key",
     "PUT /admin/offer-content/:productId",
     "PUT /admin/payments/providers/:provider",
     "PUT /admin/pricing/policy",
