@@ -265,6 +265,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "POST /warehouse/tasks/:id/pack",
     "POST /warehouse/tasks/:id/scan",
     "PUT /admin/finance/affiliates/:id/self-employed",
+    "PUT /admin/legal/documents/:type",
     "PUT /admin/offer-content/:productId",
     "PUT /admin/payments/providers/:provider",
     "PUT /admin/pricing/policy",
