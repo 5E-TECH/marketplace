@@ -126,6 +126,8 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/next',
     'POST /operator/orders/:id/cancel',
     'PUT /operator/state',
+    // BE-44: mijoz qo‘ng‘iroq qilsa — qaytarish so‘rovini kiritadi
+    'POST /admin/orders/:id/returns',
   ],
   // Operator ishi + navbat xulosasi, o‘tkazish va qizil ro‘yxat, lidlar ro‘yxati (qayta ochish — faqat admin).
   // BE-18: buyurtmalar ro‘yxati va kartasi (TC12, FE-26), bekor qilish (BUY-3).
@@ -135,6 +137,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /admin/orders',
     'GET /admin/orders/:id',
     'POST /admin/orders/:id/cancel',
+    'POST /admin/orders/:id/returns',
     'POST /operator/orders/:id/cancel',
     'GET /operator/leads',
     'GET /operator/leads/:id',

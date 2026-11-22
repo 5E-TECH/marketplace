@@ -9,6 +9,7 @@ describe('ReturnRequestsController (C4.2)', () => {
       returns as never,
       refunds as never,
       queries as never,
+      { isStaffRequest: jest.fn(async () => false) } as never,
     );
     return { controller, returns, refunds, queries };
   }

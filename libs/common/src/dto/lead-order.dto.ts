@@ -7,7 +7,7 @@ import { LeadOrderStatus } from './order-events.dto';
 
 /**
  * Ruxsat etilgan o‘tishlar (TZ T5 «Buyurtma» jadvali). Boshqa har qanday o‘tish rad etiladi va jurnalga yoziladi
- * (BUY-2). RETURN_REQUESTED dan keyingi holat T5 da yo‘q — qaytarish oqimi BE-44 da.
+ * (BUY-2). RETURN_REQUESTED dan keyingi holatlar T5 da yo‘q — BE-44 [taklif]: RETURNING yoki DELIVERED.
  */
 export const LEAD_ORDER_TRANSITIONS: Readonly<
   Record<LeadOrderStatus, readonly LeadOrderStatus[]>
@@ -36,7 +36,11 @@ export const LEAD_ORDER_TRANSITIONS: Readonly<
   [LeadOrderStatus.REMITTED]: [LeadOrderStatus.SETTLED],
   [LeadOrderStatus.REFUSED]: [LeadOrderStatus.RETURNING],
   [LeadOrderStatus.RETURNING]: [LeadOrderStatus.RETURNED_GRADED],
-  [LeadOrderStatus.RETURN_REQUESTED]: [],
+  // BE-44 [taklif, T5 ga yoziladi]: tasdiqlansa — tovar qaytmoqda (BE-17 saralash), rad etilsa — yetkazilgan
+  [LeadOrderStatus.RETURN_REQUESTED]: [
+    LeadOrderStatus.RETURNING,
+    LeadOrderStatus.DELIVERED,
+  ],
   [LeadOrderStatus.SETTLED]: [],
   [LeadOrderStatus.RETURNED_GRADED]: [],
   [LeadOrderStatus.CANCELLED]: [],

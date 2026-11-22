@@ -24,6 +24,8 @@ import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { SellerOrdersService } from './seller-orders.service';
+import { LeadReturnService } from './lead-return.service';
+import { ReturnRequestQueryService } from './return-request-query.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
 import { ReservationSweeperService } from '../../inventory-service/src/reservation-sweeper.service';
@@ -832,5 +834,165 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
         [order.id],
       ),
     ).rejects.toThrow(/chk_checkout_sales_order_lead/);
+  });
+
+  describe('BE-44: yetkazilgandan keyin qaytarish so‘rovi', () => {
+    const STAFF = { id: '41', role: 'ADMIN' };
+    let windowDays = 10;
+    const returns = () =>
+      new LeadReturnService(
+        checkoutDs,
+        { get: () => windowDays } as never,
+        status,
+        new OutboxService(checkoutDs.getRepository(OutboxEvent)),
+        new ReturnRequestQueryService(checkoutDs),
+      );
+    const deliveredOrder = async (leadId: string) => {
+      await inbound(2, `in-ret-${leadId}`);
+      await orders.onLeadConfirmed(confirmed({ leadId }));
+      const id = String((await orderOfLead(leadId)).id);
+      for (const to of [
+        LeadOrderStatus.PICKING,
+        LeadOrderStatus.PACKED,
+        LeadOrderStatus.HANDED_TO_ELCHI,
+      ])
+        await status.transition({ orderId: id, to, actor: ACTOR });
+      const elchi = { type: LeadOrderActorType.ELCHI, id: null };
+      for (const to of [LeadOrderStatus.IN_TRANSIT, LeadOrderStatus.DELIVERED])
+        await status.transition({ orderId: id, to, actor: elchi });
+      const [item] = (await checkoutDs.query(
+        `SELECT i.id::text FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id WHERE p.sales_order_id = $1`,
+        [id],
+      )) as Array<{ id: string }>;
+      return { id, itemId: item.id };
+    };
+    const request = (orderId: string, itemId: string, over: object = {}) =>
+      returns().create({
+        orderId,
+        dto: {
+          items: [{ orderItemId: itemId, quantity: 1 }],
+          reason: 'DEFECTIVE',
+          comment: 'Ekranda chiziq',
+          ...over,
+        } as never,
+        actor: STAFF,
+      });
+
+    beforeEach(() => {
+      windowDays = 10;
+    });
+
+    it('TC1/TC4/TC5: so‘rov → RETURN_REQUESTED, tarixda xodim; tasdiq → RETURNING va order.returned bir marta', async () => {
+      const { id, itemId } = await deliveredOrder('8001');
+      const created = await request(id, itemId);
+      expect(created).toMatchObject({ status: 'SUBMITTED', orderId: id });
+      expect((await orderOfLead('8001')).status).toBe('RETURN_REQUESTED');
+      const [history] = (await checkoutDs.query(
+        `SELECT actor_id::text AS actor, actor_role AS role FROM checkout.return_request_history
+          WHERE return_request_id = $1`,
+        [created.id],
+      )) as Array<{ actor: string; role: string }>;
+      expect(history).toEqual({ actor: '41', role: 'ADMIN' });
+
+      // buyurtma endi RETURN_REQUESTED — ikkinchi so‘rov 400
+      await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 });
+
+      const approved = await returns().decide({
+        returnId: created.id,
+        approve: true,
+        actor: STAFF,
+      });
+      expect(approved.status).toBe('APPROVED');
+      expect((await orderOfLead('8001')).status).toBe('RETURNING');
+      // takror tasdiq — o‘sha natija, ikkinchi hodisa yo‘q (TC5: moliya eventId bo‘yicha ham takrorni tashlaydi)
+      await returns().decide({
+        returnId: created.id,
+        approve: true,
+        actor: STAFF,
+      });
+      const events = await outboxOf('order.returned', id);
+      expect(events).toHaveLength(1);
+      expect(events[0].payload).toMatchObject({
+        eventId: `order.returned:${created.id}`,
+        orderId: id,
+        returnRequestId: created.id,
+        items: [{ productId: PRODUCT, quantity: 1 }],
+      });
+      // qaror yakuniy
+      await expect(
+        returns().decide({
+          returnId: created.id,
+          approve: false,
+          actor: STAFF,
+          comment: 'xato',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('TC2: sababsiz — 400; «Boshqa» izohsiz — 400; muddat o‘tgan — 400', async () => {
+      const { id, itemId } = await deliveredOrder('8002');
+      await expect(
+        request(id, itemId, { reason: undefined }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        request(id, itemId, { reason: 'OTHER', comment: '  ' }),
+      ).rejects.toMatchObject({ status: 400 });
+      await checkoutDs.query(
+        `UPDATE checkout.order_status_history SET created_at = now() - interval '11 days'
+          WHERE order_id = $1 AND to_status = 'DELIVERED'`,
+        [id],
+      );
+      await expect(request(id, itemId)).rejects.toMatchObject({
+        status: 400,
+        response: expect.objectContaining({
+          message: expect.stringContaining('muddati (10 kun)'),
+        }),
+      });
+      expect((await orderOfLead('8002')).status).toBe('DELIVERED');
+    });
+
+    it('TC3: «Yo‘lda» buyurtmaga — 400; rad etilsa buyurtma DELIVERED ga qaytadi, hodisa yo‘q', async () => {
+      await inbound(1, 'in-ret-8003');
+      await orders.onLeadConfirmed(confirmed({ leadId: '8003' }));
+      const transit = String((await orderOfLead('8003')).id);
+      for (const to of [
+        LeadOrderStatus.PICKING,
+        LeadOrderStatus.PACKED,
+        LeadOrderStatus.HANDED_TO_ELCHI,
+      ])
+        await status.transition({ orderId: transit, to, actor: ACTOR });
+      await status.transition({
+        orderId: transit,
+        to: LeadOrderStatus.IN_TRANSIT,
+        actor: { type: LeadOrderActorType.ELCHI, id: null },
+      });
+      const [item] = (await checkoutDs.query(
+        `SELECT i.id::text FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id WHERE p.sales_order_id = $1`,
+        [transit],
+      )) as Array<{ id: string }>;
+      await expect(request(transit, item.id)).rejects.toMatchObject({
+        status: 400,
+      });
+
+      const { id, itemId } = await deliveredOrder('8004');
+      const created = await request(id, itemId);
+      await expect(
+        returns().decide({
+          returnId: created.id,
+          approve: false,
+          actor: STAFF,
+        }),
+      ).rejects.toMatchObject({ status: 400 }); // sababsiz rad
+      await returns().decide({
+        returnId: created.id,
+        approve: false,
+        actor: STAFF,
+        comment: 'Tovar ishlatilgan',
+      });
+      expect((await orderOfLead('8004')).status).toBe('DELIVERED');
+      expect(await outboxOf('order.returned', id)).toEqual([]);
+    });
   });
 });
