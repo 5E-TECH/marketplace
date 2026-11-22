@@ -9,6 +9,7 @@ import { CreatePlatformSettings1725897600000 } from './migrations/1725897600000-
 import { AddUserAuthVersion1725984000000 } from './migrations/1725984000000-add-user-auth-version';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { NewRoles1795996800000 } from './migrations/1795996800000-new-roles';
+import { ActivityLogImmutable1797292800000 } from './migrations/1797292800000-activity-log-immutable';
 import { User } from './entities/user.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { ActivityLog } from '@app/common';
@@ -32,5 +33,6 @@ export const IDENTITY_DB: DatabaseDefinition = {
     AddUserAuthVersion1725984000000,
     MoneyToBigint1795219200000,
     NewRoles1795996800000,
+    ActivityLogImmutable1797292800000,
   ],
 };
