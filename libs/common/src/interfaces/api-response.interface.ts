@@ -13,4 +13,6 @@ export interface ApiErrorResponse {
   details?: Array<{ field: string; error: string }>;
   /** Kuzatuv identifikatori — log bilan solishtirish uchun (X-Request-Id). */
   requestId?: string;
+  /** BE-06: xatoga xos qo‘shimcha maydonlar (masalan `attemptsLeft`, `retryAfterSeconds`). */
+  [extra: string]: unknown;
 }

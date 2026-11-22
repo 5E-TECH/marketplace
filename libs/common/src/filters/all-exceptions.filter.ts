@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ErrorCode, STATUS_TO_ERROR_CODE } from '../constants/error-codes';
+import { ErrorExtra, errorExtraOf } from '../exceptions/business.exception';
 import { RequestContext } from '../context/request-context';
 import { ApiErrorResponse } from '../interfaces/api-response.interface';
 
@@ -29,6 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message: string | string[] = 'Ichki xato';
     let errorCode: string = ErrorCode.INTERNAL_ERROR;
     let details: ApiErrorResponse['details'];
+    let extra: ErrorExtra | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -41,6 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const r = res as Record<string, any>;
         message = r.message ?? exception.message;
         if (r.errorCode) errorCode = r.errorCode; // custom (BusinessException)
+        extra = errorExtraOf(r.extra); // BE-06: attemptsLeft, retryAfterSeconds va h.k.
         // class-validator ro'yxati → details
         if (Array.isArray(r.message)) {
           details = r.message.map((m: string) => ({
@@ -71,9 +74,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const requestId = RequestContext.requestId();
-    const body: ApiErrorResponse = { statusCode: status, message, errorCode };
+    // qo‘shimcha maydonlar asosiylarni almashtirmaydi
+    const body: ApiErrorResponse = {
+      ...(extra ?? {}),
+      statusCode: status,
+      message,
+      errorCode,
+    };
     if (details) body.details = details;
     if (requestId) body.requestId = requestId;
+    if (typeof extra?.retryAfterSeconds === 'number')
+      response.setHeader?.('Retry-After', String(extra.retryAfterSeconds));
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(

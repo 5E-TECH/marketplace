@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 import { STATUS_TO_ERROR_CODE } from '../constants/error-codes';
+import { ErrorExtra, errorExtraOf } from '../exceptions/business.exception';
 
 /**
  * Microservice ichidagi HttpException ma'lumotlarini RMQ orqali gateway'ga
@@ -23,6 +24,7 @@ export class RpcHttpExceptionFilter implements RpcExceptionFilter<HttpException>
     let errorCode =
       STATUS_TO_ERROR_CODE[statusCode] ??
       STATUS_TO_ERROR_CODE[HttpStatus.INTERNAL_SERVER_ERROR];
+    let extra: ErrorExtra | undefined;
 
     if (typeof raw === 'string') {
       message = raw;
@@ -35,8 +37,13 @@ export class RpcHttpExceptionFilter implements RpcExceptionFilter<HttpException>
         message = response.message as string | string[];
       if (typeof response.errorCode === 'string')
         errorCode = response.errorCode as typeof errorCode;
+      extra = errorExtraOf(response.extra);
     }
 
-    return throwError(() => ({ statusCode, message, errorCode }));
+    return throwError(() =>
+      extra
+        ? { statusCode, message, errorCode, extra }
+        : { statusCode, message, errorCode },
+    );
   }
 }
