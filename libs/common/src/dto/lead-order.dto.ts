@@ -119,6 +119,21 @@ export interface CatalogOrderSnapshot {
     /** Elchi tarifi jami og‘irlik bo‘yicha (BUY-4, NRX-7). */
     elchiTariff: number;
   };
+  /** BE-41 (EQ-09): fiskal chek qatori uchun nusxa — buyurtma paytidagi kodlar (eski katalog javobida yo‘q). */
+  fiscal?: OrderItemFiscal;
+}
+
+/**
+ * BE-41 (EQ-09): chek qatori ma’lumoti — chekni Elchi kuryeri chiqaradi. Komissiya tovari: komitent — optovik
+ * (OPT-1 komissiya shartnomasi). Kiritilmagan bo‘lsa null (BE-41 dan oldingi mahsulot yoki STIRsiz optovik).
+ */
+export interface OrderItemFiscal {
+  /** MXIK (IKPU), 17 raqam. */
+  mxikCode: string | null;
+  /** Qadoq (o‘lchov birligi) kodi. */
+  packageCode: string | null;
+  /** Optovik (komitent) STIR i, 9 raqam (`catalog.shop.tin`). */
+  wholesalerTin: string | null;
 }
 
 export enum LeadOrderActorType {

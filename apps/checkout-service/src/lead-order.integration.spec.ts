@@ -28,7 +28,10 @@ import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
 import { ReservationSweeperService } from '../../inventory-service/src/reservation-sweeper.service';
 import { splitDelivered } from '../../finance-service/src/ledger/split';
-import { ParcelService } from '../../elchi-integration/src/parcel.service';
+import {
+  ParcelService,
+  fiscalProblem,
+} from '../../elchi-integration/src/parcel.service';
 import { Reservation } from '../../inventory-service/src/entities/reservation.entity';
 import { Stock } from '../../inventory-service/src/entities/stock.entity';
 
@@ -109,6 +112,11 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     hiddenDelivery: 11_000,
     platformService: 25_000,
     delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+    fiscal: {
+      mxikCode: '03304001001000000',
+      packageCode: '1500012',
+      wholesalerTin: '305123456',
+    },
   });
 
   const confirmed = (
@@ -345,7 +353,8 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     const [item] = (await checkoutDs.query(
       `SELECT i.unit_price::int AS "salePrice", i.approved_price::int AS "approvedPrice",
               i.base_price::int AS "basePrice", i.markup::int AS markup,
-              i.variant_id::text AS "variantId", i.sku
+              i.variant_id::text AS "variantId", i.sku, i.mxik_code AS "mxikCode",
+              i.package_code AS "packageCode", i.wholesaler_tin AS "wholesalerTin"
          FROM checkout.sales_order_item i
          JOIN checkout.sales_order_seller s ON s.id = i.sales_order_seller_id
         WHERE s.sales_order_id = $1`,
@@ -359,6 +368,10 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       markup: 25_000,
       variantId: VARIANT,
       sku: 'Q-1',
+      // BE-41: chek nusxasi — buyurtma paytidagi kodlar va optovik STIR i
+      mxikCode: '03304001001000000',
+      packageCode: '1500012',
+      wholesalerTin: '305123456',
     });
 
     const [created] = await outboxOf('order.status.changed', String(order.id));
@@ -397,6 +410,11 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
             hiddenDelivery: 11_000,
             platformService: 25_000,
           },
+          fiscal: {
+            mxikCode: '03304001001000000',
+            packageCode: '1500012',
+            wholesalerTin: '305123456',
+          },
         },
       ],
       delivery: { mode: 'PARTIAL', cost: 30_000, elchiTariff: 40_000 },
@@ -408,6 +426,8 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       invalidReason(event: OrderStatusChangedEvent): string | null;
     };
     expect(parcels.invalidReason(payload)).toBeNull();
+    // BE-41 TC3: qisman rejim — chek jami (276 000 + ko‘rinadigan yetkazish 30 000) = COD = sotuvchi sahifasidagi jami
+    expect(fiscalProblem(payload)).toBeNull();
 
     // band — HQ dan, muddatsiz (TC8 asosi)
     const reserve = inventoryCalls.find((c) => c.cmd === 'inventory.reserve');

@@ -353,7 +353,8 @@ export class LeadOrderStatusService {
               i.approved_price::text AS "approvedPrice", i.base_price::text AS "basePrice",
               i.unit_price::text AS "salePrice", i.affiliate_fee::text AS "affiliateFee",
               i.call_center_fee::text AS "callCenterFee", i.hidden_delivery::text AS "hiddenDelivery",
-              i.platform_service::text AS "platformService"
+              i.platform_service::text AS "platformService", i.mxik_code AS "mxikCode",
+              i.package_code AS "packageCode", i.wholesaler_tin AS "wholesalerTin"
          FROM checkout.sales_order_item i
          JOIN checkout.parcel s ON s.id = i.sales_order_seller_id
         WHERE s.sales_order_id = $1
@@ -405,6 +406,12 @@ export class LeadOrderStatusService {
             callCenterFee: n(item.callCenterFee) * quantity,
             hiddenDelivery: n(item.hiddenDelivery) * quantity,
             platformService: n(item.platformService) * quantity,
+          },
+          // BE-41: chek qatori (Elchi kuryeri chiqaradi)
+          fiscal: {
+            mxikCode: (item.mxikCode as string | null) ?? null,
+            packageCode: (item.packageCode as string | null) ?? null,
+            wholesalerTin: (item.wholesalerTin as string | null) ?? null,
           },
         };
       }),

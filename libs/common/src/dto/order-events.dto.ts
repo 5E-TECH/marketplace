@@ -114,6 +114,15 @@ export interface OrderStatusChangedEvent {
       /** Ixtiyoriy tekshiruv: berilsa finance hisoblagan qoldiq bilan teng bo'lishi kerak. */
       platformService?: number;
     };
+    /**
+     * BE-41 (EQ-09): fiskal chek qatori — MXIK, qadoq kodi, optovik (komitent) STIR i; buyurtma paytidagi nusxa.
+     * Eski hodisalarda yo'q.
+     */
+    fiscal?: {
+      mxikCode: string | null;
+      packageCode: string | null;
+      wholesalerTin: string | null;
+    };
   }>;
   /**
    * Yetkazish rejimi (TZ T4: alohida / qisman / bepul) va mijozga ko'rsatilgan

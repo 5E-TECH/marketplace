@@ -286,8 +286,10 @@ export class LeadOrderService {
         `INSERT INTO checkout.sales_order_item
            (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
             line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
-            affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+            affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode,
+            mxik_code, package_code, wholesaler_tin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                 $19, $20, $21)`,
         [
           seller.id,
           offer.productId,
@@ -307,6 +309,10 @@ export class LeadOrderService {
           offer.hiddenDelivery,
           platformService,
           offer.barcode?.trim() || null,
+          // BE-41: fiskal chek nusxasi (katalog eski bo‘lsa `fiscal` yo‘q — null)
+          offer.fiscal?.mxikCode ?? null,
+          offer.fiscal?.packageCode ?? null,
+          offer.fiscal?.wholesalerTin ?? null,
         ],
       );
       // BE-19: yig‘ish vazifasi; kun — operator tasdiqlagan vaqtdan (14:00 chegarasi, OMB-4)
