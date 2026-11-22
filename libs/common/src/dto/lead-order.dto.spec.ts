@@ -18,7 +18,8 @@ describe('lid buyurtmasi holatlari (BE-18, TZ T5)', () => {
       REMITTED: [S.SETTLED],
       REFUSED: [S.RETURNING],
       RETURNING: [S.RETURNED_GRADED],
-      RETURN_REQUESTED: [],
+      // BE-44 [taklif]: tasdiq — qaytmoqda, rad — yetkazilgan
+      RETURN_REQUESTED: [S.RETURNING, S.DELIVERED],
       SETTLED: [],
       RETURNED_GRADED: [],
       CANCELLED: [],
