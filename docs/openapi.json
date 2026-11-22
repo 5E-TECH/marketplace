@@ -19986,6 +19986,19 @@
               "$ref": "#/components/schemas/AffiliateAgreementDto"
             }
           },
+          "pendingAgreements": {
+            "example": [
+              {
+                "type": "affiliate-offer",
+                "version": "1.1"
+              }
+            ],
+            "description": "Joriy e’lon qilingan, lekin hali qabul qilinmagan versiyalar — qayta qabul kerak",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "selfEmployed": {
             "$ref": "#/components/schemas/AffiliateProfileSelfEmployedDto"
           },
@@ -20003,7 +20016,8 @@
           "phone",
           "registeredAt",
           "lastLoginAt",
-          "agreements"
+          "agreements",
+          "pendingAgreements"
         ]
       },
       "UpdateAffiliateProfileDto": {
@@ -20101,7 +20115,7 @@
             "type": "string",
             "example": null,
             "nullable": true,
-            "description": "null — hali e’lon qilinmagan (ekranda «e’lon qilinadi»)"
+            "description": "Kuchga kirish vaqti; null — matn hali e’lon qilinmagan (ekranda «e’lon qilinadi»), bunday hujjat bilan ro‘yxat yopiq"
           },
           "summary": {
             "type": "array",
@@ -20134,7 +20148,8 @@
           "effectiveAt": {
             "type": "object",
             "example": "2026-12-01T00:00:00+05:00",
-            "nullable": true
+            "nullable": true,
+            "description": "Kuchga kirish vaqti; berilmasa — darhol (e’lon paytidan)"
           },
           "summary": {
             "type": "array",

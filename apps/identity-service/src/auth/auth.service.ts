@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Optional,
   ForbiddenException,
   Inject,
   Injectable,
@@ -12,7 +13,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomInt, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import {
   BusinessException,
   CreateSupportTicketDto,
@@ -24,9 +25,11 @@ import {
   RmqClient,
   UpdateProfileDto,
   VerifyPhoneDto,
+  ErrorCode,
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
+import { OtpGuardService } from '../affiliate-auth/otp-guard.service';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -43,8 +46,15 @@ export class AuthService {
     private readonly dataSource: DataSource,
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
-  ) {}
+    @Optional() otpGuard?: OtpGuardService,
+  ) {
+    // BE-06: parolni tiklash va telefon kodi ham SMS kod qoidasi bilan (3 xato → 15 daqiqa blok)
+    this.otp = otpGuard ?? new OtpGuardService(config);
+  }
 
+  private readonly otp: OtpGuardService;
+
+  /** Parol bilan foydalanuvchi yaratish — ichki (testlar). Ochiq RPC `auth.register` BE-06 da yopilgan. */
   async register(dto: RegisterDto) {
     const exists = await this.users.findOne({ where: { phone: dto.phone } });
     if (exists) {
@@ -329,13 +339,21 @@ export class AuthService {
     });
     // Enumerationdan himoya: user topilmasa ham bir xil javob.
     if (!user) return { sent: true, expiresIn: 300 };
-    // BE-06 (T9-9): kriptografik tasodifiy kod
-    const code = String(randomInt(100_000, 1_000_000));
-    await this.dataSource.query(
-      `INSERT INTO identity.verification_code(id, phone, purpose, code_hash, expires_at)
-       VALUES ($1,$2,$3,$4,now() + interval '5 minutes')`,
-      [randomUUID(), dto.phone, purpose, this.hashToken(code)],
-    );
+    let code: string;
+    try {
+      // BE-06 (T9-9): kriptografik tasodifiy kod, HMAC, blok qoidasi — `OtpGuardService`
+      code = await this.dataSource.transaction((m) =>
+        this.otp.issue(m, dto.phone, purpose),
+      );
+    } catch (error) {
+      // blokda ham bir xil javob (raqam holati oshkor bo‘lmasin) — kod yuborilmaydi
+      if (
+        error instanceof BusinessException &&
+        error.errorCode === ErrorCode.OTP_BLOCKED
+      )
+        return { sent: true, expiresIn: 300 };
+      throw error;
+    }
     this.notifications.emit('auth.verification-code.requested', {
       phone: dto.phone,
       code,
@@ -344,17 +362,12 @@ export class AuthService {
     return { sent: true, expiresIn: 300 };
   }
 
+  /** BE-06: kod tekshiruvi SMS kod qoidasi bilan — xato hisobi, 3 xato → 15 daqiqa blok (TZ SOT-1). */
   private async consumeCode(phone: string, code: string, purpose: string) {
-    const rows = await this.dataSource.query(
-      `UPDATE identity.verification_code SET used_at=now() WHERE id=(
-       SELECT id FROM identity.verification_code WHERE phone=$1 AND purpose=$2 AND used_at IS NULL
-       AND expires_at>now() ORDER BY created_at DESC LIMIT 1) AND code_hash=$3 RETURNING id`,
-      [phone, purpose, this.hashToken(code)],
+    const result = await this.dataSource.transaction((m) =>
+      this.otp.check(m, phone, purpose, code),
     );
-    if (!rows.length)
-      throw new BadRequestException(
-        'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
-      );
+    this.otp.throwUnlessOk(result);
   }
 
   async resetPassword(dto: ResetPasswordDto) {

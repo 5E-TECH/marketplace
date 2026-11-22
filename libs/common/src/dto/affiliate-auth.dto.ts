@@ -142,7 +142,8 @@ export class LegalDocumentDto {
     example: null,
     nullable: true,
     type: String,
-    description: 'null — hali e’lon qilinmagan (ekranda «e’lon qilinadi»)',
+    description:
+      'Kuchga kirish vaqti; null — matn hali e’lon qilinmagan (ekranda «e’lon qilinadi»), bunday hujjat bilan ro‘yxat yopiq',
   })
   effectiveAt: string | null;
   @ApiProperty({ type: [LegalSummaryItemDto] })
@@ -159,7 +160,11 @@ export class PublishLegalDocumentDto {
   })
   version: string;
 
-  @ApiPropertyOptional({ example: '2026-12-01T00:00:00+05:00', nullable: true })
+  @ApiPropertyOptional({
+    example: '2026-12-01T00:00:00+05:00',
+    nullable: true,
+    description: 'Kuchga kirish vaqti; berilmasa — darhol (e’lon paytidan)',
+  })
   @IsOptional()
   @IsDateString({ strict: true })
   effectiveAt?: string | null;
@@ -217,6 +222,12 @@ export class AffiliateProfileDto {
   lastLoginAt: string | null;
   @ApiProperty({ type: [AffiliateAgreementDto] })
   agreements: AffiliateAgreementDto[];
+  @ApiProperty({
+    example: [{ type: 'affiliate-offer', version: '1.1' }],
+    description:
+      'Joriy e’lon qilingan, lekin hali qabul qilinmagan versiyalar — qayta qabul kerak',
+  })
+  pendingAgreements: Array<{ type: LegalDocumentType; version: string }>;
   @ApiProperty({ type: AffiliateProfileSelfEmployedDto, required: false })
   selfEmployed?: AffiliateProfileSelfEmployedDto;
   @ApiProperty({

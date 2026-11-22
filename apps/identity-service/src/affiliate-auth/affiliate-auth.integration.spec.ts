@@ -9,6 +9,7 @@ import { User } from '../entities/user.entity';
 import { AuthService } from '../auth/auth.service';
 import { IDENTITY_DB } from '../database';
 import { AffiliateAuthService } from './affiliate-auth.service';
+import { OtpGuardService } from './otp-guard.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 /** team/new-roles.integration.spec.ts dagi bilan bir xil: identity sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
@@ -89,6 +90,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     svc = new AffiliateAuthService(
       ds.getRepository(User),
       auth,
+      new OtpGuardService(config),
       jwt,
       config,
       ds,
@@ -119,6 +121,43 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     return registrationToken;
   };
 
+  it('matni yo‘q oferta (seed 1.0) bilan ro‘yxat yopiq — 409; e’lon qilingach ochiladi', async () => {
+    const phone = '+998901110000';
+    const token = await register(phone);
+    await expect(svc.legalDocument('affiliate-offer')).resolves.toMatchObject({
+      version: '1.0',
+      effectiveAt: null,
+    });
+    await expect(
+      errorOf(
+        svc.registerAffiliate(
+          {
+            registrationToken: token,
+            offerVersion: '1.0',
+            consentVersion: '1.0',
+          },
+          null,
+        ),
+      ),
+    ).resolves.toMatchObject({ status: 409, errorCode: 'OFFER_NOT_ACCEPTED' });
+    for (const type of [
+      LegalDocumentType.AFFILIATE_OFFER,
+      LegalDocumentType.PERSONAL_DATA_CONSENT,
+    ])
+      await svc.publishLegalDocument(
+        type,
+        {
+          version: '1.1',
+          summary: [],
+          sections: [{ id: 's1', title: '1. Atamalar', body: 'Matn' }],
+        },
+        '1',
+      );
+    const doc = await svc.legalDocument('affiliate-offer');
+    expect(doc.version).toBe('1.1');
+    expect(doc.effectiveAt).not.toBeNull(); // sanasiz — e’lon paytidan
+  });
+
   it('TC1: to‘g‘ri kod 5 daqiqa ichida → ro‘yxat yakunlandi, oferta va rozilik versiyasi va vaqti bazada', async () => {
     const phone = '+998901110001';
     await expect(
@@ -140,7 +179,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       code: lastCode(phone),
     })) as { registrationToken: string };
     const auth = await svc.registerAffiliate(
-      { registrationToken, offerVersion: '1.0', consentVersion: '1.0' },
+      { registrationToken, offerVersion: '1.1', consentVersion: '1.1' },
       '10.0.0.1',
     );
     expect(auth.accessToken).toEqual(expect.any(String));
@@ -153,13 +192,13 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     expect(rows).toEqual([
       {
         type: 'affiliate-offer',
-        version: '1.0',
+        version: '1.1',
         has_time: true,
         ip: '10.0.0.1',
       },
       {
         type: 'personal-data-consent',
-        version: '1.0',
+        version: '1.1',
         has_time: true,
         ip: '10.0.0.1',
       },
@@ -168,7 +207,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     await expect(
       errorOf(
         svc.registerAffiliate(
-          { registrationToken, offerVersion: '1.0', consentVersion: '1.0' },
+          { registrationToken, offerVersion: '1.1', consentVersion: '1.1' },
           null,
         ),
       ),
@@ -259,8 +298,8 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     await svc.registerAffiliate(
       {
         registrationToken: await register(phone),
-        offerVersion: '1.0',
-        consentVersion: '1.0',
+        offerVersion: '1.1',
+        consentVersion: '1.1',
       },
       null,
     );
@@ -301,7 +340,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     await expect(
       errorOf(
         svc.registerAffiliate(
-          { registrationToken: token, offerVersion: '', consentVersion: '1.0' },
+          { registrationToken: token, offerVersion: '', consentVersion: '1.1' },
           null,
         ),
       ),
@@ -322,7 +361,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       errorCode: 'REGISTRATION_EXPIRED',
     });
     await svc.registerAffiliate(
-      { registrationToken: token, offerVersion: '1.0', consentVersion: '1.0' },
+      { registrationToken: token, offerVersion: '1.1', consentVersion: '1.1' },
       null,
     );
     const user = await ds.getRepository(User).findOneByOrFail({ phone });
@@ -330,36 +369,39 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     await svc.publishLegalDocument(
       LegalDocumentType.AFFILIATE_OFFER,
       {
-        version: '1.1',
+        version: '1.2',
         summary: [{ term: 'Haq', text: 'faqat to‘langan buyurtma uchun' }],
-        sections: [],
+        sections: [{ id: 's1', title: '1', body: 'Yangi matn' }],
       },
       '1',
     );
     await expect(svc.legalDocument('affiliate-offer')).resolves.toMatchObject({
-      version: '1.1',
-      effectiveAt: null,
+      version: '1.2',
+    });
+    // qayta qabul kerakligi profilda ko‘rinadi
+    await expect(svc.profile(user.id)).resolves.toMatchObject({
+      pendingAgreements: [{ type: 'affiliate-offer', version: '1.2' }],
     });
     await expect(
       errorOf(
         svc.acceptAgreement(
           user.id,
-          { type: LegalDocumentType.AFFILIATE_OFFER, version: '1.0' },
+          { type: LegalDocumentType.AFFILIATE_OFFER, version: '1.1' },
           null,
         ),
       ),
     ).resolves.toMatchObject({ errorCode: 'OFFER_NOT_ACCEPTED' });
     const profile = await svc.acceptAgreement(
       user.id,
-      { type: LegalDocumentType.AFFILIATE_OFFER, version: '1.1' },
+      { type: LegalDocumentType.AFFILIATE_OFFER, version: '1.2' },
       null,
     );
     const offers = profile.agreements.filter(
       (a) => a.type === 'affiliate-offer',
     );
     expect(offers.map((a) => [a.version, a.current])).toEqual([
-      ['1.1', true],
-      ['1.0', false],
+      ['1.2', true],
+      ['1.1', false],
     ]);
     // kelajak sanasi bilan e’lon qilingan versiya — o‘sha kungacha joriy emas
     await svc.publishLegalDocument(
@@ -373,7 +415,7 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       '1',
     );
     await expect(svc.legalDocument('affiliate-offer')).resolves.toMatchObject({
-      version: '1.1',
+      version: '1.2',
     });
 
     const updated = await svc.updateProfile(user.id, {
@@ -388,5 +430,69 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     expect((await ds.getRepository(User).findOneByOrFail({ phone })).name).toBe(
       'Jasur Tursunov',
     );
+  });
+
+  it('parolni tiklash kodi ham: 3 xato → 423 blok (aylanib o‘tib bo‘lmaydi); blokda kod yuborilmaydi, javob bir xil', async () => {
+    const phone = '+998901110006';
+    await svc.registerAffiliate(
+      {
+        registrationToken: await register(phone),
+        offerVersion: '1.2',
+        consentVersion: '1.1',
+      },
+      null,
+    );
+    const auth = (svc as unknown as { auth: AuthService }).auth;
+    await auth.createVerificationCode({ phone });
+    const reset = (code: string) =>
+      auth.resetPassword({
+        phone,
+        code,
+        newPassword: 'YangiParol123',
+      } as never);
+    await expect(errorOf(reset('000000'))).resolves.toMatchObject({
+      status: 400,
+      extra: { attemptsLeft: 2 },
+    });
+    await errorOf(reset('000001'));
+    await expect(errorOf(reset('000002'))).resolves.toMatchObject({
+      status: 423,
+      errorCode: 'OTP_BLOCKED',
+    });
+    const before = sent.length;
+    await expect(auth.createVerificationCode({ phone })).resolves.toEqual({
+      sent: true,
+      expiresIn: 300,
+    });
+    expect(sent.length).toBe(before); // blokda SMS ketmaydi
+  });
+
+  it('eski parol bilan ochilgan hisob: birinchi SMS kirishda parol almashadi va eski sessiyalar yopiladi', async () => {
+    const phone = '+998901110007';
+    const auth = (svc as unknown as { auth: AuthService }).auth;
+    await auth.register({
+      name: 'Bosqinchi',
+      phone,
+      password: 'Parol12345',
+    } as never);
+    await expect(
+      auth.login({ phone, password: 'Parol12345' } as never),
+    ).resolves.toHaveProperty('accessToken');
+    await svc.sendOtp({ phone, purpose: OtpPurpose.LOGIN });
+    await svc.verifyOtp({
+      phone,
+      purpose: OtpPurpose.LOGIN,
+      code: lastCode(phone),
+    });
+    await expect(
+      auth.login({ phone, password: 'Parol12345' } as never),
+    ).rejects.toBeInstanceOf(HttpException);
+    const [row] = (await ds.query(
+      `SELECT phone_verified_at IS NOT NULL AS verified,
+              (SELECT count(*)::int FROM identity.auth_session s WHERE s.user_id = u.id AND s.revoked_at IS NULL) AS open
+         FROM identity.users u WHERE phone = $1`,
+      [phone],
+    )) as Array<{ verified: boolean; open: number }>;
+    expect(row).toEqual({ verified: true, open: 1 }); // faqat yangi SMS sessiyasi
   });
 });
