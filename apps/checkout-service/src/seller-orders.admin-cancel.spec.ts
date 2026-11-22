@@ -23,7 +23,6 @@ describe('checkout.admin.order-cancel (BE-18)', () => {
     const controller = new SellerOrdersController(
       orders as never,
       {} as never,
-      {} as never,
       leadOrders as never,
       {} as never,
     );

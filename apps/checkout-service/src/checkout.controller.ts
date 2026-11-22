@@ -1,8 +1,6 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
-  CreateCheckoutDto,
-  CheckoutAddressDto,
   ElchiWebhookDto,
   PaymentPaidEvent,
   RpcHttpExceptionFilter,
@@ -53,58 +51,6 @@ export class CheckoutController {
       data.customerId,
       data.orderItemId,
       data.productId,
-    );
-  }
-
-  @MessagePattern({ cmd: 'checkout.create' })
-  create(
-    @Payload()
-    data: {
-      customerId: string;
-      sessionId?: string;
-      dto: CreateCheckoutDto;
-      idempotencyKey?: string;
-    },
-  ) {
-    return this.service.create(
-      data.customerId,
-      data.dto,
-      data.idempotencyKey,
-      data.sessionId,
-    );
-  }
-
-  @MessagePattern({ cmd: 'checkout.delivery.preview' })
-  preview(
-    @Payload()
-    data: {
-      customerId?: string;
-      sessionId?: string;
-      address: CheckoutAddressDto;
-      cartItemIds?: string[];
-    },
-  ) {
-    return this.service.preview(
-      data.customerId,
-      data.sessionId,
-      data.address,
-      data.cartItemIds,
-    );
-  }
-
-  @MessagePattern({ cmd: 'checkout.confirm-cod' })
-  confirmCod(
-    @Payload()
-    data: {
-      orderId: string;
-      customerId?: string;
-      sessionId?: string;
-    },
-  ) {
-    return this.confirmer.confirm(
-      data.orderId,
-      data.customerId,
-      data.sessionId,
     );
   }
 

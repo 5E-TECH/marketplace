@@ -10,7 +10,6 @@ const threshold = positiveInt(process.env.MONITOR_FAILURE_THRESHOLD, 3);
 const webhookUrl = process.env.ALERT_WEBHOOK_URL;
 // BE-02: `_v2` — DLQ argumentlari bilan yangi navbatlar (libs/common/src/messaging/rmq.util.ts RmqQueue bilan bir xil)
 const requiredQueues = [
-  'echo_queue_v2',
   'identity_queue_v2',
   'catalog_queue_v2',
   'inventory_queue_v2',

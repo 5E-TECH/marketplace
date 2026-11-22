@@ -1,7 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { DataSource } from 'typeorm';
 import {
   AdminReturnRequestsQueryDto,
+  CATALOG_DISPLAY_LOOKUP,
+  CatalogDisplayLookupResult,
+  RmqClient,
+  sendRpc,
   ReturnRequestDetailsDto,
   ReturnRequestDto,
   ReturnRequestHistoryDto,
@@ -32,7 +43,7 @@ export function assertReturnId(id: string): void {
 const SELECT_RETURN = `
   SELECT r.id::text, r.sales_order_id::text AS "orderId",
          r.sales_order_seller_id::text AS "sellerOrderId",
-         r.shop_id::text AS "shopId", sh.name AS "shopName",
+         r.shop_id::text AS "shopId",
          o.buyer_name AS "buyerName", r.status, r.reason, r.comment,
          o.payment_method AS "paymentMethod",
          r.requested_amount AS "requestedAmount",
@@ -41,12 +52,19 @@ const SELECT_RETURN = `
          r.refunded_at AS "refundedAt", r.created_at AS "createdAt",
          r.updated_at AS "updatedAt"
     FROM checkout.return_request r
-    JOIN checkout.sales_order o ON o.id = r.sales_order_id
-    LEFT JOIN catalog.shop sh ON sh.id = r.shop_id`;
+    JOIN checkout.sales_order o ON o.id = r.sales_order_id`;
 
 @Injectable()
 export class ReturnRequestQueryService {
-  constructor(private readonly dataSource: DataSource) {}
+  private readonly logger = new Logger(ReturnRequestQueryService.name);
+
+  constructor(
+    private readonly dataSource: DataSource,
+    // BE-29: do‘kon nomi va mahsulot rasmi katalogdan (avval `catalog.*` ga JOIN edi)
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
+  ) {}
 
   async list(filter: ReturnListFilter): Promise<ReturnRequestsPageDto> {
     const page = Math.max(1, Number(filter.page ?? 1));
@@ -79,7 +97,7 @@ export class ReturnRequestQueryService {
     )) as Array<Record<string, unknown>>;
     const total = Number(count?.total ?? 0);
     return {
-      items: await this.withItems(this.dataSource.manager, rows),
+      items: await this.withItems(rows),
       total,
       page,
       limit,
@@ -109,7 +127,7 @@ export class ReturnRequestQueryService {
     )) as Array<Record<string, unknown>>;
     if (!rows.length)
       throw new NotFoundException('Qaytarish so‘rovi topilmadi');
-    const [request] = await this.withItems(this.dataSource.manager, rows);
+    const [request] = await this.withItems(rows);
     const history = (await this.dataSource.query(
       `SELECT from_status AS "fromStatus", to_status AS "toStatus",
               actor_role AS "actorRole", comment, created_at AS "createdAt"
@@ -121,38 +139,27 @@ export class ReturnRequestQueryService {
     return { ...request, history };
   }
 
-  /** Yangi yaratilgan so'rovlar — o'sha tranzaksiya ichida ham o'qiladi. */
-  async findMany(
-    manager: EntityManager,
-    ids: string[],
-  ): Promise<ReturnRequestDto[]> {
-    if (!ids.length) return [];
-    const rows = (await manager.query(
-      `${SELECT_RETURN} WHERE r.id = ANY($1::bigint[]) ORDER BY r.id`,
-      [ids],
-    )) as Array<Record<string, unknown>>;
-    return this.withItems(manager, rows);
-  }
-
   private async withItems(
-    manager: EntityManager,
     rows: Array<Record<string, unknown>>,
   ): Promise<ReturnRequestDto[]> {
     if (!rows.length) return [];
-    const items = (await manager.query(
+    const items = (await this.dataSource.query(
       `SELECT ri.id::text, ri.return_request_id::text AS "returnRequestId",
               ri.sales_order_item_id::text AS "orderItemId",
               i.product_id::text AS "productId", i.variant_id::text AS "variantId",
-              i.product_name AS "productName", p.image_url AS "imageUrl",
+              i.product_name AS "productName",
               ri.quantity, ri.unit_price AS "unitPrice",
               ri.line_total AS "lineTotal"
          FROM checkout.return_request_item ri
          JOIN checkout.sales_order_item i ON i.id = ri.sales_order_item_id
-         LEFT JOIN catalog.product p ON p.id = i.product_id
         WHERE ri.return_request_id = ANY($1::bigint[])
         ORDER BY ri.id`,
       [rows.map((row) => String(row.id))],
     )) as Array<Record<string, unknown>>;
+    const display = await this.display(
+      rows.map((row) => String(row.shopId)),
+      items.map((item) => String(item.productId)),
+    );
     const byRequest = new Map<string, ReturnRequestItemDto[]>();
     for (const item of items) {
       const key = String(item.returnRequestId);
@@ -163,14 +170,52 @@ export class ReturnRequestQueryService {
         productId: String(item.productId),
         variantId: String(item.variantId),
         productName: String(item.productName ?? ''),
-        imageUrl: item.imageUrl ? String(item.imageUrl) : null,
+        imageUrl: display.images.get(String(item.productId)) ?? null,
         quantity: Number(item.quantity),
         unitPrice: moneyFromDb(item.unitPrice as string),
         lineTotal: moneyFromDb(item.lineTotal as string),
       });
       byRequest.set(key, list);
     }
-    return rows.map((row) => this.toDto(row, byRequest.get(String(row.id))));
+    return rows.map((row) =>
+      this.toDto(
+        { ...row, shopName: display.shops.get(String(row.shopId)) ?? null },
+        byRequest.get(String(row.id)),
+      ),
+    );
+  }
+
+  /**
+   * BE-29: do‘kon nomi va mahsulot rasmi — katalog RPC (`catalog.display.lookup`). Katalog javob bermasa ro‘yxat
+   * yiqilmaydi: nom va rasm `null` [taklif] — bu faqat ko‘rinish ma’lumoti.
+   */
+  private async display(
+    shopIds: string[],
+    productIds: string[],
+  ): Promise<{ shops: Map<string, string>; images: Map<string, string> }> {
+    const shops = new Map<string, string>();
+    const images = new Map<string, string>();
+    if (!this.catalog || (!shopIds.length && !productIds.length))
+      return { shops, images };
+    try {
+      const result = await sendRpc<CatalogDisplayLookupResult>(
+        this.catalog,
+        { cmd: CATALOG_DISPLAY_LOOKUP },
+        {
+          shopIds: [...new Set(shopIds)],
+          productIds: [...new Set(productIds)],
+        },
+      );
+      for (const shop of result?.shops ?? [])
+        if (shop.name) shops.set(String(shop.id), shop.name);
+      for (const product of result?.products ?? [])
+        if (product.imageUrl) images.set(String(product.id), product.imageUrl);
+    } catch (error) {
+      this.logger.warn(
+        `Katalogdan do‘kon nomi va rasm olinmadi: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return { shops, images };
   }
 
   private toDto(

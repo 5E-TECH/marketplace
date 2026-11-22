@@ -247,7 +247,8 @@ async function reachable(role: Role): Promise<string[]> {
 
 describe('BE-05: gateway yo‘llari va rollar', () => {
   it('yo‘llar topildi', () => {
-    expect(routes.length).toBeGreaterThan(200);
+    // skaner ishlayotganini tekshiradi: BE-29 da eski do‘kon yo‘llari o‘chgach 190 ta yo‘l (2026-11-22)
+    expect(routes.length).toBeGreaterThan(150);
   });
 
   it('har bir yo‘l ochiq (@Public), rolli (@Roles) yoki ANY_SIGNED_IN ro‘yxatida', () => {
@@ -257,13 +258,39 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
     expect(open).toEqual(ANY_SIGNED_IN);
   });
 
-  it('TC6: tokensiz har bir yopiq yo‘l — 401 (sellers/*, admin/shops/* ham)', async () => {
+  it('TC6: tokensiz har bir yopiq yo‘l — 401', async () => {
     const statuses = new Map<string, number>();
     for (const route of routes.filter((r) => !r.isPublic))
       statuses.set(route.key, await statusOf(route));
     expect([...statuses.values()].every((status) => status === 401)).toBe(true);
-    expect(statuses.get('GET /sellers/me')).toBe(401);
-    expect(statuses.get('GET /admin/shops')).toBe(401);
+    expect(statuses.get('GET /admin/leads')).toBe(401);
+  });
+
+  it('BE-29 TC1: eski do‘kon yo‘llari ro‘yxatdan o‘chirilgan (404)', () => {
+    const keys = [...new Set(routes.map((route) => route.key))];
+    for (const key of [
+      'GET /sellers/me',
+      'POST /sellers/register',
+      'GET /seller/orders',
+      'GET /seller/returns',
+      'GET /seller/finance/summary',
+      'POST /products',
+      'GET /products/:productId/variants',
+      'GET /orders',
+      'GET /admin/shops',
+      'POST /admin/shops/:id/approve',
+      'POST /files/upload',
+      'GET /echo',
+      'GET /storefront/shops',
+    ])
+      expect([key, keys.includes(key)]).toEqual([key, false]);
+    expect(
+      keys.filter((key) =>
+        / \/(sellers?|shops|products|orders|returns|files|echo|storefront|inventory)(\/|$)/.test(
+          key,
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it('TC6: eski do‘kon yo‘llari (LegacyRole) yangi rollarning hech biriga ochilmaydi — 403', async () => {
@@ -275,17 +302,9 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
           Object.values(LegacyRole).includes(role as LegacyRole),
         ),
     );
+    // BE-29: eski do‘kon yo‘llari o‘chirildi; onlayn to‘lov (eski xaridor) qoldi
     expect(legacy.map((route) => route.key)).toEqual(
-      expect.arrayContaining([
-        'GET /sellers/me',
-        'GET /seller/orders',
-        'POST /products',
-        'GET /orders',
-        'POST /payments',
-        // karta: «admin/shops/* yangi rollar bilan ochilmaydi»
-        'GET /admin/shops',
-        'POST /admin/shops/:id/approve',
-      ]),
+      expect.arrayContaining(['POST /payments']),
     );
     for (const route of legacy)
       for (const role of Object.values(Role))
@@ -354,7 +373,6 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
     const superadmin = await reachable(Role.SUPERADMIN);
     for (const open of [admin, superadmin]) {
       expect(open.filter((key) => key.includes(' /affiliate/'))).toEqual([]);
-      expect(open).not.toContain('GET /sellers/me');
       expect(open).not.toContain('POST /payments');
     }
     expect(admin.filter((key) => !superadmin.includes(key))).toEqual([]);

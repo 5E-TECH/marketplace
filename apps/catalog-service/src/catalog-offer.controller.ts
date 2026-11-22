@@ -1,6 +1,8 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  CATALOG_DISPLAY_LOOKUP,
+  CatalogDisplayLookupRequest,
   CatalogOfferListQuery,
   LEAD_CATALOG_RPC,
   LEAD_ORDER_RPC,
@@ -39,5 +41,11 @@ export class CatalogOfferController {
   @MessagePattern({ cmd: LEAD_CATALOG_RPC.OFFER_LIST })
   list(@Payload() query: CatalogOfferListQuery) {
     return this.offers.list(query ?? {});
+  }
+
+  /** BE-29: checkout (eski qaytarishlar ro‘yxati) uchun do‘kon nomi va mahsulot rasmi. */
+  @MessagePattern({ cmd: CATALOG_DISPLAY_LOOKUP })
+  displayLookup(@Payload() data: CatalogDisplayLookupRequest) {
+    return this.offers.displayLookup(data);
   }
 }

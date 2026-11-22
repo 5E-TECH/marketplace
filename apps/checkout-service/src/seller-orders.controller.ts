@@ -1,19 +1,12 @@
 import {
   ConflictException,
   Controller,
-  Inject,
   NotFoundException,
   UseFilters,
   ForbiddenException,
 } from '@nestjs/common';
-import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
-import {
-  LeadOrderActorType,
-  RmqClient,
-  Role,
-  RpcHttpExceptionFilter,
-  SellerOrdersQueryDto,
-} from '@app/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { LeadOrderActorType, Role, RpcHttpExceptionFilter } from '@app/common';
 import {
   SellerOrdersService,
   ShippingLabelTarget,
@@ -25,132 +18,16 @@ import {
 } from './shipping-label.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { FulfillmentService } from './fulfillment.service';
-import {
-  resolveSellerShopId,
-  SellerScope,
-  sellerShop,
-} from './catalog-shop.util';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class SellerOrdersController {
   constructor(
     private readonly orders: SellerOrdersService,
-    @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     private readonly labels: ShippingLabelService,
     private readonly leadOrders: LeadOrderStatusService,
     private readonly fulfillment: FulfillmentService,
   ) {}
-
-  @MessagePattern({ cmd: 'seller.orders.list' })
-  async list(
-    @Payload()
-    data: {
-      ownerUserId?: string;
-      shopId?: string;
-      query: SellerOrdersQueryDto;
-    },
-  ) {
-    const shopId = await this.resolveShopId(data);
-    return this.orders.findAll(shopId, data.query);
-  }
-
-  /** Buyurtma holatini yangilash (owner yoki operator; shop bo'yicha scope). */
-  @MessagePattern({ cmd: 'seller.orders.update-status' })
-  async updateStatus(
-    @Payload()
-    data: {
-      ownerUserId?: string;
-      shopId?: string;
-      orderId: string;
-      status: string;
-    },
-  ) {
-    const shopId = await this.resolveShopId(data);
-    return this.orders.updateStatus(shopId, String(data.orderId), data.status);
-  }
-
-  @MessagePattern({ cmd: 'seller.orders.get' }) async get(@Payload() d: any) {
-    return this.orders.getSellerOrder(
-      await this.resolveShopId(d),
-      String(d.orderId),
-    );
-  }
-  @MessagePattern({ cmd: 'seller.orders.items' }) async items(
-    @Payload() d: any,
-  ) {
-    return this.orders.getItems(await this.resolveShopId(d), String(d.orderId));
-  }
-  @MessagePattern({ cmd: 'seller.orders.history' }) async history(
-    @Payload() d: any,
-  ) {
-    return this.orders.history(await this.resolveShopId(d), String(d.orderId));
-  }
-  @MessagePattern({ cmd: 'seller.shipments.list' }) async shipments(
-    @Payload() d: any,
-  ) {
-    return this.orders.shipments(await this.resolveShopId(d), d.query);
-  }
-  @MessagePattern({ cmd: 'seller.shipments.get' }) async shipment(
-    @Payload() d: any,
-  ) {
-    return this.orders.getSellerOrder(
-      await this.resolveShopId(d),
-      String(d.shipmentId),
-    );
-  }
-  @MessagePattern({ cmd: 'seller.shipments.tracking' }) async tracking(
-    @Payload() d: any,
-  ) {
-    const o: any = await this.orders.getSellerOrder(
-      await this.resolveShopId(d),
-      String(d.shipmentId),
-    );
-    return {
-      shipmentId: o.elchiShipmentId,
-      status: o.status,
-      trackingUrl: o.trackingUrl,
-      updatedAt: o.updatedAt,
-    };
-  }
-  @MessagePattern({ cmd: 'seller.shipments.create' }) async createShipment(
-    @Payload() d: any,
-  ) {
-    return this.orders.createShipment(
-      await this.resolveShopId(d),
-      String(d.orderId),
-      d.customerPhone,
-    );
-  }
-
-  @MessagePattern({ cmd: 'seller.orders.label' }) async label(
-    @Payload() d: any,
-  ) {
-    const data = await this.orders.getShippingLabelData(
-      await this.resolveShopId(d),
-      String(d.orderId),
-    );
-    return this.labels.generate(data);
-  }
-
-  @MessagePattern({ cmd: 'seller.orders.labels' })
-  async labelsBatch(
-    @Payload()
-    data: {
-      ownerUserId?: string;
-      shopId?: string;
-      orderIds: string[];
-    },
-  ) {
-    const shopId = await this.resolveShopId(data);
-    return this.batchLabels(
-      data.orderIds.map((id) => ({
-        shopId,
-        sellerOrderId: String(id),
-        orderId: String(id),
-      })),
-    );
-  }
 
   /** Admin: `orderId` = sales_order.id — buyurtmaning barcha posilkalari. */
   @MessagePattern({ cmd: 'checkout.admin.order-label' })
@@ -248,75 +125,9 @@ export class SellerOrdersController {
     return this.labels.generateBatch(labels, all);
   }
 
-  /** Scope: operator → JWT shopId (to'g'ridan); owner → ownerUserId'dan resolve. */
-  private resolveShopId(data: SellerScope): Promise<string> {
-    return resolveSellerShopId(this.catalog, data);
-  }
-
   @MessagePattern({ cmd: 'checkout.admin.stats' })
   adminStats() {
     return this.orders.adminStats();
-  }
-
-  @MessagePattern({ cmd: 'checkout.order.tracking' })
-  buyerTracking(
-    @Payload()
-    data: {
-      orderId: string;
-      customerId?: string;
-      sessionId?: string;
-    },
-  ) {
-    return this.orders.buyerTracking(
-      data.orderId,
-      data.customerId,
-      data.sessionId,
-    );
-  }
-
-  @MessagePattern({ cmd: 'checkout.order.details' })
-  buyerOrderDetails(
-    @Payload()
-    data: {
-      orderId: string;
-      customerId?: string;
-      sessionId?: string;
-    },
-  ) {
-    return this.orders.buyerOrderDetails(
-      data.orderId,
-      data.customerId,
-      data.sessionId,
-    );
-  }
-
-  @MessagePattern({ cmd: 'checkout.order.refund' })
-  buyerRefundOrder(
-    @Payload()
-    data: {
-      orderId: string;
-      reason: string;
-      customerId?: string;
-      sessionId?: string;
-    },
-  ) {
-    return this.orders.buyerRefundOrder(data);
-  }
-
-  @MessagePattern({ cmd: 'checkout.orders.list-by-buyer' })
-  buyerOrders(
-    @Payload()
-    data: {
-      customerId: string;
-      query?: { page?: number; limit?: number };
-    },
-  ) {
-    return this.orders.buyerOrders(data.customerId, data.query);
-  }
-
-  @MessagePattern({ cmd: 'checkout.orders.count-by-shop' })
-  countByShop(@Payload() data: { shopId: string }) {
-    return this.orders.countByShop(String(data.shopId));
   }
 
   @MessagePattern({ cmd: 'checkout.admin.orders-list' })
@@ -388,16 +199,5 @@ export class SellerOrdersController {
     },
   ) {
     return this.orders.adminRefundOrder(data);
-  }
-
-  @MessagePattern({ cmd: 'seller.dashboard.get' })
-  async dashboard(@Payload() data: { ownerUserId: string }) {
-    const shop = await this.shop(data.ownerUserId);
-    // BE-16: do‘kon ombori va sotuvchi qoldig‘i yo‘q (bitta HQ ombor) — kam qoldiq soni 0
-    return this.orders.dashboard(shop.id, 0);
-  }
-
-  private shop(ownerUserId: string): Promise<{ id: string }> {
-    return sellerShop(this.catalog, ownerUserId);
   }
 }

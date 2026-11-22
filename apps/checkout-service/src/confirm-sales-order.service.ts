@@ -71,18 +71,6 @@ export class ConfirmSalesOrderService {
     private readonly notifications: ClientProxy,
   ) {}
 
-  async confirm(
-    orderId: string,
-    customerId?: string,
-    sessionId?: string,
-  ): Promise<ConfirmSalesOrderResult> {
-    return this.confirmOrder(orderId, {
-      customerId,
-      sessionId,
-      prepaid: false,
-    });
-  }
-
   async confirmPaid(
     orderId: string,
     paymentId: string,

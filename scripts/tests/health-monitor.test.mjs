@@ -8,7 +8,6 @@ test('consumer outage retries failed alerts, deduplicates and retries recovery',
   process.env.RABBITMQ_MANAGEMENT_URL = 'http://rabbit.test';
   process.env.ALERT_WEBHOOK_URL = 'http://alerts.test';
   const queues = [
-    'echo',
     'identity',
     'catalog',
     'inventory',
@@ -70,7 +69,6 @@ test('BE-02: DLQ ogohlantirishi alohida — asosiy ogohlantirishni bosmaydi', as
   process.env.MONITOR_API_URL = 'http://monitor.test/health';
   process.env.ALERT_WEBHOOK_URL = 'http://alerts.test';
   const names = [
-    'echo',
     'identity',
     'catalog',
     'inventory',

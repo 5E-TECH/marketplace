@@ -45,3 +45,52 @@ describe('CatalogOfferService.stockOf (BE-16)', () => {
     await expect(pending).resolves.toEqual(new Map([['1', null]]));
   });
 });
+
+/** BE-29: checkout savat va qaytarishlar uchun ko‘rinish ma’lumoti — checkout `catalog.*` ga SQL yozmasligi uchun. */
+describe('CatalogOfferService.displayLookup (BE-29)', () => {
+  const make = (query: jest.Mock) =>
+    new CatalogOfferService(
+      { manager: { query } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+  it('ID lar bo‘yicha do‘kon nomi, mahsulot va variant rasmi; noto‘g‘ri va takroriy ID tashlanadi', async () => {
+    const query = jest.fn(async (sql: string, [ids]: string[][]) => {
+      if (sql.includes('FROM catalog.shop'))
+        return ids.map((id) => ({ id, name: `Do‘kon ${id}` }));
+      if (sql.includes('FROM catalog.product_variant'))
+        return ids.map((id) => ({ id, name: 'Smartfon', imageUrl: '' }));
+      return ids.map((id) => ({ id, imageUrl: `https://cdn/${id}.webp` }));
+    });
+
+    await expect(
+      make(query).displayLookup({
+        shopIds: ['7', '7', 'x', '0'],
+        productIds: ['10', '99999999999999999999'],
+        variantIds: ['11'],
+      }),
+    ).resolves.toEqual({
+      shops: [{ id: '7', name: 'Do‘kon 7' }],
+      products: [{ id: '10', imageUrl: 'https://cdn/10.webp' }],
+      variants: [{ id: '11', name: 'Smartfon', imageUrl: null }],
+    });
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls.map((call) => call[1])).toEqual([
+      [['7']],
+      [['10']],
+      [['11']],
+    ]);
+  });
+
+  it('bo‘sh so‘rov bazaga bormaydi', async () => {
+    const query = jest.fn();
+    await expect(make(query).displayLookup({})).resolves.toEqual({
+      shops: [],
+      products: [],
+      variants: [],
+    });
+    expect(query).not.toHaveBeenCalled();
+  });
+});

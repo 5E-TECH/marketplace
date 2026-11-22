@@ -4,9 +4,12 @@ import { firstValueFrom, timeout } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import {
+  CatalogDisplayLookupRequest,
+  CatalogDisplayLookupResult,
   CatalogOfferListQuery,
   CatalogOfferSnapshot,
   CatalogOrderSnapshot,
+  isLeadBigintId,
   ProductStatus,
   RmqClient,
   ShopStatus,
@@ -206,6 +209,64 @@ export class CatalogOfferService {
       .createQueryBuilder('product')
       .innerJoinAndSelect('product.shop', 'shop')
       .leftJoinAndSelect('product.category', 'category');
+  }
+
+  /**
+   * BE-29: do‘kon nomi, mahsulot va variant rasmi ID lar bo‘yicha (checkout boshqa sxemaga SQL yozmasligi uchun). Eski
+   * JOIN lar kabi o‘chirilganlari ham qaytadi; noto‘g‘ri yoki takroriy ID tashlanadi.
+   */
+  async displayLookup(
+    request: Partial<CatalogDisplayLookupRequest> | null | undefined,
+  ): Promise<CatalogDisplayLookupResult> {
+    const ids = (list: unknown) => [
+      ...new Set(
+        (Array.isArray(list) ? list : []).map(String).filter(isLeadBigintId),
+      ),
+    ];
+    const shopIds = ids(request?.shopIds);
+    const productIds = ids(request?.productIds);
+    const variantIds = ids(request?.variantIds);
+    const db = this.products.manager;
+    const shops = shopIds.length
+      ? ((await db.query(
+          `SELECT id::text AS id, name FROM catalog.shop WHERE id = ANY($1::bigint[])`,
+          [shopIds],
+        )) as Array<{ id: string; name: string | null }>)
+      : [];
+    const products = productIds.length
+      ? ((await db.query(
+          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl"
+             FROM catalog.product WHERE id = ANY($1::bigint[])`,
+          [productIds],
+        )) as Array<{ id: string; imageUrl: string | null }>)
+      : [];
+    const variants = variantIds.length
+      ? ((await db.query(
+          `SELECT v.id::text AS id, p.name,
+                  COALESCE(NULLIF(v.image_url, ''), NULLIF(p.image_url, ''),
+                           p.images->>0) AS "imageUrl"
+             FROM catalog.product_variant v
+             JOIN catalog.product p ON p.id = v.product_id
+            WHERE v.id = ANY($1::bigint[])`,
+          [variantIds],
+        )) as Array<{
+          id: string;
+          name: string | null;
+          imageUrl: string | null;
+        }>)
+      : [];
+    return {
+      shops: shops.map((row) => ({ id: row.id, name: row.name ?? null })),
+      products: products.map((row) => ({
+        id: row.id,
+        imageUrl: row.imageUrl ?? null,
+      })),
+      variants: variants.map((row) => ({
+        id: row.id,
+        name: row.name ?? null,
+        imageUrl: row.imageUrl || null,
+      })),
+    };
   }
 }
 
