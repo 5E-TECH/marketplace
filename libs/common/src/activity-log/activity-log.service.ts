@@ -14,6 +14,9 @@ export interface ActivityLogInput {
 export interface ActivityLogQuery {
   actorId?: string;
   action?: string;
+  /** BE-27: ob’ekt turi va ID si bo‘yicha (masalan, «shu mahsulot auditi» — FE-12). */
+  entityType?: string;
+  entityId?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;
@@ -73,6 +76,17 @@ export class ActivityLogService {
     }
     if (query?.action?.trim()) {
       qb.andWhere('log.action = :action', { action: query.action.trim() });
+    }
+    if (query?.entityType?.trim()) {
+      // aniq moslik — (entity_type, entity_id) indeksi ishlaydi; turlar gateway’dagi kabi: Product, User, FinanceSetting
+      qb.andWhere('log.entity_type = :entityType', {
+        entityType: query.entityType.trim(),
+      });
+    }
+    if (query?.entityId?.trim()) {
+      qb.andWhere('log.entity_id = :entityId', {
+        entityId: query.entityId.trim(),
+      });
     }
     if (dateFrom) {
       qb.andWhere('log.created_at >= :dateFrom', {

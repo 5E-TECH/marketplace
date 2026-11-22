@@ -207,10 +207,12 @@ export class AdminPricingController {
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ) {
+    // BE-27: izoh faqat auditga — katalogga ketmaydi
+    const { comment, ...tariff } = dto;
     const row = await sendRpc<{ id: string }>(
       this.catalog,
       { cmd: 'catalog.pricing.tariff-add' },
-      { dto, actorId: admin.sub },
+      { dto: tariff, actorId: admin.sub },
     );
     this.audit(
       admin.sub,
@@ -218,7 +220,7 @@ export class AdminPricingController {
       'ElchiTariff',
       String(row.id),
       ip,
-      { ...dto },
+      { ...tariff, comment: comment ?? null },
     );
     return row;
   }
@@ -230,21 +232,25 @@ export class AdminPricingController {
     admin: JwtUser,
     ip: string,
   ) {
+    // BE-27: izoh faqat auditga — katalogga ketmaydi
+    const { comment, ...policy } = dto;
     const result = await sendRpc<{ before: unknown; after: unknown }>(
       this.catalog,
       { cmd: 'catalog.pricing.policy-set' },
-      { scope, scopeId, dto, actorId: admin.sub },
+      { scope, scopeId, dto: policy, actorId: admin.sub },
     );
     this.audit(
       admin.sub,
       'pricing.policy.update',
-      'PricePolicy',
+      // mahsulot darajasidagi o‘zgarish «shu mahsulot auditi» da ko‘rinsin (FE-12, entityType=Product)
+      scope === 'PRODUCT' ? 'Product' : 'PricePolicy',
       scopeId ?? 'GLOBAL',
       ip,
       {
         scope,
         before: result.before,
         after: result.after,
+        comment: comment ?? null,
       },
     );
     return result.after;

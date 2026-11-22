@@ -33,13 +33,33 @@ export function percent(part: number, whole: number): number | null {
   return whole > 0 ? Math.round((part * 100) / whole) : null;
 }
 
-/** Sotuvchiga sahifa ochish mumkinmi (BE-11 TC5: qoldiq 0 → rad). */
-export function canOpenStream(offer: CatalogOfferSnapshot | null): boolean {
+/** BE-27 (SOT-9): offerda kamida bitta video kreativ bormi (BE-08). */
+export function hasVideo(
+  offer: Pick<CatalogOfferSnapshot, 'creatives'>,
+): boolean {
+  return (offer.creatives ?? []).some((c) => c.type === 'VIDEO');
+}
+
+/**
+ * Offer sotuvchiga ko‘rinadimi (ro‘yxat va offer kartasi): CPA ochiq, olib tashlanmagan, narx tasdiqlangan va
+ * kamida bitta video bor (BE-27, SOT-9). Mavjud sahifa lid qabul qilishiga video ta’sir qilmaydi (`landingState`)
+ * [taklif]: admin videoni almashtirayotganda pullik lidlar yo‘qolmasin.
+ */
+export function isOfferVisible(
+  offer: CatalogOfferSnapshot | null,
+): offer is CatalogOfferSnapshot {
   return (
     !!offer &&
     offer.cpaAvailable &&
     !offer.withdrawn &&
     offer.approvedPrice !== null &&
-    (offer.stock ?? 0) > 0 // noma’lum qoldiq — yangi sahifa ochilmaydi
+    hasVideo(offer)
+  );
+}
+
+/** Sotuvchiga sahifa ochish mumkinmi (BE-11 TC5: qoldiq 0 → rad; BE-27: videosiz — rad). */
+export function canOpenStream(offer: CatalogOfferSnapshot | null): boolean {
+  return (
+    isOfferVisible(offer) && (offer!.stock ?? 0) > 0 // noma’lum qoldiq — yangi sahifa ochilmaydi
   );
 }

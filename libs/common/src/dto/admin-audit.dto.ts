@@ -29,6 +29,26 @@ export class AdminAuditQueryDto {
   @MaxLength(100)
   action?: string;
 
+  @ApiPropertyOptional({
+    example: 'Product',
+    description:
+      'BE-27: ob’ekt turi (yozuvdagi `entityType`, masalan Product, User, FinanceSetting)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  entityType?: string;
+
+  @ApiPropertyOptional({
+    example: '12',
+    description:
+      'BE-27: ob’ekt ID si (`entityType` bilan birga — «shu mahsulot auditi»)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  entityId?: string;
+
   @ApiPropertyOptional({ example: '2026-09-01' })
   @IsOptional()
   @IsDateString({ strict: true })

@@ -11,6 +11,8 @@ import {
   CatalogOrderSnapshot,
   CatalogOrderSnapshotMany,
   isLeadBigintId,
+  INBOUND_RPC,
+  ModerationSummaryDto,
   ProductStatus,
   RmqClient,
   ShopStatus,
@@ -261,6 +263,71 @@ export class CatalogOfferService {
       withdrawn: isWithdrawn(product),
       ...pricing,
     };
+  }
+
+  /**
+   * BE-27: moderatsiya hisoblagichlari (FE-12). Pilotda mahsulotlar soni kichik (TZ: 30–50 SKU) — narx holati
+   * har mahsulot uchun kalkulyator bilan hisoblanadi (bazada saqlanmaydi, tarif va siyosatga bog‘liq).
+   */
+  async moderationSummary(): Promise<ModerationSummaryDto> {
+    const products = await this.base()
+      .where('product.is_deleted = FALSE')
+      .getMany();
+    const byStatus: Record<string, number> = {
+      ALL: products.length,
+      PENDING_REVIEW: 0,
+      ACTIVE: 0,
+      REJECTED: 0,
+      BLOCKED: 0,
+      DRAFT: 0,
+    };
+    for (const p of products) {
+      if (p.isBlocked) byStatus.BLOCKED++;
+      else if (p.status in byStatus) byStatus[p.status]++;
+    }
+    const ctx = await this.pricing.context();
+    const priced = products.filter(
+      (p) =>
+        p.cpaEnabled &&
+        !p.isBlocked &&
+        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(p.status),
+    );
+    const onSale = products.filter(isCpaAvailable);
+    const stock = await this.stockOf(onSale.map((p) => String(p.id)));
+    const stockValues = [...stock.values()];
+    let expirySoon: number | null = null;
+    try {
+      const lots = await firstValueFrom(
+        this.inventory
+          .send<unknown[]>({ cmd: INBOUND_RPC.LOTS }, { state: 'BLOCKED' })
+          .pipe(timeout(INVENTORY_TIMEOUT_MS)),
+      );
+      expirySoon = Array.isArray(lots) ? lots.length : null;
+    } catch (error) {
+      this.logger.warn(`Partiyalar olinmadi: ${(error as Error).message}`);
+    }
+    return {
+      productsPending: byStatus.PENDING_REVIEW,
+      pricesPending: priced.filter((p) => !this.approvalCurrentSafe(p, ctx))
+        .length,
+      byStatus,
+      outOfStock: stockValues.some((v) => v === null)
+        ? null
+        : stockValues.filter((v) => (v ?? 0) <= 0).length,
+      expirySoon,
+    };
+  }
+
+  /** Bitta mahsulotning buzilgan narx sozlamasi hisoblagichni yiqitmasin — u narx qarorini kutadi deb sanaladi. */
+  private approvalCurrentSafe(product: Product, ctx: PricingContext): boolean {
+    try {
+      return this.pricing.approvalCurrent(product, ctx);
+    } catch (error) {
+      this.logger.warn(
+        `Narx holati hisoblanmadi (${product.id}): ${(error as Error).message}`,
+      );
+      return false;
+    }
   }
 
   private base() {

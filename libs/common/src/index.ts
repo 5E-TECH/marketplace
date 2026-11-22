@@ -65,6 +65,7 @@ export * from './dto/lead-events.dto';
 export * from './dto/lead-fraud.dto';
 export * from './dto/affiliate-income.dto';
 export * from './dto/withdrawal.dto';
+export * from './dto/finance-settings.dto';
 export * from './dto/wholesaler-settlement.dto';
 export * from './dto/settlement-response.dto';
 export * from './dto/finance-reconciliation.dto';

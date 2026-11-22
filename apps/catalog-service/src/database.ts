@@ -4,6 +4,7 @@ import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wh
 import { Pricing1796169600000 } from './migrations/1796169600000-pricing';
 import { Creative1796515200000 } from './migrations/1796515200000-creative';
 import { WholesalerCabinet1798329600000 } from './migrations/1798329600000-wholesaler-cabinet';
+import { ProductBlockReason1797379200000 } from './migrations/1797379200000-product-block-reason';
 import { Creative } from './entities/creative.entity';
 import {
   ElchiTariffEntity,
@@ -63,5 +64,6 @@ export const CATALOG_DB: DatabaseDefinition = {
     Pricing1796169600000,
     Creative1796515200000,
     WholesalerCabinet1798329600000,
+    ProductBlockReason1797379200000,
   ],
 };

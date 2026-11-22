@@ -16,6 +16,8 @@ import { SellerFinanceService } from './seller-finance.service';
 import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
 import { SettlementController } from './ledger/settlement.controller';
+import { FinanceSettingsController } from './ledger/finance-settings.controller';
+import { FinanceSettingsService } from './ledger/finance-settings.service';
 import { SettlementService } from './ledger/settlement.service';
 import { WholesalerBalanceService } from './ledger/wholesaler-balance.service';
 import { PlatformMetricsService } from './ledger/platform-metrics.service';
@@ -56,6 +58,7 @@ const entities = FINANCE_DB.entities;
     SettlementController,
     ReconciliationController,
     SettlementResponseController,
+    FinanceSettingsController,
   ],
   providers: [
     FinanceService,
@@ -69,6 +72,7 @@ const entities = FINANCE_DB.entities;
     PlatformMetricsService,
     RemittanceService,
     SettlementResponseService,
+    FinanceSettingsService,
   ],
 })
 export class FinanceModule {}

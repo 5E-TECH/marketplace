@@ -46,4 +46,20 @@ describe('AdminAuditController (C6.3)', () => {
       }
     },
   );
+
+  it('BE-27 TC3: DELETE audit — 405 (yozuv o‘chirilmaydi), identity ga murojaat yo‘q', () => {
+    const send = jest.fn();
+    const controller = new AdminAuditController({ send } as never);
+    let status: number | undefined;
+    try {
+      controller.remove();
+    } catch (error) {
+      status = (error as { getStatus(): number }).getStatus();
+    }
+    expect(status).toBe(405);
+    expect(send).not.toHaveBeenCalled();
+    expect(
+      Reflect.getMetadata(ROLES_KEY, AdminAuditController.prototype.remove),
+    ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+  });
 });
