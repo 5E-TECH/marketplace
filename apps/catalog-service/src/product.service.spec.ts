@@ -33,6 +33,7 @@ describe('ProductService', () => {
     // Optovik rekvizitlari `select: false` — servis ularni query builder bilan o‘qiydi; mock findOne natijasini beradi
     shopRepo.createQueryBuilder.mockImplementation(() => {
       const qb: Record<string, unknown> = {};
+      qb.select = () => qb;
       qb.addSelect = () => qb;
       qb.where = () => qb;
       qb.getOne = () => shopRepo.findOne();
@@ -306,6 +307,7 @@ describe('ProductService', () => {
         name: 'Gadget Trade',
         status: ShopStatus.ACTIVE,
         isDeleted: false,
+        tin: '305123456',
         ...CONTRACT,
       });
       (variantRepo as any).count = jest.fn(async () => 1);
@@ -369,6 +371,20 @@ describe('ProductService', () => {
       await expect(service.adminApprove('10')).resolves.toMatchObject({
         status: ProductStatus.ACTIVE,
       });
+    });
+
+    it('BE-41: STIRsiz optovikning CPA mahsuloti tasdiqlanmaydi — 409 (chekda komitent bo‘lmaydi)', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        tin: null,
+        ...CONTRACT,
+      });
+      await expect(service.adminApprove('10')).rejects.toThrow(
+        'Optovik STIR i kiritilmagan — CPA mahsulotini tasdiqlab bo‘lmaydi (fiskal chek)',
+      );
     });
 
     it('BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab bo‘lmaydi; kodsiz eskisida CPA ni o‘chirish va kod kiritish mumkin', async () => {

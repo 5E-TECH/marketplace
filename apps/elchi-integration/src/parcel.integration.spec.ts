@@ -382,9 +382,11 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
           weight_kg: 0.35,
           price: 276000,
           fiscal: {
+            name: 'Simsiz quloqchin',
             mxik_code: '08517001001000000',
             package_code: '1500012',
             commitent_tin: '305123456',
+            commission: true,
           },
         },
         {
@@ -394,9 +396,11 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
           weight_kg: 0.1,
           price: 120000,
           fiscal: {
+            name: 'G‘ilof',
             mxik_code: '03926001001000000',
             package_code: '1500012',
             commitent_tin: '207654321',
+            commission: true,
           },
         },
       ]);
@@ -440,6 +444,42 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       expect(body).not.toHaveProperty('delivery_price');
       expect(body.items[0]).not.toHaveProperty('fiscal');
       expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    });
+
+    it('Elchi chek maydonlarini rad etsa (400) — bir marta chek maydonlarisiz qayta yuboriladi, posilka yaratiladi', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment.mockRejectedValueOnce(
+        new ElchiApiError(400, 'property items.0.fiscal should not exist'),
+      );
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      expect(elchi.createShipment).toHaveBeenCalledTimes(2);
+      const [first, second] = elchi.createShipment.mock.calls.map(
+        (c) => c[0] as Record<string, any>,
+      );
+      expect(first.delivery_price).toBe(30000);
+      expect(second).not.toHaveProperty('delivery_price');
+      expect(second.items[0]).not.toHaveProperty('fiscal');
+      expect(second.items[0]).not.toHaveProperty('price');
+      expect(second.items[0]).toMatchObject({
+        name: 'Simsiz quloqchin #88',
+        quantity: 2,
+      });
+      expect(second.external_order_id).toBe(first.external_order_id);
+      expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    });
+
+    it('chek maydonlarisiz so‘rov ham rad etilsa — bugungidek FAILED (uchinchi urinish yo‘q)', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment
+        .mockRejectedValueOnce(new ElchiApiError(400, 'fiscal'))
+        .mockRejectedValueOnce(new ElchiApiError(422, 'district'));
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      expect(elchi.createShipment).toHaveBeenCalledTimes(2);
+      expect(await parcel()).toMatchObject({ status: 'FAILED' });
     });
 
     it('jami COD ga teng emas — chek maydonlarisiz (noto‘g‘ri chek chiqmaydi)', async () => {

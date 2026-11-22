@@ -34,11 +34,15 @@ export interface CreateElchiShipmentInput {
      * (Elchi gateway noma'lum maydonni 400 bilan rad etadi; nomlar Elchi bilan kelishiladi [taklif]).
      */
     price?: number;
-    /** BE-41: chek qatori kodlari; blok bor qator — komissiya tovari, komitent — optovik. */
+    /** BE-41: chek qatori — komissiya tovari, komitent — optovik. */
     fiscal?: {
+      /** Chekdagi nom — tovar nomi (`name` dagi `#ID` qo'shimchasisiz). */
+      name: string;
       mxik_code: string;
       package_code: string;
       commitent_tin: string;
+      /** Komissioner belgisi: platforma optovik tovarini komissiya shartnomasi bilan sotadi (OPT-1). */
+      commission: true;
     };
   }>;
   /** BE-41: mijozga ko'rinadigan yetkazish, butun so'm — chekdagi yetkazish qatori (0 — qator yo'q). */

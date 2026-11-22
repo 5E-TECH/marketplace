@@ -81,6 +81,28 @@ export function elchiItemName(name: string, productId: string): string {
   return `${name.trim().slice(0, ELCHI_ITEM_NAME_MAX - suffix.length)}${suffix}`;
 }
 
+/** BE-41: so'rovda chek maydonlari bormi (`ELCHI_FISCAL_RECEIPT=on` va ma'lumot to'liq). */
+function hasReceipt(body: CreateElchiShipmentInput): boolean {
+  return body.delivery_price !== undefined;
+}
+
+/** BE-41: o'sha so'rov chek maydonlarisiz — bugungi (sozlama o'chiq) shaklda. */
+function withoutReceipt(
+  body: CreateElchiShipmentInput,
+): CreateElchiShipmentInput {
+  const copy: CreateElchiShipmentInput = {
+    ...body,
+    items: body.items.map((item) => {
+      const plain = { ...item };
+      delete plain.price;
+      delete plain.fiscal;
+      return plain;
+    }),
+  };
+  delete copy.delivery_price;
+  return copy;
+}
+
 /**
  * BE-41: chek ma'lumoti nimasi yetishmaydi (null — to'liq). Kodlar va STIR formati katalogda tekshirilgan
  * (MXIK 17 raqam, STIR 9 raqam); bu yerda — borligi va jami COD ga tengligi.
@@ -331,8 +353,25 @@ export class ParcelService {
     try {
       result = await this.elchi.createShipment(built.body);
     } catch (error) {
-      await this.createFailed(row, error as Error);
-      return;
+      // BE-41: Elchi chek maydonlarini (yoki ularning qiymatini) rad etsa posilka to'xtamaydi — so'rov chek
+      // ma'lumotisiz bir marta qayta yuboriladi. 400/422 da Elchi buyurtma yaratmagan, takror xavfsiz.
+      if (
+        !hasReceipt(built.body) ||
+        !(error instanceof ElchiApiError) ||
+        !REJECT_STATUSES.has(error.status)
+      ) {
+        await this.createFailed(row, error as Error);
+        return;
+      }
+      this.logger.warn(
+        `Buyurtma ${row.orderId}: Elchi chek ma’lumotini rad etdi (${error.status}: ${error.message}) — chek maydonlarisiz qayta yuborildi`,
+      );
+      try {
+        result = await this.elchi.createShipment(withoutReceipt(built.body));
+      } catch (retryError) {
+        await this.createFailed(row, retryError as Error);
+        return;
+      }
     }
     await this.finishCreate(row, result);
   }
@@ -511,9 +550,11 @@ export class ParcelService {
             ? {
                 price: item.salePrice,
                 fiscal: {
+                  name: item.name.trim().slice(0, ELCHI_ITEM_NAME_MAX),
                   mxik_code: item.fiscal!.mxikCode!,
                   package_code: item.fiscal!.packageCode!,
                   commitent_tin: item.fiscal!.wholesalerTin!,
+                  commission: true as const,
                 },
               }
             : {}),

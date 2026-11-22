@@ -326,6 +326,11 @@ export class ProductService {
       );
     if (product.cpaEnabled) await this.assertSingleActiveVariant(product.id);
     assertFiscalCodes(product);
+    // BE-41: chekdagi komitent — optovik STIR i; eski optovikda bo‘lmasligi mumkin
+    if (product.cpaEnabled && !(await this.shopTin(shop.id)))
+      throw new ConflictException(
+        'Optovik STIR i kiritilmagan — CPA mahsulotini tasdiqlab bo‘lmaydi (fiskal chek)',
+      );
     product.status = ProductStatus.ACTIVE;
     product.moderationNote = null;
     const saved = await this.save(product);
@@ -459,6 +464,17 @@ export class ProductService {
   }
 
   /** Optovik shartnoma maydonlari bilan (ular `select: false`). */
+  /** BE-41: optovik STIR i (`select: false`) — faqat tekshiruv uchun, shop obyektiga yuklanmaydi (hodisalarga chiqmasin). */
+  private async shopTin(shopId: string): Promise<string | null> {
+    const row = await this.shops
+      .createQueryBuilder('shop')
+      .select('shop.id')
+      .addSelect('shop.tin')
+      .where('shop.id = :id', { id: String(shopId) })
+      .getOne();
+    return row?.tin ?? null;
+  }
+
   private async getShopById(shopId: string): Promise<Shop> {
     const shop = /^\d+$/.test(String(shopId ?? ''))
       ? await this.shops
