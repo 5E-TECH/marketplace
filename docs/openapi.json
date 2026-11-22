@@ -12608,6 +12608,18 @@
             "type": "boolean",
             "example": false
           },
+          "mxikCode": {
+            "type": "string",
+            "example": "03304001001000000",
+            "nullable": true,
+            "description": "BE-41: MXIK (IKPU) kodi — fiskal chek qatori"
+          },
+          "packageCode": {
+            "type": "string",
+            "example": "1500012",
+            "nullable": true,
+            "description": "BE-41: qadoq kodi — fiskal chek qatori"
+          },
           "rating": {
             "type": "number",
             "example": 4.75
@@ -12651,6 +12663,8 @@
           "cpaEnabled",
           "isBad",
           "isBlocked",
+          "mxikCode",
+          "packageCode",
           "rating",
           "createdAt",
           "updatedAt"
@@ -14274,6 +14288,18 @@
             "example": false,
             "description": "BAD — «Dori vositasi emas» yozuvi (8-bo‘lim)"
           },
+          "mxikCode": {
+            "type": "string",
+            "example": "03304001001000000",
+            "nullable": true,
+            "description": "BE-41: MXIK (IKPU) kodi, 17 raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy"
+          },
+          "packageCode": {
+            "type": "string",
+            "example": "1500012",
+            "nullable": true,
+            "description": "BE-41: qadoq (o‘lchov birligi) kodi, faqat raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy"
+          },
           "wholesalerId": {
             "type": "string",
             "example": "15",
@@ -14385,6 +14411,18 @@
             "type": "boolean",
             "example": false,
             "description": "BAD — «Dori vositasi emas» yozuvi (8-bo‘lim)"
+          },
+          "mxikCode": {
+            "type": "string",
+            "example": "03304001001000000",
+            "nullable": true,
+            "description": "BE-41: MXIK (IKPU) kodi, 17 raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy"
+          },
+          "packageCode": {
+            "type": "string",
+            "example": "1500012",
+            "nullable": true,
+            "description": "BE-41: qadoq (o‘lchov birligi) kodi, faqat raqam — fiskal chek qatori; CPA mahsulotida tasdiqdan oldin majburiy"
           }
         }
       },
