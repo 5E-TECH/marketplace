@@ -20,6 +20,8 @@ interface CreateNotificationInput {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** BE-24: berilsa — shu kalit bilan xabar bor bo‘lsa qayta yaratilmaydi (hodisa takrori). */
+  dedupeKey?: string;
 }
 
 @Injectable()
@@ -39,17 +41,36 @@ export class NotificationService {
   ) {}
 
   async create(input: CreateNotificationInput): Promise<Notification> {
-    const notification = await this.notifications.save(
-      this.notifications.create({
-        userId: input.recipient.userId,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        data: input.data ?? {},
-        isRead: false,
-        readAt: null,
-      }),
-    );
+    if (input.dedupeKey) {
+      const existing = await this.notifications.findOne({
+        where: { dedupeKey: input.dedupeKey },
+      });
+      if (existing) return existing;
+    }
+    let notification: Notification;
+    try {
+      notification = await this.notifications.save(
+        this.notifications.create({
+          userId: input.recipient.userId ?? null,
+          dedupeKey: input.dedupeKey ?? null,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          data: input.data ?? {},
+          isRead: false,
+          readAt: null,
+        }),
+      );
+    } catch (error) {
+      // bir vaqtda kelgan takror hodisa — birinchisi yozdi, ikkinchisi jim o‘tadi
+      if ((error as { code?: string }).code === '23505' && input.dedupeKey) {
+        const existing = await this.notifications.findOne({
+          where: { dedupeKey: input.dedupeKey },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
     const channels = input.recipient.channels ?? [
       NotificationChannel.EMAIL,
       NotificationChannel.TELEGRAM,

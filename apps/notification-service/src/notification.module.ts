@@ -18,6 +18,7 @@ import { EmailAdapter } from './adapters/email.adapter';
 import { NOTIFICATION_ADAPTERS } from './adapters/notification-adapter';
 import { SmsAdapter } from './adapters/sms.adapter';
 import { OtpSmsController } from './otp-sms.controller';
+import { OrderSmsController } from './order-sms.controller';
 import { TelegramAdapter } from './adapters/telegram.adapter';
 import { DeliveryRetryService } from './delivery-retry.service';
 import { NotificationAdminController } from './notification-admin.controller';
@@ -42,6 +43,16 @@ const entities = NOTIFICATION_DB.entities;
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
       },
+      // BE-24: mijoz SMS idagi tuman nomi — Elchi geo keshi
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -65,6 +76,7 @@ const entities = NOTIFICATION_DB.entities;
     NotificationEventsController,
     NotificationAdminController,
     OtpSmsController,
+    OrderSmsController,
   ],
   providers: [
     NotificationService,

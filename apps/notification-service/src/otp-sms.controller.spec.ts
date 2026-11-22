@@ -27,7 +27,7 @@ describe('BE-06 TC4: SMS kod hodisasi notification-service ga yetadi', () => {
     expect(sms.send).toHaveBeenCalledWith({
       recipient: '+998901234567',
       title: 'Elchi',
-      body: expect.stringContaining('305918'),
+      body: '305918 — ro‘yxatdan o‘tish kodi. 5 daqiqa amal qiladi. Kodni hech kimga aytmang.',
     });
   });
 
@@ -54,6 +54,31 @@ describe('BE-06 TC4: SMS kod hodisasi notification-service ga yetadi', () => {
       code: '12',
     });
     expect(sms.send).not.toHaveBeenCalled();
+  });
+
+  it('BE-24 TC5: provayder javob bermasa — 15 s va 60 s dan keyin qayta (kod yo‘qolmaydi)', async () => {
+    jest.useFakeTimers();
+    try {
+      const sms = {
+        isConfigured: () => true,
+        send: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('HTTP 503'))
+          .mockRejectedValueOnce(new Error('HTTP 503'))
+          .mockResolvedValue(undefined),
+      };
+      await new OtpSmsController(sms as never, config({})).onCode(event);
+      expect(sms.send).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(15_000);
+      expect(sms.send).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(sms.send).toHaveBeenCalledTimes(3);
+      expect(sms.send).toHaveBeenLastCalledWith(
+        expect.objectContaining({ body: expect.stringContaining('305918') }),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('provayder xato bersa — xato logi, hodisa yiqilmaydi', async () => {

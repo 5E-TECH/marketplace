@@ -44,20 +44,51 @@ export class OtpSmsController {
         this.logger.warn(`[SMS stub] ${phone} (${event.purpose}): kod ${code}`);
       return;
     }
+    await this.deliver(phone, otpText(code, event.purpose), 0);
+  }
+
+  /**
+   * BE-24 (TC5): provayder javob bermasa kod yo‘qolmaydi — u 5 daqiqa amal qiladi, SMS 15 s va 60 s dan keyin qayta
+   * yuboriladi [taklif]. Kod bazaga yozilmaydi, shuning uchun qayta urinish xotirada (servis qayta ishga tushsa —
+   * foydalanuvchi yangi kod so‘raydi).
+   */
+  private async deliver(
+    phone: string,
+    body: string,
+    attempt: number,
+  ): Promise<void> {
     try {
-      await this.sms.send({
-        recipient: phone,
-        title: 'Elchi',
-        body: `Elchi: tasdiqlash kodi ${code}. Hech kimga aytmang.`,
-      });
+      await this.sms.send({ recipient: phone, title: 'Elchi', body });
     } catch (error) {
-      // bitta urinish: kod 5 daqiqa amal qiladi, foydalanuvchi qayta so‘raydi
+      const delay = OTP_RETRY_DELAYS_MS[attempt];
       this.logger.error(
-        `SMS kod yuborilmadi (${maskPhone(phone)}): ${(error as Error).message}`,
+        `SMS kod yuborilmadi (${maskPhone(phone)}, ${attempt + 1}-urinish): ${(error as Error).message}` +
+          (delay ? ` — ${delay / 1000} s dan keyin qayta` : ''),
       );
+      if (delay)
+        setTimeout(
+          () => void this.deliver(phone, body, attempt + 1),
+          delay,
+        ).unref?.();
     }
   }
 }
+
+/** Dizayn (xabar-otp): «{kod} — {maqsad} kodi. 5 daqiqa amal qiladi. Kodni hech kimga aytmang.» */
+const OTP_PURPOSE_TEXT: Record<string, string> = {
+  REGISTER: 'ro‘yxatdan o‘tish kodi',
+  LOGIN: 'kabinetga kirish kodi',
+  PHONE_VERIFY: 'yangi raqamni tasdiqlash kodi',
+  PASSWORD_RESET: 'parolni tiklash kodi',
+};
+
+export function otpText(code: string, purpose: string): string {
+  const what = OTP_PURPOSE_TEXT[String(purpose ?? '')] ?? 'tasdiqlash kodi';
+  return `${code} — ${what}. 5 daqiqa amal qiladi. Kodni hech kimga aytmang.`;
+}
+
+/** OTP SMS qayta urinishlari (kod 5 daqiqa amal qiladi) [taklif]. */
+export const OTP_RETRY_DELAYS_MS = [15_000, 60_000];
 
 function maskPhone(phone: string): string {
   return `${phone.slice(0, 6)}***${phone.slice(-2)}`;

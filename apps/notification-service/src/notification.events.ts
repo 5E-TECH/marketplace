@@ -1,7 +1,8 @@
 import { NotificationChannel } from './entities/notification-delivery.entity';
 
 export interface NotificationRecipient {
-  userId: string;
+  /** null — tizim foydalanuvchisi emas (mijozga SMS, BE-24). */
+  userId: string | null;
   email?: string | null;
   phone?: string | null;
   telegramChatId?: string | null;
