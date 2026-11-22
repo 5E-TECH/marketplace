@@ -1,5 +1,6 @@
 import { LEAD_DB } from './database';
 import { Module } from '@nestjs/common';
+import { LeadOpsController } from './lead-ops.controller';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -122,6 +123,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     TypeOrmModule.forFeature(LEAD_ENTITIES),
   ],
   controllers: [
+    LeadOpsController,
     LeadAddressController,
     LeadOfferController,
     LeadIntakeController,
