@@ -15,6 +15,7 @@ describe('CatalogOfferService.stockOf (BE-16)', () => {
       {} as never,
       variants as never,
       { send } as never,
+      { forProducts: async () => new Map() } as never,
     ) as unknown as {
       stockOf(ids: string[]): Promise<Map<string, number | null>>;
     };

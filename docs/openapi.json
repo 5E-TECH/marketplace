@@ -2829,6 +2829,189 @@
         ]
       }
     },
+    "/api/v1/admin/products/{id}/creatives/upload": {
+      "post": {
+        "description": "Fayl `multipart/form-data` bilan `url` ga yuboriladi: avval `fields` (o‘zgartirmasdan), oxirida `file`. Hajm va turni MinIO ham tekshiradi. Sozlamada yo‘q tur yoki katta hajm — 400.",
+        "operationId": "AdminCreativesController_uploadPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeUploadRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeUploadPolicyDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fayl turi yoki hajmi ruxsat etilmagan"
+          },
+          "404": {
+            "description": "Mahsulot topilmadi"
+          },
+          "409": {
+            "description": "Kreativlar chegarasi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuklash uchun imzolangan POST (15 daqiqa)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/creatives": {
+      "post": {
+        "description": "Yuklash javobidagi `objectKey` yuboriladi. Fayl tekshiriladi (bor, hajmi, turi, birinchi baytlari); mos kelmasa o‘chiriladi va 400. Mos kelsa ochiq papkaga ko‘chiriladi. Takroriy tasdiq o‘sha kreativni qaytaradi. Bir mahsulotga 20 tagacha kreativ.",
+        "operationId": "AdminCreativesController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeConfirmDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fayl yo‘q yoki mos emas"
+          },
+          "409": {
+            "description": "Kreativlar chegarasi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yuklangan faylni kreativ qilib saqlash",
+        "tags": [
+          "admin-creatives"
+        ]
+      },
+      "get": {
+        "operationId": "AdminCreativesController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CreativeDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot kreativlari (tartib bilan)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
+    "/api/v1/admin/products/{id}/creatives/{creativeId}": {
+      "delete": {
+        "operationId": "AdminCreativesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creativeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Kreativ topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kreativni o‘chirish (offerdan chiqadi, fayl ham o‘chiriladi)",
+        "tags": [
+          "admin-creatives"
+        ]
+      }
+    },
     "/api/v1/admin/wholesalers": {
       "post": {
         "operationId": "AdminWholesalersController_create",
@@ -6372,6 +6555,46 @@
           }
         ],
         "summary": "Offerlar: mahsulot, narx, haq, EPC, tasdiq va sotilish foizi",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/offers/{productId}": {
+      "get": {
+        "description": "Ro‘yxat maydonlari va tafsilot (kategoriya, tavsif, og‘irlik, yetkazish, BAD, holat, kreativlar). Katalogda hali bo‘lmagan qismlar (yetkazish rejimi, narx taqsimoti, hamma sotuvchilar natijasi) — null. Yopiq offer — 404.",
+        "operationId": "AffiliateStreamsController_getOffer",
+        "parameters": [
+          {
+            "name": "productId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateOfferDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Offer topilmadi yoki yopiq"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Offer kartasi: tafsilot va kreativlar",
         "tags": [
           "affiliate"
         ]
@@ -10906,6 +11129,136 @@
           "reason"
         ]
       },
+      "CreativeUploadRequestDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ],
+            "example": "VIDEO"
+          },
+          "contentType": {
+            "type": "string",
+            "example": "video/mp4",
+            "description": "Fayl turi (MIME)"
+          },
+          "size": {
+            "type": "number",
+            "example": 83886080,
+            "description": "Fayl hajmi, bayt"
+          }
+        },
+        "required": [
+          "type",
+          "contentType",
+          "size"
+        ]
+      },
+      "CreativeUploadPolicyDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media",
+            "description": "Fayl `multipart/form-data` bilan shu manzilga POST qilinadi"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Formaga shu maydonlar (o‘zgartirmasdan) va oxirida `file` qo‘shiladi",
+            "example": {
+              "key": "creatives/12/…mp4",
+              "Content-Type": "video/mp4"
+            }
+          },
+          "objectKey": {
+            "type": "string",
+            "example": "creative-uploads/12/7b0c…mp4",
+            "description": "Tasdiqlashda shu kalit yuboriladi"
+          },
+          "expiresAt": {
+            "type": "string",
+            "example": "2026-11-21T10:15:00.000Z"
+          },
+          "maxSize": {
+            "type": "number",
+            "example": 104857600,
+            "description": "Ruxsat etilgan eng katta hajm, bayt"
+          }
+        },
+        "required": [
+          "url",
+          "fields",
+          "objectKey",
+          "expiresAt",
+          "maxSize"
+        ]
+      },
+      "CreativeConfirmDto": {
+        "type": "object",
+        "properties": {
+          "objectKey": {
+            "type": "string",
+            "example": "creative-uploads/12/7b0c3e1a-….mp4",
+            "description": "Yuklash javobidagi `objectKey`"
+          }
+        },
+        "required": [
+          "objectKey"
+        ]
+      },
+      "CreativeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media/creatives/12/….mp4"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "video/mp4"
+          },
+          "size": {
+            "type": "number",
+            "example": 83886080
+          },
+          "position": {
+            "type": "number",
+            "example": 0
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "type",
+          "url",
+          "mimeType",
+          "size",
+          "position",
+          "createdAt"
+        ]
+      },
       "CreateWholesalerDto": {
         "type": "object",
         "properties": {
@@ -14229,6 +14582,197 @@
           "page",
           "limit",
           "totalPages"
+        ]
+      },
+      "AffiliateOfferCreativeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media/creatives/12/….mp4"
+          },
+          "caption": {
+            "type": "string",
+            "nullable": true,
+            "description": "Admin izohi (hozir yo‘q)"
+          },
+          "processing": {
+            "type": "boolean",
+            "example": false,
+            "description": "Video tayyorlanmoqda (hozir doim false — fayl yuklanganda tekshiriladi)"
+          },
+          "approvedAt": {
+            "type": "string",
+            "example": "2026-11-21T10:00:00.000Z",
+            "description": "Kutubxonaga qo‘shilgan vaqt (moderatsiya yo‘q)"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "url",
+          "caption",
+          "processing",
+          "approvedAt"
+        ]
+      },
+      "AffiliateOfferDetailDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "name": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "approvedPrice": {
+            "type": "number"
+          },
+          "maxSalePrice": {
+            "type": "number"
+          },
+          "affiliateFee": {
+            "type": "number"
+          },
+          "epc": {
+            "type": "number",
+            "nullable": true
+          },
+          "approveRate": {
+            "type": "number",
+            "nullable": true
+          },
+          "saleRate": {
+            "type": "number",
+            "nullable": true
+          },
+          "stock": {
+            "type": "number"
+          },
+          "hasVideo": {
+            "type": "boolean"
+          },
+          "categoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "subtitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "boxContents": {
+            "type": "string",
+            "nullable": true,
+            "description": "Qutida (offer matnidan)"
+          },
+          "weightKg": {
+            "type": "number",
+            "nullable": true
+          },
+          "deliveryMode": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "description": "Hozir null — katalog snapshotida yo‘q"
+          },
+          "centerDeliveryFee": {
+            "type": "number"
+          },
+          "addressDeliveryFee": {
+            "type": "number"
+          },
+          "isBad": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "OUT_OF_STOCK"
+            ],
+            "description": "Qoldiq 0 — OUT_OF_STOCK (yopiq offer — 404)"
+          },
+          "stoppedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "stopReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "onSaleSince": {
+            "type": "string",
+            "example": "2026-11-20"
+          },
+          "results": {
+            "type": "object",
+            "nullable": true,
+            "description": "Hamma sotuvchilar natijasi — hozir null"
+          },
+          "priceSplit": {
+            "type": "object",
+            "nullable": true,
+            "description": "Narx taqsimoti — hozir null"
+          },
+          "creatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliateOfferCreativeDto"
+            }
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "imageUrl",
+          "approvedPrice",
+          "maxSalePrice",
+          "affiliateFee",
+          "epc",
+          "approveRate",
+          "saleRate",
+          "stock",
+          "hasVideo",
+          "categoryName",
+          "subtitle",
+          "description",
+          "boxContents",
+          "weightKg",
+          "deliveryMode",
+          "centerDeliveryFee",
+          "addressDeliveryFee",
+          "isBad",
+          "state",
+          "stoppedAt",
+          "stopReason",
+          "onSaleSince",
+          "results",
+          "priceSplit",
+          "creatives"
         ]
       },
       "CreateAffiliateStreamDto": {

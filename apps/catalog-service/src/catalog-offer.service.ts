@@ -15,6 +15,7 @@ import {
   ShopStatus,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
+import { CreativeService } from './creative.service';
 import { Product } from './entities/product.entity';
 import {
   OfferPricing,
@@ -43,6 +44,7 @@ export class CatalogOfferService {
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    private readonly creatives: CreativeService,
   ) {}
 
   /**
@@ -93,11 +95,13 @@ export class CatalogOfferService {
       .getOne();
     if (!product) return null;
     const stock = await this.stockOf([String(product.id)]);
+    const creatives = await this.creatives.forProducts([String(product.id)]);
     return toSnapshot(
       product,
       this.pricingOf(product, await this.pricing.context()),
       // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
       stock.get(String(product.id)),
+      creatives.get(String(product.id)) ?? [],
     );
   }
 
@@ -146,8 +150,16 @@ export class CatalogOfferService {
     if (!rows.length) return [];
     const ctx = await this.pricing.context();
     const stock = await this.stockOf(rows.map((row) => String(row.id)));
+    const creatives = await this.creatives.forProducts(
+      rows.map((row) => String(row.id)),
+    );
     return rows.map((row) =>
-      toSnapshot(row, this.pricingOf(row, ctx), stock.get(String(row.id))),
+      toSnapshot(
+        row,
+        this.pricingOf(row, ctx),
+        stock.get(String(row.id)),
+        creatives.get(String(row.id)) ?? [],
+      ),
     );
   }
 
@@ -300,6 +312,7 @@ export function toSnapshot(
   product: Product,
   pricing?: OfferPricing,
   stock: number | null = 0,
+  creatives: CatalogOfferSnapshot['creatives'] = [],
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
@@ -331,7 +344,8 @@ export function toSnapshot(
     centerDeliveryFee: pricing?.centerDeliveryFee ?? 0,
     addressDeliveryFee: pricing?.addressDeliveryFee ?? 0,
     stock, // BE-16: HQ ombordagi bo‘sh (band qilinmagan) qoldiq
-    creatives: [], // BE-08
+    // BE-08: admin yuklagan kreativlar (SOT-9), tartib bilan
+    creatives,
     createdAt: new Date(product.createdAt).toISOString(),
   };
 }

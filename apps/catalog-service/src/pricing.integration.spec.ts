@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { PriceStatus } from '@app/common';
+import { CreativeType, PriceStatus } from '@app/common';
 import { CATALOG_DB } from './database';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -15,6 +15,8 @@ import {
   PricePolicyScope,
 } from './entities/pricing.entity';
 import { CatalogOfferService } from './catalog-offer.service';
+import { CreativeService } from './creative.service';
+import { Creative } from './entities/creative.entity';
 import { PricingService } from './pricing.service';
 import { ProductService } from './product.service';
 import { WholesalerService } from './wholesaler.service';
@@ -34,6 +36,7 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
   let ds: DataSource;
   let pricing: PricingService;
   let offers: CatalogOfferService;
+  let creatives: CreativeService;
   let productId: string;
   const emitted: Array<[string, unknown]> = [];
 
@@ -78,6 +81,10 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       pricing,
       ds.getRepository(ProductVariant),
       { send: () => of({}) } as never, // qoldiq — BE-16 testida
+      (creatives = new CreativeService(
+        ds.getRepository(Creative),
+        ds.getRepository(Product),
+      )),
     );
     const wholesalers = new WholesalerService(ds.getRepository(Shop));
     const products = new ProductService(
@@ -426,5 +433,118 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       elchiTariff: 45_000,
     });
     expect((await pricing.listTariffs()).length).toBe(3);
+  });
+
+  it('BE-08: kreativlar — mahsulotga bog‘lanadi, offer ularni tartib bilan beradi; o‘chirilgani chiqadi; chegara 20', async () => {
+    const file = (n: number, type: CreativeType) => ({
+      objectKey: `creatives/${productId}/0000000${n}-1111-4222-8333-944455556666.${type === CreativeType.VIDEO ? 'mp4' : 'png'}`,
+      url: `https://api.elchi.test/media/m/creatives/${productId}/${n}`,
+      type,
+      mimeType: type === CreativeType.VIDEO ? 'video/mp4' : 'image/png',
+      size: type === CreativeType.VIDEO ? 80 * 1024 * 1024 : 2048,
+    });
+    const video = await creatives.create({
+      productId,
+      file: file(1, CreativeType.VIDEO),
+      actorId: '7',
+    });
+    const image = await creatives.create({
+      productId,
+      file: file(2, CreativeType.IMAGE),
+      actorId: '7',
+    });
+    expect(video).toMatchObject({
+      type: 'VIDEO',
+      size: 80 * 1024 * 1024,
+      position: 0,
+    });
+    expect(image.position).toBe(1);
+    // takroriy tasdiq — o‘sha kreativ
+    await expect(
+      creatives.create({
+        productId,
+        file: file(1, CreativeType.VIDEO),
+        actorId: '7',
+      }),
+    ).resolves.toMatchObject({ id: video.id });
+    // boshqa mahsulot kaliti — rad
+    await expect(
+      creatives.create({
+        productId,
+        file: {
+          ...file(3, CreativeType.IMAGE),
+          objectKey: 'creatives/999/x.png',
+        },
+        actorId: '7',
+      }),
+    ).rejects.toThrow('noto‘g‘ri');
+
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      creatives: [
+        {
+          id: video.id,
+          type: 'VIDEO',
+          url: video.url,
+          createdAt: expect.any(String),
+        },
+        {
+          id: image.id,
+          type: 'IMAGE',
+          url: image.url,
+          createdAt: expect.any(String),
+        },
+      ],
+    });
+    await expect(creatives.list(productId)).resolves.toHaveLength(2);
+    // gateway tasdiqdan oldin so‘raydi: bor — o‘sha kreativ, yo‘q — null
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(1, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toMatchObject({ creative: { id: video.id } });
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(7, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toEqual({ creative: null });
+
+    await expect(
+      creatives.delete({ productId, creativeId: image.id }),
+    ).resolves.toEqual({
+      id: image.id,
+      objectKey: file(2, CreativeType.IMAGE).objectKey,
+    });
+    // o‘chirilgan kreativ fayli qayta tasdiqlanmaydi
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(2, CreativeType.IMAGE).objectKey,
+      }),
+    ).rejects.toThrow('o‘chirilgan');
+    const after = await offers.list({ productIds: [productId] } as never);
+    expect(after.find((o) => o.productId === productId)?.creatives).toEqual([
+      {
+        id: video.id,
+        type: 'VIDEO',
+        url: video.url,
+        createdAt: expect.any(String),
+      },
+    ]);
+
+    for (let n = 10; n < 29; n++)
+      await creatives.create({
+        productId,
+        file: file(n, CreativeType.IMAGE),
+        actorId: null,
+      });
+    await expect(
+      creatives.create({
+        productId,
+        file: file(29, CreativeType.IMAGE),
+        actorId: null,
+      }),
+    ).rejects.toThrow('20');
   });
 });

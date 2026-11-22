@@ -588,7 +588,13 @@ export interface CatalogOfferSnapshot {
   /** Band qilinmagan qoldiq, dona; null — noma’lum (inventory javob bermadi): lid qabul ochiq, yangi sahifa yopiq. */
   stock: number | null;
   /** Admin yuklagan kreativlar (BE-08 fayl servisi). */
-  creatives: Array<{ id: string; type: 'IMAGE' | 'VIDEO'; url: string }>;
+  creatives: Array<{
+    id: string;
+    type: 'IMAGE' | 'VIDEO';
+    url: string;
+    /** Kutubxonaga qo‘shilgan vaqt (BE-08). */
+    createdAt?: string;
+  }>;
   createdAt: string;
 }
 

@@ -34,6 +34,8 @@ import { ReviewService } from './review.service';
 import { CategorySeeder } from './seed/category.seeder';
 import { WholesalerController } from './wholesaler.controller';
 import { WholesalerService } from './wholesaler.service';
+import { CreativeController } from './creative.controller';
+import { CreativeService } from './creative.service';
 import { CatalogOfferController } from './catalog-offer.controller';
 import { CatalogOfferService } from './catalog-offer.service';
 import { PricingController } from './pricing.controller';
@@ -110,6 +112,7 @@ const entities = CATALOG_DB.entities;
     BannerController,
     WholesalerController,
     CatalogOfferController,
+    CreativeController,
     PricingController,
   ],
   providers: [
@@ -126,6 +129,7 @@ const entities = CATALOG_DB.entities;
     WholesalerService,
     CatalogOfferService,
     PricingService,
+    CreativeService,
   ],
 })
 export class CatalogModule {}
