@@ -117,3 +117,36 @@ test('BE-02: DLQ ogohlantirishi alohida — asosiy ogohlantirishni bosmaydi', as
   await tick();
   assert.deepEqual(sent, ['dlq_firing', 'firing', 'dlq_resolved', 'resolved']);
 });
+
+test('BE-13 TC10: sotuvchi sahifasi /healthz javob bermasa — ogohlantirish, tiklansa — resolved', async (t) => {
+  process.env.MONITOR_FAILURE_THRESHOLD = '1';
+  process.env.RABBITMQ_MANAGEMENT_URL = '';
+  process.env.MONITOR_API_URL = 'http://monitor.test/health';
+  process.env.MONITOR_LANDING_URL = 'http://landing.test/healthz';
+  process.env.ALERT_WEBHOOK_URL = 'http://alerts.test';
+  let landingUp = false;
+  const sent = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === process.env.ALERT_WEBHOOK_URL) {
+      sent.push(JSON.parse(options.body));
+      return { ok: true, status: 200 };
+    }
+    if (url === process.env.MONITOR_LANDING_URL)
+      return { ok: landingUp, status: landingUp ? 200 : 503 };
+    return { ok: true };
+  });
+  t.mock.method(console, 'log', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  const { tick } = await import(`../health-monitor.mjs?landing=${Date.now()}`);
+  await tick();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].status, 'firing');
+  assert.match(sent[0].detail, /sotuvchi sahifasi: HTTP 503/);
+  landingUp = true;
+  await tick();
+  assert.deepEqual(
+    sent.map((alert) => alert.status),
+    ['firing', 'resolved'],
+  );
+  delete process.env.MONITOR_LANDING_URL;
+});

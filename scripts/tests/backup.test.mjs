@@ -49,6 +49,20 @@ test('failed dump is not published; successful backup has checksum and restores 
   const calls = await readFile(join(dir, 'calls'), 'utf8');
   assert.match(calls, /pg_restore --exit-on-error/);
   assert.match(calls, /SELECT count\(\*\) FROM finance.payout/);
+  // BE-13 TC9: lid-sotuv jadvallari ham tekshiriladi
+  for (const table of [
+    'lead.lead',
+    'checkout.parcel',
+    'finance.journal',
+    'finance.ledger_entry',
+    'finance.withdrawal_request',
+    'finance.wholesaler_settlement',
+    'finance.fee_hold',
+  ])
+    assert.match(
+      calls,
+      new RegExp(`SELECT count\\(\\*\\) FROM ${table.replace('.', '\\.')};`),
+    );
   assert.match(calls, /rm -f marketplace-restore-test-/);
   assert.notEqual(
     spawnSync('sh', [restore], { env: { ...env, SCHEMA_EXIT: '1' } }).status,

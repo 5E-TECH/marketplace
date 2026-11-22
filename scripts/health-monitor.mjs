@@ -5,6 +5,8 @@ const apiUrl =
   process.env.MONITOR_API_URL ??
   'http://localhost:3000/api/v1/health/readiness';
 const rabbitUrl = process.env.RABBITMQ_MANAGEMENT_URL;
+// BE-13 TC10: sotuvchi sahifasi (Storefront `landing/`, `/healthz`) — domen EQ-05 dan keyin beriladi; bo‘sh — tekshirilmaydi
+const landingUrl = process.env.MONITOR_LANDING_URL;
 const intervalMs = positiveInt(process.env.MONITOR_INTERVAL_MS, 30_000);
 const threshold = positiveInt(process.env.MONITOR_FAILURE_THRESHOLD, 3);
 const webhookUrl = process.env.ALERT_WEBHOOK_URL;
@@ -94,10 +96,24 @@ async function notify(status, detail) {
   );
 }
 
-/** API va consumerlar sog'ligi; yiqilsa xato. Natija — xabari bor DLQ lar (alohida ogohlantirish). */
+/** Sotuvchi sahifasi javob bermasa — xato (asosiy ogohlantirish bilan bir xil). */
+async function checkLanding() {
+  if (!landingUrl) return;
+  try {
+    await fetchOk(landingUrl);
+  } catch (error) {
+    throw new Error(
+      `sotuvchi sahifasi: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/** API, consumerlar va sotuvchi sahifasi sog'ligi; yiqilsa xato. Natija — xabari bor DLQ lar (alohida ogohlantirish). */
 export async function checkOnce() {
   await fetchOk(apiUrl);
-  return checkRabbitMq();
+  const deadLetters = await checkRabbitMq();
+  await checkLanding();
+  return deadLetters;
 }
 
 /** BE-02: DLQ da xabar paydo bo'lsa — `dlq_firing`, bo'shasa — `dlq_resolved` (asosiy ogohlantirishdan mustaqil). */
@@ -165,7 +181,10 @@ export async function tick() {
   failures = 0;
   if (alertOpen) {
     try {
-      await notify('resolved', 'API va barcha RabbitMQ consumerlar tiklandi');
+      await notify(
+        'resolved',
+        'API, sotuvchi sahifasi va barcha RabbitMQ consumerlar tiklandi',
+      );
       alertOpen = false;
     } catch (error) {
       console.error(
