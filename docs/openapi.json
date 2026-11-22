@@ -171,6 +171,149 @@
         ]
       }
     },
+    "/api/v1/auth/2fa/setup": {
+      "post": {
+        "operationId": "AuthController_setupTwoFactor",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorChallengeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorSetupResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "2FA allaqachon ulangan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "2FA ni ulash: QR uchun sir va otpauth havola (parol bosqichidagi challengeToken bilan)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/2fa/enable": {
+      "post": {
+        "operationId": "AuthController_enableTwoFactor",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorEnableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "recoveryCodes": [
+                      "K7QM2XPA4D"
+                    ],
+                    "accessToken": null
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "2FA ni yoqish: birinchi kod → bir martalik tiklash kodlari (faqat shu javobda) va sessiya",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/2fa/verify": {
+      "post": {
+        "operationId": "AuthController_verifyTwoFactor",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorVerifyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "accessToken": null
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Kirish: 2FA kodi yoki tiklash kodi → sessiya (3 xato → 15 daqiqa blok)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "operationId": "AuthController_refresh",
@@ -2971,6 +3114,42 @@
           }
         ],
         "summary": "Foydalanuvchini blokdan chiqarish",
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}/2fa/reset": {
+      "post": {
+        "operationId": "AdminUsersController_resetTwoFactor",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xodim 2FA sini nolga tushirish (keyingi kirishda qayta ulaydi)",
         "tags": [
           "admin-users"
         ]
@@ -11953,6 +12132,76 @@
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           }
         }
+      },
+      "TwoFactorChallengeDto": {
+        "type": "object",
+        "properties": {
+          "challengeToken": {
+            "type": "string",
+            "description": "Parol bosqichidan keyingi token (5 daqiqa), sessiya emas"
+          }
+        },
+        "required": [
+          "challengeToken"
+        ]
+      },
+      "TwoFactorSetupResultDto": {
+        "type": "object",
+        "properties": {
+          "secret": {
+            "type": "string",
+            "example": "JBSWY3DPEHPK3PXP",
+            "description": "Qo‘lda kiritish uchun"
+          },
+          "otpauthUrl": {
+            "type": "string",
+            "example": "otpauth://totp/Elchi%20Marketplace%3A%2B998901234567?secret=JBSWY3DPEHPK3PXP&issuer=Elchi%20Marketplace&algorithm=SHA1&digits=6&period=30",
+            "description": "QR shu matndan chiziladi"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauthUrl"
+        ]
+      },
+      "TwoFactorEnableDto": {
+        "type": "object",
+        "properties": {
+          "challengeToken": {
+            "type": "string",
+            "description": "Parol bosqichidan keyingi token (5 daqiqa), sessiya emas"
+          },
+          "code": {
+            "type": "string",
+            "example": "305918",
+            "description": "Authenticator ilovasidagi 6 raqam"
+          }
+        },
+        "required": [
+          "challengeToken",
+          "code"
+        ]
+      },
+      "TwoFactorVerifyDto": {
+        "type": "object",
+        "properties": {
+          "challengeToken": {
+            "type": "string",
+            "description": "Parol bosqichidan keyingi token (5 daqiqa), sessiya emas"
+          },
+          "code": {
+            "type": "string",
+            "example": "305918"
+          },
+          "recoveryCode": {
+            "type": "string",
+            "example": "K7QM2XPA4D",
+            "description": "Telefon yo‘q bo‘lsa — bir martalik tiklash kodi"
+          }
+        },
+        "required": [
+          "challengeToken"
+        ]
       },
       "RefreshTokenDto": {
         "type": "object",
