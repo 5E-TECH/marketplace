@@ -1,9 +1,12 @@
-import { Controller, UseFilters } from '@nestjs/common';
+import { ConflictException, Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AdminReturnRequestsQueryDto,
+  CreateReturnRequestDto,
+  ErrorCode,
   RpcHttpExceptionFilter,
 } from '@app/common';
+import { LeadReturnService } from './lead-return.service';
 import { ReturnActor } from './return-history';
 import { ReturnRequestQueryService } from './return-request-query.service';
 import { ReturnRequestService } from './return-request.service';
@@ -23,7 +26,25 @@ export class ReturnRequestsController {
     private readonly returns: ReturnRequestService,
     private readonly refunds: ReturnRefundService,
     private readonly queries: ReturnRequestQueryService,
+    private readonly leadReturns: LeadReturnService,
   ) {}
+
+  /** BE-44: xodim (admin, operator) mijoz nomidan yetkazilgan buyurtmaga qaytarish so‘rovini kiritadi. */
+  @MessagePattern({ cmd: 'checkout.admin.order-return-create' })
+  createForOrder(
+    @Payload()
+    data: {
+      orderId: string;
+      dto: CreateReturnRequestDto;
+      actor: ReturnActor;
+    },
+  ) {
+    return this.leadReturns.create({
+      orderId: String(data?.orderId ?? ''),
+      dto: data.dto,
+      actor: { id: String(data.actor.id), role: String(data.actor.role) },
+    });
+  }
 
   // ─── Admin ────────────────────────────────────────────────────────────────
 
@@ -38,20 +59,33 @@ export class ReturnRequestsController {
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-approve' })
-  adminApprove(@Payload() data: ActionPayload) {
+  async adminApprove(@Payload() data: ActionPayload) {
+    // BE-44: liddan buyurtmaga xodim so‘rovi — buyurtma holati va order.returned shu yerda
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      return this.leadReturns.decide({ ...this.action(data), approve: true });
     return this.returns.transition('adminApprove', this.action(data));
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-reject' })
-  adminReject(@Payload() data: ActionPayload) {
+  async adminReject(@Payload() data: ActionPayload) {
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      return this.leadReturns.decide({ ...this.action(data), approve: false });
     return this.returns.transition('adminReject', this.action(data));
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-refund' })
-  adminRefund(
+  async adminRefund(
     @Payload()
     data: ActionPayload & { amount?: number; restock?: boolean },
   ) {
+    // BE-44: xodim so‘rovida pul `order.returned` (moliya teskari yozuvlari), tovar — ombor saralashi (BE-17);
+    // eski onlayn refund va darhol qoldiqqa qaytarish ikki marta yozardi
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      throw new ConflictException({
+        message:
+          'Liddan buyurtma qaytarishida pul va tovar avtomatik (moliya va ombor) — refund yo‘q',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     return this.refunds.refund({
       ...this.action(data),
       amount: data.amount,

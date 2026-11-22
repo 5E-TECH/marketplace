@@ -113,6 +113,8 @@ export class CheckoutOutboxRelayService {
         ...(this.notification ? [this.notification] : []),
       ];
     if (eventType === LEAD_EVENTS.ORDER_CREATE_FAILED) return [this.lead];
+    // BE-44: yetkazilgandan keyin qaytarish — moliya teskari yozuvlari (BE-22)
+    if (eventType === ORDER_EVENTS.RETURNED) return [this.finance];
     return [];
   }
 }

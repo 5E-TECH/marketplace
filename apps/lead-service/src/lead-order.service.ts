@@ -96,6 +96,8 @@ export class LeadOrderService {
           lead.deliveredAt = at;
         if (
           REFUSED_LIKE.has(event.status) &&
+          // BE-44: yetkazilgandan keyin qaytarish (RETURN_REQUESTED → RETURNING) — rad emas
+          !lead.deliveredAt &&
           (!lead.refusedAt || at < lead.refusedAt)
         )
           lead.refusedAt = at;

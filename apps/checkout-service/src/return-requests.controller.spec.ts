@@ -9,6 +9,7 @@ describe('ReturnRequestsController (C4.2)', () => {
       returns as never,
       refunds as never,
       queries as never,
+      { isStaffRequest: jest.fn(async () => false) } as never,
     );
     return { controller, returns, refunds, queries };
   }
@@ -48,5 +49,22 @@ describe('ReturnRequestsController (C4.2)', () => {
       amount: 1000,
       restock: false,
     });
+  });
+
+  it('BE-44: xodim so‘rovida eski refund yo‘li — 409 (pul va tovar avtomatik)', async () => {
+    const refunds = { refund: jest.fn() };
+    const controller = new ReturnRequestsController(
+      { transition: jest.fn() } as never,
+      refunds as never,
+      { list: jest.fn(), get: jest.fn() } as never,
+      { isStaffRequest: jest.fn(async () => true) } as never,
+    );
+    await expect(
+      controller.adminRefund({
+        returnId: '3',
+        actor: { id: '1', role: 'SUPERADMIN' },
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(refunds.refund).not.toHaveBeenCalled();
   });
 });
