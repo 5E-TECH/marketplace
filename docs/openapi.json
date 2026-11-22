@@ -674,6 +674,476 @@
         ]
       }
     },
+    "/api/v1/storefront/products": {
+      "get": {
+        "description": "Kategoriya, qidiruv, narx oralig‘i (`minPrice`, `maxPrice`), «faqat mavjud» (`inStock=true`), saralash va sahifalash. Faqat sotuvdagi va narxi tasdiqlangan mahsulotlar.",
+        "operationId": "StorefrontController_list",
+        "parameters": [
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "iphone",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "7",
+              "type": "string"
+            }
+          },
+          {
+            "name": "minPrice",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "example": 100000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "example": 15000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "inStock",
+            "required": false,
+            "in": "query",
+            "description": "Faqat omborda bor mahsulotlar",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt:desc",
+              "type": "string",
+              "enum": [
+                "createdAt:asc",
+                "createdAt:desc",
+                "price:asc",
+                "price:desc",
+                "name:asc",
+                "name:desc"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontProductsPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtr noto‘g‘ri (min > max)"
+          }
+        },
+        "summary": "Sayt katalogi",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/products/{id}": {
+      "get": {
+        "description": "«Shu bo‘limdan» javoni (`related`) bilan.",
+        "operationId": "StorefrontController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontProductDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mahsulot topilmadi yoki sotuvda emas"
+          }
+        },
+        "summary": "Sayt mahsuloti",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/banners": {
+      "get": {
+        "operationId": "StorefrontController_banners",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StorefrontBannerDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sayt bannerlari (admin «Sayt kontenti»)",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/cart": {
+      "get": {
+        "operationId": "StorefrontController_cart",
+        "parameters": [
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontCartDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "storefront"
+        ]
+      },
+      "delete": {
+        "operationId": "StorefrontController_clearCart",
+        "parameters": [
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontCartDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Savatni bo‘shatish (idempotent)",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/cart/items": {
+      "post": {
+        "description": "Narx — tasdiqlangan narx (savatga qo‘shilgandagi surat).",
+        "operationId": "StorefrontController_addItem",
+        "parameters": [
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorefrontCartItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontCartDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mahsulot saytda sotuvda emas"
+          }
+        },
+        "summary": "Savatga mahsulot qo‘shish",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/cart/items/{id}": {
+      "patch": {
+        "operationId": "StorefrontController_updateItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStorefrontCartItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontCartDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "storefront"
+        ]
+      },
+      "delete": {
+        "operationId": "StorefrontController_removeItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontCartDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/orders": {
+      "post": {
+        "description": "Savatdagi hamma tovar bitta so‘rovda — lid (manba SITE). Ism, telefon, viloyat, tuman, ko‘cha/uy majburiy (BE-38). `confirmMode`: CALL — operator qo‘ng‘iroq qiladi; SMS — havola bosilgach buyurtma operatorsiz. Qora ro‘yxat yoki dublikatda server CALL qiladi (javobdagi `confirmMode`). Muvaffaqiyatda savat bo‘shatiladi.",
+        "operationId": "StorefrontController_order",
+        "parameters": [
+          {
+            "name": "x-session-id",
+            "required": true,
+            "in": "header",
+            "description": "Mehmon savati kaliti (sayt yaratadi, 16–128 belgi: harf, raqam, - _)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user-agent",
+            "required": false,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOrderCreatedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Maydon noto‘g‘ri (maydon nomi bilan) yoki savat bo‘sh (SITE_CART_EMPTY)"
+          },
+          "409": {
+            "description": "Savatdagi mahsulot saytda sotuvda emas (SITE_PRODUCT_UNAVAILABLE)"
+          }
+        },
+        "summary": "Savatdan buyurtma (lid)",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
+    "/api/v1/storefront/orders/confirm": {
+      "post": {
+        "description": "Havola bosilgach sayt sahifasi yuboradi. Takror — o‘sha javob. Muddat o‘tgan yoki operator olgan — 409 (SITE_CONFIRM_EXPIRED): operator qo‘ng‘iroq qilib tasdiqlaydi.",
+        "operationId": "StorefrontController_confirm",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteOrderConfirmDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOrderConfirmedDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Havola noto‘g‘ri"
+          },
+          "409": {
+            "description": "Havola muddati o‘tgan"
+          }
+        },
+        "summary": "SMS havola bilan buyurtmani tasdiqlash",
+        "tags": [
+          "storefront"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "operationId": "NotificationsController_list",
@@ -9568,6 +10038,516 @@
           }
         }
       },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "StorefrontCategoryRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "7"
+          },
+          "name": {
+            "type": "string",
+            "example": "Quloqchinlar"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "StorefrontAttributeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Aloqa"
+          },
+          "value": {
+            "type": "string",
+            "example": "Bluetooth 5.3"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ]
+      },
+      "StorefrontProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "name": {
+            "type": "string",
+            "example": "Simsiz quloqchin X1"
+          },
+          "subtitle": {
+            "type": "object",
+            "example": "Shovqinni pasaytiradi",
+            "nullable": true
+          },
+          "description": {
+            "type": "object",
+            "example": "Batareya 30 soat…",
+            "nullable": true
+          },
+          "images": {
+            "example": [
+              "https://elchimarket.uz/media/p/12-1.webp"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "videoUrl": {
+            "type": "object",
+            "example": null,
+            "nullable": true
+          },
+          "category": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCategoryRefDto"
+              }
+            ]
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontAttributeDto"
+            }
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false,
+            "description": "Biologik faol qo‘shimcha — «Dori vositasi emas» yozuvi"
+          },
+          "price": {
+            "type": "number",
+            "example": 249000,
+            "description": "Tasdiqlangan narx, so‘m"
+          },
+          "deliveryToCenter": {
+            "type": "number",
+            "example": 25000,
+            "description": "Markazgacha yetkazish, so‘m"
+          },
+          "deliveryToAddress": {
+            "type": "number",
+            "example": 35000,
+            "description": "Eshikkacha yetkazish, so‘m"
+          },
+          "inStock": {
+            "type": "object",
+            "example": true,
+            "nullable": true,
+            "description": "Omborda bor; null — ombor javob bermadi (noma’lum)"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "subtitle",
+          "description",
+          "images",
+          "videoUrl",
+          "category",
+          "attributes",
+          "isBad",
+          "price",
+          "deliveryToCenter",
+          "deliveryToAddress",
+          "inStock"
+        ]
+      },
+      "StorefrontProductsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontProductDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 25
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 2
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "StorefrontProductDetailsDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "name": {
+            "type": "string",
+            "example": "Simsiz quloqchin X1"
+          },
+          "subtitle": {
+            "type": "object",
+            "example": "Shovqinni pasaytiradi",
+            "nullable": true
+          },
+          "description": {
+            "type": "object",
+            "example": "Batareya 30 soat…",
+            "nullable": true
+          },
+          "images": {
+            "example": [
+              "https://elchimarket.uz/media/p/12-1.webp"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "videoUrl": {
+            "type": "object",
+            "example": null,
+            "nullable": true
+          },
+          "category": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCategoryRefDto"
+              }
+            ]
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontAttributeDto"
+            }
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false,
+            "description": "Biologik faol qo‘shimcha — «Dori vositasi emas» yozuvi"
+          },
+          "price": {
+            "type": "number",
+            "example": 249000,
+            "description": "Tasdiqlangan narx, so‘m"
+          },
+          "deliveryToCenter": {
+            "type": "number",
+            "example": 25000,
+            "description": "Markazgacha yetkazish, so‘m"
+          },
+          "deliveryToAddress": {
+            "type": "number",
+            "example": 35000,
+            "description": "Eshikkacha yetkazish, so‘m"
+          },
+          "inStock": {
+            "type": "object",
+            "example": true,
+            "nullable": true,
+            "description": "Omborda bor; null — ombor javob bermadi (noma’lum)"
+          },
+          "related": {
+            "description": "«Shu bo‘limdan» — shu kategoriyadagi boshqa mahsulotlar",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontProductDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "subtitle",
+          "description",
+          "images",
+          "videoUrl",
+          "category",
+          "attributes",
+          "isBad",
+          "price",
+          "deliveryToCenter",
+          "deliveryToAddress",
+          "inStock",
+          "related"
+        ]
+      },
+      "StorefrontBannerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "3"
+          },
+          "title": {
+            "type": "string",
+            "example": "50% chegirma"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://api.elchimarket.uz/media/marketplace-media/banners/1727000000000-uuid.jpg"
+          },
+          "linkUrl": {
+            "type": "string",
+            "example": "/katalog/telefon",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 10
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "imageUrl",
+          "linkUrl",
+          "sortOrder"
+        ]
+      },
+      "StorefrontCartLineDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "31"
+          },
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Simsiz quloqchin X1"
+          },
+          "imageUrl": {
+            "type": "object",
+            "example": null,
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 249000,
+            "description": "Savatga qo‘shilgandagi tasdiqlangan narx"
+          },
+          "lineTotal": {
+            "type": "number",
+            "example": 249000
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "productName",
+          "imageUrl",
+          "quantity",
+          "unitPrice",
+          "lineTotal"
+        ]
+      },
+      "StorefrontCartDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorefrontCartLineDto"
+            }
+          },
+          "totalAmount": {
+            "type": "number",
+            "example": 249000
+          },
+          "totalQuantity": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "totalAmount",
+          "totalQuantity"
+        ]
+      },
+      "StorefrontCartItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "12"
+          },
+          "quantity": {
+            "type": "object",
+            "example": 1,
+            "default": 1,
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "productId"
+        ]
+      },
+      "UpdateStorefrontCartItemDto": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "number",
+            "example": 2,
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "quantity"
+        ]
+      },
+      "SiteOrderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Aziza"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901234567"
+          },
+          "regionSoato": {
+            "type": "string",
+            "example": "1726",
+            "description": "Viloyat SOATO kodi"
+          },
+          "districtSoato": {
+            "type": "string",
+            "example": "1726266",
+            "description": "Tuman yoki shahar SOATO kodi"
+          },
+          "addressLine": {
+            "type": "string",
+            "example": "Turkiston ko‘chasi, 27-uy",
+            "description": "Ko‘cha, uy; faqat bo‘shliq — bo‘sh hisoblanadi (TC2: 400, maydon nomi bilan)"
+          },
+          "whereDeliver": {
+            "type": "string",
+            "enum": [
+              "ADDRESS",
+              "CENTER"
+            ],
+            "example": "ADDRESS"
+          },
+          "confirmMode": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "SMS"
+            ],
+            "example": "CALL",
+            "description": "CALL — operator qo‘ng‘iroq qiladi; SMS — havola bosilgach buyurtma operatorsiz. Qora ro‘yxat yoki dublikat bo‘lsa server CALL qiladi"
+          },
+          "consentVersion": {
+            "type": "string",
+            "example": "2026-11-16",
+            "description": "Oferta va maxfiylik matni versiyasi"
+          },
+          "website": {
+            "type": "string",
+            "description": "Yashirin maydon (bot himoyasi): to‘ldirilsa lid yozilmaydi, javob baribir 201"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "regionSoato",
+          "districtSoato",
+          "addressLine",
+          "whereDeliver",
+          "confirmMode",
+          "consentVersion"
+        ]
+      },
+      "SiteOrderCreatedDto": {
+        "type": "object",
+        "properties": {
+          "leadId": {
+            "type": "string",
+            "example": "7001"
+          },
+          "confirmMode": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "SMS"
+            ],
+            "description": "Haqiqiy usul: SMS so‘ralgan bo‘lsa ham qora ro‘yxat yoki dublikatda — CALL"
+          }
+        },
+        "required": [
+          "leadId",
+          "confirmMode"
+        ]
+      },
+      "SiteOrderConfirmDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "q3Jf…",
+            "description": "SMS havoladagi bir martalik kod"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "SiteOrderConfirmedDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "CONFIRMED"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "NotificationDto": {
         "type": "object",
         "properties": {
@@ -9774,10 +10754,6 @@
           "gmv",
           "revenue"
         ]
-      },
-      "Object": {
-        "type": "object",
-        "properties": {}
       },
       "UpdateUserRoleDto": {
         "type": "object",
@@ -13993,6 +14969,14 @@
             "type": "string",
             "example": "2026-11-16",
             "description": "Mijoz rozi bo‘lgan oferta va maxfiylik matni versiyasi (SF-07)"
+          },
+          "confirmMode": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "SMS"
+            ],
+            "description": "BE-34: SMS bilan tasdiq faqat asosiy saytda; sotuvchi sahifasi lidini har doim operator tasdiqlaydi — qiymat e’tiborga olinmaydi (TC8)"
           },
           "clickId": {
             "type": "string",
