@@ -95,6 +95,18 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Elchi holati zid: buyurtma {orderId}',
     body: 'Buyurtma {orderId} ({orderStatus}) — Elchi «{elchiStatus}» yubordi. Holat o‘zgarmadi. Pul va holatni qo‘lda tekshiring.',
   },
+
+  lot_blocked: {
+    name: 'Partiya sotuvdan chiqdi (muddat)',
+    description:
+      'BE-17 (TZ OMB-3): yaroqlilik muddatiga 60 kundan kam qolgan partiya sotuvga chiqmaydi — admin va superadminga',
+    variables: {
+      count: 'Partiyalar soni',
+      list: 'Partiyalar (SKU, partiya, muddat, soni)',
+    },
+    title: 'Muddati yaqin tovar sotuvdan chiqdi: {count} partiya',
+    body: '{list}. Optovikka qaytarish yoki hisobdan chiqarishni hal qiling.',
+  },
   price_orange: {
     name: 'To‘q sariq narx tasdiqlandi',
     description:

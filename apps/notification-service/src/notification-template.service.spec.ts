@@ -45,6 +45,7 @@ describe('NotificationTemplateService (C6.8)', () => {
       'order_refunded',
       'cod_reconciliation_mismatch',
       'elchi_status_conflict',
+      'lot_blocked',
       'price_orange', // BE-09
     ]);
     expect(list.find((row) => row.key === 'shop_approved')).toMatchObject({

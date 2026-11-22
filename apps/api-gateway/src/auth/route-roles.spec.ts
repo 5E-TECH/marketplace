@@ -152,7 +152,18 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'PUT /operator/state',
   ],
   // Qoldiqni ko‘rish; HQ kirim va tuzatish — BE-16 (to‘liq qabul akti BE-17); yig‘ish, qadoq, yorliq, topshirish — BE-19.
+  // BE-17: postavka qabuli, partiyalar, qaytganlarni saralash (qabul va saralash — faqat omborchi va superadmin).
   [Role.WAREHOUSE]: [
+    'GET /admin/inventory/lots',
+    'GET /admin/inventory/shipments',
+    'GET /admin/inventory/shipments/:id',
+    'GET /admin/inventory/shipments/:id/act.pdf',
+    'POST /admin/inventory/shipments',
+    'POST /admin/inventory/shipments/:id/in-transit',
+    'POST /admin/inventory/shipments/:id/receive',
+    'GET /warehouse/returns',
+    'GET /warehouse/returns/:orderId/defect-act.pdf',
+    'POST /warehouse/returns/:orderId/grade',
     'GET /admin/inventory/movements',
     'GET /admin/inventory/stock',
     'POST /admin/inventory/adjust',

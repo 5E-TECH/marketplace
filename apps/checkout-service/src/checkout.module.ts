@@ -38,6 +38,8 @@ import { LeadOrderController } from './lead-order.controller';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { FulfillmentController } from './fulfillment.controller';
+import { WarehouseReturnsController } from './warehouse-returns.controller';
+import { WarehouseReturnsService } from './warehouse-returns.service';
 import { FulfillmentService } from './fulfillment.service';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 
@@ -124,8 +126,10 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     ReturnRequestsController,
     LeadOrderController,
     FulfillmentController,
+    WarehouseReturnsController,
   ],
   providers: [
+    WarehouseReturnsService,
     SellerOrdersService,
     CartService,
     CheckoutService,

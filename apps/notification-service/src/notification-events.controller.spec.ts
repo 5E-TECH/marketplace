@@ -307,4 +307,38 @@ describe('NotificationEventsController', () => {
       }),
     );
   });
+
+  it('BE-17: partiya sotuvdan chiqdi — admin va superadminga (bir odam — bir xabar)', async () => {
+    identitySend
+      .mockReturnValueOnce(
+        of([{ id: '3', phone: '+998900000003', email: null }]),
+      )
+      .mockReturnValueOnce(
+        of([{ id: '3', phone: '+998900000003', email: null }]),
+      );
+    await controller.lotBlocked({
+      lots: [
+        {
+          lotId: '9',
+          sku: 'SKU-43',
+          productName: 'Vitamin C',
+          batch: 'BAD-1',
+          expiryDate: '2027-01-10',
+          sellableUntil: '2026-11-11',
+          quantity: 10,
+        },
+      ],
+    });
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'ADMIN' },
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'lot_blocked',
+        title: 'Muddati yaqin tovar sotuvdan chiqdi: 1 partiya',
+      }),
+    );
+  });
 });

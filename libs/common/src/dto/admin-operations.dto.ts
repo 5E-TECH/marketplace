@@ -76,6 +76,11 @@ export class AdminStockItemDto extends AdminVariantInfoDto {
   @ApiProperty({ example: 3 }) reserved: number;
   @ApiProperty({ example: 12 }) available: number;
   @ApiProperty({ example: 5 }) lowStockThreshold: number;
+  /** BE-17 (OMB-2): yacheyka manzili. */
+  @ApiProperty({ example: 'B-02-1', nullable: true, type: String })
+  cell: string | null;
+  /** BE-17 (OMB-3): sotuvdan chiqqan (muddatga 60 kundan kam) partiyalar — `available` ga kirmaydi. */
+  @ApiProperty({ example: 0 }) blocked: number;
 }
 
 /** Katalog so'rovi yiqilgan do'kon — uning qatorlari nomsiz qaytadi. */
@@ -332,4 +337,19 @@ export class AdminStockAdjustDto {
   @IsString()
   @MaxLength(255)
   idempotencyKey?: string;
+
+  /**
+   * BE-17: hisobdan chiqarishda (manfiy) — qaysi partiyadan (muddat ro‘yxati). SKU da sotuvdan chiqqan partiya
+   * bo‘lsa, `lotId` yoki `goodStock` majburiy.
+   */
+  @ApiPropertyOptional({ example: '9' })
+  @IsOptional()
+  @Matches(/^[1-9]\d{0,18}$/)
+  lotId?: string;
+
+  /** BE-17: hisobdan chiqarilayotgani yaxshi tovar (sotuvdan chiqqan partiyaga tegilmaydi). */
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  goodStock?: boolean;
 }

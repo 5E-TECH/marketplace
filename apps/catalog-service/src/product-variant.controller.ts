@@ -4,6 +4,7 @@ import {
   CreateProductVariantDto,
   RpcHttpExceptionFilter,
   UpdateProductVariantDto,
+  CATALOG_INVENTORY_PRODUCTS,
 } from '@app/common';
 import { ProductVariantService } from './product-variant.service';
 
@@ -81,6 +82,12 @@ export class ProductVariantController {
       data.productId,
       data.variantId,
     );
+  }
+
+  /** BE-17: ombor qabuli — mahsulot → yagona faol variant. */
+  @MessagePattern({ cmd: CATALOG_INVENTORY_PRODUCTS })
+  inventoryProducts(@Payload() data: { productIds: string[] }) {
+    return this.variants.inventoryProducts(data?.productIds ?? []);
   }
 
   @MessagePattern({ cmd: 'inventory.variant-details' })

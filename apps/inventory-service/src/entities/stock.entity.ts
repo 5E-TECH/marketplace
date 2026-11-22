@@ -23,6 +23,10 @@ export class Stock extends BaseEntity {
   @Column({ name: 'quantity_reserved', type: 'integer', default: 0 })
   quantityReserved: number;
 
+  /** BE-17 (OMB-2): yacheyka manzili — qabulda kiritiladi. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  cell: string | null;
+
   @Column({ name: 'low_stock_threshold', type: 'integer', default: 0 })
   lowStockThreshold: number;
 }
