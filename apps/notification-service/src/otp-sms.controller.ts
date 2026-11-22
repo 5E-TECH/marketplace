@@ -44,8 +44,15 @@ export class OtpSmsController {
         this.logger.warn(`[SMS stub] ${phone} (${event.purpose}): kod ${code}`);
       return;
     }
-    await this.deliver(phone, otpText(code, event.purpose), 0);
+    // yangi kod — shu raqam va maqsad uchun eski kodning qayta urinishi bekor (eski kod endi yaroqsiz)
+    const key = `${phone}:${event.purpose}`;
+    clearTimeout(this.retries.get(key));
+    this.retries.delete(key);
+    await this.deliver(key, phone, otpText(code, event.purpose), 0);
   }
+
+  /** Raqam va maqsad bo‘yicha kutayotgan qayta urinish (faqat eng yangi kod qayta yuboriladi). */
+  private readonly retries = new Map<string, ReturnType<typeof setTimeout>>();
 
   /**
    * BE-24 (TC5): provayder javob bermasa kod yo‘qolmaydi — u 5 daqiqa amal qiladi, SMS 15 s va 60 s dan keyin qayta
@@ -53,10 +60,12 @@ export class OtpSmsController {
    * foydalanuvchi yangi kod so‘raydi).
    */
   private async deliver(
+    key: string,
     phone: string,
     body: string,
     attempt: number,
   ): Promise<void> {
+    this.retries.delete(key);
     try {
       await this.sms.send({ recipient: phone, title: 'Elchi', body });
     } catch (error) {
@@ -65,11 +74,14 @@ export class OtpSmsController {
         `SMS kod yuborilmadi (${maskPhone(phone)}, ${attempt + 1}-urinish): ${(error as Error).message}` +
           (delay ? ` — ${delay / 1000} s dan keyin qayta` : ''),
       );
-      if (delay)
-        setTimeout(
-          () => void this.deliver(phone, body, attempt + 1),
+      if (delay) {
+        const timer = setTimeout(
+          () => void this.deliver(key, phone, body, attempt + 1),
           delay,
-        ).unref?.();
+        );
+        timer.unref?.();
+        this.retries.set(key, timer);
+      }
     }
   }
 }

@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { LeadOrderStatus, OrderStatusChangedEvent } from '@app/common';
 import { NotificationChannel } from './entities/notification-delivery.entity';
@@ -176,5 +176,59 @@ describeWithPostgres('BE-24 SMS (PostgreSQL)', () => {
       type: string;
     }>;
     expect(row).toEqual({ user_id: '42', type: 'withdrawal_paid' });
+  });
+
+  it('DLQ dan qayta: xabar bor, yetkazish yo‘q — yetkazish yoziladi va SMS ketadi; «Yo‘lda» treksiz — SMS yo‘q', async () => {
+    await ds.query(
+      `INSERT INTO notification.notification (user_id, type, title, body, data, is_read, dedupe_key)
+       VALUES (NULL, 'order_confirmed', 't', 'b', '{}'::jsonb, FALSE, 'order:1284:CONFIRMED')`,
+    );
+    await controller.onOrderStatus(event(LeadOrderStatus.CONFIRMED));
+    expect(sms.send).toHaveBeenCalledTimes(1);
+    const [{ n }] = (await ds.query(
+      `SELECT count(*)::int AS n FROM notification.notification_delivery`,
+    )) as Array<{
+      n: number;
+    }>;
+    expect(n).toBe(1);
+
+    await controller.onOrderStatus(
+      event(LeadOrderStatus.IN_TRANSIT, { parcel: null }),
+    );
+    expect(sms.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('identity ishlamasa «pul o‘tkazildi» xatosi qaytadi (DLQ — keyin qayta), foydalanuvchi yo‘q (404) — tashlanadi', async () => {
+    const notifications = new NotificationService(
+      ds.getRepository(Notification),
+      ds.getRepository(NotificationDelivery),
+      [sms as never],
+    );
+    const paid = {
+      withdrawalId: '6',
+      affiliateId: '42',
+      amount: 100000,
+      tax: 1000,
+      net: 99000,
+    };
+    const down = new OrderSmsController(
+      notifications,
+      { send: () => of({ ok: false }) } as never,
+      {
+        send: () => throwError(() => ({ status: 500, message: 'timeout' })),
+      } as never,
+    );
+    await expect(down.onWithdrawalPaid(paid)).rejects.toMatchObject({
+      status: 500,
+    });
+    const missing = new OrderSmsController(
+      notifications,
+      { send: () => of({ ok: false }) } as never,
+      {
+        send: () => throwError(() => ({ status: 404, message: 'yo‘q' })),
+      } as never,
+    );
+    await expect(missing.onWithdrawalPaid(paid)).resolves.toBeUndefined();
+    expect(sms.send).not.toHaveBeenCalled();
   });
 });

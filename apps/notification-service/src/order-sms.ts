@@ -11,7 +11,9 @@ const money = (n: number) =>
 function goodsName(event: OrderStatusChangedEvent): string {
   const names = event.items.map((i) => i.name.trim()).filter(Boolean);
   if (names.length <= 1) return names[0] ?? 'buyurtma';
-  return `${names.slice(0, -1).join(', ')} va ${names[names.length - 1]}`;
+  if (names.length === 2) return `${names[0]} va ${names[1]}`;
+  // dizayn: «va yana N ta tovar»
+  return `${names[0]} va yana ${names.length - 1} ta tovar`;
 }
 
 function goodsTotal(event: OrderStatusChangedEvent): number {

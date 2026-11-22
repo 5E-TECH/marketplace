@@ -1,6 +1,7 @@
 import { Controller, Inject, Logger } from '@nestjs/common';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
+  LeadOrderStatus,
   ORDER_EVENTS,
   OrderStatusChangedEvent,
   RmqClient,
@@ -41,6 +42,16 @@ export class OrderSmsController {
     if (!phone) return;
     const text = customerSmsText(event, await this.districtName(event));
     if (!text) return;
+    // «Yo‘lda» SMS i trek raqami bilan — trek bo‘lmasa yuborilmaydi (dizayn: «trek kelmaguncha SMS yo‘q»)
+    if (
+      event.status === LeadOrderStatus.IN_TRANSIT &&
+      !event.parcel?.shipmentId
+    ) {
+      this.logger.warn(
+        `Buyurtma ${event.orderNumber}: «Yo‘lda» SMS i — trek raqami yo‘q, yuborilmadi`,
+      );
+      return;
+    }
     await this.notifications.create({
       recipient: { userId: null, phone, channels: [NotificationChannel.SMS] },
       ...text,
@@ -60,11 +71,16 @@ export class OrderSmsController {
       this.identity,
       { cmd: 'identity.user.admin-get' },
       { userId: String(event.affiliateId) },
-    ).catch((error: Error) => {
-      this.logger.warn(
-        `Sotuvchi topilmadi (${event.affiliateId}): ${error.message}`,
-      );
-      return null;
+    ).catch((error: { status?: number; message?: string }) => {
+      // foydalanuvchi yo‘q (4xx) — xabar tashlanadi; identity ishlamasa — xato qaytadi (DLQ, keyin qayta)
+      const status = Number(error?.status ?? 0);
+      if (status >= 400 && status < 500) {
+        this.logger.warn(
+          `Sotuvchi topilmadi (${event.affiliateId}): ${error?.message}`,
+        );
+        return null;
+      }
+      throw error;
     });
     if (!user) return;
     // SMS va kabinet xabari (xabar-pul: «natijani SMS va kabinet xabari bilan oladi»)

@@ -93,4 +93,27 @@ describe('BE-06 TC4: SMS kod hodisasi notification-service ga yetadi', () => {
     ).resolves.toBeUndefined();
     expect(error).toHaveBeenCalledWith(expect.stringContaining('HTTP 500'));
   });
+
+  it('BE-24: yangi kod kelsa eski kodning qayta urinishi bekor (faqat eng yangi kod yuboriladi)', async () => {
+    jest.useFakeTimers();
+    try {
+      const sms = {
+        isConfigured: () => true,
+        send: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('HTTP 503'))
+          .mockResolvedValue(undefined),
+      };
+      const ctrl = new OtpSmsController(sms as never, config({}));
+      await ctrl.onCode(event); // 305918 — xato, 15 s dan keyin qayta
+      await ctrl.onCode({ ...event, code: '777111' }); // yangi kod
+      await jest.advanceTimersByTimeAsync(120_000);
+      expect(sms.send.mock.calls.map((c) => c[0].body.slice(0, 6))).toEqual([
+        '305918',
+        '777111',
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
