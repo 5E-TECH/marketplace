@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { LEAD_DB } from './database';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
@@ -12,14 +13,6 @@ import {
 } from '@app/common';
 import { LEAD_ENTITIES, Lead, Stream } from './entities';
 import { LeadStatsService } from './lead-stats.service';
-import { CreateLeadTables1794787200000 } from './migrations/1794787200000-create-lead-tables';
-import { CreateOfferContent1794873600000 } from './migrations/1794873600000-create-offer-content';
-import { AddLeadReview1794960000000 } from './migrations/1794960000000-add-lead-review';
-import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
-import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-leads';
-import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
-import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
-import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { PlatformStatsService } from './platform-stats.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -147,16 +140,8 @@ describeWithPostgres(
         url: testDatabaseUrl,
         schema: 'lead',
         entities: LEAD_ENTITIES,
-        migrations: [
-          CreateLeadTables1794787200000,
-          CreateOfferContent1794873600000,
-          AddLeadReview1794960000000,
-          AddLeadQueue1795046400000,
-          AddApiLeads1795132800000,
-          AddLeadStats1795564800000,
-          AddCapiFields1795651200000,
-          AddFraudCenter1795824000000,
-        ],
+        // hamma lid migratsiyasi (BE-34 sayt buyurtmasi ustunlari ham — entity ularni kutadi)
+        migrations: LEAD_DB.migrations,
         synchronize: false,
         logging: false,
       });
