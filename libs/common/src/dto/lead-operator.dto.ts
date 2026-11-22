@@ -226,6 +226,19 @@ export class LeadPreviousDto {
 }
 
 /** Lid kartasi: operator (BE-13) va admin/nazoratchi (BE-42) uchun bitta shakl. */
+/** BE-34: saytdan ko‘p tovarli lidning bitta qatori (operator hamma tovarni bitta jami bilan ko‘radi — FE-29). */
+export class LeadCardItemDto {
+  @ApiProperty({ example: '501' }) productId: string;
+  @ApiProperty({ example: 'Simsiz quloqchin' }) name: string;
+  @ApiProperty({ example: 1 }) quantity: number;
+  @ApiProperty({
+    example: 251000,
+    description: 'Saytdagi (tasdiqlangan) narx, bir dona',
+  })
+  unitPrice: number;
+  @ApiProperty({ example: 251000 }) lineTotal: number;
+}
+
 export class LeadCardDto {
   @ApiProperty({ example: '7001' }) id: string;
   @ApiProperty({ enum: LeadStatus, example: LeadStatus.BOOKED })
@@ -244,6 +257,21 @@ export class LeadCardDto {
 
   @ApiProperty({ type: LeadProductRefDto }) product: LeadProductRefDto;
   @ApiProperty({ example: 1, description: 'Miqdor (OPR-4)' }) quantity: number;
+
+  @ApiProperty({
+    type: [LeadCardItemDto],
+    description:
+      'BE-34: saytdan buyurtma tovarlari (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami',
+  })
+  items: LeadCardItemDto[];
+
+  @ApiProperty({
+    enum: ['CALL', 'SMS'],
+    example: 'CALL',
+    description:
+      'BE-34: tasdiqlash usuli — SMS bo‘lsa mijozga havola ketgan, muddati o‘tgach operatorga',
+  })
+  confirmMode: 'CALL' | 'SMS';
 
   @ApiProperty({
     type: LeadAddressDto,

@@ -16,7 +16,13 @@ import {
   sendRpc,
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
-import { Lead, LeadAttempt, LeadHistory, OfferContent } from './entities';
+import {
+  Lead,
+  LeadAttempt,
+  LeadHistory,
+  LeadItem,
+  OfferContent,
+} from './entities';
 import { LEAD_RULES } from './lead-rules';
 import { reminderHorizon } from './lead-schedule';
 
@@ -102,31 +108,55 @@ export class LeadCardService {
   }
 
   async build(lead: Lead): Promise<LeadCardDto> {
-    const [offer, content, attempts, history, previous, address, rejections] =
-      await Promise.all([
-        this.catalog.get(lead.productId).catch(() => null),
-        this.contents.findOne({
-          where: { productId: lead.productId, isDeleted: false },
-        }),
-        this.attempts.find({
-          where: { leadId: lead.id },
-          order: { createdAt: 'ASC', id: 'ASC' },
-        }),
-        this.history.find({
-          where: { leadId: lead.id },
-          order: { createdAt: 'ASC', id: 'ASC' },
-        }),
-        this.previousLeads(lead),
-        this.address(lead),
-        this.leads.count({
-          where: {
-            phoneE164: lead.phoneE164,
-            status: LeadStatus.REJECTED,
-            mergedIntoId: IsNull(),
-            isDeleted: false,
-          },
-        }),
-      ]);
+    const [
+      offer,
+      content,
+      attempts,
+      history,
+      previous,
+      address,
+      rejections,
+      lines,
+    ] = await Promise.all([
+      this.catalog.get(lead.productId).catch(() => null),
+      this.contents.findOne({
+        where: { productId: lead.productId, isDeleted: false },
+      }),
+      this.attempts.find({
+        where: { leadId: lead.id },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      }),
+      this.history.find({
+        where: { leadId: lead.id },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      }),
+      this.previousLeads(lead),
+      this.address(lead),
+      this.leads.count({
+        where: {
+          phoneE164: lead.phoneE164,
+          status: LeadStatus.REJECTED,
+          mergedIntoId: IsNull(),
+          isDeleted: false,
+        },
+      }),
+      this.leads.manager.getRepository(LeadItem).find({
+        where: { leadId: lead.id },
+        order: { position: 'ASC', id: 'ASC' },
+      }),
+    ]);
+    // birinchi qator soni — lidning o‘z soni (operator o‘zgartirishi mumkin)
+    const items = lines.map((line, index) => {
+      const quantity = index === 0 ? lead.quantity : line.quantity;
+      const unitPrice = Number(line.salePrice);
+      return {
+        productId: String(line.productId),
+        name: line.productName,
+        quantity,
+        unitPrice,
+        lineTotal: unitPrice * quantity,
+      };
+    });
     return {
       id: lead.id,
       status: lead.status,
@@ -139,10 +169,14 @@ export class LeadCardService {
         salePrice: Number(lead.salePrice),
       },
       quantity: lead.quantity,
+      items: items.length > 1 ? items : [],
+      confirmMode: lead.confirmMode ?? 'CALL',
       address,
-      price: lead.whereDeliver
-        ? await this.price(lead, offer, lead.quantity, lead.whereDeliver)
-        : null,
+      price: !lead.whereDeliver
+        ? null
+        : items.length > 1
+          ? await this.parcelPrice(items, lead.whereDeliver)
+          : await this.price(lead, offer, lead.quantity, lead.whereDeliver),
       rejectReason: lead.rejectReason,
       callScript: content?.callScript ?? null,
       stockShortage: !!lead.stockShortageAt,
@@ -198,6 +232,36 @@ export class LeadCardService {
     return {
       unitPrice,
       quantity,
+      subtotal,
+      whereDeliver,
+      deliveryFee,
+      totalAmount: subtotal + deliveryFee,
+    };
+  }
+
+  /** BE-34: ko‘p tovarli sayt lidi — butun posilka (buyurtma bilan bir xil hisob, `catalog.order.snapshot-many`). */
+  private async parcelPrice(
+    items: Array<{ productId: string; quantity: number; unitPrice: number }>,
+    whereDeliver: CheckoutDeliveryDestination,
+  ): Promise<LeadPriceDto | null> {
+    let deliveryFee: number | null = null;
+    try {
+      const snapshot = await this.catalog.orderSnapshotMany(
+        items.map(({ productId, quantity }) => ({ productId, quantity })),
+        whereDeliver,
+      );
+      deliveryFee = snapshot?.delivery?.shown ?? null;
+    } catch {
+      deliveryFee = null;
+    }
+    if (deliveryFee === null) return null;
+    const subtotal = items.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0,
+    );
+    return {
+      unitPrice: items[0].unitPrice,
+      quantity: items.reduce((sum, item) => sum + item.quantity, 0),
       subtotal,
       whereDeliver,
       deliveryFee,

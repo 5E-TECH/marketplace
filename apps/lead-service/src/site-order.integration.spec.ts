@@ -16,7 +16,15 @@ import {
   SiteConfirmSmsEvent,
 } from '@app/common';
 import { LEAD_DB } from './database';
-import { Lead, LeadItem, Stream } from './entities';
+import {
+  Lead,
+  LeadAttempt,
+  LeadHistory,
+  LeadItem,
+  OfferContent,
+  Stream,
+} from './entities';
+import { LeadCardService } from './lead-card.service';
 import { LeadAddressService } from './lead-address.service';
 import { LeadIntakeService } from './lead-intake.service';
 import { SiteOrderService, SMS_CONFIRM_WINDOW_MIN } from './site-order.service';
@@ -235,6 +243,50 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
         userAgent: null,
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('lid kartasi (FE-29): saytdan ko‘p tovar — qatorlar va butun posilka jami, tasdiqlash usuli', async () => {
+    const result = await service().create({
+      order: order({ phone: '+998901234599' }),
+      lines: twoItems,
+      ip: null,
+      userAgent: null,
+    });
+    const cards = new LeadCardService(
+      db.getRepository(Lead),
+      db.getRepository(LeadAttempt),
+      db.getRepository(LeadHistory),
+      db.getRepository(OfferContent),
+      { ...catalog, get: jest.fn(async () => offers[0]) } as never,
+      { send: jest.fn() } as never,
+      { send: jest.fn() } as never,
+    );
+    const card = await cards.build(
+      await db.getRepository(Lead).findOneByOrFail({ id: result.leadId }),
+    );
+    expect(card.items).toEqual([
+      {
+        productId: '501',
+        name: 'Simsiz quloqchin',
+        quantity: 1,
+        unitPrice: 251_000,
+        lineTotal: 251_000,
+      },
+      {
+        productId: '502',
+        name: 'Termos 1 l',
+        quantity: 2,
+        unitPrice: 120_000,
+        lineTotal: 240_000,
+      },
+    ]);
+    expect(card.price).toMatchObject({
+      quantity: 3,
+      subtotal: 491_000,
+      deliveryFee: 50_000,
+      totalAmount: 541_000,
+    });
+    expect(card.confirmMode).toBe('CALL');
   });
 
   it('TC6: SMS tanlandi → SMS havola (summa, tovarlar, manzil) → bosildi → «Tasdiqlandi», tasdiqlovchi mijoz, buyurtma hodisasi qatorlar bilan', async () => {
