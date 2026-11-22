@@ -86,6 +86,14 @@ export class LeadQueueController {
     },
   ) {
     const card = await this.cards.forOperator(input.operatorId, input.leadId);
+    // BE-34: saytdan ko‘p tovarli lid — butun posilka; operator o‘zgartiradigan son — birinchi tovarniki
+    if (card.items.length > 1)
+      return this.cards.parcelPrice(
+        card.items.map((item, index) =>
+          index === 0 ? { ...item, quantity: input.quantity } : item,
+        ),
+        input.whereDeliver,
+      );
     return this.cards.priceFor(
       card.product.id,
       card.product.salePrice,

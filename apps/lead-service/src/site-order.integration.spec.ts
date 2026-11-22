@@ -161,7 +161,7 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
   });
 
   beforeEach(async () => {
-    offers = [offer('501'), offer('502')];
+    offers = [offer('501'), offer('502'), offer('503')];
     await db.query(
       'TRUNCATE lead.lead_item, lead.lead_history, lead.outbox_event, lead.lead RESTART IDENTITY CASCADE',
     );
@@ -303,7 +303,9 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
     // 251 000 + 2 × 120 000 + yetkazish 50 000
     expect(payload.text).toContain('541 000 so‘m');
     expect(payload.text).toContain('Simsiz quloqchin ×1, Termos 1 l ×2');
-    expect(payload.text).toContain('Turkiston ko‘chasi, 27-uy');
+    // mijoz yozgan matn (ko‘cha/uy) SMS ga kirmaydi — faqat geo tuman nomi
+    expect(payload.text).toContain('Yunusobod tumani');
+    expect(payload.text).not.toContain('Turkiston');
     expect(payload.text).toMatch(
       new RegExp(`${CONFIRM_URL}/[A-Za-z0-9_-]{43}$`),
     );
@@ -415,15 +417,39 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
       ip: null,
       userAgent: null,
     });
+    // ko‘p tovar: boshqa tovar bo‘yicha faol lid bor — birlashtirilmaydi (yangi tovar yo‘qolmasin), yangi lid,
+    // faqat qo‘ng‘iroq, tarixda bog‘liq lid
     const duplicate = await service().create({
       order: order({ confirmMode: SiteConfirmMode.SMS }),
-      lines: twoItems,
+      lines: [
+        { productId: '502', quantity: 1 },
+        { productId: '503', quantity: 1 },
+      ],
       ip: null,
       userAgent: null,
     });
     expect(duplicate.confirmMode).toBe(SiteConfirmMode.CALL);
     await expect(
       db.getRepository(Lead).findOneByOrFail({ id: duplicate.leadId }),
+    ).resolves.toMatchObject({ status: LeadStatus.NEW, mergedIntoId: null });
+    await expect(
+      db.getRepository(LeadItem).count({ where: { leadId: duplicate.leadId } }),
+    ).resolves.toBe(2);
+    const [note] = (await db.query(
+      `SELECT note FROM lead.lead_history WHERE lead_id = $1`,
+      [duplicate.leadId],
+    )) as Array<{ note: string }>;
+    expect(note.note).toContain(`#${first.leadId}`);
+    // bitta tovar: sotuvchi sahifasidagidek birlashtiriladi (9-qoida)
+    const single = await service().create({
+      order: order({ confirmMode: SiteConfirmMode.SMS }),
+      lines: [{ productId: '501', quantity: 1 }],
+      ip: null,
+      userAgent: null,
+    });
+    expect(single.confirmMode).toBe(SiteConfirmMode.CALL);
+    await expect(
+      db.getRepository(Lead).findOneByOrFail({ id: single.leadId }),
     ).resolves.toMatchObject({
       status: LeadStatus.MERGED,
       mergedIntoId: first.leadId,
@@ -439,6 +465,30 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
       userAgent: null,
     });
     expect(noUrl.confirmMode).toBe(SiteConfirmMode.CALL);
+
+    // bitta raqamga bir vaqtda bitta amaldagi havola — ikkinchi buyurtma (boshqa tovar) qo‘ng‘iroq bilan
+    const sms1 = await service().create({
+      order: order({
+        phone: '+998906666666',
+        confirmMode: SiteConfirmMode.SMS,
+      }),
+      lines: [{ productId: '501', quantity: 1 }],
+      ip: null,
+      userAgent: null,
+    });
+    const sms2 = await service().create({
+      order: order({
+        phone: '+998906666666',
+        confirmMode: SiteConfirmMode.SMS,
+      }),
+      lines: [{ productId: '502', quantity: 1 }],
+      ip: null,
+      userAgent: null,
+    });
+    expect([sms1.confirmMode, sms2.confirmMode]).toEqual([
+      SiteConfirmMode.SMS,
+      SiteConfirmMode.CALL,
+    ]);
   });
 
   it('TC8: bazada SMS faqat sayt lidida bo‘lishi mumkin (CHECK)', async () => {

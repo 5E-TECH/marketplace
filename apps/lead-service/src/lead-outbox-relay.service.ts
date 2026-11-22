@@ -59,6 +59,12 @@ export class LeadOutboxRelayService {
           }
           event.status = OutboxStatus.PROCESSED;
           event.processedAt = new Date();
+          // BE-34: SMS tasdiq havolasi (kod) yuborilgach bazada qolmaydi — bazada faqat xeshi
+          if (event.eventType === LEAD_EVENTS.SITE_CONFIRM_SMS)
+            event.payload = {
+              ...(event.payload as Record<string, unknown>),
+              text: null,
+            };
           await repo.save(event);
           sent++;
         }

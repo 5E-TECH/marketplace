@@ -45,7 +45,10 @@ export class SiteOrderSmsController {
     if (!this.sms.isConfigured()) {
       // provayder yo‘q (EQ-03): prod bo‘lmagan muhitda matn logda — sinov uchun
       if (this.config.get<string>('NODE_ENV') !== 'production')
-        this.logger.log(`SMS (stub) ${phone}: ${text}`);
+        // havola kodi logga to‘liq yozilmaydi
+        this.logger.log(
+          `SMS (stub) ${phone}: ${text.replace(/\/[A-Za-z0-9_-]{43}\b/, '/…')}`,
+        );
       else
         this.logger.warn(
           `Sayt buyurtmasi SMS yuborilmadi — SMS_WEBHOOK_URL yo‘q (lid ${event.leadId})`,

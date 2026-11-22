@@ -33,6 +33,7 @@ import { enqueueLeadConfirmed } from './lead-confirmed.event';
 import {
   HONEYPOT_LEAD_ID,
   LeadIntakeService,
+  LOCK_SPACE_IP,
   LOCK_SPACE_LEAD,
 } from './lead-intake.service';
 import {
@@ -51,7 +52,8 @@ import {
 export const SMS_CONFIRM_WINDOW_MIN = 30;
 /** SMS dagi tovarlar ro‘yxati uzunligi (bitta SMS sig‘imi uchun qisqartiriladi) [taklif]. */
 const SMS_ITEMS_MAX_CHARS = 80;
-const LOCK_SPACE_SITE_IP = 2103;
+/** Bitta raqamga SMS yuborish qulfi (bir vaqtda bitta amaldagi havola). */
+const LOCK_SPACE_SITE_SMS = 2103;
 
 /** Saytda sotiladi: sotuvdan olinmagan, sotuvchilarga ochiq, narxi tasdiqlangan (katalog `isOnSite` bilan bir xil). */
 function onSite(
@@ -146,32 +148,79 @@ export class SiteOrderService {
       // Qulflar tartibi sotuvchi sahifasidagidek: IP, keyin raqam + mahsulot
       if (input.ip)
         await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-          LOCK_SPACE_SITE_IP,
+          LOCK_SPACE_IP,
           input.ip,
         ]);
       const [first] = priced;
+      // Raqam + har mahsulot (sotuvchi sahifasi bilan bir xil kalit; tartiblangan — o‘zaro kutish yo‘q)
+      for (const productId of priced.map((line) => line.productId).sort())
+        await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+          LOCK_SPACE_LEAD,
+          `${dto.phone}:${productId}`,
+        ]);
+      const decisionOf = async (productId: string) => {
+        const previous = await this.intake.previousLead(
+          manager,
+          dto.phone,
+          productId,
+          now,
+        );
+        return duplicateDecision(
+          previous && {
+            id: previous.id,
+            status: previous.status,
+            rejectedAt:
+              previous.status === LeadStatus.REJECTED
+                ? await this.intake.rejectedAt(manager, previous)
+                : null,
+          },
+          now,
+        );
+      };
+      const firstDecision = await decisionOf(first.productId);
+      // Ko‘p tovarli savatda biror tovar bo‘yicha faol yoki yaqindagi lid bor — birlashtirilmaydi (yangi tovarlar
+      // yo‘qolmasin): yangi lid, faqat qo‘ng‘iroq, operator dublikatni o‘zi belgilaydi (LID-4) [taklif]
+      const related: string[] = [];
+      const relate = (id: string) => {
+        if (!related.includes(id)) related.push(id);
+      };
+      if (priced.length > 1)
+        for (const line of priced) {
+          const found =
+            line === first ? firstDecision : await decisionOf(line.productId);
+          if (found.kind !== 'NEW') relate(found.rootId);
+        }
+      // boshqa ko‘p tovarli sayt lidida shu tovar qatori bor (lid mahsuloti emas) — o‘sha lid faol bo‘lsa
+      for (const line of priced) {
+        const [active] = (await manager.query(
+          `SELECT l.id::text AS id FROM lead.lead l
+             JOIN lead.lead_item i ON i.lead_id = l.id
+            WHERE l.phone_e164 = $1 AND i.product_id = $2 AND l.merged_into_id IS NULL
+              AND l.is_deleted = FALSE AND l.status IN ('NEW', 'BOOKED', 'CALLBACK')
+            ORDER BY l.id DESC LIMIT 1`,
+          [dto.phone, line.productId],
+        )) as Array<{ id: string }>;
+        if (
+          active &&
+          !(firstDecision.kind !== 'NEW' && firstDecision.rootId === active.id)
+        )
+          relate(active.id);
+      }
+      const decision = related.length
+        ? ({ kind: 'NEW' } as const)
+        : firstDecision;
+      // Bitta raqamga bir vaqtda bitta amaldagi SMS havola (SMS yuborishni suiiste’mol qilmaslik uchun)
       await manager.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        LOCK_SPACE_LEAD,
-        `${dto.phone}:${first.productId}`,
-      ]);
-
-      const previous = await this.intake.previousLead(
-        manager,
+        LOCK_SPACE_SITE_SMS,
         dto.phone,
-        first.productId,
-        now,
-      );
-      const decision = duplicateDecision(
-        previous && {
-          id: previous.id,
-          status: previous.status,
-          rejectedAt:
-            previous.status === LeadStatus.REJECTED
-              ? await this.intake.rejectedAt(manager, previous)
-              : null,
-        },
-        now,
-      );
+      ]);
+      const [pendingSms] = (await manager.query(
+        `SELECT 1 FROM lead.lead
+          WHERE phone_e164 = $1 AND confirm_mode = 'SMS' AND status = 'NEW'
+            AND sms_expires_at > now() AND is_deleted = FALSE
+          LIMIT 1`,
+        [dto.phone],
+      )) as unknown[];
       const ipLeads = input.ip
         ? await leads.count({
             where: {
@@ -189,6 +238,8 @@ export class SiteOrderService {
         !!confirmUrl &&
         delivery !== null &&
         decision.kind === 'NEW' &&
+        !related.length &&
+        !pendingSms &&
         !blacklisted &&
         !heldForReview;
       const token = sms ? randomBytes(32).toString('base64url') : null;
@@ -238,9 +289,15 @@ export class SiteOrderService {
             leadId: resultLead.id,
             fromStatus: null,
             toStatus: LeadStatus.NEW,
-            note: heldForReview
-              ? `${summary} — tekshiruvga: bir IP dan ko‘p ariza`
-              : summary,
+            note: [
+              summary,
+              heldForReview ? 'tekshiruvga: bir IP dan ko‘p ariza' : null,
+              related.length
+                ? `shu raqamda boshqa lid bor: ${related.map((id) => `#${id}`).join(', ')} — dublikatni operator belgilaydi`
+                : null,
+            ]
+              .filter(Boolean)
+              .join('. '),
           }),
         );
         target = resultLead;
@@ -304,10 +361,11 @@ export class SiteOrderService {
       );
       if (sms)
         await this.enqueueSms(manager, resultLead, {
+          // mijoz yozgan matn (ko‘cha/uy) SMS ga kirmaydi — faqat rasmiy tuman nomi (soxta havola yozib bo‘lmasin)
           text: this.smsText(
             priced,
             delivery!,
-            dto.addressLine,
+            address.districtName,
             `${confirmUrl}/${token}`,
           ),
           expiresAt: smsExpiresAt!,
@@ -408,11 +466,11 @@ export class SiteOrderService {
     });
   }
 
-  /** SMS matni [taklif]: summa (tovarlar + yetkazish), tovarlar, manzil va havola. */
+  /** SMS matni [taklif]: summa (tovarlar + yetkazish), tovarlar (katalog nomi), tuman (geo nomi) va havola. */
   private smsText(
     lines: Array<{ name: string; quantity: number; salePrice: number }>,
     delivery: number,
-    addressLine: string,
+    district: string,
     url: string,
   ): string {
     const total =
@@ -424,7 +482,7 @@ export class SiteOrderService {
     if (goods.length > SMS_ITEMS_MAX_CHARS)
       goods = `${goods.slice(0, SMS_ITEMS_MAX_CHARS - 1).trimEnd()}…`;
     return (
-      `Elchi Market: buyurtma ${money(total)} so‘m (${goods}). Manzil: ${addressLine}. ` +
+      `Elchi Market: buyurtma ${money(total)} so‘m (${goods}), ${district}. ` +
       `Tasdiqlash: ${url}`
     );
   }

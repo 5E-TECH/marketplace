@@ -45,6 +45,7 @@ import {
   reminderHorizon,
   retryAt,
 } from './lead-schedule';
+import { enqueueLeadConfirmed } from './lead-confirmed.event';
 
 /** 1-qoida zinapoyasi faqat aloqa bo‘lmagan natijalar soniga qarab yuradi (TZ 5-bo‘lim jadvali). */
 const MISSED_OUTCOMES = [
@@ -62,7 +63,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *   keyin boshqasiga ham beriladi (4-qoida), 5 ta chegaraga kirmaydi (6-qoida), eslatma keladi (8-qoida);
  * - egasiz — avtomatik qayta urinish («javob bermadi», «band», «o‘chiq», vaqtsiz «o‘ylab ko‘radi»): navbatdagi har
  *   operatorga, 5 ta chegaraga kiradi.
- */ import { enqueueLeadConfirmed } from './lead-confirmed.event';
+ */
 
 @Injectable()
 export class LeadQueueService {

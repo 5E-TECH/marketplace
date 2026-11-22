@@ -314,4 +314,26 @@ describe('CartService', () => {
       ]);
     });
   });
+
+  it('BE-34: bitta tovar qatori 1 000 donagacha — oshsa 400', async () => {
+    const variant = {
+      productId: '10',
+      variantId: '11',
+      shopId: '7',
+      unitPrice: 100,
+      productName: 'Smartfon X',
+    };
+    await service.add(
+      { sessionId: 'anon-cap' },
+      { productId: '10', variantId: '11', quantity: 999 },
+      variant,
+    );
+    await expect(
+      service.add(
+        { sessionId: 'anon-cap' },
+        { productId: '10', variantId: '11', quantity: 2 },
+        variant,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
 });

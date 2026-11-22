@@ -632,6 +632,23 @@ describeWithPostgres(
         `UPDATE checkout.fulfillment_task SET required_qty = required_qty + 1 WHERE id = $1`,
         [order.taskId],
       );
+      // yig‘ish ro‘yxatida posilkaning hamma tovari (birinchisi va jami emas)
+      const list = await fulfillment.pickList('2026-12-16');
+      expect(
+        list.items.find((item) => item.taskId === order.taskId)?.lines,
+      ).toEqual([
+        expect.objectContaining({
+          barcode: '4780012345678',
+          quantity: 1,
+          pickedQty: 0,
+        }),
+        expect.objectContaining({
+          productName: 'Termos 1 l',
+          barcode: '4780012345999',
+          quantity: 1,
+          pickedQty: 0,
+        }),
+      ]);
       await expect(
         fulfillment.scan(order.taskId, '4780012345678', WAREHOUSE),
       ).resolves.toMatchObject({

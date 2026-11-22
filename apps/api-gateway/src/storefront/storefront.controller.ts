@@ -15,6 +15,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -197,6 +198,8 @@ export class StorefrontController {
   // ─── Buyurtma (lid) ───────────────────────────────────────────────────────
 
   @Post('orders')
+  // ochiq yo‘l SMS yuboradi — kirish yo‘li bilan bir xil qattiq limit (auth.controller: daqiqasiga 5) [taklif]
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiHeader(SESSION_HEADER)
   @ApiHeader({ name: 'user-agent', required: false })
   @ApiOperation({
@@ -254,6 +257,7 @@ export class StorefrontController {
   }
 
   @Post('orders/confirm')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({
     summary: 'SMS havola bilan buyurtmani tasdiqlash',

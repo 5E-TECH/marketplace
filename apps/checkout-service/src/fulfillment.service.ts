@@ -18,6 +18,7 @@ import {
   LeadOrderStatus,
   ParcelElchiState,
   PickListItem,
+  PickListLine,
   PickListPage,
   RmqClient,
   tashkentDate,
@@ -99,7 +100,11 @@ export class FulfillmentService {
               i.product_name AS "productName", i.sku, i.barcode,
               p.elchi_state AS "elchiState", p.elchi_shipment_id::text AS "shipmentId",
               (p.elchi_shipment_id IS NOT NULL AND p.qr_code_token IS NOT NULL) AS "labelReady",
-              p.elchi_error AS "elchiError"
+              p.elchi_error AS "elchiError",
+              (SELECT json_agg(json_build_object(
+                        'productName', x.product_name, 'sku', x.sku, 'barcode', x.barcode,
+                        'quantity', x.quantity, 'pickedQty', x.picked_qty) ORDER BY x.id)
+                 FROM checkout.sales_order_item x WHERE x.sales_order_seller_id = p.id) AS lines
          FROM checkout.fulfillment_task t
          JOIN checkout.parcel p ON p.id = t.parcel_id
          JOIN LATERAL (
@@ -125,6 +130,13 @@ export class FulfillmentService {
       barcode: (r.barcode as string) ?? null,
       quantity: Number(r.requiredQty),
       pickedQty: Number(r.pickedQty),
+      lines: ((r.lines as PickListLine[] | null) ?? []).map((line) => ({
+        productName: String(line.productName ?? ''),
+        sku: line.sku ?? null,
+        barcode: line.barcode ?? null,
+        quantity: Number(line.quantity),
+        pickedQty: Number(line.pickedQty),
+      })),
       parcel: {
         elchiState: (r.elchiState as ParcelElchiState) ?? null,
         shipmentId: (r.shipmentId as string) ?? null,

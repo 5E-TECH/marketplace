@@ -74,7 +74,8 @@ interface LeadForm {
 }
 
 /** Advisory lock kalit makonlari (ikki argumentli shakl: IP va raqam kalitlari to‘qnashmaydi). */
-const LOCK_SPACE_IP = 2101;
+/** BE-34: sayt buyurtmasi ham shu IP qulfi bilan (bir IP dan sahifa va sayt arizalari birga sanaladi). */
+export const LOCK_SPACE_IP = 2101;
 export const LOCK_SPACE_LEAD = 2102;
 
 /** Yashirin maydon to‘ldirilganda qaytadi: lid yozilmagan, sahifa piksel yubormaydi. */

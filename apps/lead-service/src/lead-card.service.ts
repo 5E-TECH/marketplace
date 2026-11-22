@@ -240,7 +240,7 @@ export class LeadCardService {
   }
 
   /** BE-34: ko‘p tovarli sayt lidi — butun posilka (buyurtma bilan bir xil hisob, `catalog.order.snapshot-many`). */
-  private async parcelPrice(
+  async parcelPrice(
     items: Array<{ productId: string; quantity: number; unitPrice: number }>,
     whereDeliver: CheckoutDeliveryDestination,
   ): Promise<LeadPriceDto | null> {
