@@ -1,71 +1,20 @@
-import {
-  Controller,
-  Inject,
-  Logger,
-  Optional,
-  UseFilters,
-} from '@nestjs/common';
-import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
-import { firstValueFrom, timeout } from 'rxjs';
+import { Controller, UseFilters } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CheckoutReserveInputDto,
   ReturnOrderItemsDto,
-  RmqClient,
   RpcHttpExceptionFilter,
-  STOCK_DEPLETED_EVENT,
-  StockDepletedEvent,
 } from '@app/common';
 import { InventoryService } from './inventory.service';
-
-/** Xabar yuborishni kutish chegarasi, ms — band qilish javobini ushlab turmasin [taklif]. */
-const NOTIFY_TIMEOUT_MS = 1500;
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class InventoryOperationsController {
-  private readonly logger = new Logger(InventoryOperationsController.name);
-
-  constructor(
-    private readonly inventory: InventoryService,
-    // BE-47: «Offer qoldig‘i tugadi»
-    @Optional()
-    @Inject(RmqClient.NOTIFICATION)
-    private readonly notifications?: ClientProxy,
-  ) {}
+  constructor(private readonly inventory: InventoryService) {}
 
   @MessagePattern({ cmd: 'inventory.reserve' })
-  async reserve(@Payload() input: CheckoutReserveInputDto) {
-    const result = await this.inventory.reserveAvailable(input);
-    await this.notifyDepleted(
-      (input?.items ?? []).map((item) => String(item.variantId)),
-    );
-    return result;
-  }
-
-  /** BE-47 TC4: band qilishdan keyin bo‘sh qoldig‘i 0 bo‘lgan variantlar — notification’ga (yuborilmasa — log). */
-  private async notifyDepleted(variantIds: string[]): Promise<void> {
-    if (!this.notifications || !variantIds.length) return;
-    try {
-      const available = await this.inventory.available(variantIds);
-      const depleted = Object.entries(available)
-        .filter(([, quantity]) => quantity <= 0)
-        .map(([variantId]) => variantId);
-      if (!depleted.length) return;
-      const event: StockDepletedEvent = {
-        variantIds: depleted,
-        at: new Date().toISOString(),
-      };
-      await firstValueFrom(
-        this.notifications
-          .emit(STOCK_DEPLETED_EVENT, event)
-          .pipe(timeout(NOTIFY_TIMEOUT_MS)),
-        { defaultValue: undefined },
-      );
-    } catch (error) {
-      this.logger.warn(
-        `«Qoldiq tugadi» xabari yuborilmadi: ${(error as Error)?.message}`,
-      );
-    }
+  reserve(@Payload() input: CheckoutReserveInputDto) {
+    return this.inventory.reserveAvailable(input);
   }
 
   @MessagePattern({ cmd: 'inventory.commit' })

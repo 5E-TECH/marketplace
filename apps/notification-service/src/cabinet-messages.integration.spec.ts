@@ -202,7 +202,9 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
       expect(row.body).not.toMatch(/\+998|Chilonzor|Dilnoza/);
     expect(await rowsOf('78')).toEqual([]);
     // B o‘z ro‘yxatida A ning xabarini ko‘rmaydi
-    await expect(notifications.findAll('78', {} as never)).resolves.toMatchObject({
+    await expect(
+      notifications.findAll('78', {} as never),
+    ).resolves.toMatchObject({
       total: 0,
     });
     // saytdan buyurtma — sotuvchi yo‘q, kabinet xabari ham yo‘q
@@ -296,8 +298,12 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
     await expect(notifications.markRead('78', row.id)).rejects.toMatchObject({
       status: 404,
     });
-    expect((await notifications.findAll('77', {} as never)).unreadCount).toBe(1);
+    expect((await notifications.findAll('77', {} as never)).unreadCount).toBe(
+      1,
+    );
     await notifications.markRead('77', row.id);
-    expect((await notifications.findAll('77', {} as never)).unreadCount).toBe(0);
+    expect((await notifications.findAll('77', {} as never)).unreadCount).toBe(
+      0,
+    );
   });
 });

@@ -1,5 +1,13 @@
-import { OutboxEvent, OutboxStatus, StockMovementType } from '@app/common';
-import { DataSource, EntityManager, MoreThan } from 'typeorm';
+import {
+  INBOUND_RECEIVED_EVENT,
+  InboundReceivedEvent,
+  OutboxEvent,
+  OutboxStatus,
+  STOCK_DEPLETED_EVENT,
+  StockDepletedEvent,
+  StockMovementType,
+} from '@app/common';
+import { DataSource, EntityManager, In, MoreThan } from 'typeorm';
 import { InventoryOperation } from './entities/inventory-operation.entity';
 import { StockMovement } from './entities/stock-movement.entity';
 import { Stock } from './entities/stock.entity';
@@ -149,6 +157,77 @@ export async function emitStockDepletedIfNeeded(
         warehouseId: stock.warehouseId,
         status: 'OUT_OF_STOCK',
       },
+      status: OutboxStatus.PENDING,
+    }),
+  );
+}
+
+/** BE-47: notification’ga boradigan inventory hodisalari (outbox relay yo‘nalishi). */
+export const NOTIFICATION_EVENTS: ReadonlySet<string> = new Set([
+  STOCK_DEPLETED_EVENT,
+  INBOUND_RECEIVED_EVENT,
+]);
+
+/**
+ * BE-47 (TZ 6.12 «Offer qoldig‘i tugadi»): HQ da bo‘sh va sotuvga yaroqli qoldig‘i (qoldiq − band − muddatdan chiqqan
+ * partiyalar) 0 bo‘lgan variantlar — o‘sha tranzaksiyada outbox’ga (yo‘qolmaydi). Qoldiq kamayadigan har amaldan keyin.
+ */
+export async function recordOfferOutOfStock(
+  manager: EntityManager,
+  variantIds: string[],
+  warehouseId: string,
+  blocked: (
+    manager: EntityManager,
+    ids: string[],
+    warehouseId: string,
+  ) => Promise<Map<string, number>>,
+): Promise<void> {
+  const ids = [...new Set(variantIds.map(String))].filter((id) =>
+    /^[1-9]\d{0,18}$/.test(id),
+  );
+  if (!ids.length) return;
+  const rows = await manager
+    .getRepository(Stock)
+    .find({ where: { variantId: In(ids), warehouseId } });
+  const lots = await blocked(manager, ids, warehouseId);
+  const empty = rows
+    .filter(
+      (row) =>
+        row.quantityOnHand -
+          row.quantityReserved -
+          (lots.get(String(row.variantId)) ?? 0) <=
+        0,
+    )
+    .map((row) => String(row.variantId));
+  if (!empty.length) return;
+  const payload: StockDepletedEvent = {
+    variantIds: empty,
+    at: new Date().toISOString(),
+  };
+  const repo = manager.getRepository(OutboxEvent);
+  await repo.save(
+    repo.create({
+      aggregateType: 'product_variant',
+      aggregateId: empty[0],
+      eventType: STOCK_DEPLETED_EVENT,
+      payload: payload as unknown as Record<string, unknown>,
+      status: OutboxStatus.PENDING,
+    }),
+  );
+}
+
+/** BE-47: postavka qabul qilindi — o‘sha tranzaksiyada outbox’ga (optovik kabineti). */
+export async function recordInboundReceived(
+  manager: EntityManager,
+  event: InboundReceivedEvent,
+): Promise<void> {
+  const repo = manager.getRepository(OutboxEvent);
+  await repo.save(
+    repo.create({
+      aggregateType: 'inbound_shipment',
+      aggregateId: event.shipmentId,
+      eventType: INBOUND_RECEIVED_EVENT,
+      payload: event as unknown as Record<string, unknown>,
       status: OutboxStatus.PENDING,
     }),
   );

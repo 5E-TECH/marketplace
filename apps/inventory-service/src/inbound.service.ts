@@ -17,8 +17,6 @@ import {
   CatalogInventoryProduct,
   InboundShipmentDto,
   InboundShipmentItemDto,
-  INBOUND_RECEIVED_EVENT,
-  InboundReceivedEvent,
   InboundShipmentPageDto,
   InboundShipmentStatus,
   LOT_BLOCKED_EVENT,
@@ -34,7 +32,13 @@ import {
   WarehouseOwnerType,
 } from '@app/common';
 import { Stock } from './entities/stock.entity';
-import { lockStock, saveMovement } from './inventory.helpers';
+import { blockedByVariant } from './stock-lots';
+import {
+  lockStock,
+  recordInboundReceived,
+  recordOfferOutOfStock,
+  saveMovement,
+} from './inventory.helpers';
 import { tashkentTime } from './pdf-text';
 import { TODAY_SQL } from './stock-lots';
 
@@ -387,42 +391,24 @@ export class InboundService {
           input.comment?.trim() || null,
         ],
       );
+      // BE-47: optovikka «Postavka qabul qilindi, brak topildi» — shu tranzaksiyada outbox’ga (yo‘qolmaydi)
+      await recordInboundReceived(manager, {
+        shipmentId: id,
+        number: shipmentNumber(id),
+        wholesalerId: String(shipment.wholesalerId),
+        status: discrepancy
+          ? InboundShipmentStatus.DISCREPANCY
+          : InboundShipmentStatus.RECEIVED,
+        declaredQty: items.reduce(
+          (sum, item) => sum + Number(item.declaredQty),
+          0,
+        ),
+        receivedQty: lines.reduce((sum, line) => sum + line.receivedQty, 0),
+        defectiveQty: lines.reduce((sum, line) => sum + line.defectiveQty, 0),
+      });
     });
     if (blockedLots.length) await this.notifyBlocked(blockedLots);
-    const result = await this.get({ id });
-    await this.notifyReceived(result);
-    return result;
-  }
-
-  /** BE-47: optovikka «Postavka qabul qilindi, brak topildi» (kabinet). Yuborilmasa — qabul baribir saqlangan. */
-  private async notifyReceived(shipment: InboundShipmentDto): Promise<void> {
-    if (!this.notifications) return;
-    const sum = (pick: (item: InboundShipmentItemDto) => number | null) =>
-      shipment.items.reduce(
-        (total, item) => total + Number(pick(item) ?? 0),
-        0,
-      );
-    const event: InboundReceivedEvent = {
-      shipmentId: shipment.id,
-      number: shipment.number,
-      wholesalerId: shipment.wholesalerId,
-      status: shipment.status,
-      declaredQty: sum((item) => item.declaredQty),
-      receivedQty: sum((item) => item.receivedQty),
-      defectiveQty: sum((item) => item.defectiveQty),
-    };
-    try {
-      await firstValueFrom(
-        this.notifications
-          .emit(INBOUND_RECEIVED_EVENT, event)
-          .pipe(timeout(NOTIFY_TIMEOUT_MS)),
-        { defaultValue: undefined },
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Postavka ${shipment.number}: optovikka xabar yuborilmadi: ${(error as Error)?.message}`,
-      );
-    }
+    return this.get({ id });
   }
 
   /** OMB-3: partiyalar — muddat, sotuvdan chiqish sanasi, holat (admin «Muddat» ro‘yxati). */
@@ -477,6 +463,21 @@ export class InboundService {
       ),
     ).map((row) => row.id);
     if (!claimed.length) return;
+    // BE-47: muddatdan chiqqan partiya sotuvga yaroqli qoldiqni kamaytiradi — 0 bo‘lsa «Offer qoldig‘i tugadi»
+    const variants = (await this.dataSource.query(
+      `SELECT DISTINCT variant_id::text AS "variantId", warehouse_id::text AS "warehouseId"
+         FROM inventory.stock_lot WHERE id = ANY($1::bigint[])`,
+      [claimed],
+    )) as Array<{ variantId: string; warehouseId: string }>;
+    for (const warehouseId of new Set(variants.map((v) => v.warehouseId)))
+      await recordOfferOutOfStock(
+        this.dataSource.manager,
+        variants
+          .filter((v) => v.warehouseId === warehouseId)
+          .map((v) => v.variantId),
+        warehouseId,
+        blockedByVariant,
+      );
     const lots = (await this.dataSource.query(
       `SELECT l.id::text AS "lotId", i.sku, i.product_name AS "productName", l.batch,
               to_char(l.expiry_date, 'YYYY-MM-DD') AS "expiryDate",

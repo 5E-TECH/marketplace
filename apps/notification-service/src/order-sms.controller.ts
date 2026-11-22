@@ -40,7 +40,12 @@ export class OrderSmsController {
     @Payload() event: OrderStatusChangedEvent,
   ): Promise<void> {
     if (!event?.orderId) return;
+    // mijoz SMS i (MVP) birinchi — sotuvchi xabari yozilmasa ham SMS ketgan bo‘ladi; qayta ishlashda dedupeKey ushlaydi
+    await this.customerSms(event);
     await this.sellerMessage(event);
+  }
+
+  private async customerSms(event: OrderStatusChangedEvent): Promise<void> {
     if (!CUSTOMER_SMS_STATUSES.has(event.status)) return;
     const phone = event.recipient?.phone;
     if (!phone) return;

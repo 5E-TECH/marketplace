@@ -79,7 +79,8 @@ export class CabinetMessagesController {
     const defective = Number(event.defectiveQty) || 0;
     const parts = [`${event.receivedQty} dona qabul qilindi`];
     if (defective > 0) parts.push(`brak ${defective} dona`);
-    if (event.receivedQty < event.declaredQty)
+    // kam yoki ortiq kelgan bo‘lsa — e’lon qilingan soni ham
+    if (event.receivedQty !== event.declaredQty)
       parts.push(`e’lon qilingan ${event.declaredQty} dona`);
     await this.notifications.create({
       recipient: { userId: wholesaler.ownerUserId, channels: [] },
@@ -104,7 +105,11 @@ export class CabinetMessagesController {
       { cmd: 'inventory.variant-details' },
       { shopId: null, variantIds },
     );
-    const day = String(event.at ?? new Date().toISOString()).slice(0, 10);
+    // «kuniga bir marta» — Toshkent kuni
+    const at = new Date(String(event.at ?? ''));
+    const day = (
+      Number.isNaN(at.getTime()) ? new Date() : at
+    ).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
     const staff = (
       await Promise.all(
         ['ADMIN', 'SUPERADMIN'].map((role) =>
@@ -119,14 +124,8 @@ export class CabinetMessagesController {
       .flat()
       .map((user) => String(user.id));
     for (const product of products ?? []) {
-      const affiliates = await sendRpc<string[]>(
-        this.lead,
-        { cmd: LEAD_OFFER_AFFILIATES_RPC },
-        { productId: String(product.productId) },
-      );
-      const recipients = [...new Set([...staff, ...(affiliates ?? [])])];
-      for (const userId of recipients)
-        await this.notifications.create({
+      const write = (userId: string) =>
+        this.notifications.create({
           recipient: { userId, channels: [] },
           type: 'offer_out_of_stock',
           title: 'Offer qoldig‘i tugadi',
@@ -134,6 +133,22 @@ export class CabinetMessagesController {
           data: { productId: String(product.productId) },
           dedupeKey: `stock:${product.variantId}:${day}:user:${userId}`,
         });
+      // avval xodimlar — lid-service javob bermasa ham admin xabarni oladi
+      for (const userId of new Set(staff)) await write(userId);
+      let affiliates: string[] = [];
+      try {
+        affiliates = await sendRpc<string[]>(
+          this.lead,
+          { cmd: LEAD_OFFER_AFFILIATES_RPC },
+          { productId: String(product.productId) },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `«Qoldiq tugadi» (${product.productId}): sotuvchilar olinmadi — ${(error as Error)?.message}`,
+        );
+      }
+      for (const userId of new Set(affiliates ?? []))
+        if (!staff.includes(userId)) await write(userId);
     }
   }
 
@@ -152,7 +167,8 @@ export class CabinetMessagesController {
       };
     } catch (error) {
       const status = Number((error as { status?: number })?.status ?? 0);
-      // optovik yo‘q (4xx) — xabar tashlanadi; katalog ishlamasa — xato qaytadi (qayta urinish)
+      // optovik yo‘q (4xx) — xabar tashlanadi; katalog ishlamasa — xato qaytadi (notification navbatida qayta urinish
+      // yo‘q — hodisa DLQ ga, `ops:rmq-dlq-replay` bilan qaytariladi)
       if (status >= 400 && status < 500) {
         this.logger.warn(`Optovik topilmadi (${id})`);
         return null;

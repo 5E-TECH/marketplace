@@ -164,7 +164,9 @@ export class AdminSettlementsController {
       { cmd: FINANCE_SETTLEMENT_RPC.PAID },
       { id, paidBy },
     );
-    // BE-47 (TC3): optovikka «Pul o‘tkazildi» — takror bosilsa ham bitta xabar (notification `dedupeKey`)
+    // BE-47 (TC3): optovikka «Pul o‘tkazildi» — takror bosilsa ham bitta xabar (notification `dedupeKey`). BE-24 dagi
+    // sotuvchi «pul o‘tkazildi» kabi gateway’dan, outbox’siz [taklif]: yuborilmasa — log; «To‘landi» ni qayta bosish
+    // xabarni qayta yuboradi (holat idempotent)
     if (this.notification)
       this.notification
         .emit(SETTLEMENT_PAID_EVENT, {

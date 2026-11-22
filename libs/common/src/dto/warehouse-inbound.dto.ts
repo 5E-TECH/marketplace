@@ -72,10 +72,11 @@ export interface InboundReceivedEvent {
 }
 
 /**
- * BE-47 (TZ 6.12): inventory → notification — HQ dagi bo‘sh qoldiq 0 bo‘ldi (band qilishdan keyin). Xabar adminga va
- * shu offerda sahifasi bor sotuvchilarga; bir kunda bir variantga bitta [taklif].
+ * BE-47 (TZ 6.12): inventory → notification (outbox) — HQ dagi bo‘sh, sotuvga yaroqli qoldiq 0 bo‘ldi: band qilish,
+ * tuzatish yoki hisobdan chiqarish, partiya muddati bloki. Xabar adminga va shu offerda sahifasi bor sotuvchilarga;
+ * bir kunda bir variantga bitta [taklif]. (`inventory.stock_depleted` — boshqa hodisa: omborda umuman yo‘q, katalogga.)
  */
-export const STOCK_DEPLETED_EVENT = 'inventory.stock.depleted';
+export const STOCK_DEPLETED_EVENT = 'inventory.offer.out-of-stock';
 
 export interface StockDepletedEvent {
   variantIds: string[];
