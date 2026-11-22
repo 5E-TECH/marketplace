@@ -16492,6 +16492,39 @@
           "salePrice"
         ]
       },
+      "LeadCardItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "501"
+          },
+          "name": {
+            "type": "string",
+            "example": "Simsiz quloqchin"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 251000,
+            "description": "Saytdagi (tasdiqlangan) narx, bir dona"
+          },
+          "lineTotal": {
+            "type": "number",
+            "example": 251000
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "quantity",
+          "unitPrice",
+          "lineTotal"
+        ]
+      },
       "LeadAddressDto": {
         "type": "object",
         "properties": {
@@ -16798,6 +16831,22 @@
             "example": 1,
             "description": "Miqdor (OPR-4)"
           },
+          "items": {
+            "description": "BE-34: saytdan buyurtma tovarlari (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadCardItemDto"
+            }
+          },
+          "confirmMode": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "SMS"
+            ],
+            "example": "CALL",
+            "description": "BE-34: tasdiqlash usuli — SMS bo‘lsa mijozga havola ketgan, muddati o‘tgach operatorga"
+          },
           "address": {
             "nullable": true,
             "description": "Sotuvchi sahifasi va sayt lidida doim bor. Bo‘sh faqat API lidida bo‘lishi mumkin (BE-43, EQ-04)",
@@ -16898,6 +16947,8 @@
           "phoneMasked",
           "product",
           "quantity",
+          "items",
+          "confirmMode",
           "address",
           "price",
           "rejectReason",
