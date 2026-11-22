@@ -42,6 +42,30 @@ esac
   exit 1
 }
 
+# BE-36: servis DB rollari. Bitta DB_USERNAME_<SXEMA> berilsa — hamma 10 servisning roli va paroli kerak, boshqa
+# nom (xato yozilgan kalit) bo'lmasin: aks holda servis ishga tushmaydi (typeorm.util dbCredentials).
+if grep -Eq '^DB_USERNAME_[A-Z_]+=.+' "$env_file"; then
+  schemas='IDENTITY CATALOG INVENTORY CHECKOUT PAYMENT FINANCE INTEGRATION NOTIFICATION SEARCH LEAD'
+  for schema in $schemas; do
+    for key in "DB_USERNAME_$schema" "DB_PASSWORD_$schema"; do
+      value=$(sed -n "s/^${key}=//p" "$env_file" | tail -n 1)
+      if [ -z "$value" ] || [ "$value" = '""' ] || [ "$value" = "''" ]; then
+        printf 'Servis DB rollari yoqilgan, lekin qiymat yo‘q: %s (docs/BE-36-KOP-NUSXA.md)\n' "$key" >&2
+        exit 1
+      fi
+    done
+  done
+  for key in $(sed -n 's/^\(DB_USERNAME_[A-Z_]*\)=.*/\1/p' "$env_file"); do
+    case " $schemas " in
+      *" ${key#DB_USERNAME_} "*) ;;
+      *)
+        printf 'Noma’lum servis DB roli kaliti: %s (sxemalar: %s)\n' "$key" "$schemas" >&2
+        exit 1
+        ;;
+    esac
+  done
+fi
+
 domain=$(sed -n 's/^DOMAIN=//p' "$env_file" | tail -n 1)
 if [ -z "${domain:-}" ] || [ "${domain#:}" != "$domain" ]; then
   printf 'OGOHLANTIRISH: DOMAIN yo‘q yoki HTTP rejimi — API sertifikatsiz, IP orqali ochiladi.\n' >&2

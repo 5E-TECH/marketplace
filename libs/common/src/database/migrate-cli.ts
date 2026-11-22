@@ -164,6 +164,37 @@ async function pending(ds: DataSource): Promise<string[]> {
 }
 
 /**
+ * BE-36: servis roli (`DB_USERNAME_<SXEMA>`, bo‘lmasa `mkt_<sxema>`) migratsiya jurnalini o‘zgartira olmasin — bootstrap dagi
+ * default huquqlar migrator yaratgan har jadvalga DML beradi. Rol yo‘q bo‘lsa (umumiy foydalanuvchi) — hech narsa.
+ */
+async function protectMigrationHistory(
+  ds: DataSource,
+  schema: string,
+  env: Env,
+): Promise<void> {
+  const role =
+    env[`DB_USERNAME_${schema.toUpperCase()}`]?.trim() || `mkt_${schema}`;
+  const [state] = (await ds.query(
+    `SELECT current_user AS "current",
+            (SELECT tableowner FROM pg_tables WHERE schemaname = $1 AND tablename = 'migrations') AS "owner",
+            EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $2) AS "exists"`,
+    [schema, role],
+  )) as Array<{ current: string; owner: string | null; exists: boolean }>;
+  // rol yo‘q; yoki servis roli CLI ning o‘zi / jadval egasi (umumiy foydalanuvchi) — egadan huquq olinmaydi;
+  // jadval boshqa foydalanuvchiniki — REVOKE ni faqat egasi bajara oladi
+  if (
+    !state?.exists ||
+    role === state.current ||
+    role === state.owner ||
+    state.owner !== state.current
+  )
+    return;
+  await ds.query(
+    `REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON "${schema}"."migrations" FROM "${role.replace(/"/g, '""')}"`,
+  );
+}
+
+/**
  * Migratsiya CLI (BE-04, `DB_AUTO_MIGRATE=false` bo‘lganda deploy qadami):
  * - `run` — sxema yaratiladi (yo‘q bo‘lsa), hamma yangi migratsiya, har biri o‘z tranzaksiyasida;
  * - `revert` — oxirgi migratsiya qaytariladi;
@@ -199,8 +230,15 @@ export async function runMigrationCli(
       log(`${def.schema}: oxirgi migratsiya qaytarildi`);
       return 0;
     }
-    await ds.query(`CREATE SCHEMA IF NOT EXISTS "${def.schema}"`);
+    // BE-36: migrator bazada CREATE huquqisiz — sxemani bootstrap yaratadi; `IF NOT EXISTS` ham huquqni tekshiradi
+    const exists = (await ds.query(
+      'SELECT 1 FROM pg_namespace WHERE nspname = $1',
+      [def.schema],
+    )) as unknown[];
+    if (!exists.length)
+      await ds.query(`CREATE SCHEMA IF NOT EXISTS "${def.schema}"`);
     const executed = await ds.runMigrations({ transaction: 'each' });
+    await protectMigrationHistory(ds, def.schema, env);
     log(
       `${def.schema}: ${executed.length ? `yurgizildi — ${executed.map((m) => m.name).join(', ')}` : 'yangi migratsiya yo‘q'}`,
     );
