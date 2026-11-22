@@ -40,6 +40,7 @@ import { CurrentRoleGuard } from './auth/current-role.guard';
 import { AdminInventoryController } from './admin/admin-inventory.controller';
 import { AdminVariantReportController } from './leads/admin-variant-report.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
+import { AdminOrderReturnsController } from './admin/admin-order-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
@@ -172,6 +173,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     RegionsController,
     AdminInventoryController,
     AdminReturnsController,
+    AdminOrderReturnsController,
     AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,
