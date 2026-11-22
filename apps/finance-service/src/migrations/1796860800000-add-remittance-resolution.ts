@@ -19,13 +19,19 @@ export class AddRemittanceResolution1796860800000 implements MigrationInterface 
           AND ("resolved_at" IS NULL) = ("resolution_comment" IS NULL))
     `);
     await queryRunner.query(
-      `CREATE INDEX "idx_finance_remittance_created" ON "finance"."remittance_item" ("created_at")`,
+      // BE-21 (`1796601600000-create-cod-daily-check`) ham shu indeksni yaratadi — ikkalasi birga ishlasin
+      `CREATE INDEX IF NOT EXISTS "idx_finance_remittance_created" ON "finance"."remittance_item" ("created_at")`,
     );
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
+    // BE-21 kunlik sverkasi ham shu indeksdan foydalanadi — uning jadvali bor bo‘lsa indeks qoladi
     await queryRunner.query(
-      `DROP INDEX IF EXISTS "finance"."idx_finance_remittance_created"`,
+      `DO $$ BEGIN
+         IF to_regclass('finance.cod_daily_check') IS NULL THEN
+           DROP INDEX IF EXISTS "finance"."idx_finance_remittance_created";
+         END IF;
+       END $$`,
     );
     await queryRunner.query(`
       ALTER TABLE "finance"."remittance_item"
