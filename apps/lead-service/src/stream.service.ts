@@ -178,6 +178,17 @@ export class StreamService {
     return { updated: res.affected ?? 0 };
   }
 
+  /** BE-47: shu mahsulotda sahifasi (oqimi) bor sotuvchilar — «Offer qoldig‘i tugadi» xabari uchun. */
+  async affiliatesOf(productId: string): Promise<string[]> {
+    if (!/^[1-9]\d{0,18}$/.test(String(productId ?? ''))) return [];
+    const rows = (await this.streams.query(
+      `SELECT DISTINCT affiliate_id::text AS id FROM lead.stream
+        WHERE product_id = $1 AND is_deleted = FALSE`,
+      [String(productId)],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
   private async counts(
     streamIds: string[],
   ): Promise<Array<{ clicks: number; leads: number }>> {

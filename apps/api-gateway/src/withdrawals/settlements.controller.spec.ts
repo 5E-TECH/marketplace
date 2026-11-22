@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { Role, ROLES_KEY } from '@app/common';
+import { Role, ROLES_KEY, SETTLEMENT_PAID_EVENT } from '@app/common';
 import { AdminSettlementsController } from './admin-settlements.controller';
 
 describe('BE-33: optovik aktlari endpointlari finance-service ga', () => {
@@ -35,5 +35,31 @@ describe('BE-33: optovik aktlari endpointlari finance-service ga', () => {
       expect(roles(m)).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
     // bank fayli aktlarni muzlatadi — to‘lov qadami (BE-05 tekshiruvi)
     expect(roles('bankFile')).toEqual([Role.FINANCE, Role.SUPERADMIN]);
+  });
+
+  it('BE-47 TC3: «To‘landi» dan keyin optovikka «Pul o‘tkazildi» hodisasi (bankka o‘tgan summa bilan)', async () => {
+    const settlement = {
+      id: '12',
+      number: 'OPT-2026-48',
+      wholesalerId: '15',
+      exportedTotal: 1_250_000,
+      totalAmount: 1_300_000,
+      periodStart: '2026-11-16',
+      periodEnd: '2026-11-22',
+    };
+    const emit = jest.fn(() => of(undefined));
+    const c = new AdminSettlementsController(
+      { send: jest.fn(() => of(settlement)) } as never,
+      { emit } as never,
+    );
+    await expect(c.paid('12', '7')).resolves.toEqual(settlement);
+    expect(emit).toHaveBeenCalledWith(SETTLEMENT_PAID_EVENT, {
+      settlementId: '12',
+      number: 'OPT-2026-48',
+      wholesalerId: '15',
+      amount: 1_250_000,
+      periodStart: '2026-11-16',
+      periodEnd: '2026-11-22',
+    });
   });
 });

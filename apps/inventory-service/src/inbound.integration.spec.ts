@@ -181,6 +181,20 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     );
   });
 
+  it('BE-47 TC2: qabul — optovik kabinetiga hodisa shu tranzaksiyada outbox’da (qabul, brak, e’lon qilingan)', async () => {
+    const [row] = (await ds.query(
+      `SELECT payload FROM inventory.outbox_event WHERE event_type = 'inventory.inbound.received' ORDER BY id LIMIT 1`,
+    )) as Array<{ payload: Record<string, unknown> }>;
+    expect(row.payload).toMatchObject({
+      wholesalerId: WHOLESALER,
+      number: expect.stringMatching(/^PS-\d{6}$/),
+      status: 'DISCREPANCY',
+      declaredQty: 100,
+      receivedQty: 98,
+      defectiveQty: 2,
+    });
+  });
+
   it('e’lon: boshqa optovik mahsuloti yoki takroriy mahsulot — 400; qabulda hamma qator shart', async () => {
     await expect(
       inbound.declare({

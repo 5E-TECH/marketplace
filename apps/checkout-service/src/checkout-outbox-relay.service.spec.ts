@@ -26,14 +26,24 @@ describe('CheckoutOutboxRelayService (BE-03)', () => {
     const lead = { emit: jest.fn(() => of(undefined)) };
     const integration = { emit: jest.fn(() => of(undefined)) };
     const inventory = { send: jest.fn((): unknown => of({ ok: true })) };
+    const notification = { emit: jest.fn(() => of(undefined)) };
     const relay = new CheckoutOutboxRelayService(
       outbox as never,
       finance as never,
       lead as never,
       integration as never,
       inventory as never,
+      notification as never,
     );
-    return { relay, finance, lead, integration, inventory, results };
+    return {
+      relay,
+      finance,
+      lead,
+      integration,
+      inventory,
+      notification,
+      results,
+    };
   }
 
   it('moliya hodisasini o‘z nomi va payload i bilan finance ga yuboradi', async () => {
@@ -126,5 +136,17 @@ describe('CheckoutOutboxRelayService (BE-03)', () => {
     );
     await expect(relay.relayPending()).resolves.toBe(0);
     expect(results[0]).toBeInstanceOf(OutboxPermanentError);
+  });
+
+  it('BE-24: order.status.changed notification-service ga ham (mijozga SMS, BUY-6)', async () => {
+    const payload = { eventId: 'evt_sms', orderId: '7' };
+    const { relay, notification } = setup([
+      { id: '9', eventType: 'order.status.changed', payload },
+    ]);
+    await expect(relay.relayPending()).resolves.toBe(1);
+    expect(notification.emit).toHaveBeenCalledWith(
+      'order.status.changed',
+      payload,
+    );
   });
 });

@@ -105,6 +105,23 @@ describeWithPostgres('BE-16 HQ ombor (PostgreSQL)', () => {
     });
   });
 
+  it('BE-47: oxirgi bo‘sh dona band qilindi → «Offer qoldig‘i tugadi» shu tranzaksiyada outbox’da', async () => {
+    const outbox = () =>
+      ds.query(
+        `SELECT payload FROM inventory.outbox_event WHERE event_type = 'inventory.offer.out-of-stock' ORDER BY id`,
+      ) as Promise<Array<{ payload: { variantIds: string[] } }>>;
+    expect(await outbox()).toEqual([]); // 1 dona hali bo‘sh
+    await inventory.reserveAvailable({
+      orderRef: '9101',
+      items: [{ variantId: variant, quantity: 1 }],
+      idempotencyKey: 'r-9101',
+    });
+    expect((await outbox()).map((row) => row.payload.variantIds)).toEqual([
+      [variant],
+    ]);
+    await inventory.release({ orderRef: '9101', idempotencyKey: 'x-9101' });
+  });
+
   it('TC2: topshirish → qoldiq −1, band −1', async () => {
     await inventory.commit({ orderRef: '9001', idempotencyKey: 'c-9001' });
     await expect(stockRow()).resolves.toMatchObject({

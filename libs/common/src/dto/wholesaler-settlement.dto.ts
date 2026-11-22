@@ -198,3 +198,20 @@ export class SettlementRunResultDto {
   @ApiProperty({ example: 7, description: 'Aktga kirgan tovar qatorlari' })
   items: number;
 }
+
+/**
+ * BE-47 (TZ 6.12): optovikka «Pul o‘tkazildi» — gateway «To‘landi» dan keyin notification-service ga (sotuvchidagi
+ * `finance.withdrawal.paid` kabi). Takror bosilsa ham bitta xabar (`dedupeKey` = akt).
+ */
+export const SETTLEMENT_PAID_EVENT = 'finance.wholesaler.paid';
+
+export interface SettlementPaidEvent {
+  settlementId: string;
+  /** Akt raqami (masalan, OPT-2026-48). */
+  number: string;
+  wholesalerId: string;
+  /** Bankka o‘tkazilgan summa, so‘m. */
+  amount: number;
+  periodStart: string;
+  periodEnd: string;
+}
