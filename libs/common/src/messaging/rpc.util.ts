@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { errorExtraOf } from '../exceptions/business.exception';
 import {
   catchError,
   firstValueFrom,
@@ -67,8 +68,9 @@ export function sendRpc<T = unknown>(
         const message = clientFacing
           ? (err?.message ?? INTERNAL_MESSAGE)
           : INTERNAL_MESSAGE;
+        const extra = clientFacing ? errorExtraOf(err?.extra) : undefined;
         const response = err?.errorCode
-          ? { message, errorCode: err.errorCode }
+          ? { message, errorCode: err.errorCode, ...(extra ? { extra } : {}) }
           : message;
         return throwError(() => new HttpException(response, status));
       }),

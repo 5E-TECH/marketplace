@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Optional,
   ForbiddenException,
   Inject,
   Injectable,
@@ -24,9 +25,11 @@ import {
   RmqClient,
   UpdateProfileDto,
   VerifyPhoneDto,
+  ErrorCode,
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
+import { OtpCheck, OtpGuardService } from '../affiliate-auth/otp-guard.service';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -43,8 +46,15 @@ export class AuthService {
     private readonly dataSource: DataSource,
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
-  ) {}
+    @Optional() otpGuard?: OtpGuardService,
+  ) {
+    // BE-06: parolni tiklash va telefon kodi ham SMS kod qoidasi bilan (3 xato → 15 daqiqa blok)
+    this.otp = otpGuard ?? new OtpGuardService(config);
+  }
 
+  private readonly otp: OtpGuardService;
+
+  /** Parol bilan foydalanuvchi yaratish — ichki (testlar). Ochiq RPC `auth.register` BE-06 da yopilgan. */
   async register(dto: RegisterDto) {
     const exists = await this.users.findOne({ where: { phone: dto.phone } });
     if (exists) {
@@ -329,12 +339,22 @@ export class AuthService {
     });
     // Enumerationdan himoya: user topilmasa ham bir xil javob.
     if (!user) return { sent: true, expiresIn: 300 };
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    await this.dataSource.query(
-      `INSERT INTO identity.verification_code(id, phone, purpose, code_hash, expires_at)
-       VALUES ($1,$2,$3,$4,now() + interval '5 minutes')`,
-      [randomUUID(), dto.phone, purpose, this.hashToken(code)],
-    );
+    let code: string;
+    try {
+      // BE-06 (T9-9): kriptografik tasodifiy kod, HMAC, blok qoidasi — `OtpGuardService`
+      code = await this.dataSource.transaction((m) =>
+        this.otp.issue(m, dto.phone, purpose),
+      );
+      await this.otp.cleanup(this.dataSource);
+    } catch (error) {
+      // blokda ham bir xil javob (raqam holati oshkor bo‘lmasin) — kod yuborilmaydi
+      if (
+        error instanceof BusinessException &&
+        error.errorCode === ErrorCode.OTP_BLOCKED
+      )
+        return { sent: true, expiresIn: 300 };
+      throw error;
+    }
     this.notifications.emit('auth.verification-code.requested', {
       phone: dto.phone,
       code,
@@ -343,14 +363,25 @@ export class AuthService {
     return { sent: true, expiresIn: 300 };
   }
 
+  /**
+   * BE-06: kod tekshiruvi SMS kod qoidasi bilan — xato hisobi, 3 xato → 15 daqiqa blok (TZ SOT-1). Eski yo‘llarda
+   * (parolni tiklash, telefon kodi) har qanday xato bir xil javob: hisob borligi bilinmasin (forgot-password kabi).
+   */
   private async consumeCode(phone: string, code: string, purpose: string) {
-    const rows = await this.dataSource.query(
-      `UPDATE identity.verification_code SET used_at=now() WHERE id=(
-       SELECT id FROM identity.verification_code WHERE phone=$1 AND purpose=$2 AND used_at IS NULL
-       AND expires_at>now() ORDER BY created_at DESC LIMIT 1) AND code_hash=$3 RETURNING id`,
-      [phone, purpose, this.hashToken(code)],
-    );
-    if (!rows.length)
+    let result: OtpCheck;
+    try {
+      result = await this.dataSource.transaction((m) =>
+        this.otp.check(m, phone, purpose, code),
+      );
+    } catch (error) {
+      if (
+        error instanceof BusinessException &&
+        error.errorCode === ErrorCode.OTP_BLOCKED
+      )
+        result = { kind: 'blocked' };
+      else throw error;
+    }
+    if (result.kind !== 'ok')
       throw new BadRequestException(
         'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
       );
@@ -471,7 +502,8 @@ export class AuthService {
     return row;
   }
 
-  private async buildAuthResult(user: User) {
+  /** BE-06: SMS kod bilan kirish va ro‘yxat ham shu sessiyani ochadi (`AffiliateAuthService`). */
+  async buildAuthResult(user: User) {
     // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
     const payload = {
       sub: user.id,

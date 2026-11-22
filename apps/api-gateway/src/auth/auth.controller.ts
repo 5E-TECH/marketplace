@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Ip,
   Optional,
   Param,
   Patch,
@@ -27,12 +28,19 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
   ACCESS_TOKEN_COOKIE,
+  AFFILIATE_AUTH_RPC,
   AuthErrorResponseDto,
+  OtpPurpose,
+  OtpSendResultDto,
+  RegisterAffiliateDto,
+  SendOtpDto,
+  VerifyOtpDto,
   AuthSuccessResponseDto,
   ForgotPasswordDto,
   CurrentUser,
@@ -173,6 +181,120 @@ export class AuthController {
     if (this.tokensInBody) return result;
     const { accessToken: _access, refreshToken: _refresh, ...rest } = result;
     return rest;
+  }
+
+  // ---------------------------------------------------------------- BE-06: SMS kod (SOT-1, FE-04)
+
+  @Public()
+  @IgnoreAuthCookie()
+  // IP bo‘yicha cheklov `resend-code` bilan bir xil (SMS pul turadi)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('otp/send')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'SMS kod yuborish: REGISTER — sotuvchi ro‘yxati, LOGIN — sotuvchi va optovik kirishi (kod 5 daqiqa)',
+  })
+  @ApiOkResponse({ type: OtpSendResultDto })
+  @ApiBadRequestResponse({
+    description:
+      'PHONE_OPERATOR_INVALID — raqam O‘zbekiston mobil operatoriniki emas',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'PHONE_ALREADY_REGISTERED (REGISTER)',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'ACCOUNT_NOT_FOUND (LOGIN)' })
+  @ApiResponse({
+    status: 423,
+    description:
+      'OTP_BLOCKED — 3 xatodan keyin 15 daqiqa; `retryAfterSeconds`, `Retry-After`',
+  })
+  sendOtp(@Body() dto: SendOtpDto): Promise<OtpSendResultDto> {
+    return sendRpc(this.identity, { cmd: AFFILIATE_AUTH_RPC.OTP_SEND }, dto);
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'SMS kodni tekshirish: REGISTER → bir martalik `registrationToken`; LOGIN → kirish (`/auth/login` kabi, cookie)',
+  })
+  @ApiOkResponse({
+    schema: {
+      example: { registrationToken: 'eyJhbGciOiJIUzI1NiIs…' },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'OTP_INVALID — kod noto‘g‘ri; `attemptsLeft`',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'OTP_EXPIRED — muddati o‘tgan yoki so‘ralmagan',
+  })
+  @ApiResponse({
+    status: 423,
+    description: 'OTP_BLOCKED — `retryAfterSeconds`',
+  })
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<
+      | { registrationToken: string }
+      | { accessToken: string; refreshToken: string }
+    >(this.identity, { cmd: AFFILIATE_AUTH_RPC.OTP_VERIFY }, dto);
+    if (dto.purpose === OtpPurpose.REGISTER || 'registrationToken' in result)
+      return result;
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register/affiliate')
+  @ApiOperation({
+    summary:
+      'Sotuvchi ro‘yxati: SMS tasdig‘idan keyin oferta va rozilik versiyasi bilan; sessiya darhol ochiladi',
+  })
+  @ApiCreatedResponse({ schema: { example: { accessToken: null } } })
+  @ApiBadRequestResponse({
+    description:
+      'OFFER_NOT_ACCEPTED — oferta yoki rozilikning joriy versiyasi qabul qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'PHONE_ALREADY_REGISTERED',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'REGISTRATION_EXPIRED — telefonni qayta tasdiqlang',
+  })
+  async registerAffiliate(
+    @Body() dto: RegisterAffiliateDto,
+    @Ip() ip: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
+      this.identity,
+      { cmd: AFFILIATE_AUTH_RPC.REGISTER },
+      { dto, ip: ip ?? null },
+    );
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
   }
 
   @Public()

@@ -45,6 +45,8 @@ import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { AffiliateProfileController } from './affiliate-account/affiliate-profile.controller';
+import { LegalDocumentsController } from './affiliate-account/legal-documents.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { AdminReconciliationController } from './withdrawals/admin-reconciliation.controller';
 import { AdminActResponsesController } from './withdrawals/admin-act-responses.controller';
@@ -184,6 +186,9 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     // BE-23: pul yechish
     AffiliateWithdrawalsController,
     AdminWithdrawalsController,
+    // BE-06
+    AffiliateProfileController,
+    LegalDocumentsController,
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
     AdminReconciliationController,

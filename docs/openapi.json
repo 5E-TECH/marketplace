@@ -97,6 +97,171 @@
         ]
       }
     },
+    "/api/v1/auth/otp/send": {
+      "post": {
+        "operationId": "AuthController_sendOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpSendResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PHONE_OPERATOR_INVALID — raqam O‘zbekiston mobil operatoriniki emas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ACCOUNT_NOT_FOUND (LOGIN)"
+          },
+          "409": {
+            "description": "PHONE_ALREADY_REGISTERED (REGISTER)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "OTP_BLOCKED — 3 xatodan keyin 15 daqiqa; `retryAfterSeconds`, `Retry-After`"
+          }
+        },
+        "summary": "SMS kod yuborish: REGISTER — sotuvchi ro‘yxati, LOGIN — sotuvchi va optovik kirishi (kod 5 daqiqa)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/otp/verify": {
+      "post": {
+        "operationId": "AuthController_verifyOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "registrationToken": "eyJhbGciOiJIUzI1NiIs…"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OTP_INVALID — kod noto‘g‘ri; `attemptsLeft`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "OTP_EXPIRED — muddati o‘tgan yoki so‘ralmagan"
+          },
+          "423": {
+            "description": "OTP_BLOCKED — `retryAfterSeconds`"
+          }
+        },
+        "summary": "SMS kodni tekshirish: REGISTER → bir martalik `registrationToken`; LOGIN → kirish (`/auth/login` kabi, cookie)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/register/affiliate": {
+      "post": {
+        "operationId": "AuthController_registerAffiliate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterAffiliateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "accessToken": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OFFER_NOT_ACCEPTED — oferta yoki rozilikning joriy versiyasi qabul qilinmagan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHONE_ALREADY_REGISTERED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "REGISTRATION_EXPIRED — telefonni qayta tasdiqlang"
+          }
+        },
+        "summary": "Sotuvchi ro‘yxati: SMS tasdig‘idan keyin oferta va rozilik versiyasi bilan; sessiya darhol ochiladi",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -7514,6 +7679,253 @@
         ]
       }
     },
+    "/api/v1/affiliate/profile": {
+      "get": {
+        "operationId": "AffiliateProfileController_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateProfileDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Sotuvchi profili",
+        "tags": [
+          "affiliate"
+        ]
+      },
+      "patch": {
+        "operationId": "AffiliateProfileController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAffiliateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateProfileDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ism va familiya (soliq hisoboti uchun)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/agreements": {
+      "post": {
+        "operationId": "AffiliateProfileController_accept",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptAgreementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateProfileDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OFFER_NOT_ACCEPTED — joriy versiya emas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ofertaning (yoki rozilikning) yangi versiyasini qabul qilish — versiya va vaqt saqlanadi",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/legal/documents/{type}": {
+      "get": {
+        "operationId": "LegalDocumentsController_get",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "affiliate-offer",
+                "personal-data-consent"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalDocumentDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hujjatning joriy versiyasi (effectiveAt null — «e’lon qilinadi»)",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/documents/{type}": {
+      "put": {
+        "operationId": "LegalDocumentsController_publish",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "affiliate-offer",
+                "personal-data-consent"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishLegalDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalDocumentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Bu versiya allaqachon e’lon qilingan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yangi versiyani e’lon qilish (matn — yurist); sotuvchilar keyingi kirishda qabul qiladi",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
     "/api/v1/admin/finance/settlements": {
       "get": {
         "operationId": "AdminSettlementsController_list",
@@ -10148,6 +10560,100 @@
           "statusCode",
           "message",
           "errorCode"
+        ]
+      },
+      "SendOtpDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "+998973152286"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "REGISTER",
+              "LOGIN"
+            ],
+            "example": "REGISTER"
+          }
+        },
+        "required": [
+          "phone",
+          "purpose"
+        ]
+      },
+      "OtpSendResultDto": {
+        "type": "object",
+        "properties": {
+          "expiresIn": {
+            "type": "number",
+            "example": 300,
+            "description": "Kod necha soniya amal qiladi"
+          },
+          "delivery": {
+            "type": "string",
+            "example": "SENT",
+            "enum": [
+              "SENT",
+              "DELAYED"
+            ],
+            "description": "DELAYED — SMS provayder javob bermadi, server qayta yuboradi"
+          }
+        },
+        "required": [
+          "expiresIn",
+          "delivery"
+        ]
+      },
+      "VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "example": "+998973152286"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "REGISTER",
+              "LOGIN"
+            ],
+            "example": "REGISTER"
+          },
+          "code": {
+            "type": "string",
+            "example": "305918"
+          }
+        },
+        "required": [
+          "phone",
+          "purpose",
+          "code"
+        ]
+      },
+      "RegisterAffiliateDto": {
+        "type": "object",
+        "properties": {
+          "registrationToken": {
+            "type": "string",
+            "description": "OTP tasdig‘idan keyingi bir martalik token"
+          },
+          "offerVersion": {
+            "type": "string",
+            "example": "1.0",
+            "description": "Qabul qilingan sotuvchi ofertasi versiyasi"
+          },
+          "consentVersion": {
+            "type": "string",
+            "example": "1.0",
+            "description": "Shaxsiy ma’lumotlarga rozilik versiyasi"
+          }
+        },
+        "required": [
+          "registrationToken",
+          "offerVersion",
+          "consentVersion"
         ]
       },
       "LoginDto": {
@@ -16456,6 +16962,275 @@
           "selfEmployed",
           "updatedBy",
           "updatedAt"
+        ]
+      },
+      "AffiliateAgreementDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "affiliate-offer",
+              "personal-data-consent"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "example": "1.0"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "example": "2026-11-22T04:14:00.000Z"
+          },
+          "current": {
+            "type": "boolean",
+            "example": true,
+            "description": "Shu turdagi joriy (eng so‘nggi qabul qilingan) versiya"
+          }
+        },
+        "required": [
+          "type",
+          "version",
+          "acceptedAt",
+          "current"
+        ]
+      },
+      "AffiliateProfileSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "NOT_SUBMITTED",
+            "enum": [
+              "NOT_SUBMITTED",
+              "PENDING",
+              "VERIFIED",
+              "REJECTED",
+              "REVOKED"
+            ],
+            "description": "Hozir moliya qo‘yadigan belgi (BE-23): VERIFIED yoki NOT_SUBMITTED"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "AffiliateProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1001"
+          },
+          "firstName": {
+            "type": "string",
+            "example": ""
+          },
+          "lastName": {
+            "type": "string",
+            "example": ""
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998973152286"
+          },
+          "registeredAt": {
+            "type": "string",
+            "example": "2026-11-22T04:14:00.000Z"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "example": "2026-11-22T04:14:00.000Z",
+            "nullable": true
+          },
+          "agreements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliateAgreementDto"
+            }
+          },
+          "pendingAgreements": {
+            "example": [
+              {
+                "type": "affiliate-offer",
+                "version": "1.1"
+              }
+            ],
+            "description": "Joriy e’lon qilingan, lekin hali qabul qilinmagan versiyalar — qayta qabul kerak",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "selfEmployed": {
+            "$ref": "#/components/schemas/AffiliateProfileSelfEmployedDto"
+          },
+          "card": {
+            "type": "object",
+            "example": null,
+            "nullable": true,
+            "description": "Karta — BE-32 (hozircha null)"
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "phone",
+          "registeredAt",
+          "lastLoginAt",
+          "agreements",
+          "pendingAgreements"
+        ]
+      },
+      "UpdateAffiliateProfileDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "example": "Jasur"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Tursunov"
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName"
+        ]
+      },
+      "AcceptAgreementDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "affiliate-offer",
+              "personal-data-consent"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "example": "1.1"
+          }
+        },
+        "required": [
+          "type",
+          "version"
+        ]
+      },
+      "LegalSummaryItemDto": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "example": "Haq"
+          },
+          "text": {
+            "type": "string",
+            "example": "faqat mijoz to‘lagan buyurtma uchun, so‘mda yoziladi."
+          }
+        },
+        "required": [
+          "term",
+          "text"
+        ]
+      },
+      "LegalSectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "s1"
+          },
+          "title": {
+            "type": "string",
+            "example": "1. Atamalar va taraflar"
+          },
+          "body": {
+            "type": "string",
+            "example": "…"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "body"
+        ]
+      },
+      "LegalDocumentDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "affiliate-offer",
+              "personal-data-consent"
+            ],
+            "example": "affiliate-offer"
+          },
+          "version": {
+            "type": "string",
+            "example": "1.0"
+          },
+          "effectiveAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Kuchga kirish vaqti; null — matn hali e’lon qilinmagan (ekranda «e’lon qilinadi»), bunday hujjat bilan ro‘yxat yopiq"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LegalSummaryItemDto"
+            }
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LegalSectionDto"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "version",
+          "effectiveAt",
+          "summary",
+          "sections"
+        ]
+      },
+      "PublishLegalDocumentDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "1.1"
+          },
+          "effectiveAt": {
+            "type": "object",
+            "example": "2026-12-01T00:00:00+05:00",
+            "nullable": true,
+            "description": "Kuchga kirish vaqti; berilmasa — darhol (e’lon paytidan)"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LegalSummaryItemDto"
+            }
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LegalSectionDto"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "summary",
+          "sections"
         ]
       },
       "WholesalerSettlementItemDto": {
