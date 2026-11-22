@@ -5,6 +5,8 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
+  Optional,
   Param,
   Post,
   Query,
@@ -34,6 +36,7 @@ import {
   WholesalerSettlementDto,
   WholesalerSettlementPageDto,
   WholesalerSettlementQueryDto,
+  SETTLEMENT_PAID_EVENT,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
@@ -46,8 +49,14 @@ import { LabelDocument, labelPdf } from '../orders/label-pdf';
 @ApiBearerAuth()
 @Controller('admin/finance/settlements')
 export class AdminSettlementsController {
+  private readonly logger = new Logger(AdminSettlementsController.name);
+
   constructor(
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    // BE-47: optovikka «Pul o‘tkazildi» (SMS va kabinet)
+    @Optional()
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notification?: ClientProxy,
   ) {}
 
   @Get()
@@ -146,14 +155,32 @@ export class AdminSettlementsController {
     description:
       'INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)',
   })
-  paid(
+  async paid(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser('sub') paidBy: string,
   ): Promise<WholesalerSettlementDto> {
-    return sendRpc(
+    const result = await sendRpc<WholesalerSettlementDto>(
       this.finance,
       { cmd: FINANCE_SETTLEMENT_RPC.PAID },
       { id, paidBy },
     );
+    // BE-47 (TC3): optovikka «Pul o‘tkazildi» — takror bosilsa ham bitta xabar (notification `dedupeKey`)
+    if (this.notification)
+      this.notification
+        .emit(SETTLEMENT_PAID_EVENT, {
+          settlementId: String(result.id),
+          number: result.number,
+          wholesalerId: String(result.wholesalerId),
+          amount: result.exportedTotal ?? result.totalAmount,
+          periodStart: result.periodStart,
+          periodEnd: result.periodEnd,
+        })
+        .subscribe({
+          error: (error: Error) =>
+            this.logger.warn(
+              `Optovikka «Pul o‘tkazildi» xabari yuborilmadi: ${error.message}`,
+            ),
+        });
+    return result;
   }
 }

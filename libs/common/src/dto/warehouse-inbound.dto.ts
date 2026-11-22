@@ -55,6 +55,37 @@ export interface CatalogInventoryProduct {
   isBad: boolean;
 }
 
+/**
+ * BE-47 (TZ 6.12): inventory → notification — postavka qabul qilindi (brak bo‘lsa soni bilan), optovik kabinetiga.
+ * Bir postavkaga bitta xabar (`dedupeKey`).
+ */
+export const INBOUND_RECEIVED_EVENT = 'inventory.inbound.received';
+
+export interface InboundReceivedEvent {
+  shipmentId: string;
+  number: string;
+  wholesalerId: string;
+  status: InboundShipmentStatus;
+  declaredQty: number;
+  receivedQty: number;
+  defectiveQty: number;
+}
+
+/**
+ * BE-47 (TZ 6.12): inventory → notification — HQ dagi bo‘sh qoldiq 0 bo‘ldi (band qilishdan keyin). Xabar adminga va
+ * shu offerda sahifasi bor sotuvchilarga; bir kunda bir variantga bitta [taklif].
+ */
+export const STOCK_DEPLETED_EVENT = 'inventory.stock.depleted';
+
+export interface StockDepletedEvent {
+  variantIds: string[];
+  /** ISO 8601 */
+  at: string;
+}
+
+/** notification → lead-service: shu mahsulotda sahifasi (oqimi) bor sotuvchilar (BE-47). */
+export const LEAD_OFFER_AFFILIATES_RPC = 'lead.offer.affiliates';
+
 /** inventory → notification: partiya sotuvdan chiqdi (muddatga 60 kundan kam qoldi) — admin va superadminga. */
 export const LOT_BLOCKED_EVENT = 'inventory.lot.blocked';
 

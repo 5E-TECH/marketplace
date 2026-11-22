@@ -7,6 +7,7 @@ import {
   RpcHttpExceptionFilter,
   UpdateAffiliateStreamDto,
   UpdateOfferContentDto,
+  LEAD_OFFER_AFFILIATES_RPC,
 } from '@app/common';
 import { LandingService } from './landing.service';
 import { OfferService } from './offer.service';
@@ -25,6 +26,12 @@ export class LeadOfferController {
     private readonly postbacks: PostbackService,
     private readonly capi: CapiService,
   ) {}
+
+  /** BE-47: notification — «Offer qoldig‘i tugadi» qabul qiluvchilari. */
+  @MessagePattern({ cmd: LEAD_OFFER_AFFILIATES_RPC })
+  offerAffiliates(@Payload() input: { productId: string }) {
+    return this.streams.affiliatesOf(String(input?.productId ?? ''));
+  }
 
   @MessagePattern({ cmd: 'lead.offer.list' })
   listOffers(@Payload() input: { query: AffiliateOffersQueryDto }) {

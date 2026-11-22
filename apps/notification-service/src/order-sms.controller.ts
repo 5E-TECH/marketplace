@@ -12,6 +12,8 @@ import { NotificationService } from './notification.service';
 import {
   CUSTOMER_SMS_STATUSES,
   customerSmsText,
+  SELLER_MESSAGES,
+  sellerMessageBody,
   WithdrawalPaidEvent,
   withdrawalPaidText,
 } from './order-sms';
@@ -37,7 +39,9 @@ export class OrderSmsController {
   async onOrderStatus(
     @Payload() event: OrderStatusChangedEvent,
   ): Promise<void> {
-    if (!event?.orderId || !CUSTOMER_SMS_STATUSES.has(event.status)) return;
+    if (!event?.orderId) return;
+    await this.sellerMessage(event);
+    if (!CUSTOMER_SMS_STATUSES.has(event.status)) return;
     const phone = event.recipient?.phone;
     if (!phone) return;
     const text = customerSmsText(event, await this.districtName(event));
@@ -95,6 +99,27 @@ export class OrderSmsController {
       body: withdrawalPaidText(event),
       data: { withdrawalId: event.withdrawalId },
       dedupeKey: `withdrawal:${event.withdrawalId}:PAID`,
+    });
+  }
+
+  /**
+   * BE-47 TC1: sotuvchiga kabinet xabari — faqat shu buyurtmaning sotuvchisiga (saytdan buyurtmada sotuvchi yo‘q).
+   * Bir hodisaga bitta xabar (`dedupeKey`, TC6).
+   */
+  private async sellerMessage(event: OrderStatusChangedEvent): Promise<void> {
+    const kind = SELLER_MESSAGES[event.status];
+    if (!kind || !event.affiliateId) return;
+    await this.notifications.create({
+      recipient: { userId: String(event.affiliateId), channels: [] },
+      type: kind.type,
+      title: kind.title,
+      body: sellerMessageBody(event),
+      data: {
+        orderId: event.orderId,
+        orderNumber: event.orderNumber,
+        status: event.status,
+      },
+      dedupeKey: `seller:order:${event.orderId}:${event.status}`,
     });
   }
 

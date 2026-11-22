@@ -17,6 +17,7 @@ import {
 import { EmailAdapter } from './adapters/email.adapter';
 import { NOTIFICATION_ADAPTERS } from './adapters/notification-adapter';
 import { SmsAdapter } from './adapters/sms.adapter';
+import { CabinetMessagesController } from './cabinet-messages.controller';
 import { OtpSmsController } from './otp-sms.controller';
 import { OrderSmsController } from './order-sms.controller';
 import { TelegramAdapter } from './adapters/telegram.adapter';
@@ -42,6 +43,19 @@ const entities = NOTIFICATION_DB.entities;
         inject: [ConfigService],
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
+      },
+      // BE-47: optovik telefoni va kabinet egasi, offer nomi; offer sotuvchilari
+      {
+        name: RmqClient.CATALOG,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
+      },
+      {
+        name: RmqClient.LEAD,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.LEAD),
       },
       // BE-24: mijoz SMS idagi tuman nomi — Elchi geo keshi
       {
@@ -75,6 +89,7 @@ const entities = NOTIFICATION_DB.entities;
     NotificationController,
     NotificationEventsController,
     NotificationAdminController,
+    CabinetMessagesController,
     OtpSmsController,
     OrderSmsController,
   ],

@@ -17,6 +17,8 @@ import {
   CatalogInventoryProduct,
   InboundShipmentDto,
   InboundShipmentItemDto,
+  INBOUND_RECEIVED_EVENT,
+  InboundReceivedEvent,
   InboundShipmentPageDto,
   InboundShipmentStatus,
   LOT_BLOCKED_EVENT,
@@ -387,7 +389,40 @@ export class InboundService {
       );
     });
     if (blockedLots.length) await this.notifyBlocked(blockedLots);
-    return this.get({ id });
+    const result = await this.get({ id });
+    await this.notifyReceived(result);
+    return result;
+  }
+
+  /** BE-47: optovikka «Postavka qabul qilindi, brak topildi» (kabinet). Yuborilmasa — qabul baribir saqlangan. */
+  private async notifyReceived(shipment: InboundShipmentDto): Promise<void> {
+    if (!this.notifications) return;
+    const sum = (pick: (item: InboundShipmentItemDto) => number | null) =>
+      shipment.items.reduce(
+        (total, item) => total + Number(pick(item) ?? 0),
+        0,
+      );
+    const event: InboundReceivedEvent = {
+      shipmentId: shipment.id,
+      number: shipment.number,
+      wholesalerId: shipment.wholesalerId,
+      status: shipment.status,
+      declaredQty: sum((item) => item.declaredQty),
+      receivedQty: sum((item) => item.receivedQty),
+      defectiveQty: sum((item) => item.defectiveQty),
+    };
+    try {
+      await firstValueFrom(
+        this.notifications
+          .emit(INBOUND_RECEIVED_EVENT, event)
+          .pipe(timeout(NOTIFY_TIMEOUT_MS)),
+        { defaultValue: undefined },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Postavka ${shipment.number}: optovikka xabar yuborilmadi: ${(error as Error)?.message}`,
+      );
+    }
   }
 
   /** OMB-3: partiyalar — muddat, sotuvdan chiqish sanasi, holat (admin «Muddat» ro‘yxati). */

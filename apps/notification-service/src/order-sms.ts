@@ -98,3 +98,37 @@ export interface WithdrawalPaidEvent {
 export function withdrawalPaidText(e: WithdrawalPaidEvent): string {
   return `Pul kartangizga o‘tkazildi: ${money(e.net)} so‘m. So‘rov ${money(e.amount)} so‘m, 1% soliq ${money(e.tax)} so‘m.`;
 }
+
+/**
+ * BE-47 (TZ 6.12): sotuvchiga kabinet xabari — «Yangi sotuv, yetkazildi, rad etildi» (`order.status.changed`).
+ * Faqat kabinet (SMS emas). Matn [taklif] — `xabar-sotuvchi` taxtasi uslubida.
+ */
+export const SELLER_MESSAGES: Readonly<
+  Partial<Record<LeadOrderStatus, { type: string; title: string }>>
+> = {
+  [LeadOrderStatus.CONFIRMED]: {
+    type: 'seller_new_sale',
+    title: 'Yangi sotuv',
+  },
+  [LeadOrderStatus.DELIVERED]: {
+    type: 'seller_delivered',
+    title: 'Yetkazildi',
+  },
+  [LeadOrderStatus.REFUSED]: { type: 'seller_refused', title: 'Rad etildi' },
+};
+
+/** Buyurtma raqami, tovarlar va sotuvchi haqi — mijoz raqami va manzili yo‘q (BE-28 qoidasi, TC1). */
+export function sellerMessageBody(event: OrderStatusChangedEvent): string {
+  const goods = (event.items ?? [])
+    .map((item) => `${item.name} ×${item.quantity}`)
+    .join(', ');
+  const fee = (event.items ?? []).reduce(
+    (sum, item) => sum + Number(item.split?.affiliateFee ?? 0),
+    0,
+  );
+  const head = goods ? `${event.orderNumber} · ${goods}` : event.orderNumber;
+  // rad etilgan buyurtmada haq yo‘q
+  return event.status !== LeadOrderStatus.REFUSED && fee > 0
+    ? `${head}. Sotuvchi haqi: ${money(fee)} so‘m`
+    : head;
+}
