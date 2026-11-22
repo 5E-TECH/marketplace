@@ -182,14 +182,34 @@ describePostgres('BE-27 moliya sozlamalari (PostgreSQL)', () => {
       now.laterScheduled.map((r) => [r.value, r.effectiveFrom]),
     ).toContainEqual([40000, at]);
     await expect(
-      svc.cancelScheduled({ key: 'refusal_fee', effectiveFrom: at }),
+      svc.cancelScheduled({
+        key: 'refusal_fee',
+        effectiveFrom: at,
+        actorId: '8',
+        comment: 'Xato edi',
+      }),
     ).resolves.toMatchObject({ value: 40000, effectiveFrom: at });
     const [refusal] = await svc.list();
     expect(refusal.scheduled.map((r) => r.value)).not.toContain(40000);
+    // iz: nima, kim, nega bekor qilingani
+    await expect(
+      ds.query(
+        `SELECT value::int AS value, comment, cancelled_by AS "by", cancel_comment AS reason FROM finance.setting_cancelled`,
+      ),
+    ).resolves.toEqual([
+      {
+        value: 40000,
+        comment: 'Rejalashtirildi',
+        by: 'user:8',
+        reason: 'Xato edi',
+      },
+    ]);
     await expect(
       svc.cancelScheduled({
         key: 'refusal_fee',
         effectiveFrom: now.effectiveFrom,
+        actorId: '8',
+        comment: 'Xato edi',
       }),
     ).rejects.toThrow('allaqachon kuchga kirgan');
     const [row] = (await ds.query(

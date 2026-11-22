@@ -144,22 +144,38 @@ export class FinanceSettingsService {
     const key = String(input?.key ?? '');
     if (!KEYS.includes(key))
       throw new BadRequestException(`Noma’lum sozlama: ${key}`);
-    const at = new Date(String(input?.effectiveFrom ?? ''));
-    if (!Number.isFinite(at.getTime()))
-      throw new BadRequestException('Kuchga kirish vaqti noto‘g‘ri');
-    const rows = (await this.dataSource.query(
-      `DELETE FROM finance.setting
-        WHERE key = $1 AND effective_from = $2 AND effective_from > now()
-        RETURNING key, value::text AS value, effective_from AS "effectiveFrom", changed_by AS "changedBy"`,
-      [key, at],
-    )) as unknown as Row[] | [Row[], number];
-    // pg DELETE … RETURNING: TypeORM [rows, count] qaytaradi
-    const deleted = (Array.isArray(rows[0]) ? rows[0] : rows) as Row[];
-    if (!deleted.length)
-      throw new NotFoundException(
-        'Rejalashtirilgan qiymat topilmadi yoki allaqachon kuchga kirgan',
+    // `set` bilan bir xil o‘qish: faqat sana — Toshkent kuni boshi
+    const at = effectiveTime(input?.effectiveFrom);
+    const actorId = String(input?.actorId ?? '');
+    if (!/^[1-9]\d{0,18}$/.test(actorId))
+      throw new BadRequestException('Kim bekor qilgani noma’lum');
+    const comment = String(input?.comment ?? '').trim();
+    if (comment.length < 3 || comment.length > 500)
+      throw new BadRequestException('Izoh majburiy (3–500 belgi)');
+    return this.dataSource.transaction(async (m) => {
+      await m.query(
+        `SELECT pg_advisory_xact_lock(hashtext('finance.setting:' || $1))`,
+        [key],
       );
-    return view(deleted[0]);
+      // o‘chirish va izni yozish bitta so‘rovda — audit yozilmasa ham nima, kim va nega bekor qilgani qoladi
+      const deleted = (await m.query(
+        `WITH d AS (
+           DELETE FROM finance.setting
+            WHERE key = $1 AND effective_from = $2 AND effective_from > now()
+           RETURNING key, value, effective_from, changed_by, comment
+         )
+         INSERT INTO finance.setting_cancelled
+           (key, value, effective_from, changed_by, comment, cancelled_by, cancel_comment)
+         SELECT key, value, effective_from, changed_by, comment, $3, $4 FROM d
+         RETURNING key, value::text AS value, effective_from AS "effectiveFrom", changed_by AS "changedBy"`,
+        [key, at, `user:${actorId}`, comment],
+      )) as Row[];
+      if (!deleted.length)
+        throw new NotFoundException(
+          'Rejalashtirilgan qiymat topilmadi yoki allaqachon kuchga kirgan',
+        );
+      return view(deleted[0]);
+    });
   }
 }
 

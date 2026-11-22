@@ -118,6 +118,8 @@ export class CancelFinanceSettingDto {
 export interface FinanceSettingCancelInput {
   key: string;
   effectiveFrom: string;
+  actorId: string;
+  comment: string;
 }
 
 export interface FinanceSettingSetResult {

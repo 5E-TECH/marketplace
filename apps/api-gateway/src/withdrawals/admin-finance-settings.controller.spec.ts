@@ -113,7 +113,12 @@ describe('BE-27: moliya sozlamalari (gateway)', () => {
     ).resolves.toEqual(cancelled);
     expect(finance.send).toHaveBeenCalledWith(
       { cmd: 'finance.settings.cancel' },
-      { key: 'refusal_fee', effectiveFrom: cancelled.effectiveFrom },
+      {
+        key: 'refusal_fee',
+        effectiveFrom: cancelled.effectiveFrom,
+        actorId: '7',
+        comment: 'Xato kiritilgan',
+      },
     );
     expect(identity.send).toHaveBeenCalledWith(
       { cmd: 'identity.audit.log' },

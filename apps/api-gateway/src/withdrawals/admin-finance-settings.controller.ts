@@ -145,7 +145,12 @@ export class AdminFinanceSettingsController {
     const cancelled = await sendRpc<FinanceSettingValueDto>(
       this.finance,
       { cmd: FINANCE_SETTINGS_RPC.CANCEL },
-      { key, effectiveFrom: dto.effectiveFrom },
+      {
+        key,
+        effectiveFrom: dto.effectiveFrom,
+        actorId: user.sub,
+        comment: dto.comment,
+      },
     );
     await this.audit(user.sub, 'finance.setting.cancel', key, {
       cancelled,
