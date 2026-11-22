@@ -7,7 +7,7 @@ import { LeadOrderStatus } from './order-events.dto';
 
 /**
  * Ruxsat etilgan o‘tishlar (TZ T5 «Buyurtma» jadvali). Boshqa har qanday o‘tish rad etiladi va jurnalga yoziladi
- * (BUY-2). RETURN_REQUESTED dan keyingi holatlar T5 da yo‘q — BE-44 [taklif]: RETURNING yoki DELIVERED.
+ * (BUY-2). RETURN_REQUESTED dan keyingi holatlar T5 da yo‘q — BE-44 [taklif]: `LEAD_RETURN_TRANSITIONS`.
  */
 export const LEAD_ORDER_TRANSITIONS: Readonly<
   Record<LeadOrderStatus, readonly LeadOrderStatus[]>
@@ -36,14 +36,25 @@ export const LEAD_ORDER_TRANSITIONS: Readonly<
   [LeadOrderStatus.REMITTED]: [LeadOrderStatus.SETTLED],
   [LeadOrderStatus.REFUSED]: [LeadOrderStatus.RETURNING],
   [LeadOrderStatus.RETURNING]: [LeadOrderStatus.RETURNED_GRADED],
-  // BE-44 [taklif, T5 ga yoziladi]: tasdiqlansa — tovar qaytmoqda (BE-17 saralash), rad etilsa — yetkazilgan
+  // BE-44: qaror o‘tishlari umumiy jadvalda emas (Elchi xabari yo‘l qidirib kutilayotgan qaytarishni chetlab o‘tmasin) —
+  // faqat qaytarish oqimi: `LEAD_RETURN_TRANSITIONS`
+  [LeadOrderStatus.RETURN_REQUESTED]: [],
+  [LeadOrderStatus.SETTLED]: [],
+  [LeadOrderStatus.RETURNED_GRADED]: [],
+  [LeadOrderStatus.CANCELLED]: [],
+};
+
+/**
+ * BE-44 [taklif, T5 ga yoziladi]: qaytarish so‘rovi qarori — tasdiq: tovar qaytmoqda (BE-17 saralashi), rad: yetkazilgan.
+ * Faqat xodim qarori bilan (`LeadReturnService`); Elchi, ombor va boshqa o‘tishlar bu yo‘lni ishlata olmaydi.
+ */
+export const LEAD_RETURN_TRANSITIONS: Readonly<
+  Partial<Record<LeadOrderStatus, readonly LeadOrderStatus[]>>
+> = {
   [LeadOrderStatus.RETURN_REQUESTED]: [
     LeadOrderStatus.RETURNING,
     LeadOrderStatus.DELIVERED,
   ],
-  [LeadOrderStatus.SETTLED]: [],
-  [LeadOrderStatus.RETURNED_GRADED]: [],
-  [LeadOrderStatus.CANCELLED]: [],
 };
 
 export function isLeadOrderTransitionAllowed(

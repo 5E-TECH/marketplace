@@ -21,6 +21,7 @@ import {
 import {
   AppliedTransition,
   LeadOrderStatusService,
+  TransitionRejected,
 } from './lead-order-status.service';
 import { ReturnActor, writeReturnHistory } from './return-history';
 import {
@@ -133,6 +134,21 @@ export class LeadReturnService {
         shopId: string;
       }>;
       const byId = new Map(items.map((item) => [item.id, item]));
+      // Hozircha faqat to‘liq qaytarish: moliya qisman qaytarishni yozmaydi (BE-22 `recordReturn`), ombor saralashi
+      // hamma donani talab qiladi (BE-17) [taklif — qisman qaytarish alohida karta]
+      if (
+        lines.length !== items.length ||
+        lines.some(
+          (line) =>
+            Number(byId.get(String(line.orderItemId))?.quantity) !==
+            line.quantity,
+        )
+      )
+        throw new BadRequestException({
+          message: [
+            'items hozircha faqat to‘liq qaytarish: buyurtmadagi hamma tovar, to‘liq soni bilan',
+          ],
+        });
       let amount = 0n;
       for (const line of lines) {
         const item = byId.get(String(line.orderItemId));
@@ -230,7 +246,31 @@ export class LeadReturnService {
     if (!input.approve && !comment)
       throw new BadRequestException('Rad etish sababini yozing');
     let applied: AppliedTransition | null = null;
-    await this.dataSource.transaction(async (manager) => {
+    try {
+      await this.decideIn(input, to, comment, (value) => (applied = value));
+    } catch (error) {
+      // BUY-2: rad etilgan holat o‘tishi ham jurnalda
+      if (error instanceof TransitionRejected)
+        await this.status.recordRejected(
+          error,
+          this.orderActor(input.actor),
+          comment,
+        );
+      throw error;
+    }
+    await this.status.sendInventoryNow(
+      (applied as AppliedTransition | null)?.command ?? null,
+    );
+    return this.queries.get(input.returnId);
+  }
+
+  private decideIn(
+    input: { returnId: string; approve: boolean; actor: ReturnActor },
+    to: ReturnRequestStatus,
+    comment: string | null,
+    onApplied: (applied: AppliedTransition) => void,
+  ): Promise<void> {
+    return this.dataSource.transaction(async (manager) => {
       const [row] = (await manager.query(
         `SELECT id::text, status, source, sales_order_id::text AS "orderId"
            FROM checkout.return_request WHERE id = $1 FOR UPDATE`,
@@ -262,8 +302,9 @@ export class LeadReturnService {
         actor: input.actor,
         comment,
       });
-      applied = await this.status.applyTransition(manager, {
+      const applied = await this.status.applyTransition(manager, {
         orderId: row.orderId,
+        returnDecision: true,
         to: input.approve
           ? LeadOrderStatus.RETURNING
           : LeadOrderStatus.DELIVERED,
@@ -272,13 +313,10 @@ export class LeadReturnService {
           ? `Qaytarish tasdiqlandi (#${row.id})`
           : `Qaytarish rad etildi (#${row.id}): ${comment}`,
       });
+      onApplied(applied);
       if (input.approve)
         await this.enqueueReturned(manager, row.id, row.orderId);
     });
-    await this.status.sendInventoryNow(
-      (applied as AppliedTransition | null)?.command ?? null,
-    );
-    return this.queries.get(input.returnId);
   }
 
   /** EQ-10 muddati: oxirgi «Yetkazildi» o‘tishidan. TC2: muddat o‘tgan — 400. */
@@ -287,8 +325,10 @@ export class LeadReturnService {
     orderId: string,
   ): Promise<void> {
     const [row] = (await manager.query(
-      `SELECT max(created_at) AS at FROM checkout.order_status_history
-        WHERE order_id = $1 AND to_status = 'DELIVERED' AND accepted = TRUE`,
+      // birinchi yetkazilish (rad etilgan so‘rovdan DELIVERED ga qaytish muddatni yangilamasin)
+      `SELECT min(created_at) AS at FROM checkout.order_status_history
+        WHERE order_id = $1 AND to_status = 'DELIVERED' AND accepted = TRUE
+          AND from_status IS DISTINCT FROM 'RETURN_REQUESTED'`,
       [orderId],
     )) as Array<{ at: Date | null }>;
     if (!row?.at) throw new BadRequestException('Yetkazilgan vaqti topilmadi');

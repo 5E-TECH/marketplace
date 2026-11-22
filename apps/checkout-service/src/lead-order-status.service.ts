@@ -13,6 +13,7 @@ import {
   CheckoutDeliveryDestination,
   ErrorCode,
   isLeadOrderTransitionAllowed,
+  LEAD_RETURN_TRANSITIONS,
   LeadOrderActor,
   LeadOrderActorType,
   LeadOrderStatus,
@@ -111,6 +112,8 @@ export class LeadOrderStatusService {
       to: LeadOrderStatus;
       actor: LeadOrderActor;
       reason: string | null;
+      /** BE-44: qaytarish so‘rovi qarori — `LEAD_RETURN_TRANSITIONS` ham ruxsat (faqat LeadReturnService). */
+      returnDecision?: boolean;
     },
   ): Promise<AppliedTransition> {
     const { orderId, to, actor, reason } = input;
@@ -131,7 +134,10 @@ export class LeadOrderStatusService {
         },
         command: null,
       };
-    if (!isLeadOrderTransitionAllowed(from, to))
+    if (
+      !isLeadOrderTransitionAllowed(from, to) &&
+      !(input.returnDecision && LEAD_RETURN_TRANSITIONS[from]?.includes(to))
+    )
       throw new TransitionRejected(orderId, from, to);
     const command = inventoryCommand(orderId, to, actor, reason);
     if (command)

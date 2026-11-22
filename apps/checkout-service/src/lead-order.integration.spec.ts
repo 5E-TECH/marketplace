@@ -847,9 +847,9 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
         new OutboxService(checkoutDs.getRepository(OutboxEvent)),
         new ReturnRequestQueryService(checkoutDs),
       );
-    const deliveredOrder = async (leadId: string) => {
+    const deliveredOrder = async (leadId: string, quantity = 1) => {
       await inbound(2, `in-ret-${leadId}`);
-      await orders.onLeadConfirmed(confirmed({ leadId }));
+      await orders.onLeadConfirmed(confirmed({ leadId, quantity }));
       const id = String((await orderOfLead(leadId)).id);
       for (const to of [
         LeadOrderStatus.PICKING,
@@ -993,6 +993,29 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       });
       expect((await orderOfLead('8004')).status).toBe('DELIVERED');
       expect(await outboxOf('order.returned', id)).toEqual([]);
+    });
+
+    it('qisman qaytarish hozircha yo‘q — 400; rad etilgandan keyin muddat birinchi yetkazilishdan', async () => {
+      const { id, itemId } = await deliveredOrder('8005', 2);
+      await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 }); // 2 dan 1
+      const created = await request(id, itemId, {
+        items: [{ orderItemId: itemId, quantity: 2 }],
+      });
+      await returns().decide({
+        returnId: created.id,
+        approve: false,
+        actor: STAFF,
+        comment: 'Tovar ishlatilgan',
+      });
+      // birinchi yetkazilish 11 kun oldin — rad etilgandan keyingi DELIVERED muddatni yangilamaydi
+      await checkoutDs.query(
+        `UPDATE checkout.order_status_history SET created_at = now() - interval '11 days'
+          WHERE order_id = $1 AND to_status = 'DELIVERED' AND from_status = 'IN_TRANSIT'`,
+        [id],
+      );
+      await expect(
+        request(id, itemId, { items: [{ orderItemId: itemId, quantity: 2 }] }),
+      ).rejects.toMatchObject({ status: 400 });
     });
   });
 });

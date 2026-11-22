@@ -1,8 +1,9 @@
-import { Controller, UseFilters } from '@nestjs/common';
+import { ConflictException, Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AdminReturnRequestsQueryDto,
   CreateReturnRequestDto,
+  ErrorCode,
   RpcHttpExceptionFilter,
 } from '@app/common';
 import { LeadReturnService } from './lead-return.service';
@@ -73,10 +74,18 @@ export class ReturnRequestsController {
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-refund' })
-  adminRefund(
+  async adminRefund(
     @Payload()
     data: ActionPayload & { amount?: number; restock?: boolean },
   ) {
+    // BE-44: xodim so‘rovida pul `order.returned` (moliya teskari yozuvlari), tovar — ombor saralashi (BE-17);
+    // eski onlayn refund va darhol qoldiqqa qaytarish ikki marta yozardi
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      throw new ConflictException({
+        message:
+          'Liddan buyurtma qaytarishida pul va tovar avtomatik (moliya va ombor) — refund yo‘q',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     return this.refunds.refund({
       ...this.action(data),
       amount: data.amount,
