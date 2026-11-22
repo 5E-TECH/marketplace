@@ -29,7 +29,7 @@ import {
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
-import { OtpGuardService } from '../affiliate-auth/otp-guard.service';
+import { OtpCheck, OtpGuardService } from '../affiliate-auth/otp-guard.service';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -345,6 +345,7 @@ export class AuthService {
       code = await this.dataSource.transaction((m) =>
         this.otp.issue(m, dto.phone, purpose),
       );
+      await this.otp.cleanup(this.dataSource);
     } catch (error) {
       // blokda ham bir xil javob (raqam holati oshkor bo‘lmasin) — kod yuborilmaydi
       if (
@@ -362,12 +363,28 @@ export class AuthService {
     return { sent: true, expiresIn: 300 };
   }
 
-  /** BE-06: kod tekshiruvi SMS kod qoidasi bilan — xato hisobi, 3 xato → 15 daqiqa blok (TZ SOT-1). */
+  /**
+   * BE-06: kod tekshiruvi SMS kod qoidasi bilan — xato hisobi, 3 xato → 15 daqiqa blok (TZ SOT-1). Eski yo‘llarda
+   * (parolni tiklash, telefon kodi) har qanday xato bir xil javob: hisob borligi bilinmasin (forgot-password kabi).
+   */
   private async consumeCode(phone: string, code: string, purpose: string) {
-    const result = await this.dataSource.transaction((m) =>
-      this.otp.check(m, phone, purpose, code),
-    );
-    this.otp.throwUnlessOk(result);
+    let result: OtpCheck;
+    try {
+      result = await this.dataSource.transaction((m) =>
+        this.otp.check(m, phone, purpose, code),
+      );
+    } catch (error) {
+      if (
+        error instanceof BusinessException &&
+        error.errorCode === ErrorCode.OTP_BLOCKED
+      )
+        result = { kind: 'blocked' };
+      else throw error;
+    }
+    if (result.kind !== 'ok')
+      throw new BadRequestException(
+        'Tasdiqlash kodi noto‘g‘ri yoki muddati tugagan',
+      );
   }
 
   async resetPassword(dto: ResetPasswordDto) {

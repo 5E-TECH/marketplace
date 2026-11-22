@@ -450,14 +450,19 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
         code,
         newPassword: 'YangiParol123',
       } as never);
-    await expect(errorOf(reset('000000'))).resolves.toMatchObject({
+    // eski yo‘l: hamma xato bir xil (hisob borligi bilinmasin), lekin hisob va blok ishlaydi
+    for (const wrong of ['000000', '000001', '000002'])
+      await expect(errorOf(reset(wrong))).resolves.toMatchObject({
+        status: 400,
+      });
+    const [state] = (await ds.query(
+      `SELECT blocked_until > now() AS blocked FROM identity.otp_state WHERE phone = $1 AND purpose = 'PASSWORD_RESET'`,
+      [phone],
+    )) as Array<{ blocked: boolean }>;
+    expect(state.blocked).toBe(true);
+    // blokda to‘g‘ri kod ham o‘tmaydi (kod bekor qilingan, yangisi yuborilmaydi)
+    await expect(errorOf(reset(lastCode(phone)))).resolves.toMatchObject({
       status: 400,
-      extra: { attemptsLeft: 2 },
-    });
-    await errorOf(reset('000001'));
-    await expect(errorOf(reset('000002'))).resolves.toMatchObject({
-      status: 423,
-      errorCode: 'OTP_BLOCKED',
     });
     const before = sent.length;
     await expect(auth.createVerificationCode({ phone })).resolves.toEqual({
@@ -494,5 +499,20 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       [phone],
     )) as Array<{ verified: boolean; open: number }>;
     expect(row).toEqual({ verified: true, open: 1 }); // faqat yangi SMS sessiyasi
+  });
+
+  it('ikki telefonga parallel kod — deadlock yo‘q (tozalash tranzaksiyadan tashqarida)', async () => {
+    await ds.query(
+      `INSERT INTO identity.otp_state (phone, purpose, updated_at) VALUES
+         ('+998901118001', 'REGISTER', now() - interval '2 days'),
+         ('+998901118002', 'REGISTER', now() - interval '2 days')
+       ON CONFLICT DO NOTHING`,
+    );
+    await expect(
+      Promise.all([
+        svc.sendOtp({ phone: '+998901118001', purpose: OtpPurpose.REGISTER }),
+        svc.sendOtp({ phone: '+998901118002', purpose: OtpPurpose.REGISTER }),
+      ]),
+    ).resolves.toHaveLength(2);
   });
 });

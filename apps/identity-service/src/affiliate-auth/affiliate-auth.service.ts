@@ -99,6 +99,7 @@ export class AffiliateAuthService {
     const code = await this.dataSource.transaction((m) =>
       this.otp.issue(m, phone, purpose),
     );
+    await this.otp.cleanup(this.dataSource);
     // notification-service SMS adapteri orqali yuboradi (sozlanmagan bo‘lsa — test stub, kod logda)
     this.notifications.emit('auth.verification-code.requested', {
       phone,

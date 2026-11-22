@@ -51,13 +51,26 @@ export class OtpGuardService {
        VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`,
       [randomUUID(), phone, purpose, this.hash(code), OTP_TTL_SECONDS],
     );
-    // eski, bloksiz holat qatorlari tozalanadi (jadval cheksiz o‘smasin)
-    await m.query(
-      `DELETE FROM identity.otp_state
-        WHERE updated_at < now() - interval '1 day'
-          AND (blocked_until IS NULL OR blocked_until < now())`,
-    );
     return code;
+  }
+
+  /**
+   * Eski, bloksiz holat qatorlarini tozalash (jadval cheksiz o‘smasin). Chaqiruvchi tranzaksiyasidan TASHQARIDA:
+   * qulflangan qatorlar o‘tkazib yuboriladi (SKIP LOCKED) — parallel so‘rovlar bilan deadlock bo‘lmaydi; bir marta
+   * ko‘pi bilan 100 qator. Xato bo‘lsa — e’tiborsiz (asosiy amalga ta’sir qilmaydi).
+   */
+  async cleanup(dataSource: { query: EntityManager['query'] }): Promise<void> {
+    try {
+      await dataSource.query(
+        `DELETE FROM identity.otp_state WHERE ctid IN (
+           SELECT ctid FROM identity.otp_state
+            WHERE updated_at < now() - interval '1 day'
+              AND (blocked_until IS NULL OR blocked_until < now())
+            LIMIT 100 FOR UPDATE SKIP LOCKED)`,
+      );
+    } catch {
+      /* tozalash — ixtiyoriy */
+    }
   }
 
   /** Kodni tekshiradi va natijani yozadi (xato hisobi, blok, kod ishlatildi). Blokda — 423 tashlanadi. */
@@ -150,6 +163,8 @@ export class OtpGuardService {
       blockedUntil: Date | null;
       stale: boolean;
     }>;
+    // qator boshqa tranzaksiyada o‘chirilgan bo‘lsa (tozalash bilan poyga) — yangi holat
+    if (!row) return 0;
     const until = row.blockedUntil ? new Date(row.blockedUntil).getTime() : 0;
     if (until > Date.now())
       throw this.blockedError(Math.ceil((until - Date.now()) / 1000));
