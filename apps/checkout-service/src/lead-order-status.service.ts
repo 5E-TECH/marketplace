@@ -348,7 +348,7 @@ export class LeadOrderStatusService {
     )) as Array<Record<string, string | null>>;
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const items = (await manager.query(
-      `SELECT i.product_id::text AS "productId", s.shop_id::text AS "wholesalerId", i.sku,
+      `SELECT i.product_id::text AS "productId", COALESCE(i.wholesaler_id, s.shop_id)::text AS "wholesalerId", i.sku,
               i.product_name AS name, i.quantity, i.weight_grams AS "weightGrams",
               i.approved_price::text AS "approvedPrice", i.base_price::text AS "basePrice",
               i.unit_price::text AS "salePrice", i.affiliate_fee::text AS "affiliateFee",
