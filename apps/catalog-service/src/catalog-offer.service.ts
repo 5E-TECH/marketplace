@@ -188,9 +188,7 @@ export class CatalogOfferService {
     whereDeliver: string,
   ): Promise<CatalogOrderSnapshot | null> {
     if (!/^\d+$/.test(String(productId ?? ''))) return null;
-    // BE-41: optovik STIR i (`select: false`) faqat shu ichki nusxada o‘qiladi — chekdagi komitent
-    const product = await this.base()
-      .addSelect('shop.tin')
+    const product = await this.orderBase()
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
@@ -210,7 +208,9 @@ export class CatalogOfferService {
       .map((item) => String(item?.productId ?? ''))
       .filter((id) => /^\d+$/.test(id));
     const products = ids.length
-      ? await this.base().where('product.id IN (:...ids)', { ids }).getMany()
+      ? await this.orderBase()
+          .where('product.id IN (:...ids)', { ids })
+          .getMany()
       : [];
     const byId = new Map(products.map((p) => [String(p.id), p]));
     const snapshots: Array<CatalogOrderSnapshot | null> = [];
@@ -342,6 +342,15 @@ export class CatalogOfferService {
       .createQueryBuilder('product')
       .innerJoinAndSelect('product.shop', 'shop')
       .leftJoinAndSelect('product.category', 'category');
+  }
+
+  /**
+   * BE-41: buyurtma narx nusxasi uchun — optovik STIR i (`select: false`) chekdagi komitent sifatida o‘qiladi.
+   * Faqat ichki `catalog.order.snapshot*` RPC lari uchun: bitta va ko‘p tovarli (sayt, BE-34) yo‘l bir xil so‘rov
+   * bilan, aks holda sayt buyurtmasida STIR bo‘sh qolib, Elchi’ga chek maydonlari ketmaydi.
+   */
+  private orderBase() {
+    return this.base().addSelect('shop.tin');
   }
 
   /**
