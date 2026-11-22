@@ -21,7 +21,34 @@ export const LEAD_EVENTS = {
   FRAUD_FEE_CANCEL: 'fraud.fee.cancel',
   /** lead-service → notification-service: sotuvchiga chora (ogohlantirish, sahifa to‘xtatildi) [taklif]. */
   FRAUD_MEASURE: 'fraud.measure.applied',
+  /** lead-service → notification-service: saytdan buyurtmani SMS havola bilan tasdiqlash (BE-34). */
+  SITE_CONFIRM_SMS: 'lead.site.confirm-sms',
 } as const;
+
+/** BE-34: lidni kim tasdiqladi — operator qo‘ng‘iroqda yoki mijoz SMS havola orqali (faqat asosiy sayt lidi). */
+export enum LeadConfirmedVia {
+  OPERATOR = 'OPERATOR',
+  SMS = 'SMS',
+}
+
+/** BE-34: saytdan ko‘p tovarli lidning bitta qatori; narx — saytdagi (tasdiqlangan) narx, bir dona, so‘m. */
+export interface LeadOrderItemEvent {
+  productId: string;
+  quantity: number;
+  salePrice: number;
+}
+
+/** lead.site.confirm-sms — mijozga SMS: summa, tovarlar, manzil va bir martalik tasdiq havolasi (BE-34). */
+export interface SiteConfirmSmsEvent {
+  eventId: string;
+  leadId: string;
+  /** +998XXXXXXXXX */
+  phone: string;
+  /** Tayyor matn (lead-service yozadi: summa, tovarlar, manzil, havola). */
+  text: string;
+  /** ISO 8601 — havola shu vaqtgacha amal qiladi. */
+  expiresAt: string;
+}
 
 /** fraud.fee.* — lid bo‘yicha (moliya jurnalida `lead_id` bor). CANCEL da `leadIds` — sotuvchining ushlangan hamma lidi. */
 export interface FraudFeeEvent {
@@ -64,8 +91,15 @@ export interface LeadConfirmedEvent {
   /** Buyurtmada `delivery_address` bo‘ladi (faqat ko‘cha/uy, telefonsiz). */
   addressLine: string;
   whereDeliver: CheckoutDeliveryDestination;
-  /** «Tasdiqlandi» ni yozgan operator. */
-  confirmedBy: string;
+  /** «Tasdiqlandi» ni yozgan operator; mijoz SMS havola bilan tasdiqlasa — null (BE-34). */
+  confirmedBy: string | null;
+  /** BE-34: yo‘q bo‘lsa — OPERATOR. */
+  confirmedVia?: LeadConfirmedVia;
+  /**
+   * BE-34: saytdan ko‘p tovarli lid — hamma qatorlar; birinchisi `productId`/`quantity`/`salePrice` bilan bir xil.
+   * Yo‘q bo‘lsa — bitta tovar (eski shakl).
+   */
+  items?: LeadOrderItemEvent[];
   /** Manzilni tasdiqlagan operator (BE-38); odatda shu operator. */
   addressConfirmedBy: string | null;
   /** ISO 8601 */

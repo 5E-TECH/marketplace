@@ -80,6 +80,10 @@ export function orderCodAmount(input: {
 export const LEAD_ORDER_RPC = {
   /** checkout → catalog: buyurtma uchun narx nusxasi (tasdiqlangan narx, taqsimot, yetkazish). */
   CATALOG_SNAPSHOT: 'catalog.order.snapshot',
+  /**
+   * BE-34: ko‘p tovarli buyurtma — har tovar narx nusxasi va butun posilka yetkazishi (og‘irliklar yig‘indisi bo‘yicha).
+   */
+  CATALOG_SNAPSHOT_MANY: 'catalog.order.snapshot-many',
   /** BE-19 (ombor), BE-21 (Elchi webhook), moliya → checkout: holatni o‘zgartirish. */
   TRANSITION: 'checkout.order.transition',
   /** gateway → checkout: operator, nazoratchi yoki admin bekor qiladi (BUY-3). */
@@ -119,6 +123,13 @@ export interface CatalogOrderSnapshot {
     /** Elchi tarifi jami og‘irlik bo‘yicha (BUY-4, NRX-7). */
     elchiTariff: number;
   };
+}
+
+/** `catalog.order.snapshot-many` javobi: `items` so‘rov tartibida (topilmagan mahsulot — null). */
+export interface CatalogOrderSnapshotMany {
+  items: Array<CatalogOrderSnapshot | null>;
+  /** Butun posilka: jami og‘irlik bo‘yicha Elchi tarifi va mijozga ko‘rinadigan yetkazish [taklif BE-34]. */
+  delivery: CatalogOrderSnapshot['delivery'] | null;
 }
 
 export enum LeadOrderActorType {
