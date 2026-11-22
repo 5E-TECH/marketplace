@@ -84,7 +84,7 @@ export class WholesalerSettlementsController {
     @Query() query: WholesalerOwnSettlementQueryDto,
   ): Promise<WholesalerSettlementPageDto> {
     const wholesalerId = await this.wholesalerId(user);
-    return sendRpc(
+    const page = await sendRpc<WholesalerSettlementPageDto>(
       this.finance,
       { cmd: FINANCE_SETTLEMENT_RPC.LIST },
       {
@@ -97,6 +97,11 @@ export class WholesalerSettlementsController {
         },
       },
     );
+    // Optovikka platforma xodimining ichki ID si ko‘rsatilmaydi (kim «To‘landi» bosgan).
+    return {
+      ...page,
+      items: page.items.map((item) => ({ ...item, paidBy: null })),
+    };
   }
 
   @Get(':id')

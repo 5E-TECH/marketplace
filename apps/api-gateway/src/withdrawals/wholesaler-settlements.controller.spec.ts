@@ -34,7 +34,10 @@ describe('WholesalerSettlementsController (BE-46, FE-24)', () => {
 
   it('optovik ID si foydalanuvchidan olinadi — so‘rovdagisi e’tiborga olinmaydi', async () => {
     const { controller, finance, catalog } = setup(() => of({ id: '501' }));
-    await controller.list(
+    finance.mockImplementation(() =>
+      of({ items: [{ id: '12', paidBy: '17' }], total: 1 }),
+    );
+    const page = await controller.list(
       user as never,
       {
         page: 2,
@@ -57,6 +60,8 @@ describe('WholesalerSettlementsController (BE-46, FE-24)', () => {
         },
       },
     );
+    // platforma xodimi ID si optovikka ko‘rsatilmaydi
+    expect(page.items).toEqual([{ id: '12', paidBy: null }]);
   });
 
   it('optovikka bog‘lanmagan foydalanuvchi — 403, moliyaga so‘rov yo‘q', async () => {

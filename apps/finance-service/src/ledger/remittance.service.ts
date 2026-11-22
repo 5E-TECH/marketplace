@@ -62,17 +62,24 @@ const RANGE_TO = (col: string) =>
  *   oxirgi qatorga emas, hamma qatorlarga qaraladi.
  * - kind: yetkazilgan jurnali bo‘lsa DELIVERED, faqat rad jurnali bo‘lsa REFUSED (BE-22 `applyRemittance` tartibi);
  * - view_diff: Elchi − tizim o‘tkazma ma’nosida (DZ-07): o‘tkazmada kelgan − kutilgan; rad to‘lovida kutilgan −
- *   ushlangan (BE-22 bu qatorlarda ushlangan − kutilgan yozadi — ishora almashtiriladi);
+ *   ushlangan (BE-22 rad buyurtmasida va hisob-kitobdan keyingi rad to‘lovi qatorida — `expected_amount` siz —
+ *   ushlangan − kutilgan yozadi; ishora almashtiriladi);
+ * `orderParam` — bitta buyurtma uchun (masalan `$3`): butun jadval o‘qilmaydi.
  * - state: hal qilinmagan farq — DIFF, hal qilingan — RESOLVED, oxirgi qator MATCHED — MATCHED, qolgani PENDING.
  * `$1`, `$2` — Toshkent kunlari (kiradi) yoki `null`: buyurtmaning oxirgi o‘tkazmasi shu oraliqda bo‘lsa kiradi.
  */
-export function remittanceOrdersSql(): string {
+export function remittanceOrdersSql(orderParam?: string): string {
   return `
     WITH items AS (
       SELECT ri.* FROM finance.remittance_item ri
        WHERE ri.order_id IN (
          SELECT order_id FROM finance.remittance_item
-          WHERE ${RANGE_FROM('created_at')} AND ${RANGE_TO('created_at')})
+          WHERE ${RANGE_FROM('created_at')} AND ${RANGE_TO('created_at')})${
+            orderParam
+              ? `
+         AND ri.order_id = ${orderParam}`
+              : ''
+          }
     ),
     latest AS (SELECT DISTINCT ON (order_id) * FROM items ORDER BY order_id, id DESC),
     focus AS (
@@ -86,7 +93,8 @@ export function remittanceOrdersSql(): string {
            l.collected_from_customer, l.elchi_fee, l.market_paid_amount, l.refusal_fee,
            COALESCE(f.expected_amount, e.amount) AS expected_amount,
            CASE WHEN f.diff IS NULL THEN NULL
-                WHEN (NOT j.delivered AND j.refused) OR (j.delivered AND f.refusal_fee IS NOT NULL) THEN -f.diff
+                WHEN (NOT j.delivered AND j.refused)
+                  OR (j.delivered AND f.expected_amount IS NULL AND f.refusal_fee IS NOT NULL) THEN -f.diff
                 ELSE f.diff END AS view_diff,
            f.match_state,
            CASE WHEN ${PROBLEM('f')} AND f.resolved_at IS NULL THEN 'DIFF'
@@ -316,7 +324,7 @@ export class RemittanceService {
       return item.orderId;
     });
     const [row] = (await this.dataSource.query(
-      `SELECT * FROM (${remittanceOrdersSql()}) v WHERE order_id = $3`,
+      `SELECT * FROM (${remittanceOrdersSql('$3')}) v`,
       [null, null, orderId],
     )) as ItemRow[];
     return toItem(row);

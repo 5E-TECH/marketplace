@@ -33,8 +33,12 @@ const toDispute = (r: DisputeRow): SettlementDisputeDto => ({
   settlementNumber: `AS-${r.settlementId.padStart(6, '0')}`,
 });
 
-/** Qabul faqat qabul qilingan summa hozirgi summaga teng bo‘lsa amalda (bank faylida summa qayta hisoblanadi — BE-33). */
-const ACCEPTED_VALID = `s.accepted_at IS NOT NULL AND s.accepted_total = COALESCE(s.exported_total, s.total_amount)`;
+/**
+ * Aktning hozirgi o‘tkazma summasi: bank faylida muzlatilgani, bo‘lmasa summa − qarz ushlanishi (NETTED da
+ * exported_total yozilmaydi — BE-33 `freeze`). Qabul faqat qabul qilingan summa shunga teng bo‘lsa amalda.
+ */
+const PAYOUT = `COALESCE(s.exported_total, GREATEST(s.total_amount - s.debt_deducted, 0))`;
+const ACCEPTED_VALID = `s.accepted_at IS NOT NULL AND s.accepted_total = ${PAYOUT}`;
 
 function validId(value: unknown, field = 'id'): string {
   const s = String(value ?? '');
@@ -108,10 +112,9 @@ export class SettlementResponseService {
           'E’tirozga moliya javobi kutilmoqda — keyin qabul qiling',
         );
       await m.query(
-        `UPDATE finance.wholesaler_settlement
-            SET accepted_by = $2, accepted_at = now(), updated_at = now(),
-                accepted_total = COALESCE(exported_total, total_amount)
-          WHERE id = $1`,
+        `UPDATE finance.wholesaler_settlement s
+            SET accepted_by = $2, accepted_at = now(), updated_at = now(), accepted_total = ${PAYOUT}
+          WHERE s.id = $1`,
         [id, userId],
       );
     });

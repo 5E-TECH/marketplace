@@ -789,6 +789,30 @@ describePostgres(
         });
         expect(again.acceptedAmount).toBe(700000);
       });
+
+      it('qarzga to‘liq ushlangan akt (NETTED) — eski qabul amalda emas, e’tiroz mumkin', async () => {
+        const [{ id }] = (await ds.query(
+          `INSERT INTO finance.wholesaler_settlement
+             (wholesaler_id, period_start, period_end, return_window_days, status, total_amount)
+           VALUES ('501', '2027-01-25', '2027-01-31', 10, 'READY', 1000000) RETURNING id::text`,
+        )) as Array<{ id: string }>;
+        await responses.accept({ id, wholesalerId: '501', userId: '77' });
+        await ds.query(
+          `UPDATE finance.wholesaler_settlement SET status = 'NETTED', debt_deducted = 1000000 WHERE id = $1`,
+          [id],
+        );
+        expect(
+          (await responses.wholesalerGet({ id, wholesalerId: '501' }))
+            .acceptedAmount,
+        ).toBeNull();
+        const disputed = await responses.dispute({
+          id,
+          wholesalerId: '501',
+          userId: '77',
+          comment: 'Qaysi qarz ushlandi?',
+        });
+        expect(disputed.disputes).toHaveLength(1);
+      });
     });
   },
 );
