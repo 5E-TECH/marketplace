@@ -18,6 +18,8 @@ import {
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { AuditController } from './audit/audit.controller';
+import { AffiliateAuthController } from './affiliate-auth/affiliate-auth.controller';
+import { AffiliateAuthService } from './affiliate-auth/affiliate-auth.service';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AdminTeamController } from './team/admin-team.controller';
 import { AdminTeamService } from './team/admin-team.service';
@@ -62,6 +64,7 @@ const entities = IDENTITY_DB.entities;
   controllers: [
     AuthController,
     AuditController,
+    AffiliateAuthController,
     AdminTeamController,
     PlatformSettingsController,
     AdminUserAccessController,
@@ -69,6 +72,7 @@ const entities = IDENTITY_DB.entities;
   ],
   providers: [
     AuthService,
+    AffiliateAuthService,
     AdminSeeder,
     ActivityLogService,
     AdminTeamService,

@@ -21,6 +21,7 @@ export * from './database/typeorm.util';
 
 // DTO
 export * from './dto/auth.dto';
+export * from './dto/affiliate-auth.dto';
 export * from './dto/seller.dto';
 export * from './dto/category.dto';
 export * from './dto/banner.dto';

@@ -12,7 +12,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomInt, randomUUID } from 'crypto';
 import {
   BusinessException,
   CreateSupportTicketDto,
@@ -329,7 +329,8 @@ export class AuthService {
     });
     // Enumerationdan himoya: user topilmasa ham bir xil javob.
     if (!user) return { sent: true, expiresIn: 300 };
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // BE-06 (T9-9): kriptografik tasodifiy kod
+    const code = String(randomInt(100_000, 1_000_000));
     await this.dataSource.query(
       `INSERT INTO identity.verification_code(id, phone, purpose, code_hash, expires_at)
        VALUES ($1,$2,$3,$4,now() + interval '5 minutes')`,
@@ -471,7 +472,8 @@ export class AuthService {
     return row;
   }
 
-  private async buildAuthResult(user: User) {
+  /** BE-06: SMS kod bilan kirish va ro‘yxat ham shu sessiyani ochadi (`AffiliateAuthService`). */
+  async buildAuthResult(user: User) {
     // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
     const payload = {
       sub: user.id,
