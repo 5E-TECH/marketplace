@@ -18,6 +18,7 @@ import {
   moneyFromDb,
   moneyOrNull,
 } from '@app/common';
+import { catalogDisplayLookup } from './catalog-display.util';
 
 /** Kim ko'ryapti: xaridor faqat o'zinikini, sotuvchi faqat o'z do'koninikini. */
 export interface ReturnViewerScope {
@@ -50,8 +51,6 @@ const SELECT_RETURN = `
          r.updated_at AS "updatedAt"
     FROM checkout.return_request r
     JOIN checkout.sales_order o ON o.id = r.sales_order_id`;
-import { catalogDisplayLookup } from './catalog-display.util';
-
 @Injectable()
 export class ReturnRequestQueryService {
   private readonly logger = new Logger(ReturnRequestQueryService.name);
