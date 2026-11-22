@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminUsersQueryDto,
+  AffiliateStreamStatus,
   AuthErrorResponseDto,
   CurrentUser,
   ImpersonationResultDto,
@@ -43,6 +44,7 @@ import {
 export class AdminUsersController {
   constructor(
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
   ) {}
 
   @Get('admin/users')
@@ -128,6 +130,8 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: true },
     );
+    // BE-27 (BE-11 TC11): bloklangan sotuvchining hamma sahifasi to‘xtaydi — lid qabul qilinmaydi
+    await this.affiliateStreams(res, AffiliateStreamStatus.STOPPED);
     // C1.31 — audit (best-effort): amal muvaffaqiyatidan so'ng yoziladi.
     this.audit(admin.sub, 'user.block', 'User', id, ip);
     return res;
@@ -148,8 +152,27 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: false },
     );
+    // BE-27: blokdan chiqsa sahifalari qayta ochiladi (firibgarlik sababli to‘xtatilgani — yo‘q, BE-35)
+    await this.affiliateStreams(res, AffiliateStreamStatus.ACTIVE);
     this.audit(admin.sub, 'user.unblock', 'User', id, ip);
     return res;
+  }
+
+  /**
+   * Sotuvchi (AFFILIATE) bo‘lsa — sahifalar holati lead-service da. Xato yashirilmaydi: blok saqlangan, sahifalar
+   * esa ochiq qolsa admin xatoni ko‘rib qayta bosadi (bloklash takrorlansa ham zarari yo‘q).
+   */
+  private async affiliateStreams(
+    user: unknown,
+    status: AffiliateStreamStatus,
+  ): Promise<void> {
+    const u = (user ?? {}) as { id?: string | number; role?: string };
+    if (u.role !== Role.AFFILIATE || !u.id) return;
+    await sendRpc(
+      this.lead,
+      { cmd: 'lead.affiliate.streams.set-status' },
+      { affiliateId: String(u.id), status },
+    );
   }
 
   /** C1.31 — audit sink'ga best-effort yozadi (xatoda amalни buzmaydi). */

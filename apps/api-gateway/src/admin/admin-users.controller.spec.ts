@@ -2,8 +2,11 @@ import { of } from 'rxjs';
 import { Role, ROLES_KEY } from '@app/common';
 import { AdminUsersController } from './admin-users.controller';
 
-function makeController(send: jest.Mock) {
-  return new AdminUsersController({ send } as never);
+function makeController(send: jest.Mock, leadSend = jest.fn(() => of({}))) {
+  return new AdminUsersController(
+    { send } as never,
+    { send: leadSend } as never,
+  );
 }
 
 describe('AdminUsersController (C1.29)', () => {
@@ -102,5 +105,31 @@ describe('AdminUsersController (C1.29)', () => {
         meta: { ip: '1.2.3.4' },
       },
     );
+  });
+
+  it('BE-27 (BE-11 TC11): sotuvchi bloklansa sahifalari STOPPED, blokdan chiqsa ACTIVE; boshqa rolda lead ga murojaat yo‘q', async () => {
+    const leadSend = jest.fn(() => of({ updated: 3 }));
+    const send = jest.fn(() => of({ id: '9', role: Role.AFFILIATE }));
+    const ctrl = makeController(send, leadSend);
+    const admin = { sub: '1', role: Role.ADMIN } as never;
+
+    await ctrl.block(admin, '9', '');
+    expect(leadSend).toHaveBeenLastCalledWith(
+      { cmd: 'lead.affiliate.streams.set-status' },
+      { affiliateId: '9', status: 'STOPPED' },
+    );
+    await ctrl.unblock(admin, '9', '');
+    expect(leadSend).toHaveBeenLastCalledWith(
+      { cmd: 'lead.affiliate.streams.set-status' },
+      { affiliateId: '9', status: 'ACTIVE' },
+    );
+
+    leadSend.mockClear();
+    const operator = makeController(
+      jest.fn(() => of({ id: '10', role: Role.OPERATOR_LEAD })),
+      leadSend,
+    );
+    await operator.block(admin, '10', '');
+    expect(leadSend).not.toHaveBeenCalled();
   });
 });
