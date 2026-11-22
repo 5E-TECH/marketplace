@@ -17,6 +17,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
 import { CategoriesController } from './categories/categories.controller';
+import { StorefrontController } from './storefront/storefront.controller';
 import { NotificationsController } from './notifications/notifications.controller';
 import { AdminDashboardController } from './admin/admin-dashboard.controller';
 import { AdminUsersController } from './admin/admin-users.controller';
@@ -152,6 +153,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AppController,
     AuthController,
     CategoriesController,
+    StorefrontController,
     NotificationsController,
     AdminDashboardController,
     AdminUsersController,
