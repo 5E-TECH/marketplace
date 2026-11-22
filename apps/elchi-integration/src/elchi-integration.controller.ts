@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
-import { ORDER_EVENTS, OrderStatusChangedEvent } from '@app/common';
+import { ORDER_EVENTS, OrderStatusChangedEvent, OPS_RPC } from '@app/common';
 import { ParcelService } from './parcel.service';
 import {
   ElchiIntegrationService,
@@ -30,6 +30,14 @@ export class ElchiIntegrationController {
   }
 
   /** Elchi geo (viloyat/tuman) keshini sinxronlash (admin/cron chaqiradi). */
+  /** BE-26: monitor — oxirgi N daqiqadagi Elchi API xatolari. */
+  @MessagePattern({ cmd: OPS_RPC.ELCHI_ERRORS })
+  async apiErrors(@Payload() data: { minutes?: number }) {
+    return {
+      count: await this.parcels.apiErrorsSince(Number(data?.minutes ?? 5)),
+    };
+  }
+
   @MessagePattern({ cmd: 'integration.geo.sync' })
   syncGeo() {
     return this.service.syncGeoCache();

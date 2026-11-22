@@ -13,7 +13,8 @@ fi
 test -n "$backup"
 test -s "$backup"
 test -f "$backup.sha256"
-sha256sum -c "$backup.sha256"
+# checksum fayl nomi bilan yozilgan (db-backup.sh) — nusxa katalogida tekshiriladi
+(cd "$(dirname "$backup")" && sha256sum -c "$(basename "$backup").sha256")
 
 container="marketplace-restore-test-$$"
 cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }

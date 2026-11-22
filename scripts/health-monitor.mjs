@@ -25,6 +25,23 @@ const requiredQueues = [
   'lead_queue_v2',
 ];
 
+// BE-26 (T8 «Kuzatuv»): ko'rsatkich ogohlantirishlari — gateway `GET /health/ops` (MONITOR_TOKEN bilan).
+const opsToken = process.env.MONITOR_OPS_TOKEN;
+const opsUrl =
+  process.env.MONITOR_OPS_URL ??
+  apiUrl.replace(/\/health\/readiness$/, '/health/ops');
+// Karta BE-26 TC3: «Elchi xatolari 5 daqiqada 10 dan oshdi → ogohlantirish»
+const elchiErrorsMax = positiveInt(process.env.MONITOR_ELCHI_ERRORS_5M_MAX, 10);
+// TZ 1-bo'lim KPI (6-oy): birinchi qo'ng'iroqqacha median ≤ 10 daqiqa — eng eski lid shundan ko'p kutsa [taklif]
+const leadQueueMaxAge = positiveInt(
+  process.env.MONITOR_LEAD_QUEUE_MAX_AGE_MIN,
+  10,
+);
+/** Ochiq ko'rsatkich ogohlantirishlari: nom → true (takror yuborilmaydi, me'yorga qaytsa «hal bo'ldi»). */
+const openConditions = new Map();
+/** `health/ops` ketma-ket o'qilmagan marta (noto'g'ri token — 404, gateway yo'q): chegaradan keyin ogohlantirish. */
+let opsFailures = 0;
+
 let failures = 0;
 let alertOpen = false;
 // BE-02: DLQ ogohlantirishi alohida — u ochiq turganda API yoki consumer uzilishi ogohlantirishi bosilmasin
@@ -75,8 +92,7 @@ async function notify(status, detail) {
   };
   console.log(
     JSON.stringify({
-      level:
-        status === 'resolved' || status === 'dlq_resolved' ? 'info' : 'error',
+      level: status.endsWith('resolved') ? 'info' : 'error',
       ...payload,
     }),
   );
@@ -145,7 +161,79 @@ async function checkDeadLetters(deadLetters) {
   }
 }
 
+/** Bitta ko'rsatkich sharti: buzilsa — `<nom>_firing` (bir marta), me'yorga qaytsa — `<nom>_resolved`. */
+async function condition(name, breached, detail, resolvedDetail) {
+  const open = openConditions.get(name) === true;
+  if (breached === open) return;
+  try {
+    await notify(
+      `${name}_${breached ? 'firing' : 'resolved'}`,
+      breached ? detail : resolvedDetail,
+    );
+    openConditions.set(name, breached);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        status: 'alert_failed',
+        detail: String(error),
+      }),
+    );
+  }
+}
+
+/** BE-26: Elchi API xatolari va lid navbati. Token berilmasa — tekshirilmaydi; o'qilmasa — o'tkazib yuboriladi. */
+export async function checkOps() {
+  if (!opsToken) return;
+  let data;
+  try {
+    const response = await fetchOk(opsUrl, {
+      headers: { 'x-monitor-token': opsToken },
+    });
+    const body = await response.json();
+    data = body?.data ?? body;
+  } catch (error) {
+    opsFailures += 1;
+    console.error(
+      JSON.stringify({
+        level: 'warn',
+        status: 'ops_unavailable',
+        failures: opsFailures,
+        detail: String(error),
+      }),
+    );
+    // jim o'chib qolmasin: token xato yoki servis yo'q bo'lsa ham ogohlantirish (TC3 ishlamay qolgani bilinsin)
+    await condition(
+      'ops_unavailable',
+      opsFailures >= threshold,
+      `health/ops o'qilmadi (${opsFailures} marta): ${String(error)}`,
+      'health/ops tiklandi',
+    );
+    return;
+  }
+  opsFailures = 0;
+  await condition('ops_unavailable', false, '', 'health/ops tiklandi');
+  const errors = data?.elchiApiErrors5m;
+  if (typeof errors === 'number')
+    await condition(
+      'elchi_errors',
+      errors > elchiErrorsMax,
+      `Elchi API xatolari 5 daqiqada ${errors} (chegara ${elchiErrorsMax})`,
+      'Elchi API xatolari me’yorda',
+    );
+  const queue = data?.leadQueue;
+  if (queue && 'oldestMinutes' in queue)
+    await condition(
+      'lead_queue',
+      typeof queue.oldestMinutes === 'number' &&
+        queue.oldestMinutes > leadQueueMaxAge,
+      `Navbatda lid ${queue.oldestMinutes} daqiqadan beri qo‘ng‘iroqsiz (kutyapti: ${queue.waiting}; chegara ${leadQueueMaxAge} daq)`,
+      'Lid navbati me’yorda',
+    );
+}
+
 export async function tick() {
+  await checkOps();
   let healthError;
   let deadLetters = null;
   try {
@@ -209,6 +297,16 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
+  if (!opsToken) {
+    console.error(
+      JSON.stringify({
+        level: 'warn',
+        status: 'ops_unconfigured',
+        detail:
+          'MONITOR_OPS_TOKEN yo‘q: Elchi xatolari va lid navbati tekshirilmaydi (BE-26)',
+      }),
+    );
+  }
   if (!webhookUrl) {
     console.error(
       JSON.stringify({

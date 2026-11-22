@@ -36,6 +36,11 @@ import {
 import {
   ACCESS_TOKEN_COOKIE,
   AFFILIATE_AUTH_RPC,
+  TwoFactorChallengeDto,
+  TwoFactorChallengeResultDto,
+  TwoFactorEnableDto,
+  TwoFactorSetupResultDto,
+  TwoFactorVerifyDto,
   AuthErrorResponseDto,
   OtpPurpose,
   OtpSendResultDto,
@@ -418,16 +423,97 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await sendRpc<{
-      user: unknown;
-      accessToken: string;
-      refreshToken: string;
-    }>(this.identity, { cmd: 'auth.login' }, dto);
+    const result = await sendRpc<
+      | { user: unknown; accessToken: string; refreshToken: string }
+      | TwoFactorChallengeResultDto
+    >(this.identity, { cmd: 'auth.login' }, dto);
 
+    // BE-26: admin va moliya (ADMIN_2FA=on) — sessiya yo‘q, keyingi qadam 2FA kodi; cookie yozilmaydi
+    if ('challengeToken' in result) return rawResponse(result);
     this.setAuthCookies(request, response, result);
     return rawResponse(
       this.tokensInBody ? { accessToken: result.accessToken } : {},
     );
+  }
+
+  // ---------------------------------------------------------------- BE-26: xodim 2FA (TOTP)
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '2FA ni ulash: QR uchun sir va otpauth havola (parol bosqichidagi challengeToken bilan)',
+  })
+  @ApiOkResponse({ type: TwoFactorSetupResultDto })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiConflictResponse({
+    description: '2FA allaqachon ulangan',
+    type: AuthErrorResponseDto,
+  })
+  setupTwoFactor(
+    @Body() dto: TwoFactorChallengeDto,
+  ): Promise<TwoFactorSetupResultDto> {
+    return sendRpc(this.identity, { cmd: 'auth.2fa.setup' }, dto);
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '2FA ni yoqish: birinchi kod → bir martalik tiklash kodlari (faqat shu javobda) va sessiya',
+  })
+  @ApiOkResponse({
+    schema: { example: { recoveryCodes: ['K7QM2XPA4D'], accessToken: null } },
+  })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  async enableTwoFactor(
+    @Body() dto: TwoFactorEnableDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{
+      recoveryCodes: string[];
+      accessToken: string;
+      refreshToken: string;
+    }>(this.identity, { cmd: 'auth.2fa.enable' }, dto);
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      recoveryCodes: result.recoveryCodes,
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Kirish: 2FA kodi yoki tiklash kodi → sessiya (3 xato → 15 daqiqa blok)',
+  })
+  @ApiOkResponse({ schema: { example: { accessToken: null } } })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  async verifyTwoFactor(
+    @Body() dto: TwoFactorVerifyDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
+      this.identity,
+      { cmd: 'auth.2fa.verify' },
+      dto,
+    );
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
   }
 
   @Public()

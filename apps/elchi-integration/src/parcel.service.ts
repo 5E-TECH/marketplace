@@ -392,11 +392,13 @@ export class ParcelService {
   }
 
   private async createFailed(row: ParcelRow, error: Error): Promise<void> {
-    if (
+    const intakeClosed =
       error instanceof ElchiApiError &&
       error.status === 409 &&
-      error.code === 'ORDER_INTAKE_CLOSED'
-    ) {
+      error.code === 'ORDER_INTAKE_CLOSED';
+    // bugungi qabul yopiqligi — Elchi xatosi emas, kutilgan holat
+    if (!intakeClosed) await this.recordApiError('shipment.create', error);
+    if (intakeClosed) {
       // Bugungi qabul yopiq: Elchi kalitni band qilmaydi, `reopens_at` dan
       // keyin o'sha external_order_id ishlaydi (Elchi-Backend
       // integration-service `requestPartnerOrderCreate`).
@@ -601,6 +603,38 @@ export class ParcelService {
     return !problem;
   }
 
+  /**
+   * BE-26 (T8 «Kuzatuv»): Elchi API xatosi jurnalga — monitor 5 daqiqadagi sonini oladi. Jurnal yozilmasa ham posilka
+   * ishi to‘xtamaydi (faqat log). 7 kundan eskisi shu yerda tozalanadi (indeks bo‘yicha, arzon).
+   */
+  private async recordApiError(operation: string, error: Error): Promise<void> {
+    try {
+      await this.dataSource.query(
+        `WITH old AS (DELETE FROM integration.elchi_api_error WHERE at < now() - interval '7 days')
+         INSERT INTO integration.elchi_api_error (operation, status, message) VALUES ($1, $2, $3)`,
+        [
+          operation,
+          error instanceof ElchiApiError ? error.status : null,
+          String(error?.message ?? error).slice(0, 500),
+        ],
+      );
+    } catch (logError) {
+      this.logger.warn(
+        `Elchi xatosi jurnalga yozilmadi: ${(logError as Error).message}`,
+      );
+    }
+  }
+
+  /** BE-26: oxirgi `minutes` daqiqadagi Elchi API xatolari soni (monitor uchun). */
+  async apiErrorsSince(minutes: number): Promise<number> {
+    const [row] = (await this.dataSource.query(
+      `SELECT count(*)::int AS n FROM integration.elchi_api_error
+        WHERE at > now() - make_interval(mins => $1)`,
+      [Math.max(1, Math.min(1440, Math.floor(minutes) || 5))],
+    )) as Array<{ n: number }>;
+    return row?.n ?? 0;
+  }
+
   /** Elchi da bekor qilish: posilka ID si bo'yicha, bo'lmasa tashqi id bo'yicha. */
   private async cancel(row: ParcelRow): Promise<void> {
     if (!row.shipmentId && !row.sent) {
@@ -623,6 +657,9 @@ export class ParcelService {
   }
 
   private async cancelFailed(row: ParcelRow, error: Error): Promise<void> {
+    // 404 — tiklash yo‘li (bog‘lovchi yozuv yo‘q), xato emas
+    if (!(error instanceof ElchiApiError && error.status === 404))
+      await this.recordApiError('shipment.cancel', error);
     if (error instanceof ElchiApiError && error.status === 404) {
       if (!row.shipmentId) {
         // Elchi buyurtmani faqat bog'lovchi yozuv orqali topadi; yaratish

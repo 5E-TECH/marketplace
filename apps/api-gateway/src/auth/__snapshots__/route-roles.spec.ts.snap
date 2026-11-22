@@ -276,6 +276,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "POST /admin/returns/:id/refund",
     "POST /admin/returns/:id/reject",
     "POST /admin/team",
+    "POST /admin/users/:id/2fa/reset",
     "POST /admin/users/:id/block",
     "POST /admin/users/:id/impersonate",
     "POST /admin/users/:id/unblock",

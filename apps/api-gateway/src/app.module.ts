@@ -51,6 +51,7 @@ import { AffiliateProfileController } from './affiliate-account/affiliate-profil
 import { LegalDocumentsController } from './affiliate-account/legal-documents.controller';
 import { AdminFinanceSettingsController } from './withdrawals/admin-finance-settings.controller';
 import { AdminModerationController } from './admin/admin-moderation.controller';
+import { OpsHealthController } from './ops-health.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { AdminReconciliationController } from './withdrawals/admin-reconciliation.controller';
 import { AdminActResponsesController } from './withdrawals/admin-act-responses.controller';
@@ -204,6 +205,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     // BE-27
     AdminFinanceSettingsController,
     AdminModerationController,
+    // BE-26
+    OpsHealthController,
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
     AdminReconciliationController,

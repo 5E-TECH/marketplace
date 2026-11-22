@@ -12,6 +12,7 @@ import { NewRoles1795996800000 } from './migrations/1795996800000-new-roles';
 import { AffiliateSmsRegistration1797465600000 } from './migrations/1797465600000-affiliate-sms-registration';
 import { WholesalerContract1798329600000 } from './migrations/1798329600000-wholesaler-contract';
 import { ActivityLogImmutable1797292800000 } from './migrations/1797292800000-activity-log-immutable';
+import { StaffTwoFactor1797724800000 } from './migrations/1797724800000-staff-two-factor';
 import { User } from './entities/user.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { ActivityLog } from '@app/common';
@@ -38,5 +39,6 @@ export const IDENTITY_DB: DatabaseDefinition = {
     AffiliateSmsRegistration1797465600000,
     WholesalerContract1798329600000,
     ActivityLogImmutable1797292800000,
+    StaffTwoFactor1797724800000,
   ],
 };

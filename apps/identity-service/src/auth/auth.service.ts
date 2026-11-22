@@ -30,8 +30,12 @@ import {
 import { User } from '../entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
 import { OtpCheck, OtpGuardService } from '../affiliate-auth/otp-guard.service';
+import { TwoFactorGate } from '../two-factor/two-factor.gate';
 
 const BCRYPT_ROUNDS = 10;
+
+/** Sessiya natijasi (`buildAuthResult`). */
+export type AuthResult = Awaited<ReturnType<AuthService['buildAuthResult']>>;
 
 @Injectable()
 export class AuthService {
@@ -47,10 +51,14 @@ export class AuthService {
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
     @Optional() otpGuard?: OtpGuardService,
+    @Optional() twoFactor?: TwoFactorGate,
   ) {
     // BE-06: parolni tiklash va telefon kodi ham SMS kod qoidasi bilan (3 xato → 15 daqiqa blok)
     this.otp = otpGuard ?? new OtpGuardService(config);
+    this.twoFactor = twoFactor ?? new TwoFactorGate(jwt, config);
   }
+
+  private readonly twoFactor: TwoFactorGate;
 
   private readonly otp: OtpGuardService;
 
@@ -106,6 +114,8 @@ export class AuthService {
     if (user.isBlocked) {
       throw new UnauthorizedException('Hisobingiz bloklangan');
     }
+    // BE-26: admin va moliya — sessiya o‘rniga 2FA bosqichi (bayroq yoqilganda)
+    if (this.twoFactor.required(user)) return this.twoFactor.challenge(user);
     return this.buildAuthResult(user);
   }
 
@@ -301,7 +311,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     if (!refreshToken)
       throw new UnauthorizedException('Refresh token topilmadi');
-    let payload: { sub: string; jti: string; role: Role };
+    let payload: { sub: string; jti: string; role: Role; mfa?: boolean };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
@@ -327,7 +337,10 @@ export class AuthService {
     });
     if (!user || !user.isActive || user.isBlocked)
       throw new UnauthorizedException('Hisob faol emas');
-    return this.buildAuthResult(user);
+    // BE-26: 2FA yoqilgan bo‘lsa — 2FA siz ochilgan (eski yoki bayroqdan oldingi) xodim sessiyasi yangilanmaydi
+    if (this.twoFactor.required(user) && payload.mfa !== true)
+      throw new UnauthorizedException('2FA kerak — qayta kiring');
+    return this.buildAuthResult(user, { mfa: payload.mfa === true });
   }
 
   async createVerificationCode(
@@ -502,13 +515,16 @@ export class AuthService {
     return row;
   }
 
-  /** BE-06: SMS kod bilan kirish va ro‘yxat ham shu sessiyani ochadi (`AffiliateAuthService`). */
-  async buildAuthResult(user: User) {
+  /** BE-06: SMS kod bilan kirish va ro‘yxat ham shu sessiyani ochadi (`AffiliateAuthService`); BE-26: 2FA tasdig‘idan
+   * keyin ham (`TwoFactorService`). */
+  async buildAuthResult(user: User, opts: { mfa?: boolean } = {}) {
     // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
+    // BE-26: `mfa` — sessiya 2FA dan o‘tib ochilgan; refresh shu belgini olib yuradi.
     const payload = {
       sub: user.id,
       role: user.role,
       authVersion: user.authVersion ?? 1,
+      ...(opts.mfa ? { mfa: true } : {}),
     };
     const accessToken = this.jwt.sign(payload, {
       expiresIn: this.config.get<string>('JWT_EXPIRES_IN', '1h') as any,

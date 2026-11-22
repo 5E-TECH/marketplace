@@ -7,7 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { of } from 'rxjs';
 import { Role } from '@app/common';
-import { AuthService } from './auth.service';
+import { AuthResult, AuthService } from './auth.service';
 
 // C0.4: register hash, login JWT(sub,role), noto'g'ri parol 401, dublikat phone 409, soxta token 401
 describe('AuthService (C0.4)', () => {
@@ -210,10 +210,10 @@ describe('AuthService (C0.4)', () => {
       password: 'Secret123',
       role: Role.AFFILIATE,
     });
-    const res = await service.login({
+    const res = (await service.login({
       phone: '+998901112233',
       password: 'Secret123',
-    });
+    })) as AuthResult;
     const payload: any = jwt.verify(res.accessToken);
     expect(payload.sub).toBeDefined();
     expect(payload.role).toBe(Role.AFFILIATE);

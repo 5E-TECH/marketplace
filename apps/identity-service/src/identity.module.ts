@@ -21,6 +21,9 @@ import { AuditController } from './audit/audit.controller';
 import { AffiliateAuthController } from './affiliate-auth/affiliate-auth.controller';
 import { AffiliateAuthService } from './affiliate-auth/affiliate-auth.service';
 import { OtpGuardService } from './affiliate-auth/otp-guard.service';
+import { TwoFactorController } from './two-factor/two-factor.controller';
+import { TwoFactorGate } from './two-factor/two-factor.gate';
+import { TwoFactorService } from './two-factor/two-factor.service';
 import { AdminSeeder } from './seed/admin.seeder';
 import { AdminTeamController } from './team/admin-team.controller';
 import { AdminTeamService } from './team/admin-team.service';
@@ -66,6 +69,7 @@ const entities = IDENTITY_DB.entities;
     AuthController,
     AuditController,
     AffiliateAuthController,
+    TwoFactorController,
     AdminTeamController,
     PlatformSettingsController,
     AdminUserAccessController,
@@ -75,6 +79,8 @@ const entities = IDENTITY_DB.entities;
     AuthService,
     AffiliateAuthService,
     OtpGuardService,
+    TwoFactorGate,
+    TwoFactorService,
     AdminSeeder,
     ActivityLogService,
     AdminTeamService,

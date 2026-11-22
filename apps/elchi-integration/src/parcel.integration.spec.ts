@@ -12,6 +12,7 @@ import { CreateIntegrationTables1722900000000 } from './migrations/1722900000000
 import { AddGeoSatoCode1725285600000 } from './migrations/1725285600000-add-geo-sato-code';
 import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add-provision-tariffs';
 import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
+import { ElchiApiError1797638400000 } from './migrations/1797638400000-elchi-api-error';
 import { ParcelService, elchiItemName } from './parcel.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -115,6 +116,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
         AddGeoSatoCode1725285600000,
         AddProvisionTariffs1725375600000,
         CreateParcelQueue1795392000000,
+        ElchiApiError1797638400000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -124,7 +126,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
 
   beforeEach(async () => {
     await ds.query(
-      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event, integration.geo_cache',
+      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event, integration.geo_cache, integration.elchi_api_error',
     );
     await ds.query(`
       INSERT INTO integration.geo_cache (kind, elchi_id, name, elchi_region_id, sato_code) VALUES
@@ -514,6 +516,29 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       expect(sentBody().items[0]).not.toHaveProperty('price');
       expect(await parcel()).toMatchObject({ status: 'CREATED' });
     });
+  });
+
+  it('BE-26: Elchi xatolari jurnalga (monitor 5 daqiqada sanaydi); «qabul yopiq» va bekorda 404 — xato emas', async () => {
+    elchi.createShipment
+      .mockRejectedValueOnce(new ElchiApiError(503, 'Elchi ishlamayapti'))
+      .mockRejectedValueOnce(new Error('fetch failed'));
+    await service.onOrderStatusChanged(confirmed());
+    await service.processDue();
+    await makeDue();
+    await service.processDue();
+    await expect(service.apiErrorsSince(5)).resolves.toBe(2);
+    const rows = (await ds.query(
+      `SELECT operation, status FROM integration.elchi_api_error ORDER BY id`,
+    )) as Array<{ operation: string; status: number | null }>;
+    expect(rows).toEqual([
+      { operation: 'shipment.create', status: 503 },
+      { operation: 'shipment.create', status: null },
+    ]);
+    // 6 daqiqa oldingi xato hisobga kirmaydi
+    await ds.query(
+      `UPDATE integration.elchi_api_error SET at = now() - interval '6 minutes'`,
+    );
+    await expect(service.apiErrorsSince(5)).resolves.toBe(0);
   });
 
   it('platforma marketi sozlanmagan bo‘lsa navbatda kutadi', async () => {
