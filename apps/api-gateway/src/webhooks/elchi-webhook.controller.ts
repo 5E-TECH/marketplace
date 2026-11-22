@@ -57,10 +57,12 @@ export class ElchiWebhookController {
       'Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, ' +
       '`shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi ' +
       'normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini ' +
-      'bitta shaklga keltiradi. Elchi’ning ortiqcha moliyaviy maydonlari ' +
-      'e’tiborsiz qoldiriladi. `webhook.test` ping’i va xaritalanmagan ' +
-      'statuslar (`closed`, `paid`, `partly_paid`) 200 oladi, lekin hech ' +
-      'qanday holat o‘zgarmaydi.',
+      'bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, ' +
+      '`market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari ' +
+      '(`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi ' +
+      '(`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, ' +
+      'holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech ' +
+      'narsa o‘zgarmaydi.',
   })
   @ApiHeader({ name: 'X-Elchi-Signature', required: true })
   // Faqat HUJJAT uchun: tana `@Body()` bilan bog‘lanmaydi (izohga qarang),

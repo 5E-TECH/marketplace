@@ -2618,7 +2618,7 @@
     },
     "/api/v1/webhooks/elchi": {
       "post": {
-        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Elchi’ning ortiqcha moliyaviy maydonlari e’tiborsiz qoldiriladi. `webhook.test` ping’i va xaritalanmagan statuslar (`closed`, `paid`, `partly_paid`) 200 oladi, lekin hech qanday holat o‘zgarmaydi.",
+        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, `market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari (`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi (`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech narsa o‘zgarmaydi.",
         "operationId": "ElchiWebhookController_receive",
         "parameters": [
           {
@@ -2900,6 +2900,86 @@
           }
         ],
         "summary": "COD reconciliation va netting hisoboti",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/cod-reconciliation": {
+      "get": {
+        "description": "Har kuni 09:00 (Toshkent) hisoblanadi. Mos kelmagan buyurtmalar ro‘yxati bilan; farq bo‘lsa moliya va nazoratchiga xabar ketgan.",
+        "operationId": "AdminFinanceController_codDailyCheck",
+        "parameters": [
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "Sana (Toshkent); bo‘sh — kecha",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodDailyCheckDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bu kun uchun sverka hali yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kunlik COD sverkasi (sana bo‘yicha; bo‘sh — kecha)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/cod-reconciliation/run": {
+      "post": {
+        "description": "Natija yangilanadi; farq xabari bir kun uchun bir marta.",
+        "operationId": "AdminFinanceController_codDailyCheckRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodDailyCheckQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodDailyCheckDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kunlik COD sverkasini qayta hisoblash",
         "tags": [
           "admin-finance"
         ]
@@ -5297,20 +5377,34 @@
             }
           },
           {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "55",
+              "type": "string"
+            }
+          },
+          {
             "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "ON_THE_ROAD",
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
             "required": false,
             "in": "query",
             "schema": {
               "type": "string",
               "enum": [
-                "PENDING",
-                "CONFIRMED",
-                "SHIPMENT_CREATED",
-                "RECEIVED",
-                "ON_THE_ROAD",
-                "DELIVERED",
-                "CANCELLED",
-                "RETURNED"
+                "APPLIED",
+                "NOOP",
+                "REJECTED",
+                "IGNORED"
               ]
             }
           },
@@ -13472,7 +13566,8 @@
           },
           "externalOrderId": {
             "type": "string",
-            "example": "55"
+            "example": "mp-order:55",
+            "description": "Lid buyurtmasi — `mp-order:<buyurtma>` (BE-20); eski do‘kon buyurtmasi — posilka raqami"
           },
           "status": {
             "type": "string",
@@ -13485,7 +13580,10 @@
               "cancelled",
               "canceled",
               "returned",
-              "settled"
+              "settled",
+              "paid",
+              "partly_paid",
+              "closed"
             ],
             "example": "sold"
           },
@@ -13496,6 +13594,26 @@
           "occurredAt": {
             "type": "string",
             "example": "2026-08-27T08:00:00.000Z"
+          },
+          "collectedFromCustomer": {
+            "type": "number",
+            "example": 499000,
+            "description": "Kuryer mijozdan yig‘gan naqd (`collected_from_customer`)"
+          },
+          "marketPaidAmount": {
+            "type": "number",
+            "example": 449000,
+            "description": "Elchi marketga shu paytgacha to‘lagan jami (`market_paid_amount`, snapshot)"
+          },
+          "elchiFee": {
+            "type": "number",
+            "example": 50000,
+            "description": "Elchi haqi (`elchi_fee`)"
+          },
+          "extraCost": {
+            "type": "number",
+            "example": 20000,
+            "description": "Kuryer yozgan qo‘shimcha xarajat (`extra_cost`), masalan bekor qilishda"
           }
         },
         "required": [
@@ -13745,6 +13863,110 @@
           "nettedCommission",
           "outstandingCommission"
         ]
+      },
+      "CodDailyCheckMismatchDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "example": "55"
+          },
+          "shipmentId": {
+            "type": "object",
+            "example": "1251134"
+          },
+          "elchiStatus": {
+            "type": "string",
+            "example": "paid"
+          },
+          "expected": {
+            "type": "number",
+            "example": 265000
+          },
+          "received": {
+            "type": "number",
+            "example": 255000
+          },
+          "diff": {
+            "type": "number",
+            "example": -10000
+          }
+        },
+        "required": [
+          "orderId",
+          "elchiStatus",
+          "expected",
+          "received",
+          "diff"
+        ]
+      },
+      "CodDailyCheckDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-12-01"
+          },
+          "matched": {
+            "type": "number",
+            "description": "Mos (HOLD → AVAILABLE)"
+          },
+          "partial": {
+            "type": "number",
+            "description": "Qisman to‘langan (partly_paid)"
+          },
+          "mismatch": {
+            "type": "number",
+            "description": "Mos emas — ogohlantirish"
+          },
+          "pending": {
+            "type": "number",
+            "description": "Buyurtma hodisasi hali kelmagan"
+          },
+          "expectedTotal": {
+            "type": "number",
+            "description": "Kutilgan jami, so‘m"
+          },
+          "receivedTotal": {
+            "type": "number",
+            "description": "Kelgan jami, so‘m"
+          },
+          "mismatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodDailyCheckMismatchDto"
+            }
+          },
+          "computedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "alertedAt": {
+            "type": "object",
+            "description": "Moliya va nazoratchiga xabar yuborilgan vaqt"
+          }
+        },
+        "required": [
+          "date",
+          "matched",
+          "partial",
+          "mismatch",
+          "pending",
+          "expectedTotal",
+          "receivedTotal",
+          "mismatches",
+          "computedAt"
+        ]
+      },
+      "CodDailyCheckQueryDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-12-01",
+            "description": "Sana (Toshkent); bo‘sh — kecha"
+          }
+        }
       },
       "FinanceCommissionDto": {
         "type": "object",

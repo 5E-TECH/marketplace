@@ -10,7 +10,10 @@ describe('ElchiWebhookService (C2.4)', () => {
       | 'returned'
       | 'sold'
       | 'cancelled'
-      | 'settled' = 'on_the_road',
+      | 'settled'
+      | 'paid'
+      | 'partly_paid'
+      | 'closed' = 'on_the_road',
   ) => ({
     eventId: `evt_${status}`,
     type: 'shipment.status_changed',
@@ -24,6 +27,8 @@ describe('ElchiWebhookService (C2.4)', () => {
     options: {
       duplicate?: boolean;
       paymentMethod?: CheckoutPaymentMethod;
+      /** BE-21: posilkaning joriy holati (sukut — Elchi’da yaratilgan). */
+      current?: string;
     } = {},
   ) {
     const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -40,6 +45,7 @@ describe('ElchiWebhookService (C2.4)', () => {
               sales_order_id: '10',
               shop_id: '7',
               subtotal: '499000',
+              status: options.current ?? 'SHIPMENT_CREATED',
               payment_id: '91',
               elchi_shipment_id: '77012',
               payment_method:
@@ -68,13 +74,22 @@ describe('ElchiWebhookService (C2.4)', () => {
         },
       ),
     };
+    // BE-21: lid buyurtmasi (`mp-order:`) alohida servisga
+    const leadWebhook = {
+      orderIdOf: jest.fn((e: { externalOrderId: string }) =>
+        e.externalOrderId.startsWith('mp-order:') ? '5' : null,
+      ),
+      process: jest.fn(async () => ({ received: true, result: 'APPLIED' })),
+    };
     return {
       service: new ElchiWebhookService(
         dataSource as never,
         inventory as never,
         payment as never,
         outbox as never,
+        leadWebhook as never,
       ),
+      leadWebhook,
       inventory,
       payment,
       finance,
@@ -86,7 +101,10 @@ describe('ElchiWebhookService (C2.4)', () => {
 
   it('TC1: statusni seller orderga mirror qiladi', async () => {
     const { service, queries } = setup();
-    await expect(service.process(event())).resolves.toEqual({ received: true });
+    await expect(service.process(event())).resolves.toEqual({
+      received: true,
+      result: 'APPLIED',
+    });
     const update = queries.find((entry) =>
       entry.sql.includes('UPDATE checkout.sales_order_seller'),
     );
@@ -215,5 +233,83 @@ describe('ElchiWebhookService (C2.4)', () => {
         collectedAmount: 499000,
       }),
     );
+  });
+
+  describe('BE-21: faqat oldinga, pul holatlari, lid buyurtmasi', () => {
+    const updated = (queries: Array<{ sql: string }>) =>
+      queries.some((entry) =>
+        entry.sql.includes('UPDATE checkout.sales_order_seller'),
+      );
+    const journaled = (queries: Array<{ sql: string; params: unknown[] }>) =>
+      queries.find((entry) =>
+        entry.sql.includes('INSERT INTO checkout.elchi_webhook_event'),
+      )?.params;
+
+    it('TC1: «Yetkazildi» dan keyin «Yo‘lda» — o‘zgarmaydi, jurnalda REJECTED', async () => {
+      const { service, queries } = setup({ current: 'DELIVERED' });
+      await expect(service.process(event('on_the_road'))).resolves.toEqual({
+        received: true,
+        result: 'REJECTED',
+      });
+      expect(updated(queries)).toBe(false);
+      expect(journaled(queries)?.[6]).toBe('REJECTED');
+    });
+
+    it('takroriy «qaytarildi» (yangi event_id) — qoldiq ikkinchi marta qaytmaydi', async () => {
+      const { service, inventory, queries } = setup({ current: 'RETURNED' });
+      await expect(service.process(event('returned'))).resolves.toEqual({
+        received: true,
+        result: 'NOOP',
+      });
+      expect(inventory.send).not.toHaveBeenCalled();
+      expect(updated(queries)).toBe(false);
+    });
+
+    it('T9-7: Elchi `paid` — eski COD hisob-kitobi (yig‘ilgan summa `collected_from_customer` dan)', async () => {
+      const { service, finance } = setup({ current: 'DELIVERED' });
+      await service.process({
+        ...event('paid'),
+        collectedFromCustomer: 499000,
+      });
+      expect(finance.emit).toHaveBeenCalledWith(
+        'finance.cod.settled',
+        expect.objectContaining({ collectedAmount: 499000 }),
+      );
+    });
+
+    it('bekor → qaytarildi: tovar omborga qaytadi, pul ikkinchi marta qaytarilmaydi (Elchi: cancelled → returned_to_market)', async () => {
+      const { service, inventory, payment } = setup({
+        current: 'CANCELLED',
+        paymentMethod: CheckoutPaymentMethod.ONLINE,
+      });
+      await expect(service.process(event('returned'))).resolves.toEqual({
+        received: true,
+        result: 'APPLIED',
+      });
+      expect(inventory.send).toHaveBeenCalled();
+      expect(payment.send).not.toHaveBeenCalled();
+    });
+
+    it('`partly_paid` va `closed` — holatga ta’sir yo‘q, jurnalda IGNORED', async () => {
+      for (const status of ['partly_paid', 'closed'] as const) {
+        const { service, queries, finance } = setup({ current: 'DELIVERED' });
+        await expect(service.process(event(status))).resolves.toEqual({
+          received: true,
+          result: 'IGNORED',
+        });
+        expect(updated(queries)).toBe(false);
+        expect(finance.emit).not.toHaveBeenCalled();
+      }
+    });
+
+    it('`mp-order:` — lid buyurtmasi servisiga, eski jadvalga tegilmaydi', async () => {
+      const { service, leadWebhook, manager } = setup();
+      await service.process({
+        ...event('sold'),
+        externalOrderId: 'mp-order:5',
+      });
+      expect(leadWebhook.process).toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
+    });
   });
 });

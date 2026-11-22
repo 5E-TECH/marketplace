@@ -10,6 +10,7 @@ import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fe
 import { AddRemittanceResolution1796860800000 } from './migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from './migrations/1796947200000-create-settlement-response';
 import { SettingComment1797552000000 } from './migrations/1797552000000-setting-comment';
+import { CreateCodDailyCheck1796601600000 } from './migrations/1796601600000-create-cod-daily-check';
 import { SellerLedger } from './entities/seller-ledger.entity';
 import { Payout } from './entities/payout.entity';
 import { Commission } from './entities/commission.entity';
@@ -41,5 +42,6 @@ export const FINANCE_DB: DatabaseDefinition = {
     AddRemittanceResolution1796860800000,
     CreateSettlementResponse1796947200000,
     SettingComment1797552000000,
+    CreateCodDailyCheck1796601600000,
   ],
 };

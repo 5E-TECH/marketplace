@@ -96,6 +96,8 @@ export class AdminIntegrationQueryService {
     this.add(where, params, 'shipment_id', query.shipmentId);
     this.add(where, params, 'sales_order_seller_id', query.sellerOrderId);
     this.add(where, params, 'status', query.status);
+    this.add(where, params, 'order_id', query.orderId);
+    this.add(where, params, 'result', query.result);
     this.add(where, params, 'processed_at', query.dateFrom, '>=');
     this.add(where, params, 'processed_at', query.dateTo, '<=');
     const condition = `WHERE ${where.join(' AND ')}`;
@@ -106,6 +108,7 @@ export class AdminIntegrationQueryService {
               shipment_id::text AS "shipmentId",
               sales_order_seller_id::text AS "sellerOrderId",
               status,occurred_at AS "occurredAt",processed_at AS "processedAt",
+              result,detail,order_id::text AS "orderId",
               payload
          FROM checkout.elchi_webhook_event
          ${condition}

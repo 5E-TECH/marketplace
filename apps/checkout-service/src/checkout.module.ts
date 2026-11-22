@@ -24,6 +24,7 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { ElchiWebhookService } from './elchi-webhook.service';
+import { ElchiLeadWebhookService } from './elchi-lead-webhook.service';
 import { ReviewEligibilityService } from './review-eligibility.service';
 import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
@@ -135,6 +136,7 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     CheckoutService,
     ConfirmSalesOrderService,
     ElchiWebhookService,
+    ElchiLeadWebhookService,
     ReviewEligibilityService,
     ShippingLabelService,
     AdminIntegrationQueryService,

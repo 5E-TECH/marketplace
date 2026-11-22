@@ -53,6 +53,7 @@ export * from './dto/review.dto';
 export * from './dto/support.dto';
 export * from './dto/favorite.dto';
 export * from './dto/elchi-webhook.dto';
+export * from './dto/cod-daily-check.dto';
 export * from './dto/elchi-webhook.normalize';
 export * from './dto/geo.dto';
 export * from './dto/order-tracking.dto';
