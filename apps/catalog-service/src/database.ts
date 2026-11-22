@@ -2,6 +2,7 @@ import type { DatabaseDefinition } from '@app/common';
 import { FixProductStatusDefault1795910400000 } from './migrations/1795910400000-fix-product-status-default';
 import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
 import { Pricing1796169600000 } from './migrations/1796169600000-pricing';
+import { ProductFiscalCodes1797033600000 } from './migrations/1797033600000-product-fiscal-codes';
 import {
   ElchiTariffEntity,
   PriceDecision,
@@ -57,5 +58,6 @@ export const CATALOG_DB: DatabaseDefinition = {
     FixProductStatusDefault1795910400000,
     WholesalerCpaProduct1796083200000,
     Pricing1796169600000,
+    ProductFiscalCodes1797033600000,
   ],
 };

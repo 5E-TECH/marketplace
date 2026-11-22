@@ -41,6 +41,9 @@ const PHYS = {
   lengthMm: 200,
   widthMm: 120,
   heightMm: 80,
+  // BE-41: CPA mahsuloti tasdiqdan oldin fiskal chek kodlari bilan
+  mxikCode: '08517001001000000',
+  packageCode: '1500012',
 };
 
 /**

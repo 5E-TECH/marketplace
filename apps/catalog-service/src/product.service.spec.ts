@@ -295,6 +295,8 @@ describe('ProductService', () => {
       cpaEnabled: true,
       isBad: false,
       moderationNote: null,
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
       ...PHYS,
       ...over,
     });
@@ -350,6 +352,57 @@ describe('ProductService', () => {
       await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+
+    it('BE-41: CPA mahsuloti MXIK yoki qadoq kodisiz tasdiqlanmaydi — 400; CPA emas — kodsiz ham tasdiqlanadi', async () => {
+      productRepo.findOne.mockResolvedValue(pending({ mxikCode: null }));
+      await expect(service.adminApprove('10')).rejects.toThrow(
+        'CPA mahsuloti uchun MXIK va qadoq kodini kiriting (fiskal chek)',
+      );
+      productRepo.findOne.mockResolvedValue(pending({ packageCode: null }));
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      productRepo.findOne.mockResolvedValue(
+        pending({ cpaEnabled: false, mxikCode: null, packageCode: null }),
+      );
+      await expect(service.adminApprove('10')).resolves.toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+    });
+
+    it('BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab bo‘lmaydi; kodsiz eskisida CPA ni o‘chirish va kod kiritish mumkin', async () => {
+      const active = () => pending({ status: ProductStatus.ACTIVE });
+      productRepo.findOne.mockResolvedValue(active());
+      await expect(
+        service.adminUpdate('10', { mxikCode: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      const legacy = () =>
+        pending({
+          status: ProductStatus.ACTIVE,
+          mxikCode: null,
+          packageCode: null,
+        });
+      productRepo.findOne.mockResolvedValue(legacy());
+      // boshqa maydonni tahrirlashdan oldin kod kiritilishi kerak
+      await expect(
+        service.adminUpdate('10', { affiliateFee: 60000 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      productRepo.findOne.mockResolvedValue(legacy());
+      await expect(
+        service.adminUpdate('10', { cpaEnabled: false }),
+      ).resolves.toMatchObject({ cpaEnabled: false });
+      productRepo.findOne.mockResolvedValue(legacy());
+      await expect(
+        service.adminUpdate('10', {
+          mxikCode: '08517001001000000',
+          packageCode: '1500012',
+        }),
+      ).resolves.toMatchObject({
+        mxikCode: '08517001001000000',
+        packageCode: '1500012',
+      });
     });
 
     it('tasdiqlangan mahsulotni qayta tasdiqlash — 409', async () => {
