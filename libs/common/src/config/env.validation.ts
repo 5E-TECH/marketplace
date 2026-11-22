@@ -64,6 +64,18 @@ export const envValidationSchema = Joi.object({
   // HttpOnly cookie'da (API_CONTRACT.md §2.2.1). Frontend cookie'ga o'tgach.
   AUTH_TOKENS_IN_BODY: Joi.boolean().default(true),
 
+  // BE-26 (T8): admin va moliya uchun 2FA (TOTP). Yoqilganda sirlar kaliti majburiy — aks holda hamma admin
+  // panelga kira olmay qoladi (birinchi kirishda 500).
+  ADMIN_2FA: Joi.string().valid('on', 'off').default('off'),
+  TWO_FACTOR_SECRET_KEY: Joi.string().min(32).when('ADMIN_2FA', {
+    is: 'on',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  // BE-26: prod’da Swagger sukut bo‘yicha yopiq; monitor ko‘rsatkichlari tokeni (gateway `health/ops`)
+  SWAGGER_ENABLED: Joi.string().valid('on', 'off', 'true', 'false').optional(),
+  MONITOR_TOKEN: Joi.string().min(16).optional(),
+
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),
 

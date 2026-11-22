@@ -67,7 +67,7 @@ test('failed dump is not published; successful backup has checksum and restores 
   assert.notEqual(spawnSync('sh', [restore], { env }).status, 0);
 });
 
-test('BE-26: zaxira BACKUP_REMOTE ga yuboriladi va u yerda checksum tekshiriladi', async (t) => {
+test('BE-26: zaxira BACKUP_REMOTE ga .partial bilan yuboriladi, u yerda checksum mos kelgach nomlanadi; tiklash sinovi zaxira katalogida o‘tadi', async (t) => {
   const { dir, env } = await setup(t);
   const remote = join(dir, 'remote');
   // scp/ssh o'rnida: «server» — mahalliy papka (host: qismi tashlanadi)
@@ -76,9 +76,9 @@ test('BE-26: zaxira BACKUP_REMOTE ga yuboriladi va u yerda checksum tekshiriladi
     `#!/bin/sh
 for a in "$@"; do last="$a"; done
 dest=\${last#*:}
-mkdir -p "$dest"
+mkdir -p "$(dirname "$dest")"
 for a in "$@"; do
-  case "$a" in -*|"$last") ;; *) [ -f "$a" ] && cp "$a" "$dest/" ;; esac
+  case "$a" in -*|"$last") ;; *) [ -f "$a" ] && cp "$a" "$dest" ;; esac
 done
 `,
     { mode: 0o700 },
@@ -87,12 +87,13 @@ done
     join(dir, 'ssh'),
     `#!/bin/sh
 for a in "$@"; do last="$a"; done
-if [ -n "\${SSH_FAKE_HASH:-}" ]; then printf '%s\\n' "$SSH_FAKE_HASH"; exit 0; fi
+if [ -n "\${SSH_FAIL:-}" ]; then exit 1; fi
 sh -c "$last"
 `,
     { mode: 0o700 },
   );
   const backup = resolve('scripts/db-backup.sh');
+  const restore = resolve('scripts/db-restore-test.sh');
   const ok = spawnSync('sh', [backup], {
     env: { ...env, BACKUP_REMOTE: `backup@zaxira:${remote}` },
   });
@@ -100,17 +101,25 @@ sh -c "$last"
   assert.match(String(ok.stdout), /Tashqi zaxira tayyor/);
   const copied = await readdir(remote);
   assert.equal(copied.filter((f) => f.endsWith('.dump')).length, 1);
+  assert.equal(copied.filter((f) => f.endsWith('.partial')).length, 0);
   assert.equal(copied.filter((f) => f.endsWith('.sha256')).length, 1);
 
+  // TC2: kechagi nusxa zaxira serverining o'zida tiklanadi (checksum fayl nomi bilan)
+  const restored = spawnSync('sh', [restore], {
+    env: { ...env, BACKUP_DIR: remote },
+  });
+  assert.equal(restored.status, 0, String(restored.stderr));
+
   const bad = spawnSync('sh', [backup], {
-    env: {
-      ...env,
-      BACKUP_REMOTE: `backup@zaxira:${remote}`,
-      SSH_FAKE_HASH: 'deadbeef',
-    },
+    env: { ...env, BACKUP_REMOTE: `backup@zaxira:${remote}`, SSH_FAIL: '1' },
   });
   assert.equal(bad.status, 4);
   assert.match(String(bad.stderr), /checksum ga mos emas/);
+  // mos kelmagan nusxa asl nomga o'tmadi
+  assert.equal(
+    (await readdir(remote)).filter((f) => f.endsWith('.dump')).length,
+    1,
+  );
 
   const missing = spawnSync('sh', [backup], {
     env: { ...env, BACKUP_REMOTE_REQUIRED: 'on' },

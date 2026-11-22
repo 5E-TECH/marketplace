@@ -127,9 +127,10 @@ describeWithPostgres('BE-26 xodim 2FA (PostgreSQL)', () => {
     expect(
       await statusOf(twoFactor.enable(first.challengeToken, '000000')),
     ).toBe(401);
+    const s0 = totpStep();
     const enabled = await twoFactor.enable(
       first.challengeToken,
-      totpAt(secret, totpStep()),
+      totpAt(secret, s0),
     );
     expect(enabled.recoveryCodes).toHaveLength(8);
     expect(enabled.accessToken).toEqual(expect.any(String));
@@ -142,7 +143,7 @@ describeWithPostgres('BE-26 xodim 2FA (PostgreSQL)', () => {
     // shu oraliqdagi kod qayta ishlatilmaydi
     expect(
       await statusOf(
-        twoFactor.verify(second.challengeToken, totpAt(secret, totpStep())),
+        twoFactor.verify(second.challengeToken, totpAt(secret, s0)),
       ),
     ).toBe(401);
     await expect(
@@ -229,5 +230,44 @@ describeWithPostgres('BE-26 xodim 2FA (PostgreSQL)', () => {
       [id],
     )) as Array<{ open: number }>;
     expect(open).toBe(0);
+  });
+
+  it('refresh: 2FA siz ochilgan xodim sessiyasi (bayroqdan oldin) yangilanmaydi; 2FA dan keyingisi yangilanadi', async () => {
+    const phone = '+998900002606';
+    await staff(phone, Role.ADMIN);
+    env.ADMIN_2FA = 'off';
+    const old = (await login(phone)) as { refreshToken: string };
+    env.ADMIN_2FA = 'on';
+    expect(await statusOf(auth.refresh(old.refreshToken))).toBe(401);
+
+    const c = (await login(phone)) as TwoFactorChallenge;
+    const { secret } = await twoFactor.setup(c.challengeToken);
+    const session = await twoFactor.enable(
+      c.challengeToken,
+      totpAt(secret, totpStep()),
+    );
+    const renewed = await auth.refresh(session.refreshToken);
+    expect(renewed).toHaveProperty('accessToken');
+    // belgi yangilangan refresh tokenda ham qoladi
+    await expect(auth.refresh(renewed.refreshToken)).resolves.toHaveProperty(
+      'accessToken',
+    );
+  });
+
+  it('parallel xato urinishlar 3 dan oshmaydi (keyingilari — 423)', async () => {
+    const phone = '+998900002607';
+    await staff(phone, Role.SUPERADMIN);
+    const c1 = (await login(phone)) as TwoFactorChallenge;
+    const { secret } = await twoFactor.setup(c1.challengeToken);
+    await twoFactor.enable(c1.challengeToken, totpAt(secret, totpStep() - 1));
+    const c2 = (await login(phone)) as TwoFactorChallenge;
+    const codes = ['000001', '000002', '000003', '000004', '000005', '000006'];
+    const statuses = await Promise.all(
+      codes.map((code) => statusOf(twoFactor.verify(c2.challengeToken, code))),
+    );
+    expect(statuses.filter((st) => st === 401).length).toBeLessThanOrEqual(3);
+    expect(statuses.filter((st) => st === 423).length).toBeGreaterThanOrEqual(
+      3,
+    );
   });
 });

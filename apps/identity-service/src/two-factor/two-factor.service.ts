@@ -8,7 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 import { DataSource } from 'typeorm';
 import {
   base32Encode,
@@ -44,11 +44,6 @@ interface TotpRow {
   failedCount: number;
   blockedUntil: Date | null;
 }
-
-const hash = (value: string) =>
-  createHash('sha256')
-    .update(value.replace(/[\s-]/g, '').toUpperCase())
-    .digest('hex');
 
 /**
  * BE-26 (T8: «admin va moliya uchun 2FA»): TOTP ulash, yoqish, kirishda tekshirish, tiklash kodlari va superadmin
@@ -87,13 +82,22 @@ export class TwoFactorService {
     const recoveryCodes = Array.from({ length: RECOVERY_CODES }, () =>
       base32Encode(randomBytes(6)).slice(0, 10),
     );
-    await this.dataSource.query(
-      `UPDATE identity.users
-          SET totp_enabled_at = now(), totp_last_step = $2, totp_recovery = $3::jsonb,
-              totp_failed_count = 0, totp_blocked_until = NULL, updated_at = now()
-        WHERE id = $1`,
-      [user.id, step, JSON.stringify(recoveryCodes.map(hash))],
+    // ikki parallel «yoqish» — faqat bittasi o‘tadi
+    const enabled = rowsOf(
+      await this.dataSource.query(
+        `UPDATE identity.users
+            SET totp_enabled_at = now(), totp_last_step = $2, totp_recovery = $3::jsonb,
+                totp_failed_count = 0, totp_blocked_until = NULL, updated_at = now()
+          WHERE id = $1 AND totp_enabled_at IS NULL
+          RETURNING id`,
+        [
+          user.id,
+          step,
+          JSON.stringify(recoveryCodes.map((c) => this.recoveryHash(c))),
+        ],
+      ),
     );
+    if (!enabled.length) throw new ConflictException('2FA allaqachon ulangan');
     return { recoveryCodes, ...(await this.session(user.id)) };
   }
 
@@ -102,18 +106,22 @@ export class TwoFactorService {
     const user = await this.subject(challengeToken);
     if (!user.enabledAt || !user.secretEnc)
       throw new BadRequestException('2FA ulanmagan — avval ulang');
-    this.assertNotBlocked(user);
     if (recoveryCode) {
-      const h = hash(recoveryCode);
-      const left = user.recovery.filter((r) => r !== h);
-      if (left.length === user.recovery.length) {
-        await this.fail(user);
+      await this.reserveAttempt(user.id);
+      // atomar: kod bor bo‘lsa olib tashlanadi — bir vaqtda ikki so‘rov bitta kodni ishlata olmaydi
+      const used = rowsOf(
+        await this.dataSource.query(
+          `UPDATE identity.users
+              SET totp_recovery = totp_recovery - $2::text, totp_failed_count = 0, updated_at = now()
+            WHERE id = $1 AND totp_recovery ? $2::text
+            RETURNING id`,
+          [user.id, this.recoveryHash(recoveryCode)],
+        ),
+      );
+      if (!used.length) {
+        await this.blockIfExhausted(user.id);
         throw new UnauthorizedException('Tiklash kodi noto‘g‘ri');
       }
-      await this.dataSource.query(
-        `UPDATE identity.users SET totp_recovery = $2::jsonb, totp_failed_count = 0, updated_at = now() WHERE id = $1`,
-        [user.id, JSON.stringify(left)],
-      );
       return this.session(user.id);
     }
     const step = await this.checkCode(user, String(code ?? ''));
@@ -185,40 +193,60 @@ export class TwoFactorService {
     };
   }
 
-  /** TOTP kodi: blok, qayta ishlatish (shu yoki eski oraliq) va xato hisobi bilan. Qaytaradi: oraliq raqami. */
+  /**
+   * TOTP kodi: urinish avval bitta SQL bilan band qilinadi (blokda — 423), keyin tekshiriladi — parallel so‘rovlar
+   * 3 tadan ko‘p urina olmaydi. Qayta ishlatish (shu yoki eski oraliq) ham rad. Qaytaradi: oraliq raqami.
+   */
   private async checkCode(user: TotpRow, code: string): Promise<number> {
-    this.assertNotBlocked(user);
+    await this.reserveAttempt(user.id);
     const step = verifyTotp(decryptSecret(user.secretEnc!, this.key()), code);
     if (
       step === null ||
       (user.lastStep !== null && step <= Number(user.lastStep))
     ) {
-      await this.fail(user);
+      await this.blockIfExhausted(user.id);
       throw new UnauthorizedException('2FA kodi noto‘g‘ri');
     }
     return step;
   }
 
-  private assertNotBlocked(user: TotpRow): void {
-    const until = user.blockedUntil ? new Date(user.blockedUntil).getTime() : 0;
-    if (until > Date.now())
+  /** Urinishni band qiladi: blokda bo‘lsa — 423. */
+  private async reserveAttempt(userId: string): Promise<void> {
+    const rows = rowsOf(
+      await this.dataSource.query(
+        `UPDATE identity.users SET totp_failed_count = totp_failed_count + 1, updated_at = now()
+          WHERE id = $1 AND (totp_blocked_until IS NULL OR totp_blocked_until < now())
+          RETURNING id`,
+        [userId],
+      ),
+    );
+    if (!rows.length)
       throw new BusinessException(
-        `3 marta noto‘g‘ri 2FA kodi — ${Math.ceil((until - Date.now()) / 60_000)} daqiqadan keyin qayta urining`,
+        '3 marta noto‘g‘ri 2FA kodi — 15 daqiqadan keyin qayta urining',
         ErrorCode.RATE_LIMITED,
         HttpStatus.LOCKED,
       );
   }
 
-  private async fail(user: TotpRow): Promise<void> {
+  /** Xato: band qilingan urinishlar chegaraga yetgan bo‘lsa — 15 daqiqa blok. */
+  private async blockIfExhausted(userId: string): Promise<void> {
     await this.dataSource.query(
       `UPDATE identity.users
-          SET totp_failed_count = CASE WHEN totp_failed_count + 1 >= $2 THEN 0 ELSE totp_failed_count + 1 END,
-              totp_blocked_until = CASE WHEN totp_failed_count + 1 >= $2
-                                        THEN now() + make_interval(secs => $3) ELSE totp_blocked_until END,
-              updated_at = now()
-        WHERE id = $1`,
-      [user.id, MAX_FAILED, BLOCK_SECONDS],
+          SET totp_blocked_until = now() + make_interval(secs => $3), totp_failed_count = 0, updated_at = now()
+        WHERE id = $1 AND totp_failed_count >= $2`,
+      [userId, MAX_FAILED, BLOCK_SECONDS],
     );
+  }
+
+  /** Tiklash kodlari — server kaliti bilan HMAC (bazani o‘qigan odam tiklay olmasin). */
+  private recoveryHash(code: string): string {
+    return createHmac('sha256', `${this.key()}:recovery`)
+      .update(
+        String(code ?? '')
+          .replace(/[\s-]/g, '')
+          .toUpperCase(),
+      )
+      .digest('hex');
   }
 
   private async session(userId: string) {
@@ -227,11 +255,17 @@ export class TwoFactorService {
       .findOneByOrFail({ id: userId });
     if (!user.isActive || user.isBlocked)
       throw new UnauthorizedException('Hisob faol emas');
-    return this.auth.buildAuthResult(user);
+    return this.auth.buildAuthResult(user, { mfa: true });
   }
 
   /** TOTP sirlari kaliti — alohida sir (JWT sirlari almashtirilsa ham 2FA buzilmasin). */
   private key(): string {
     return this.config.getOrThrow<string>('TWO_FACTOR_SECRET_KEY');
   }
+}
+
+/** TypeORM UPDATE … RETURNING: `[rows, count]` yoki `rows`. */
+function rowsOf(result: unknown): unknown[] {
+  const r = result as unknown[];
+  return (Array.isArray(r[0]) ? r[0] : r) as unknown[];
 }

@@ -38,6 +38,8 @@ const leadQueueMaxAge = positiveInt(
 );
 /** Ochiq ko'rsatkich ogohlantirishlari: nom → true (takror yuborilmaydi, me'yorga qaytsa «hal bo'ldi»). */
 const openConditions = new Map();
+/** `health/ops` ketma-ket o'qilmagan marta (noto'g'ri token — 404, gateway yo'q): chegaradan keyin ogohlantirish. */
+let opsFailures = 0;
 
 let failures = 0;
 let alertOpen = false;
@@ -176,15 +178,26 @@ export async function checkOps() {
     const body = await response.json();
     data = body?.data ?? body;
   } catch (error) {
+    opsFailures += 1;
     console.error(
       JSON.stringify({
         level: 'warn',
         status: 'ops_unavailable',
+        failures: opsFailures,
         detail: String(error),
       }),
     );
+    // jim o'chib qolmasin: token xato yoki servis yo'q bo'lsa ham ogohlantirish (TC3 ishlamay qolgani bilinsin)
+    await condition(
+      'ops_unavailable',
+      opsFailures >= threshold,
+      `health/ops o'qilmadi (${opsFailures} marta): ${String(error)}`,
+      'health/ops tiklandi',
+    );
     return;
   }
+  opsFailures = 0;
+  await condition('ops_unavailable', false, '', 'health/ops tiklandi');
   const errors = data?.elchiApiErrors5m;
   if (typeof errors === 'number')
     await condition(
@@ -266,6 +279,16 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
+  if (!opsToken) {
+    console.error(
+      JSON.stringify({
+        level: 'warn',
+        status: 'ops_unconfigured',
+        detail:
+          'MONITOR_OPS_TOKEN yo‘q: Elchi xatolari va lid navbati tekshirilmaydi (BE-26)',
+      }),
+    );
+  }
   if (!webhookUrl) {
     console.error(
       JSON.stringify({

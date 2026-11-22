@@ -303,7 +303,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     if (!refreshToken)
       throw new UnauthorizedException('Refresh token topilmadi');
-    let payload: { sub: string; jti: string; role: Role };
+    let payload: { sub: string; jti: string; role: Role; mfa?: boolean };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
@@ -329,7 +329,10 @@ export class AuthService {
     });
     if (!user || !user.isActive || user.isBlocked)
       throw new UnauthorizedException('Hisob faol emas');
-    return this.buildAuthResult(user);
+    // BE-26: 2FA yoqilgan bo‘lsa — 2FA siz ochilgan (eski yoki bayroqdan oldingi) xodim sessiyasi yangilanmaydi
+    if (this.twoFactor.required(user) && payload.mfa !== true)
+      throw new UnauthorizedException('2FA kerak — qayta kiring');
+    return this.buildAuthResult(user, { mfa: payload.mfa === true });
   }
 
   async createVerificationCode(
@@ -484,12 +487,14 @@ export class AuthService {
   }
 
   /** BE-26: 2FA tasdig‘idan keyin ham shu sessiya ochiladi (`TwoFactorService`). */
-  async buildAuthResult(user: User) {
+  async buildAuthResult(user: User, opts: { mfa?: boolean } = {}) {
     // BE-05: tokenda do‘kon (shopId) yo‘q — sotuvchi, optovik va xodim o‘z ID si (`sub`) bo‘yicha.
+    // BE-26: `mfa` — sessiya 2FA dan o‘tib ochilgan; refresh shu belgini olib yuradi.
     const payload = {
       sub: user.id,
       role: user.role,
       authVersion: user.authVersion ?? 1,
+      ...(opts.mfa ? { mfa: true } : {}),
     };
     const accessToken = this.jwt.sign(payload, {
       expiresIn: this.config.get<string>('JWT_EXPIRES_IN', '1h') as any,

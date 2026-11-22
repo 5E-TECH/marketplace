@@ -53,3 +53,42 @@ test('BE-26: ko‘rsatkich ogohlantirishlari bir marta yuboriladi va hal bo‘lg
     'lead_queue_resolved: Lid navbati me’yorda',
   ]);
 });
+
+test('BE-26: health/ops o‘qilmasa (masalan, noto‘g‘ri token — 404) — chegaradan keyin ogohlantirish, tiklansa yopiladi', async (t) => {
+  process.env.MONITOR_API_URL = 'http://monitor2.test/api/v1/health/readiness';
+  process.env.MONITOR_FAILURE_THRESHOLD = '2';
+  process.env.ALERT_WEBHOOK_URL = 'http://alerts2.test';
+  process.env.MONITOR_OPS_TOKEN = 'monitor-token-0123456789';
+  let status = 404;
+  const sent = [];
+  t.mock.method(globalThis, 'fetch', async (url, options = {}) => {
+    if (url === process.env.ALERT_WEBHOOK_URL) {
+      sent.push(JSON.parse(options.body).status);
+      return { ok: true, status: 200 };
+    }
+    if (url.endsWith('/health/ops'))
+      return status === 200
+        ? {
+            ok: true,
+            json: async () => ({
+              data: {
+                elchiApiErrors5m: 0,
+                leadQueue: { waiting: 0, oldestMinutes: null },
+              },
+            }),
+          }
+        : { ok: false, status };
+    return { ok: true, json: async () => [] };
+  });
+  const { checkOps } = await import(`../health-monitor.mjs?ops=${Date.now()}`);
+  await checkOps();
+  assert.deepEqual(sent, []);
+  await checkOps();
+  assert.deepEqual(sent, ['ops_unavailable_firing']);
+  status = 200;
+  await checkOps();
+  assert.deepEqual(sent, [
+    'ops_unavailable_firing',
+    'ops_unavailable_resolved',
+  ]);
+});

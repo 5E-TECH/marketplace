@@ -31,7 +31,8 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
 
 test -s "$partial"
 mv "$partial" "$target"
-sha256sum "$target" > "$target.sha256"
+# checksum fayl nomi bilan (yo'lsiz) — nusxa boshqa katalog yoki serverda ham `sha256sum -c` bilan tekshiriladi
+(cd "$BACKUP_DIR" && sha256sum "$(basename "$target")") > "$target.sha256"
 find "$BACKUP_DIR" -type f -name 'elchi-marketplace-*.dump*' -mtime "+$KEEP_DAYS" -delete
 printf 'Backup tayyor: %s\n' "$target"
 
@@ -52,15 +53,16 @@ esac
 ssh_opts="-o BatchMode=yes -o StrictHostKeyChecking=yes"
 if [ -n "${BACKUP_SSH_KEY:-}" ]; then ssh_opts="$ssh_opts -i $BACKUP_SSH_KEY"; fi
 name=$(basename "$target")
+expected=$(cut -d' ' -f1 "$target.sha256")
+# `.partial` nomi bilan yuklanadi; u yerda checksum mos kelgandagina asl nomga o'tadi — uzilgan yuklash
+# «eng yangi nusxa» bo'lib qolmaydi
 # shellcheck disable=SC2086
-scp $ssh_opts -q "$target" "$target.sha256" "$remote_host:$remote_dir/"
-# u yerda ham butunligi tekshiriladi (checksum fayldagi yo'l mahalliy — nom bo'yicha solishtiriladi)
+scp $ssh_opts -q "$target" "$remote_host:$remote_dir/$name.partial"
 # shellcheck disable=SC2086
-ssh $ssh_opts "$remote_host" "cd '$remote_dir' && sha256sum '$name' | cut -d' ' -f1" > "$target.remote"
-if [ "$(cut -d' ' -f1 "$target.sha256")" != "$(cat "$target.remote")" ]; then
-  rm -f "$target.remote"
+scp $ssh_opts -q "$target.sha256" "$remote_host:$remote_dir/$name.sha256"
+# shellcheck disable=SC2086
+if ! ssh $ssh_opts "$remote_host" "cd '$remote_dir' && [ \"\$(sha256sum '$name.partial' | cut -d' ' -f1)\" = '$expected' ] && mv '$name.partial' '$name'"; then
   printf 'XATO: zaxira serverdagi nusxa checksum ga mos emas: %s\n' "$remote_host:$remote_dir/$name" >&2
   exit 4
 fi
-rm -f "$target.remote"
 printf 'Tashqi zaxira tayyor: %s\n' "$remote_host:$remote_dir/$name"
