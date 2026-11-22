@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
@@ -37,6 +37,10 @@ export class CheckoutOutboxRelayService {
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    // BE-24: mijozga buyurtma SMS lari (BUY-6) — notification-service ham `order.status.changed` ni oladi
+    @Optional()
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notification?: ClientProxy,
   ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS, {
@@ -102,8 +106,15 @@ export class CheckoutOutboxRelayService {
   private targets(eventType: string): ClientProxy[] {
     if (eventType.startsWith('finance.')) return [this.finance];
     if (eventType === ORDER_EVENTS.STATUS_CHANGED)
-      return [this.finance, this.lead, this.integration];
+      return [
+        this.finance,
+        this.lead,
+        this.integration,
+        ...(this.notification ? [this.notification] : []),
+      ];
     if (eventType === LEAD_EVENTS.ORDER_CREATE_FAILED) return [this.lead];
+    // BE-44: yetkazilgandan keyin qaytarish — moliya teskari yozuvlari (BE-22)
+    if (eventType === ORDER_EVENTS.RETURNED) return [this.finance];
     return [];
   }
 }

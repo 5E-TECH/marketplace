@@ -9,6 +9,8 @@ import {
   Post,
   Put,
   Query,
+  Logger,
+  Optional,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -43,8 +45,14 @@ import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 @ApiBearerAuth()
 @Controller('admin/finance')
 export class AdminWithdrawalsController {
+  private readonly logger = new Logger(AdminWithdrawalsController.name);
+
   constructor(
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    // BE-24: «Pul o‘tkazildi» SMS i sotuvchiga
+    @Optional()
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notification?: ClientProxy,
   ) {}
 
   @Get('withdrawals')
@@ -118,15 +126,32 @@ export class AdminWithdrawalsController {
     description:
       'INVALID_STATE: tasdiqlanmagan, tasdiqlar yetmaydi yoki balans yetmaydi',
   })
-  paid(
+  async paid(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser('sub') paidBy: string,
   ): Promise<WithdrawalDto> {
-    return sendRpc(
+    const result = await sendRpc<WithdrawalDto>(
       this.finance,
       { cmd: FINANCE_WITHDRAWAL_RPC.PAID },
       { id, paidBy },
     );
+    // BE-24 (TC4): sotuvchiga «Pul o‘tkazildi» — takror bosilsa ham bitta SMS (notification `dedupeKey`)
+    if (this.notification)
+      this.notification
+        .emit('finance.withdrawal.paid', {
+          withdrawalId: String(result.id),
+          affiliateId: String(result.affiliateId),
+          amount: result.amount,
+          tax: result.taxAmount,
+          net: result.netAmount,
+        })
+        .subscribe({
+          error: (error: Error) =>
+            this.logger.warn(
+              `«Pul o‘tkazildi» xabari yuborilmadi: ${error.message}`,
+            ),
+        });
+    return result;
   }
 
   @Put('affiliates/:id/self-employed')

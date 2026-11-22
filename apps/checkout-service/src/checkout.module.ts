@@ -24,6 +24,7 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 import { ElchiWebhookService } from './elchi-webhook.service';
+import { ElchiLeadWebhookService } from './elchi-lead-webhook.service';
 import { ReviewEligibilityService } from './review-eligibility.service';
 import { ShippingLabelService } from './shipping-label.service';
 import { AdminIntegrationQueryService } from './admin-integration-query.service';
@@ -33,6 +34,7 @@ import { ReturnRequestService } from './return-request.service';
 import { ReturnRequestQueryService } from './return-request-query.service';
 import { ReturnRefundService } from './return-refund.service';
 import { ReturnNotifierService } from './return-notifier.service';
+import { LeadReturnService } from './lead-return.service';
 import { LeadOrderController } from './lead-order.controller';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
@@ -134,6 +136,7 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     CheckoutService,
     ConfirmSalesOrderService,
     ElchiWebhookService,
+    ElchiLeadWebhookService,
     ReviewEligibilityService,
     ShippingLabelService,
     AdminIntegrationQueryService,
@@ -141,6 +144,7 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     ReturnRequestQueryService,
     ReturnRefundService,
     ReturnNotifierService,
+    LeadReturnService,
     OutboxService,
     CheckoutOutboxRelayService,
     LeadOrderService,

@@ -1,9 +1,11 @@
-import { Controller, UseFilters } from '@nestjs/common';
+import { Controller, HttpStatus, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
-  LoginDto,
+  BusinessException,
   CreateSupportTicketDto,
+  ErrorCode,
   ForgotPasswordDto,
+  LoginDto,
   RegisterDto,
   ResetPasswordDto,
   Role,
@@ -21,9 +23,17 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  /**
+   * BE-06: parol bilan ochiq ro‘yxat yopildi — sotuvchi faqat SMS kod va oferta bilan (`/auth/otp/send` REGISTER →
+   * `/auth/register/affiliate`). Aks holda birov SMS siz boshqa odamning raqamini egallab qo‘yardi.
+   */
   @MessagePattern({ cmd: 'auth.register' })
-  register(@Payload() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Payload() _dto: RegisterDto): never {
+    throw new BusinessException(
+      'Ro‘yxat SMS kod bilan: /auth/otp/send (REGISTER), keyin /auth/register/affiliate',
+      ErrorCode.BUSINESS_RULE_VIOLATION,
+      HttpStatus.GONE,
+    );
   }
 
   @MessagePattern({ cmd: 'auth.login' })

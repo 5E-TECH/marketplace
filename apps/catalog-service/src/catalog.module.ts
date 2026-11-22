@@ -34,10 +34,14 @@ import { ReviewService } from './review.service';
 import { CategorySeeder } from './seed/category.seeder';
 import { WholesalerController } from './wholesaler.controller';
 import { WholesalerService } from './wholesaler.service';
+import { CreativeController } from './creative.controller';
+import { CreativeService } from './creative.service';
 import { CatalogOfferController } from './catalog-offer.controller';
 import { CatalogOfferService } from './catalog-offer.service';
 import { PricingController } from './pricing.controller';
 import { PricingService } from './pricing.service';
+import { WholesalerCabinetController } from './wholesaler-cabinet/wholesaler-cabinet.controller';
+import { WholesalerCabinetService } from './wholesaler-cabinet/wholesaler-cabinet.service';
 
 const entities = CATALOG_DB.entities;
 
@@ -109,7 +113,9 @@ const entities = CATALOG_DB.entities;
     ReviewController,
     BannerController,
     WholesalerController,
+    WholesalerCabinetController,
     CatalogOfferController,
+    CreativeController,
     PricingController,
   ],
   providers: [
@@ -126,6 +132,8 @@ const entities = CATALOG_DB.entities;
     WholesalerService,
     CatalogOfferService,
     PricingService,
+    WholesalerCabinetService,
+    CreativeService,
   ],
 })
 export class CatalogModule {}

@@ -7,6 +7,11 @@ import { AddJournalLeadIndex1795564800000 } from './migrations/1795564800000-add
 import { CreateWithdrawal1795651200000 } from './migrations/1795651200000-create-withdrawal';
 import { CreateWholesalerSettlement1795737600000 } from './migrations/1795737600000-create-wholesaler-settlement';
 import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fee-hold';
+import { AddRemittanceResolution1796860800000 } from './migrations/1796860800000-add-remittance-resolution';
+import { CreateSettlementResponse1796947200000 } from './migrations/1796947200000-create-settlement-response';
+import { SettingComment1797552000000 } from './migrations/1797552000000-setting-comment';
+import { CreateCodDailyCheck1796601600000 } from './migrations/1796601600000-create-cod-daily-check';
+import { CreateTextSetting1796774400000 } from './migrations/1796774400000-create-text-setting';
 import { SellerLedger } from './entities/seller-ledger.entity';
 import { Payout } from './entities/payout.entity';
 import { Commission } from './entities/commission.entity';
@@ -35,5 +40,10 @@ export const FINANCE_DB: DatabaseDefinition = {
     CreateWithdrawal1795651200000,
     CreateWholesalerSettlement1795737600000,
     CreateFeeHold1795824000000,
+    AddRemittanceResolution1796860800000,
+    CreateSettlementResponse1796947200000,
+    SettingComment1797552000000,
+    CreateCodDailyCheck1796601600000,
+    CreateTextSetting1796774400000,
   ],
 };

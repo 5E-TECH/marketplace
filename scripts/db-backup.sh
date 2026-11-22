@@ -31,6 +31,38 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
 
 test -s "$partial"
 mv "$partial" "$target"
-sha256sum "$target" > "$target.sha256"
+# checksum fayl nomi bilan (yo'lsiz) — nusxa boshqa katalog yoki serverda ham `sha256sum -c` bilan tekshiriladi
+(cd "$BACKUP_DIR" && sha256sum "$(basename "$target")") > "$target.sha256"
 find "$BACKUP_DIR" -type f -name 'elchi-marketplace-*.dump*' -mtime "+$KEEP_DAYS" -delete
 printf 'Backup tayyor: %s\n' "$target"
+
+# BE-26 (T8 «Zaxira nusxa»: kunlik, O'zbekiston ichidagi boshqa serverga). BACKUP_REMOTE=user@host:/katalog,
+# BACKUP_SSH_KEY — shu serverga kirish kaliti (faqat shu foydalanuvchi o'qiy oladigan fayl). Server kaliti
+# known_hosts da bo'lishi shart (StrictHostKeyChecking=yes). Yuborilmasa yoki u yerda checksum mos kelmasa —
+# skript xato kodi bilan tugaydi (cron ogohlantiradi).
+if [ -z "${BACKUP_REMOTE:-}" ]; then
+  printf 'OGOHLANTIRISH: BACKUP_REMOTE berilmagan — zaxira faqat shu serverda (T8 talabi bajarilmadi)\n' >&2
+  if [ "${BACKUP_REMOTE_REQUIRED:-off}" = on ]; then exit 3; fi
+  exit 0
+fi
+remote_host=${BACKUP_REMOTE%%:*}
+remote_dir=${BACKUP_REMOTE#*:}
+case "$remote_dir" in
+  ''|"$BACKUP_REMOTE") printf 'BACKUP_REMOTE user@host:/katalog formatida bo‘lishi kerak\n' >&2; exit 2 ;;
+esac
+ssh_opts="-o BatchMode=yes -o StrictHostKeyChecking=yes"
+if [ -n "${BACKUP_SSH_KEY:-}" ]; then ssh_opts="$ssh_opts -i $BACKUP_SSH_KEY"; fi
+name=$(basename "$target")
+expected=$(cut -d' ' -f1 "$target.sha256")
+# `.partial` nomi bilan yuklanadi; u yerda checksum mos kelgandagina asl nomga o'tadi — uzilgan yuklash
+# «eng yangi nusxa» bo'lib qolmaydi
+# shellcheck disable=SC2086
+scp $ssh_opts -q "$target" "$remote_host:$remote_dir/$name.partial"
+# shellcheck disable=SC2086
+scp $ssh_opts -q "$target.sha256" "$remote_host:$remote_dir/$name.sha256"
+# shellcheck disable=SC2086
+if ! ssh $ssh_opts "$remote_host" "cd '$remote_dir' && [ \"\$(sha256sum '$name.partial' | cut -d' ' -f1)\" = '$expected' ] && mv '$name.partial' '$name'"; then
+  printf 'XATO: zaxira serverdagi nusxa checksum ga mos emas: %s\n' "$remote_host:$remote_dir/$name" >&2
+  exit 4
+fi
+printf 'Tashqi zaxira tayyor: %s\n' "$remote_host:$remote_dir/$name"

@@ -1,5 +1,6 @@
 import { LEAD_DB } from './database';
 import { Module } from '@nestjs/common';
+import { LeadOpsController } from './lead-ops.controller';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -29,11 +30,14 @@ import { LeadQueueScheduler } from './lead-queue.scheduler';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
+import { SiteOrderService } from './site-order.service';
 import { LeadOfferController } from './lead-offer.controller';
 import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadStatsController } from './lead-stats.controller';
 import { LeadStatsService } from './lead-stats.service';
+import { PlatformStatsController } from './platform-stats.controller';
+import { PlatformStatsService } from './platform-stats.service';
 import { OfferService } from './offer.service';
 import { PostbackService } from './postback.service';
 import { StreamService } from './stream.service';
@@ -122,6 +126,8 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     TypeOrmModule.forFeature(LEAD_ENTITIES),
   ],
   controllers: [
+    PlatformStatsController,
+    LeadOpsController,
     LeadAddressController,
     LeadOfferController,
     LeadIntakeController,
@@ -139,6 +145,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     StreamService,
     LandingService,
     LeadIntakeService,
+    SiteOrderService,
     LeadQueueService,
     LeadCardService,
     LeadQueueScheduler,
@@ -147,6 +154,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     PostbackService,
     ApiKeyService,
     LeadStatsService,
+    PlatformStatsService,
     LeadOrderService,
     CapiService,
     AffiliateIdentityClient,

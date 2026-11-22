@@ -1,7 +1,6 @@
 import { ThrottlerException } from '@nestjs/throttler';
 import { AllExceptionsFilter, ErrorCode } from '@app/common';
 import { AuthController } from './auth.controller';
-import { SellersController } from '../sellers/sellers.controller';
 
 /**
  * Brute-force himoyasi: nozik endpointlarda umumiy chegara emas, qattiq limit
@@ -38,13 +37,6 @@ describe('Rate limiting — nozik endpointlar', () => {
   it.each(expected)('auth.%s → daqiqada %i so‘rov', (method, limit) => {
     expect(limitOf(AuthController.prototype, method)).toBe(limit);
     expect(ttlOf(AuthController.prototype, method)).toBe(60_000);
-  });
-
-  it('BE-05: eski sellers/register yo‘li yo‘q (sotuvchi auth/register orqali)', () => {
-    expect(
-      (SellersController.prototype as unknown as Record<string, unknown>)
-        .register,
-    ).toBeUndefined();
   });
 
   // C4.7 TC4 — limitdan oshganda javob shakli o'zgarmasligi kerak:

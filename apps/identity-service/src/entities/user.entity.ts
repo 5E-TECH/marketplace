@@ -13,6 +13,13 @@ export class User extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
+  /** BE-06: sotuvchi profilidagi ism va familiya (FE-04); `name` — ikkalasidan. */
+  @Column({ name: 'first_name', type: 'varchar', length: 100, nullable: true })
+  firstName: string | null;
+
+  @Column({ name: 'last_name', type: 'varchar', length: 100, nullable: true })
+  lastName: string | null;
+
   @Column({ type: 'varchar', length: 20, unique: true })
   phone: string;
 
@@ -39,4 +46,8 @@ export class User extends BaseEntity {
   /** Rol/parol/blok holati o‘zgarganda eski access tokenlarni bekor qiladi. */
   @Column({ name: 'auth_version', type: 'integer', default: 1 })
   authVersion: number;
+
+  /** BE-26: 2FA (TOTP) ulangan vaqt; sir va tiklash kodlari alohida ustunlarda (faqat `TwoFactorService`). */
+  @Column({ name: 'totp_enabled_at', type: 'timestamptz', nullable: true })
+  totpEnabledAt: Date | null;
 }

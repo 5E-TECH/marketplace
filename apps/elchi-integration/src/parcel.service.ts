@@ -81,6 +81,52 @@ export function elchiItemName(name: string, productId: string): string {
   return `${name.trim().slice(0, ELCHI_ITEM_NAME_MAX - suffix.length)}${suffix}`;
 }
 
+/** BE-41: so'rovda chek maydonlari bormi (`ELCHI_FISCAL_RECEIPT=on` va ma'lumot to'liq). */
+function hasReceipt(body: CreateElchiShipmentInput): boolean {
+  return body.delivery_price !== undefined;
+}
+
+/** BE-41: o'sha so'rov chek maydonlarisiz — bugungi (sozlama o'chiq) shaklda. */
+function withoutReceipt(
+  body: CreateElchiShipmentInput,
+): CreateElchiShipmentInput {
+  const copy: CreateElchiShipmentInput = {
+    ...body,
+    items: body.items.map((item) => {
+      const plain = { ...item };
+      delete plain.price;
+      delete plain.fiscal;
+      return plain;
+    }),
+  };
+  delete copy.delivery_price;
+  return copy;
+}
+
+/**
+ * BE-41: chek ma'lumoti nimasi yetishmaydi (null — to'liq). Kodlar va STIR formati katalogda tekshirilgan
+ * (MXIK 17 raqam, STIR 9 raqam); bu yerda — borligi va jami COD ga tengligi.
+ */
+export function fiscalProblem(event: OrderStatusChangedEvent): string | null {
+  for (const item of event.items) {
+    const f = item.fiscal;
+    if (!f?.mxikCode || !f.packageCode || !f.wholesalerTin)
+      return `tovar ${item.productId}: MXIK, qadoq kodi yoki optovik STIR i yo‘q`;
+    if (!Number.isSafeInteger(item.salePrice) || item.salePrice < 0)
+      return `tovar ${item.productId}: narx noto‘g‘ri (${item.salePrice})`;
+  }
+  const delivery = event.delivery?.cost;
+  if (!Number.isSafeInteger(delivery) || delivery < 0)
+    return `yetkazish summasi noto‘g‘ri (${delivery})`;
+  const total = event.items.reduce(
+    (sum, item) => sum + item.salePrice * item.quantity,
+    delivery,
+  );
+  if (total !== event.codAmount)
+    return `chek jami ${total} COD ${event.codAmount} ga teng emas`;
+  return null;
+}
+
 type BuildResult =
   | { body: CreateElchiShipmentInput }
   | { retry: string }
@@ -307,18 +353,52 @@ export class ParcelService {
     try {
       result = await this.elchi.createShipment(built.body);
     } catch (error) {
-      await this.createFailed(row, error as Error);
-      return;
+      // BE-41: Elchi chek maydonlarini (yoki ularning qiymatini) rad etsa posilka to'xtamaydi — so'rov chek
+      // ma'lumotisiz bir marta qayta yuboriladi. 400/422 da Elchi buyurtma yaratmagan, takror xavfsiz.
+      if (
+        !hasReceipt(built.body) ||
+        !(error instanceof ElchiApiError) ||
+        !REJECT_STATUSES.has(error.status)
+      ) {
+        await this.createFailed(row, error as Error);
+        return;
+      }
+      // Qator hali PENDING bo‘lsin (shu orada bekor qilinmagan) va band muddati yangilansin — ikkinchi so‘rov
+      // ham to‘liq kutish vaqtini olsin, boshqa ishchi parallel yaratmasin.
+      const still = returningRows(
+        await this.dataSource.query(
+          `UPDATE integration.parcel_request
+              SET next_attempt_at = clock_timestamp() + make_interval(secs => $2)
+            WHERE id = $1 AND status = 'PENDING'
+            RETURNING id`,
+          [row.id, CLAIM_LEASE_S],
+        ),
+      ) as unknown[];
+      if (!still.length) {
+        await this.createFailed(row, error);
+        return;
+      }
+      this.logger.warn(
+        `Buyurtma ${row.orderId}: Elchi chek ma’lumotini rad etdi (${error.status}: ${error.message}) — chek maydonlarisiz qayta yuborildi`,
+      );
+      try {
+        result = await this.elchi.createShipment(withoutReceipt(built.body));
+      } catch (retryError) {
+        await this.createFailed(row, retryError as Error);
+        return;
+      }
     }
     await this.finishCreate(row, result);
   }
 
   private async createFailed(row: ParcelRow, error: Error): Promise<void> {
-    if (
+    const intakeClosed =
       error instanceof ElchiApiError &&
       error.status === 409 &&
-      error.code === 'ORDER_INTAKE_CLOSED'
-    ) {
+      error.code === 'ORDER_INTAKE_CLOSED';
+    // bugungi qabul yopiqligi — Elchi xatosi emas, kutilgan holat
+    if (!intakeClosed) await this.recordApiError('shipment.create', error);
+    if (intakeClosed) {
       // Bugungi qabul yopiq: Elchi kalitni band qilmaydi, `reopens_at` dan
       // keyin o'sha external_order_id ishlaydi (Elchi-Backend
       // integration-service `requestPartnerOrderCreate`).
@@ -457,6 +537,7 @@ export class ParcelService {
     const marketId = this.config.get<string>('ELCHI_PLATFORM_MARKET_ID');
     // Sozlama yo'q — posilka navbatda kutadi va logga tushadi.
     if (!marketId) return { retry: 'ELCHI_PLATFORM_MARKET_ID sozlanmagan' };
+    const receipt = this.withReceipt(row.orderId, event);
     return {
       body: {
         external_order_id: elchiOrderRef(String(row.orderId)),
@@ -482,10 +563,76 @@ export class ParcelService {
           quantity: item.quantity,
           external_product_id: String(item.productId),
           ...(item.weightGrams ? { weight_kg: item.weightGrams / 1000 } : {}),
+          ...(receipt
+            ? {
+                price: item.salePrice,
+                fiscal: {
+                  name: item.name.trim().slice(0, ELCHI_ITEM_NAME_MAX),
+                  mxik_code: item.fiscal!.mxikCode!,
+                  package_code: item.fiscal!.packageCode!,
+                  commitent_tin: item.fiscal!.wholesalerTin!,
+                  commission: true as const,
+                },
+              }
+            : {}),
         })),
+        ...(receipt ? { delivery_price: event.delivery.cost } : {}),
         cod_amount: event.codAmount,
       },
     };
+  }
+
+  /**
+   * BE-41 (EQ-09): chekni Elchi kuryeri chiqaradi — so'rovga har qator narxi, MXIK, qadoq kodi, komitent
+   * (optovik) STIR i va yetkazish summasi qo'shiladimi. `ELCHI_FISCAL_RECEIPT=on` bo'lmasa — yo'q: Elchi gateway
+   * noma'lum maydonni 400 bilan rad etadi (`forbidNonWhitelisted`), 400 esa bu yerda yakuniy xato.
+   *
+   * Ma'lumot to'liq bo'lmasa yoki jami COD ga teng chiqmasa posilka to'xtamaydi — so'rov chek maydonlarisiz
+   * ketadi va logga yoziladi [taklif, BE-41 savol 3].
+   */
+  private withReceipt(
+    orderId: string,
+    event: OrderStatusChangedEvent,
+  ): boolean {
+    if (this.config.get<string>('ELCHI_FISCAL_RECEIPT') !== 'on') return false;
+    const problem = fiscalProblem(event);
+    if (problem)
+      this.logger.warn(
+        `Buyurtma ${orderId}: chek ma’lumoti Elchi’ga yuborilmadi — ${problem}`,
+      );
+    return !problem;
+  }
+
+  /**
+   * BE-26 (T8 «Kuzatuv»): Elchi API xatosi jurnalga — monitor 5 daqiqadagi sonini oladi. Jurnal yozilmasa ham posilka
+   * ishi to‘xtamaydi (faqat log). 7 kundan eskisi shu yerda tozalanadi (indeks bo‘yicha, arzon).
+   */
+  private async recordApiError(operation: string, error: Error): Promise<void> {
+    try {
+      await this.dataSource.query(
+        `WITH old AS (DELETE FROM integration.elchi_api_error WHERE at < now() - interval '7 days')
+         INSERT INTO integration.elchi_api_error (operation, status, message) VALUES ($1, $2, $3)`,
+        [
+          operation,
+          error instanceof ElchiApiError ? error.status : null,
+          String(error?.message ?? error).slice(0, 500),
+        ],
+      );
+    } catch (logError) {
+      this.logger.warn(
+        `Elchi xatosi jurnalga yozilmadi: ${(logError as Error).message}`,
+      );
+    }
+  }
+
+  /** BE-26: oxirgi `minutes` daqiqadagi Elchi API xatolari soni (monitor uchun). */
+  async apiErrorsSince(minutes: number): Promise<number> {
+    const [row] = (await this.dataSource.query(
+      `SELECT count(*)::int AS n FROM integration.elchi_api_error
+        WHERE at > now() - make_interval(mins => $1)`,
+      [Math.max(1, Math.min(1440, Math.floor(minutes) || 5))],
+    )) as Array<{ n: number }>;
+    return row?.n ?? 0;
   }
 
   /** Elchi da bekor qilish: posilka ID si bo'yicha, bo'lmasa tashqi id bo'yicha. */
@@ -510,6 +657,9 @@ export class ParcelService {
   }
 
   private async cancelFailed(row: ParcelRow, error: Error): Promise<void> {
+    // 404 — tiklash yo‘li (bog‘lovchi yozuv yo‘q), xato emas
+    if (!(error instanceof ElchiApiError && error.status === 404))
+      await this.recordApiError('shipment.cancel', error);
     if (error instanceof ElchiApiError && error.status === 404) {
       if (!row.shipmentId) {
         // Elchi buyurtmani faqat bog'lovchi yozuv orqali topadi; yaratish

@@ -12,6 +12,7 @@ import { CreateIntegrationTables1722900000000 } from './migrations/1722900000000
 import { AddGeoSatoCode1725285600000 } from './migrations/1725285600000-add-geo-sato-code';
 import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add-provision-tariffs';
 import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
+import { ElchiApiError1797638400000 } from './migrations/1797638400000-elchi-api-error';
 import { ParcelService, elchiItemName } from './parcel.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -75,6 +76,8 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
   let outbox: OutboxService;
   let service: ParcelService;
   let marketId: string | undefined;
+  /** Boshqa sozlamalar (BE-41: `ELCHI_FISCAL_RECEIPT`). */
+  let settings: Record<string, string | undefined>;
 
   const parcel = async (orderId = '501') =>
     (
@@ -113,6 +116,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
         AddGeoSatoCode1725285600000,
         AddProvisionTariffs1725375600000,
         CreateParcelQueue1795392000000,
+        ElchiApiError1797638400000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -122,7 +126,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
 
   beforeEach(async () => {
     await ds.query(
-      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event, integration.geo_cache',
+      'TRUNCATE integration.parcel_request, integration.outbox_event, integration.processed_event, integration.geo_cache, integration.elchi_api_error',
     );
     await ds.query(`
       INSERT INTO integration.geo_cache (kind, elchi_id, name, elchi_region_id, sato_code) VALUES
@@ -131,6 +135,7 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
         ('region', 3, 'Samarqand', NULL, '1718'),
         ('district', 301, 'Urgut', 3, '1718236')`);
     marketId = '7001';
+    settings = {};
     elchi = {
       createShipment: jest.fn(async () => ({
         shipment_id: '1251131',
@@ -145,7 +150,10 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
       ds,
       elchi as never,
       outbox,
-      { get: () => marketId } as never,
+      {
+        get: (key: string) =>
+          key === 'ELCHI_PLATFORM_MARKET_ID' ? marketId : settings[key],
+      } as never,
       geo as never,
     );
   });
@@ -308,6 +316,229 @@ describeWithPostgres('BE-20 Elchi posilka navbati (PostgreSQL)', () => {
     await service.onOrderStatusChanged(confirmed({ eventId: 'evt-confirm-2' }));
     await service.processDue();
     expect(await parcel()).toMatchObject({ status: 'CREATED' });
+  });
+
+  describe('BE-41: fiskal chek ma’lumoti (chekni Elchi kuryeri chiqaradi)', () => {
+    const fiscal = (mxikCode: string, wholesalerTin = '305123456') => ({
+      mxikCode,
+      packageCode: '1500012',
+      wholesalerTin,
+    });
+    /** Qisman rejim: 2 × 276 000 + ikkinchi tovar 120 000 + ko‘rinadigan yetkazish 30 000 = 702 000. */
+    const receiptOrder = (over: Partial<OrderStatusChangedEvent> = {}) =>
+      confirmed({
+        items: [
+          {
+            productId: '88',
+            wholesalerId: '4',
+            sku: 'EAR-01',
+            name: 'Simsiz quloqchin',
+            quantity: 2,
+            weightGrams: 350,
+            approvedPrice: 251000,
+            basePrice: 140000,
+            salePrice: 276000,
+            split: {
+              affiliateFee: 130000,
+              callCenterFee: 24000,
+              hiddenDelivery: 22000,
+            },
+            fiscal: fiscal('08517001001000000'),
+          },
+          {
+            productId: '91',
+            wholesalerId: '6',
+            sku: 'CAS-01',
+            name: 'G‘ilof',
+            quantity: 1,
+            weightGrams: 100,
+            approvedPrice: 110000,
+            basePrice: 60000,
+            salePrice: 120000,
+            split: {
+              affiliateFee: 30000,
+              callCenterFee: 12000,
+              hiddenDelivery: 11000,
+            },
+            fiscal: fiscal('03926001001000000', '207654321'),
+          },
+        ],
+        delivery: { mode: 'PARTIAL', cost: 30000 },
+        codAmount: 702000,
+        ...over,
+      });
+    const sentBody = () =>
+      elchi.createShipment.mock.calls[0][0] as Record<string, any>;
+
+    it('TC2: sozlama yoqilgan — har qatorda narx, MXIK, qadoq kodi, komitent STIR i; yetkazish alohida; jami = COD (TC3)', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      const body = sentBody();
+      expect(body.items).toEqual([
+        {
+          name: 'Simsiz quloqchin #88',
+          quantity: 2,
+          external_product_id: '88',
+          weight_kg: 0.35,
+          price: 276000,
+          fiscal: {
+            name: 'Simsiz quloqchin',
+            mxik_code: '08517001001000000',
+            package_code: '1500012',
+            commitent_tin: '305123456',
+            commission: true,
+          },
+        },
+        {
+          name: 'G‘ilof #91',
+          quantity: 1,
+          external_product_id: '91',
+          weight_kg: 0.1,
+          price: 120000,
+          fiscal: {
+            name: 'G‘ilof',
+            mxik_code: '03926001001000000',
+            package_code: '1500012',
+            commitent_tin: '207654321',
+            commission: true,
+          },
+        },
+      ]);
+      expect(body.delivery_price).toBe(30000);
+      // TC3: chek jami = sotuvchi sahifasidagi jami (tovar + ko‘rinadigan yetkazish) = kuryer oladigan summa
+      const receiptTotal =
+        body.items.reduce(
+          (sum: number, item: { price: number; quantity: number }) =>
+            sum + item.price * item.quantity,
+          0,
+        ) + body.delivery_price;
+      expect(receiptTotal).toBe(body.cod_amount);
+      expect(body.cod_amount).toBe(702000);
+      expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    });
+
+    it('sozlama o‘chiq (sukut) — so‘rov bugungidek: Elchi noma’lum maydonni 400 bilan rad etadi', async () => {
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      const body = sentBody();
+      expect(body).not.toHaveProperty('delivery_price');
+      for (const item of body.items) {
+        expect(item).not.toHaveProperty('price');
+        expect(item).not.toHaveProperty('fiscal');
+      }
+    });
+
+    it('kod yoki STIR yo‘q (BE-41 dan oldingi mahsulot) — posilka chek maydonlarisiz yaratiladi, to‘xtamaydi', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      const order = receiptOrder();
+      order.items[1].fiscal = {
+        mxikCode: null,
+        packageCode: '1500012',
+        wholesalerTin: '207654321',
+      };
+      await service.onOrderStatusChanged(order);
+      await service.processDue();
+
+      const body = sentBody();
+      expect(body).not.toHaveProperty('delivery_price');
+      expect(body.items[0]).not.toHaveProperty('fiscal');
+      expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    });
+
+    it('Elchi chek maydonlarini rad etsa (400) — bir marta chek maydonlarisiz qayta yuboriladi, posilka yaratiladi', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment.mockRejectedValueOnce(
+        new ElchiApiError(400, 'property items.0.fiscal should not exist'),
+      );
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      expect(elchi.createShipment).toHaveBeenCalledTimes(2);
+      const [first, second] = elchi.createShipment.mock.calls.map(
+        (c) => c[0] as Record<string, any>,
+      );
+      expect(first.delivery_price).toBe(30000);
+      expect(second).not.toHaveProperty('delivery_price');
+      expect(second.items[0]).not.toHaveProperty('fiscal');
+      expect(second.items[0]).not.toHaveProperty('price');
+      expect(second.items[0]).toMatchObject({
+        name: 'Simsiz quloqchin #88',
+        quantity: 2,
+      });
+      expect(second.external_order_id).toBe(first.external_order_id);
+      expect(await parcel()).toMatchObject({ status: 'CREATED' });
+
+      // qayta yuborilgan so‘rov — sozlama o‘chiq bo‘lgandagi so‘rovning aynan o‘zi
+      await ds.query(
+        'TRUNCATE integration.parcel_request, integration.processed_event',
+      );
+      elchi.createShipment.mockClear();
+      delete settings.ELCHI_FISCAL_RECEIPT;
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+      expect(elchi.createShipment.mock.calls[0][0]).toEqual(second);
+    });
+
+    it('Elchi rad etguncha buyurtma bekor qilingan bo‘lsa — qayta yuborilmaydi', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment.mockImplementationOnce(async () => {
+        // birinchi so‘rov yo‘lda — shu orada «Bekor qilindi» keladi
+        await ds.query(
+          `UPDATE integration.parcel_request SET status = 'CANCEL_PENDING' WHERE order_id = '501'`,
+        );
+        throw new ElchiApiError(400, 'fiscal');
+      });
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+      expect(elchi.createShipment).toHaveBeenCalledTimes(1);
+    });
+
+    it('chek maydonlarisiz so‘rov ham rad etilsa — bugungidek FAILED (uchinchi urinish yo‘q)', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      elchi.createShipment
+        .mockRejectedValueOnce(new ElchiApiError(400, 'fiscal'))
+        .mockRejectedValueOnce(new ElchiApiError(422, 'district'));
+      await service.onOrderStatusChanged(receiptOrder());
+      await service.processDue();
+
+      expect(elchi.createShipment).toHaveBeenCalledTimes(2);
+      expect(await parcel()).toMatchObject({ status: 'FAILED' });
+    });
+
+    it('jami COD ga teng emas — chek maydonlarisiz (noto‘g‘ri chek chiqmaydi)', async () => {
+      settings.ELCHI_FISCAL_RECEIPT = 'on';
+      await service.onOrderStatusChanged(receiptOrder({ codAmount: 700000 }));
+      await service.processDue();
+
+      expect(sentBody().items[0]).not.toHaveProperty('price');
+      expect(await parcel()).toMatchObject({ status: 'CREATED' });
+    });
+  });
+
+  it('BE-26: Elchi xatolari jurnalga (monitor 5 daqiqada sanaydi); «qabul yopiq» va bekorda 404 — xato emas', async () => {
+    elchi.createShipment
+      .mockRejectedValueOnce(new ElchiApiError(503, 'Elchi ishlamayapti'))
+      .mockRejectedValueOnce(new Error('fetch failed'));
+    await service.onOrderStatusChanged(confirmed());
+    await service.processDue();
+    await makeDue();
+    await service.processDue();
+    await expect(service.apiErrorsSince(5)).resolves.toBe(2);
+    const rows = (await ds.query(
+      `SELECT operation, status FROM integration.elchi_api_error ORDER BY id`,
+    )) as Array<{ operation: string; status: number | null }>;
+    expect(rows).toEqual([
+      { operation: 'shipment.create', status: 503 },
+      { operation: 'shipment.create', status: null },
+    ]);
+    // 6 daqiqa oldingi xato hisobga kirmaydi
+    await ds.query(
+      `UPDATE integration.elchi_api_error SET at = now() - interval '6 minutes'`,
+    );
+    await expect(service.apiErrorsSince(5)).resolves.toBe(0);
   });
 
   it('platforma marketi sozlanmagan bo‘lsa navbatda kutadi', async () => {

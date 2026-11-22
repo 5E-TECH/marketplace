@@ -6,6 +6,7 @@ import {
   LeadReviewReason,
   LeadSource,
   LeadStatus,
+  LeadConfirmedVia,
   LeadOrderStatus,
   LeadVariant,
 } from '@app/common';
@@ -233,6 +234,31 @@ export class Lead extends BaseEntity {
 
   @Column({ name: 'confirmed_by', type: 'bigint', nullable: true })
   confirmedBy: string | null;
+
+  /** BE-34: tasdiqlash usuli — CALL (operator) yoki SMS (mijoz havola bilan; faqat SITE). */
+  @Column({ name: 'confirm_mode', type: 'varchar', length: 4, default: 'CALL' })
+  confirmMode: 'CALL' | 'SMS';
+
+  /** BE-34: kim tasdiqladi — OPERATOR yoki SMS (mijoz). */
+  @Column({
+    name: 'confirmed_via',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  confirmedVia: LeadConfirmedVia | null;
+
+  /** BE-34: bir martalik tasdiq havolasi — bazada faqat SHA-256 xeshi. */
+  @Column({
+    name: 'sms_token_hash',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  smsTokenHash: string | null;
+
+  @Column({ name: 'sms_expires_at', type: 'timestamptz', nullable: true })
+  smsExpiresAt: Date | null;
 
   /** Buyurtmaning oxirgi holati `order.status.changed` dan (BE-28; BE-18 yuboradi). */
   @Column({ name: 'order_status', type: 'varchar', length: 20, nullable: true })

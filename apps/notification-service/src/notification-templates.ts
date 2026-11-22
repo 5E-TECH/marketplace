@@ -71,6 +71,31 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Buyurtma puli qaytarildi',
     body: '#{orderId} buyurtma. Sabab: {reason}',
   },
+  cod_reconciliation_mismatch: {
+    name: 'Sverka farqi',
+    description:
+      'BE-21 (TZ ELC-4): kunlik COD sverkasida Elchi o‘tkazmasi buyurtma bilan mos kelmasa — moliya va nazoratchiga',
+    variables: {
+      date: 'Sana',
+      mismatchCount: 'Mos kelmagan buyurtmalar soni',
+      diffTotal: 'Farq jami, so‘m (kelgan − kutilgan)',
+    },
+    title: 'Sverka farqi: {date}',
+    body: '{date}: Elchi o‘tkazmasi {mismatchCount} ta buyurtmada mos emas, farq {diffTotal} so‘m. Moliya → kunlik sverka.',
+  },
+  elchi_status_conflict: {
+    name: 'Elchi holati buyurtmaga zid',
+    description:
+      'BE-21: Elchi xabari buyurtma holatiga zid (yetkazilgan sotuvni bekor qildi, rad etilganini «sotildi» dedi va h.k.) — buyurtma o‘zgarmaydi, moliya va nazoratchiga',
+    variables: {
+      orderId: 'Buyurtma raqami',
+      orderStatus: 'Buyurtma holati',
+      elchiStatus: 'Elchi holati',
+    },
+    title: 'Elchi holati zid: buyurtma {orderId}',
+    body: 'Buyurtma {orderId} ({orderStatus}) — Elchi «{elchiStatus}» yubordi. Holat o‘zgarmadi. Pul va holatni qo‘lda tekshiring.',
+  },
+
   lot_blocked: {
     name: 'Partiya sotuvdan chiqdi (muddat)',
     description:

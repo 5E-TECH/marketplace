@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -38,6 +39,12 @@ import {
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
+import {
+  HANDOVER_ACT_EXAMPLE,
+  PACK_EXAMPLE,
+  PICK_LIST_EXAMPLE,
+  SCAN_EXAMPLE,
+} from './warehouse.examples';
 
 /**
  * Ombor (BE-19; TZ 6.6 OMB-2, OMB-4, OMB-5): kunlik yig‘ish ro‘yxati, skaner, qadoq, yorliq va Elchi’ga topshirish
@@ -58,6 +65,11 @@ export class WarehouseController {
     description:
       '14:00 gacha (Toshkent) tasdiqlangan buyurtma — o‘sha kuni, keyin — ertasi kuni (OMB-4). Oldingi kunlardan qolganlar `overdue` bilan.',
   })
+  @ApiOkResponse({
+    description:
+      'Sahifalashsiz, 1 000 qatorgacha; oshsa `truncated: true`. Topshirilgan va bekor qilingan vazifalar chiqmaydi.',
+    schema: { example: PICK_LIST_EXAMPLE },
+  })
   pickList(@Query() query: WarehousePickListQueryDto): Promise<PickListPage> {
     return sendRpc(
       this.checkout,
@@ -73,6 +85,7 @@ export class WarehouseController {
     description:
       'Buyurtmadagi tovar emas — 409 `WRONG_ITEM` (jurnalda). Birinchi to‘g‘ri skaner — buyurtma «Yig‘ilmoqda», hamma dona — vazifa «Yig‘ildi».',
   })
+  @ApiOkResponse({ schema: { example: SCAN_EXAMPLE } })
   @ApiConflictResponse({
     description: 'WRONG_ITEM — boshqa tovar; INVALID_STATE — vazifa holati',
   })
@@ -93,6 +106,7 @@ export class WarehouseController {
   @ApiOperation({
     summary: 'Qadoqlandi (hamma dona to‘g‘ri skanerlangandan keyin)',
   })
+  @ApiOkResponse({ schema: { example: PACK_EXAMPLE } })
   @ApiConflictResponse({ description: 'INVALID_STATE — hali yig‘ilmagan' })
   pack(@Param('id', ParseLeadIdPipe) id: string, @CurrentUser() user: JwtUser) {
     return sendRpc(
@@ -107,6 +121,12 @@ export class WarehouseController {
   @ApiOperation({
     summary:
       'Posilka yorlig‘i (100×60 mm): Elchi raqami, QR, tasdiqlangan manzil',
+  })
+  @ApiOkResponse({
+    description: 'Chop etishga tayyor PDF yorliq',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
   })
   @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
   @ApiConflictResponse({ description: 'Elchi posilkasi hali yaratilmagan' })
@@ -128,7 +148,11 @@ export class WarehouseController {
     description:
       'Har posilka qadoqlangan va Elchi posilkasi yaratilgan bo‘lishi kerak — bittasi ham tayyor bo‘lmasa butun akt rad (409, sabablar bilan). Aktdagi son = topshirilgan posilkalar (OMB-5).',
   })
-  @ApiOkResponse({ description: 'Akt: raqam, sana, posilkalar' })
+  @ApiCreatedResponse({
+    description:
+      'Akt: raqam, sana, posilkalar. Xuddi shu QR to‘plami qayta yuborilsa — o‘sha akt',
+    schema: { example: HANDOVER_ACT_EXAMPLE },
+  })
   @ApiConflictResponse({
     description: 'Akt tuzilmadi: qaysi posilka va nima uchun',
   })
@@ -145,6 +169,7 @@ export class WarehouseController {
 
   @Get('handover-acts/:id')
   @ApiOperation({ summary: 'Topshirish akti' })
+  @ApiOkResponse({ schema: { example: HANDOVER_ACT_EXAMPLE } })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
   act(@Param('id', ParseLeadIdPipe) id: string): Promise<HandoverActView> {
     return sendRpc(this.checkout, { cmd: WAREHOUSE_RPC.ACT_GET }, { id });
@@ -153,6 +178,12 @@ export class WarehouseController {
   @Get('handover-acts/:id/pdf')
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Topshirish akti PDF (imzo uchun)' })
+  @ApiOkResponse({
+    description: 'PDF fayl (imzo uchun)',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
   async actPdf(
     @Param('id', ParseLeadIdPipe) id: string,

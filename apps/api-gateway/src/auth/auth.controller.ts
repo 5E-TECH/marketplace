@@ -5,8 +5,10 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Inject,
+  Ip,
   Optional,
   Param,
   Patch,
@@ -27,12 +29,25 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
   ACCESS_TOKEN_COOKIE,
+  AFFILIATE_AUTH_RPC,
+  TwoFactorChallengeDto,
+  TwoFactorChallengeResultDto,
+  TwoFactorEnableDto,
+  TwoFactorSetupResultDto,
+  TwoFactorVerifyDto,
   AuthErrorResponseDto,
+  OtpPurpose,
+  OtpSendResultDto,
+  RegisterAffiliateDto,
+  RegisterWholesalerDto,
+  SendOtpDto,
+  VerifyOtpDto,
   AuthSuccessResponseDto,
   ForgotPasswordDto,
   CurrentUser,
@@ -51,6 +66,7 @@ import {
   rawResponse,
   readCookie,
   sendRpc,
+  WHOLESALER_CABINET_RPC,
 } from '@app/common';
 
 @ApiTags('auth')
@@ -65,6 +81,10 @@ export class AuthController {
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     private readonly jwt: JwtService,
     @Optional() private readonly config?: ConfigService,
+    // BE-30: optovik ro‘yxati optovik yozuvini catalog da ochadi
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
   ) {}
 
   /**
@@ -175,6 +195,204 @@ export class AuthController {
     return rest;
   }
 
+  // ---------------------------------------------------------------- BE-06: SMS kod (SOT-1, FE-04)
+
+  @Public()
+  @IgnoreAuthCookie()
+  // IP bo‘yicha cheklov `resend-code` bilan bir xil (SMS pul turadi)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('otp/send')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'SMS kod yuborish: REGISTER — sotuvchi ro‘yxati, LOGIN — sotuvchi va optovik kirishi (kod 5 daqiqa)',
+  })
+  @ApiOkResponse({ type: OtpSendResultDto })
+  @ApiBadRequestResponse({
+    description:
+      'PHONE_OPERATOR_INVALID — raqam O‘zbekiston mobil operatoriniki emas',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'PHONE_ALREADY_REGISTERED (REGISTER)',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'ACCOUNT_NOT_FOUND (LOGIN)' })
+  @ApiResponse({
+    status: 423,
+    description:
+      'OTP_BLOCKED — 3 xatodan keyin 15 daqiqa; `retryAfterSeconds`, `Retry-After`',
+  })
+  sendOtp(@Body() dto: SendOtpDto): Promise<OtpSendResultDto> {
+    return sendRpc(this.identity, { cmd: AFFILIATE_AUTH_RPC.OTP_SEND }, dto);
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'SMS kodni tekshirish: REGISTER → bir martalik `registrationToken`; LOGIN → kirish (`/auth/login` kabi, cookie)',
+  })
+  @ApiOkResponse({
+    schema: {
+      example: { registrationToken: 'eyJhbGciOiJIUzI1NiIs…' },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'OTP_INVALID — kod noto‘g‘ri; `attemptsLeft`',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'OTP_EXPIRED — muddati o‘tgan yoki so‘ralmagan',
+  })
+  @ApiResponse({
+    status: 423,
+    description: 'OTP_BLOCKED — `retryAfterSeconds`',
+  })
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<
+      | { registrationToken: string }
+      | { accessToken: string; refreshToken: string }
+    >(this.identity, { cmd: AFFILIATE_AUTH_RPC.OTP_VERIFY }, dto);
+    if (dto.purpose === OtpPurpose.REGISTER || 'registrationToken' in result)
+      return result;
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register/wholesaler')
+  @ApiOperation({
+    summary:
+      'Optovik ro‘yxati (OPT-1): SMS tasdig‘idan keyin rekvizitlar, komissiya shartnomasi va rozilik; sessiya ochiladi, holat PENDING (admin tasdiqlaydi)',
+  })
+  @ApiCreatedResponse({
+    description:
+      'profileCompleted false — foydalanuvchi yaratildi, optovik yozuvi ochilmadi (masalan, STIR band): kabinetda POST /wholesaler/profile',
+    schema: {
+      example: {
+        accessToken: null,
+        profileCompleted: true,
+        profileError: null,
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description:
+      'OFFER_NOT_ACCEPTED — shartnoma yoki rozilikning joriy versiyasi qabul qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description:
+      'PHONE_ALREADY_REGISTERED; shartnoma matni hali e’lon qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'REGISTRATION_EXPIRED — telefonni qayta tasdiqlang',
+  })
+  async registerWholesaler(
+    @Body() dto: RegisterWholesalerDto,
+    @Ip() ip: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { registrationToken, contractVersion, consentVersion, ...profile } =
+      dto;
+    // avval SMS token (identity tekshiradi) — STIR bandligini tokensiz so‘rab bo‘lmasin
+    const result = await sendRpc<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string | number; phone: string };
+    }>(
+      this.identity,
+      { cmd: WHOLESALER_CABINET_RPC.REGISTER_USER },
+      {
+        dto: {
+          registrationToken,
+          contractVersion,
+          consentVersion,
+          name: profile.name,
+        },
+        ip: ip ?? null,
+      },
+    );
+    this.setAuthCookies(request, response, result);
+    // optovik yozuvi ochilmasa (STIR band va h.k.) — sessiya baribir beriladi, kabinetda POST /wholesaler/profile
+    let profileError: string | null = null;
+    try {
+      await sendRpc(
+        this.catalog!,
+        { cmd: WHOLESALER_CABINET_RPC.SELF_REGISTER },
+        {
+          ...profile,
+          ownerUserId: String(result.user.id),
+          phone: result.user.phone,
+          contractVersion,
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      profileError = error.message;
+    }
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+      profileCompleted: profileError === null,
+      profileError,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register/affiliate')
+  @ApiOperation({
+    summary:
+      'Sotuvchi ro‘yxati: SMS tasdig‘idan keyin oferta va rozilik versiyasi bilan; sessiya darhol ochiladi',
+  })
+  @ApiCreatedResponse({ schema: { example: { accessToken: null } } })
+  @ApiBadRequestResponse({
+    description:
+      'OFFER_NOT_ACCEPTED — oferta yoki rozilikning joriy versiyasi qabul qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'PHONE_ALREADY_REGISTERED',
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'REGISTRATION_EXPIRED — telefonni qayta tasdiqlang',
+  })
+  async registerAffiliate(
+    @Body() dto: RegisterAffiliateDto,
+    @Ip() ip: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
+      this.identity,
+      { cmd: AFFILIATE_AUTH_RPC.REGISTER },
+      { dto, ip: ip ?? null },
+    );
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
   @Public()
   @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -205,16 +423,97 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await sendRpc<{
-      user: unknown;
-      accessToken: string;
-      refreshToken: string;
-    }>(this.identity, { cmd: 'auth.login' }, dto);
+    const result = await sendRpc<
+      | { user: unknown; accessToken: string; refreshToken: string }
+      | TwoFactorChallengeResultDto
+    >(this.identity, { cmd: 'auth.login' }, dto);
 
+    // BE-26: admin va moliya (ADMIN_2FA=on) — sessiya yo‘q, keyingi qadam 2FA kodi; cookie yozilmaydi
+    if ('challengeToken' in result) return rawResponse(result);
     this.setAuthCookies(request, response, result);
     return rawResponse(
       this.tokensInBody ? { accessToken: result.accessToken } : {},
     );
+  }
+
+  // ---------------------------------------------------------------- BE-26: xodim 2FA (TOTP)
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '2FA ni ulash: QR uchun sir va otpauth havola (parol bosqichidagi challengeToken bilan)',
+  })
+  @ApiOkResponse({ type: TwoFactorSetupResultDto })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiConflictResponse({
+    description: '2FA allaqachon ulangan',
+    type: AuthErrorResponseDto,
+  })
+  setupTwoFactor(
+    @Body() dto: TwoFactorChallengeDto,
+  ): Promise<TwoFactorSetupResultDto> {
+    return sendRpc(this.identity, { cmd: 'auth.2fa.setup' }, dto);
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '2FA ni yoqish: birinchi kod → bir martalik tiklash kodlari (faqat shu javobda) va sessiya',
+  })
+  @ApiOkResponse({
+    schema: { example: { recoveryCodes: ['K7QM2XPA4D'], accessToken: null } },
+  })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  async enableTwoFactor(
+    @Body() dto: TwoFactorEnableDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{
+      recoveryCodes: string[];
+      accessToken: string;
+      refreshToken: string;
+    }>(this.identity, { cmd: 'auth.2fa.enable' }, dto);
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      recoveryCodes: result.recoveryCodes,
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('2fa/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Kirish: 2FA kodi yoki tiklash kodi → sessiya (3 xato → 15 daqiqa blok)',
+  })
+  @ApiOkResponse({ schema: { example: { accessToken: null } } })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  async verifyTwoFactor(
+    @Body() dto: TwoFactorVerifyDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await sendRpc<{ accessToken: string; refreshToken: string }>(
+      this.identity,
+      { cmd: 'auth.2fa.verify' },
+      dto,
+    );
+    this.setAuthCookies(request, response, result);
+    return rawResponse({
+      accessToken: this.tokensInBody ? result.accessToken : null,
+    });
   }
 
   @Public()

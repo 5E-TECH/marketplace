@@ -7,7 +7,7 @@ import { LeadOrderStatus } from './order-events.dto';
 
 /**
  * Ruxsat etilgan o‘tishlar (TZ T5 «Buyurtma» jadvali). Boshqa har qanday o‘tish rad etiladi va jurnalga yoziladi
- * (BUY-2). RETURN_REQUESTED dan keyingi holat T5 da yo‘q — qaytarish oqimi BE-44 da.
+ * (BUY-2). RETURN_REQUESTED dan keyingi holatlar T5 da yo‘q — BE-44 [taklif]: `LEAD_RETURN_TRANSITIONS`.
  */
 export const LEAD_ORDER_TRANSITIONS: Readonly<
   Record<LeadOrderStatus, readonly LeadOrderStatus[]>
@@ -36,10 +36,25 @@ export const LEAD_ORDER_TRANSITIONS: Readonly<
   [LeadOrderStatus.REMITTED]: [LeadOrderStatus.SETTLED],
   [LeadOrderStatus.REFUSED]: [LeadOrderStatus.RETURNING],
   [LeadOrderStatus.RETURNING]: [LeadOrderStatus.RETURNED_GRADED],
+  // BE-44: qaror o‘tishlari umumiy jadvalda emas (Elchi xabari yo‘l qidirib kutilayotgan qaytarishni chetlab o‘tmasin) —
+  // faqat qaytarish oqimi: `LEAD_RETURN_TRANSITIONS`
   [LeadOrderStatus.RETURN_REQUESTED]: [],
   [LeadOrderStatus.SETTLED]: [],
   [LeadOrderStatus.RETURNED_GRADED]: [],
   [LeadOrderStatus.CANCELLED]: [],
+};
+
+/**
+ * BE-44 [taklif, T5 ga yoziladi]: qaytarish so‘rovi qarori — tasdiq: tovar qaytmoqda (BE-17 saralashi), rad: yetkazilgan.
+ * Faqat xodim qarori bilan (`LeadReturnService`); Elchi, ombor va boshqa o‘tishlar bu yo‘lni ishlata olmaydi.
+ */
+export const LEAD_RETURN_TRANSITIONS: Readonly<
+  Partial<Record<LeadOrderStatus, readonly LeadOrderStatus[]>>
+> = {
+  [LeadOrderStatus.RETURN_REQUESTED]: [
+    LeadOrderStatus.RETURNING,
+    LeadOrderStatus.DELIVERED,
+  ],
 };
 
 export function isLeadOrderTransitionAllowed(
@@ -80,6 +95,10 @@ export function orderCodAmount(input: {
 export const LEAD_ORDER_RPC = {
   /** checkout → catalog: buyurtma uchun narx nusxasi (tasdiqlangan narx, taqsimot, yetkazish). */
   CATALOG_SNAPSHOT: 'catalog.order.snapshot',
+  /**
+   * BE-34: ko‘p tovarli buyurtma — har tovar narx nusxasi va butun posilka yetkazishi (og‘irliklar yig‘indisi bo‘yicha).
+   */
+  CATALOG_SNAPSHOT_MANY: 'catalog.order.snapshot-many',
   /** BE-19 (ombor), BE-21 (Elchi webhook), moliya → checkout: holatni o‘zgartirish. */
   TRANSITION: 'checkout.order.transition',
   /** gateway → checkout: operator, nazoratchi yoki admin bekor qiladi (BUY-3). */
@@ -119,6 +138,28 @@ export interface CatalogOrderSnapshot {
     /** Elchi tarifi jami og‘irlik bo‘yicha (BUY-4, NRX-7). */
     elchiTariff: number;
   };
+  /** BE-41 (EQ-09): fiskal chek qatori uchun nusxa — buyurtma paytidagi kodlar (eski katalog javobida yo‘q). */
+  fiscal?: OrderItemFiscal;
+}
+
+/**
+ * BE-41 (EQ-09): chek qatori ma’lumoti — chekni Elchi kuryeri chiqaradi. Komissiya tovari: komitent — optovik
+ * (OPT-1 komissiya shartnomasi). Kiritilmagan bo‘lsa null (BE-41 dan oldingi mahsulot yoki STIRsiz optovik).
+ */
+export interface OrderItemFiscal {
+  /** MXIK (IKPU), 17 raqam. */
+  mxikCode: string | null;
+  /** Qadoq (o‘lchov birligi) kodi. */
+  packageCode: string | null;
+  /** Optovik (komitent) STIR i, 9 raqam (`catalog.shop.tin`). */
+  wholesalerTin: string | null;
+}
+
+/** `catalog.order.snapshot-many` javobi: `items` so‘rov tartibida (topilmagan mahsulot — null). */
+export interface CatalogOrderSnapshotMany {
+  items: Array<CatalogOrderSnapshot | null>;
+  /** Butun posilka: jami og‘irlik bo‘yicha Elchi tarifi va mijozga ko‘rinadigan yetkazish [taklif BE-34]. */
+  delivery: CatalogOrderSnapshot['delivery'] | null;
 }
 
 export enum LeadOrderActorType {

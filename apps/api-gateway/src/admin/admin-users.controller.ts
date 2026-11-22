@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminUsersQueryDto,
+  AffiliateStreamStatus,
   AuthErrorResponseDto,
   CurrentUser,
   ImpersonationResultDto,
@@ -43,6 +44,7 @@ import {
 export class AdminUsersController {
   constructor(
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
   ) {}
 
   @Get('admin/users')
@@ -128,8 +130,10 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: true },
     );
-    // C1.31 — audit (best-effort): amal muvaffaqiyatidan so'ng yoziladi.
+    // audit sahifalardan oldin: lead-service xato bersa ham blok auditda qoladi
     this.audit(admin.sub, 'user.block', 'User', id, ip);
+    // BE-27 (BE-11 TC11): bloklangan sotuvchining hamma sahifasi to‘xtaydi — lid qabul qilinmaydi
+    await this.affiliateStreams(res, AffiliateStreamStatus.STOPPED);
     return res;
   }
 
@@ -148,7 +152,50 @@ export class AdminUsersController {
       { cmd: 'identity.user.set-blocked' },
       { actorId: admin.sub, userId: id, blocked: false },
     );
+    // audit sahifalardan oldin: lead-service xato bersa ham blok auditda qoladi
     this.audit(admin.sub, 'user.unblock', 'User', id, ip);
+    // BE-27: blokdan chiqsa sahifalari qayta ochiladi (firibgarlik sababli to‘xtatilgani — yo‘q, BE-35)
+    await this.affiliateStreams(res, AffiliateStreamStatus.ACTIVE);
+    return res;
+  }
+
+  /**
+   * Sotuvchi (AFFILIATE) bo‘lsa — sahifalar holati lead-service da. Xato yashirilmaydi: blok saqlangan, sahifalar
+   * esa ochiq qolsa admin xatoni ko‘rib qayta bosadi (bloklash takrorlansa ham zarari yo‘q).
+   */
+  private async affiliateStreams(
+    user: unknown,
+    status: AffiliateStreamStatus,
+  ): Promise<void> {
+    const u = (user ?? {}) as { id?: string | number; role?: string };
+    if (u.role !== Role.AFFILIATE || !u.id) return;
+    await sendRpc(
+      this.lead,
+      { cmd: 'lead.affiliate.streams.set-status' },
+      { affiliateId: String(u.id), status },
+    );
+  }
+
+  /** BE-26: xodimning 2FA sini nolga tushirish (telefon va tiklash kodlari yo‘qolgan) — sessiyalari yopiladi. */
+  @Post('admin/users/:id/2fa/reset')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xodim 2FA sini nolga tushirish (keyingi kirishda qayta ulaydi)',
+  })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  async resetTwoFactor(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') id: string,
+    @Ip() ip: string,
+  ) {
+    const res = await sendRpc(
+      this.identity,
+      { cmd: 'identity.2fa.reset' },
+      { actorId: admin.sub, userId: id },
+    );
+    this.audit(admin.sub, 'user.2fa.reset', 'User', id, ip);
     return res;
   }
 

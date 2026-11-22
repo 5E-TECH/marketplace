@@ -1,5 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
-import { ReturnRequestStatus } from '@app/common';
+import { NEVER, of, throwError } from 'rxjs';
+import { CATALOG_DISPLAY_LOOKUP, ReturnRequestStatus } from '@app/common';
+import { CATALOG_DISPLAY_TIMEOUT_MS } from './catalog-display.util';
 import { ReturnRequestQueryService } from './return-request-query.service';
 
 describe('ReturnRequestQueryService (C4.2)', () => {
@@ -8,7 +10,6 @@ describe('ReturnRequestQueryService (C4.2)', () => {
     orderId: '10',
     sellerOrderId: '51',
     shopId: '7',
-    shopName: 'Nova',
     buyerName: 'Ali',
     status: ReturnRequestStatus.REFUNDED,
     reason: 'CHANGED_MIND',
@@ -24,7 +25,18 @@ describe('ReturnRequestQueryService (C4.2)', () => {
     updatedAt: new Date(),
   };
 
-  function setup(rows: unknown[] = [row]) {
+  function setup(
+    rows: unknown[] = [row],
+    catalog = {
+      send: jest.fn(() =>
+        of({
+          shops: [{ id: '7', name: 'Nova' }],
+          products: [{ id: '7', imageUrl: 'https://cdn/nova-12.webp' }],
+          variants: [],
+        }),
+      ),
+    },
+  ) {
     const calls: Array<{ sql: string; params: unknown[] }> = [];
     const query = jest.fn(async (sql: string, params: unknown[] = []) => {
       calls.push({ sql, params });
@@ -38,7 +50,6 @@ describe('ReturnRequestQueryService (C4.2)', () => {
             productId: '7',
             variantId: '12',
             productName: 'Nova 12',
-            imageUrl: null,
             quantity: 1,
             unitPrice: '200000',
             lineTotal: '200000',
@@ -52,8 +63,12 @@ describe('ReturnRequestQueryService (C4.2)', () => {
     });
     const dataSource = { query, manager: { query } };
     return {
-      service: new ReturnRequestQueryService(dataSource as never),
+      service: new ReturnRequestQueryService(
+        dataSource as never,
+        catalog as never,
+      ),
       calls,
+      catalog,
     };
   }
 
@@ -93,5 +108,47 @@ describe('ReturnRequestQueryService (C4.2)', () => {
     await expect(setup().service.get('1; DROP')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('BE-29: do‘kon nomi va rasm katalog RPC dan — checkout SQL i `catalog.*` ga murojaat qilmaydi', async () => {
+    const { service, calls, catalog } = setup();
+    const page = await service.list({});
+
+    expect(calls.every((call) => !/\bcatalog\./.test(call.sql))).toBe(true);
+    expect(catalog.send).toHaveBeenCalledTimes(1);
+    expect(catalog.send).toHaveBeenCalledWith(
+      { cmd: CATALOG_DISPLAY_LOOKUP },
+      { shopIds: ['7'], productIds: ['7'] },
+    );
+    expect(page.items[0]).toMatchObject({
+      shopName: 'Nova',
+      items: [{ productId: '7', imageUrl: 'https://cdn/nova-12.webp' }],
+    });
+  });
+
+  it('BE-29: katalog javob bermasa ro‘yxat ochiladi — nom va rasm null', async () => {
+    const { service } = setup([row], {
+      send: jest.fn(() => throwError(() => new Error('catalog o‘chiq'))),
+    });
+    const details = await service.get('3');
+
+    expect(details).toMatchObject({
+      shopName: null,
+      items: [{ productId: '7', imageUrl: null }],
+    });
+  });
+
+  it('BE-29: katalog javob bermasa 1,5 s dan keyin nomsiz javob — gateway 10 s kutib qolmaydi', async () => {
+    jest.useFakeTimers();
+    try {
+      const { service } = setup([row], { send: jest.fn(() => NEVER) });
+      const pending = service.list({});
+      await jest.advanceTimersByTimeAsync(CATALOG_DISPLAY_TIMEOUT_MS);
+      await expect(pending).resolves.toMatchObject({
+        items: [{ shopName: null, items: [{ imageUrl: null }] }],
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

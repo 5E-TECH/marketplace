@@ -84,6 +84,6 @@ o'zgaruvchi/funksiya `camelCase`, enum qiymati `UPPER_SNAKE`. Kod inglizcha, izo
 
 ## Yangi microservice qo'shish (shablon)
 
-`apps/echo-service` — eng qisqa namuna: `ConfigModule → connectMicroservice(rmqOptions) →
-startAllMicroservices`, `@MessagePattern({ cmd: '...' })`. `identity-service` — DB'li to'liq
-namuna (TypeORM + entity + auth). Yangi servisni `nest-cli.json`'ga qo'shing.
+`apps/search-service` — kichik namuna: `ConfigModule → connectMicroservice(rmqServer) →
+startAllMicroservices`, `@MessagePattern({ cmd: '...' })` (echo-service BE-29 da o'chirildi).
+`identity-service` — DB'li to'liq namuna (TypeORM + entity + auth). Yangi servisni `nest-cli.json`'ga qo'shing.

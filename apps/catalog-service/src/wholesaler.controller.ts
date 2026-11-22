@@ -2,6 +2,7 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AdminWholesalersQueryDto,
+  CATALOG_WHOLESALER_PAYMENT_DETAILS,
   CreateWholesalerDto,
   RpcHttpExceptionFilter,
   UpdateWholesalerDto,
@@ -27,6 +28,12 @@ export class WholesalerController {
   @MessagePattern({ cmd: 'catalog.wholesaler.admin-get' })
   get(@Payload() data: { id: string }) {
     return this.wholesalers.get(String(data.id));
+  }
+
+  /** BE-33: finance bank fayli uchun (ichki). */
+  @MessagePattern({ cmd: CATALOG_WHOLESALER_PAYMENT_DETAILS })
+  paymentDetails(@Payload() data: { ids: string[] }) {
+    return this.wholesalers.paymentDetails(data?.ids ?? []);
   }
 
   @MessagePattern({ cmd: 'catalog.wholesaler.admin-update' })

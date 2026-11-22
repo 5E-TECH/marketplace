@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
   AffiliateCreativeType,
+  AffiliateOfferDetailDto,
   AffiliateOfferDto,
   AffiliateOfferSort,
   AffiliateOffersPageDto,
@@ -14,7 +15,7 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Lead, OfferContent } from './entities';
-import { maxSalePrice, percent } from './offer-math';
+import { isOfferVisible, maxSalePrice, percent } from './offer-math';
 
 /** Yaroqli lid: yaroqsiz va birlashtirilgandan boshqa hammasi (tasdiq foizining maxraji). */
 const NOT_VALID = [LeadStatus.INVALID, LeadStatus.MERGED];
@@ -42,7 +43,7 @@ export class OfferService {
         search: query.search,
         categoryId: query.categoryId,
       })
-    ).filter((o) => o.cpaAvailable && !o.withdrawn && o.approvedPrice !== null);
+    ).filter(isOfferVisible);
     const rates = await this.approveRates(offers.map((o) => o.productId));
     let items = offers.map((o) =>
       this.toDto(o, rates.get(o.productId) ?? null),
@@ -63,6 +64,52 @@ export class OfferService {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * BE-08 (QA TC5): sotuvchi offer kartasi — kreativlar (video ochiq havola bilan) va tafsilot. Sotuvchiga yopiq
+   * offer (CPA o‘chiq, olib tashlangan, narx tasdiqlanmagan) — 404, ro‘yxatdagi bilan bir xil qoida.
+   */
+  async getForAffiliate(productId: string): Promise<AffiliateOfferDetailDto> {
+    const id = String(productId ?? '');
+    const o = /^[1-9]\d{0,18}$/.test(id) ? await this.catalog.get(id) : null;
+    if (!isOfferVisible(o)) throw new NotFoundException('Offer topilmadi');
+    const rate = (await this.approveRates([o.productId])).get(o.productId);
+    const content = await this.contents.findOne({
+      where: { productId: o.productId, isDeleted: false },
+    });
+    const base = this.toDto(o, rate ?? null);
+    return {
+      ...base,
+      categoryName: o.categoryName,
+      subtitle: o.subtitle,
+      description: o.description,
+      boxContents: content?.boxContents?.length
+        ? content.boxContents.join(', ')
+        : null,
+      weightKg: o.weightGrams === null ? null : o.weightGrams / 1000,
+      deliveryMode: null,
+      centerDeliveryFee: o.centerDeliveryFee,
+      addressDeliveryFee: o.addressDeliveryFee,
+      isBad: o.isBad,
+      state: base.stock > 0 ? 'OPEN' : 'OUT_OF_STOCK',
+      stoppedAt: null,
+      stopReason: null,
+      onSaleSince: String(o.createdAt).slice(0, 10),
+      results: null,
+      priceSplit: null,
+      creatives: o.creatives.map((c) => ({
+        id: c.id,
+        type:
+          c.type === 'VIDEO'
+            ? AffiliateCreativeType.VIDEO
+            : AffiliateCreativeType.IMAGE,
+        url: c.url,
+        caption: null,
+        processing: false,
+        approvedAt: c.createdAt ?? String(o.createdAt),
+      })),
     };
   }
 

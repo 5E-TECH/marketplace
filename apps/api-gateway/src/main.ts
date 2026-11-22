@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { swaggerEnabled } from './swagger-enabled';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -87,15 +88,19 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger — /api/docs
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Elchi Marketplace API')
-    .setDescription('Marketplace API — MVP (batafsil: docs/API_CONTRACT.md)')
-    .setVersion('0.1')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger — /api/docs. BE-26 (T8: «prod’da Swagger yopiq»): prod’da sukut bo‘yicha o‘chiq — `/api/docs` 404.
+  // Ichki tarmoqda kerak bo‘lsa `SWAGGER_ENABLED=on` va Caddy’da tashqaridan yopiladi. Shartnoma fayli
+  // (`docs/openapi.json`) bunga bog‘liq emas — `npm run contract:export` alohida yaratadi.
+  if (swaggerEnabled(config)) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Elchi Marketplace API')
+      .setDescription('Marketplace API — MVP (batafsil: docs/API_CONTRACT.md)')
+      .setVersion('0.1')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(port, '0.0.0.0');
   Logger.log(

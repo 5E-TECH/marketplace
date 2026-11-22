@@ -42,6 +42,7 @@ import {
   Roles,
   sendRpc,
   UpdateAffiliateStreamDto,
+  AffiliateOfferDetailDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from './lead-id.pipe';
 
@@ -67,6 +68,25 @@ export class AffiliateStreamsController {
     @Query() query: AffiliateOffersQueryDto,
   ): Promise<AffiliateOffersPageDto> {
     return sendRpc(this.lead, { cmd: 'lead.offer.list' }, { query });
+  }
+
+  /** BE-08 (QA TC5): offer kartasi — kreativlar ochiq havola bilan (sotuvchi videoni ko‘radi). */
+  @Get('offers/:productId')
+  @ApiOperation({
+    summary: 'Offer kartasi: tafsilot va kreativlar',
+    description:
+      'Ro‘yxat maydonlari va tafsilot (kategoriya, tavsif, og‘irlik, yetkazish, BAD, holat, kreativlar). Katalogda hali bo‘lmagan qismlar (yetkazish rejimi, narx taqsimoti, hamma sotuvchilar natijasi) — null. Yopiq offer — 404.',
+  })
+  @ApiOkResponse({ type: AffiliateOfferDetailDto })
+  @ApiNotFoundResponse({ description: 'Offer topilmadi yoki yopiq' })
+  getOffer(
+    @Param('productId', ParseLeadIdPipe) productId: string,
+  ): Promise<AffiliateOfferDetailDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.offer.get-affiliate' },
+      { productId },
+    );
   }
 
   @Post('streams')

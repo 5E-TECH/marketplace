@@ -6,6 +6,7 @@ import { INVENTORY_DB } from './database';
 import { InboundService } from './inbound.service';
 import { InventoryService } from './inventory.service';
 import { ReturnInspectionService } from './return-inspection.service';
+import { WholesalerStockService } from './wholesaler-stock.service';
 import { Stock } from './entities/stock.entity';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -179,6 +180,20 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       { cmd: 'catalog.wholesaler.admin-get' },
       { id: WHOLESALER },
     );
+  });
+
+  it('BE-47 TC2: qabul — optovik kabinetiga hodisa shu tranzaksiyada outbox’da (qabul, brak, e’lon qilingan)', async () => {
+    const [row] = (await ds.query(
+      `SELECT payload FROM inventory.outbox_event WHERE event_type = 'inventory.inbound.received' ORDER BY id LIMIT 1`,
+    )) as Array<{ payload: Record<string, unknown> }>;
+    expect(row.payload).toMatchObject({
+      wholesalerId: WHOLESALER,
+      number: expect.stringMatching(/^PS-\d{6}$/),
+      status: 'DISCREPANCY',
+      declaredQty: 100,
+      receivedQty: 98,
+      defectiveQty: 2,
+    });
   });
 
   it('e’lon: boshqa optovik mahsuloti yoki takroriy mahsulot — 400; qabulda hamma qator shart', async () => {
@@ -493,5 +508,99 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
         actorId: '61',
       }),
     ).rejects.toThrow('chiqim qilinmagan');
+  });
+  it('BE-30 TC2: optovik paneli — omborda va bandda ombor jadvalining o‘zi; yo‘lda, sotilgan, qaytgan, brak; boshqa optovik postavkasi kirmaydi', async () => {
+    const received = await inbound.declare({
+      wholesalerId: WHOLESALER,
+      expectedAt: inDays(0),
+      items: [{ productId: '48', quantity: 10 }],
+      actorId: '61',
+    });
+    await inbound.receive({
+      id: received.id,
+      items: [
+        {
+          itemId: received.items[0].id,
+          receivedQty: 10,
+          defectiveQty: 1,
+          cell: 'E-1',
+        },
+      ],
+      actorId: '61',
+    });
+    // TC5: optovik e’lon qilgan, hali kelmagan — «yo‘lda»
+    const pending = await inbound.declare({
+      wholesalerId: WHOLESALER,
+      expectedAt: inDays(2),
+      items: [{ productId: '48', quantity: 7 }],
+      actorId: '501',
+    });
+    expect(pending.status).toBe(InboundShipmentStatus.DECLARED);
+    // sotilgan: 3 dona band → chiqim; 2 dona hali bandda
+    await inventory.reserveAvailable({
+      orderRef: '7201',
+      items: [{ variantId: '848', quantity: 3 }],
+      idempotencyKey: 'r-7201',
+    });
+    await inventory.commit({ orderRef: '7201', idempotencyKey: 'c-7201' });
+    await inventory.reserveAvailable({
+      orderRef: '7202',
+      items: [{ variantId: '848', quantity: 2 }],
+      idempotencyKey: 'r-7202',
+    });
+    // qaytgan: 1 sotiladigan, 1 brak
+    await returns.grade({
+      orderRef: '7201',
+      items: [{ variantId: '848', sellable: 2, defective: 1 }],
+      actorId: '61',
+    });
+    const summary = await new WholesalerStockService(ds).summary({
+      wholesalerId: WHOLESALER,
+      variants: [
+        {
+          productId: '48',
+          productName: 'Mahsulot 48',
+          variantId: '848',
+          sku: 'SKU-48',
+        },
+      ],
+    });
+    const stock = await stockOf('848');
+    expect(summary.items).toEqual([
+      {
+        productId: '48',
+        productName: 'Mahsulot 48',
+        variantId: '848',
+        sku: 'SKU-48',
+        onHand: stock.quantityOnHand,
+        reserved: stock.quantityReserved,
+        available: stock.quantityOnHand - stock.quantityReserved,
+        inTransit: 7,
+        sold: 3,
+        returned: 2,
+        defective: 2, // qabulda 1 + qaytganda 1
+      },
+    ]);
+    expect(summary.items[0]).toMatchObject({ reserved: 2 });
+    await expect(inventory.available(['848'])).resolves.toEqual({
+      '848': summary.items[0].available,
+    });
+    expect(summary.totals).toMatchObject({
+      onHand: stock.quantityOnHand,
+      inTransit: 7,
+    });
+    // boshqa optovik e’loni bu optovik panelida yo‘q
+    const other = await new WholesalerStockService(ds).summary({
+      wholesalerId: '16',
+      variants: [
+        {
+          productId: '48',
+          productName: 'Mahsulot 48',
+          variantId: '848',
+          sku: 'SKU-48',
+        },
+      ],
+    });
+    expect(other.items[0]).toMatchObject({ inTransit: 0 });
   });
 });

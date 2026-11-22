@@ -1,6 +1,7 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  COD_DAILY_CHECK_RPC,
   FINANCE_AFFILIATE_RPC,
   FinanceAffiliateIncomeQuery,
   FraudFeeEvent,
@@ -11,6 +12,7 @@ import {
   RpcHttpExceptionFilter,
 } from '@app/common';
 import { BalanceCheckService } from './balance-check.service';
+import { CodDailyCheckService } from './cod-daily-check.service';
 import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
 
@@ -22,6 +24,7 @@ export class LedgerController {
     private readonly ledger: LedgerService,
     private readonly queries: LedgerQueryService,
     private readonly balance: BalanceCheckService,
+    private readonly codDaily: CodDailyCheckService,
   ) {}
 
   @EventPattern(ORDER_EVENTS.STATUS_CHANGED)
@@ -64,6 +67,17 @@ export class LedgerController {
   @MessagePattern({ cmd: FINANCE_AFFILIATE_RPC.INCOME })
   affiliateIncome(@Payload() data: FinanceAffiliateIncomeQuery) {
     return this.queries.affiliateIncome(data);
+  }
+
+  /** BE-21 (TZ ELC-4): kunlik COD sverkasi. */
+  @MessagePattern({ cmd: COD_DAILY_CHECK_RPC.GET })
+  codDailyGet(@Payload() data: { date?: string }) {
+    return this.codDaily.get(data);
+  }
+
+  @MessagePattern({ cmd: COD_DAILY_CHECK_RPC.RUN })
+  codDailyRun(@Payload() data: { date?: string }) {
+    return this.codDaily.run(data);
   }
 
   @MessagePattern({ cmd: 'finance.balance-check.latest' })

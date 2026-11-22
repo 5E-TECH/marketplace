@@ -13,6 +13,7 @@ import {
   CheckoutDeliveryDestination,
   ErrorCode,
   isLeadOrderTransitionAllowed,
+  LEAD_RETURN_TRANSITIONS,
   LeadOrderActor,
   LeadOrderActorType,
   LeadOrderStatus,
@@ -111,6 +112,8 @@ export class LeadOrderStatusService {
       to: LeadOrderStatus;
       actor: LeadOrderActor;
       reason: string | null;
+      /** BE-44: qaytarish so‘rovi qarori — `LEAD_RETURN_TRANSITIONS` ham ruxsat (faqat LeadReturnService). */
+      returnDecision?: boolean;
     },
   ): Promise<AppliedTransition> {
     const { orderId, to, actor, reason } = input;
@@ -131,7 +134,10 @@ export class LeadOrderStatusService {
         },
         command: null,
       };
-    if (!isLeadOrderTransitionAllowed(from, to))
+    if (
+      !isLeadOrderTransitionAllowed(from, to) &&
+      !(input.returnDecision && LEAD_RETURN_TRANSITIONS[from]?.includes(to))
+    )
       throw new TransitionRejected(orderId, from, to);
     const command = inventoryCommand(orderId, to, actor, reason);
     if (command)
@@ -209,9 +215,11 @@ export class LeadOrderStatusService {
     rejected: TransitionRejected,
     actor: LeadOrderActor,
     reason: string | null,
+    // BE-21: chaqiruvchi tranzaksiyasida (webhook rad etilgan o‘tishni 200 bilan qaytaradi — qaytarilmaydi)
+    manager: EntityManager = this.dataSource.manager,
   ): Promise<void> {
     await this.journal(
-      this.dataSource.manager,
+      manager,
       rejected.orderId,
       rejected.from,
       rejected.to,
@@ -348,12 +356,13 @@ export class LeadOrderStatusService {
     )) as Array<Record<string, string | null>>;
     if (!order) throw new NotFoundException('Buyurtma topilmadi');
     const items = (await manager.query(
-      `SELECT i.product_id::text AS "productId", s.shop_id::text AS "wholesalerId", i.sku,
+      `SELECT i.product_id::text AS "productId", COALESCE(i.wholesaler_id, s.shop_id)::text AS "wholesalerId", i.sku,
               i.product_name AS name, i.quantity, i.weight_grams AS "weightGrams",
               i.approved_price::text AS "approvedPrice", i.base_price::text AS "basePrice",
               i.unit_price::text AS "salePrice", i.affiliate_fee::text AS "affiliateFee",
               i.call_center_fee::text AS "callCenterFee", i.hidden_delivery::text AS "hiddenDelivery",
-              i.platform_service::text AS "platformService"
+              i.platform_service::text AS "platformService", i.mxik_code AS "mxikCode",
+              i.package_code AS "packageCode", i.wholesaler_tin AS "wholesalerTin"
          FROM checkout.sales_order_item i
          JOIN checkout.parcel s ON s.id = i.sales_order_seller_id
         WHERE s.sales_order_id = $1
@@ -405,6 +414,12 @@ export class LeadOrderStatusService {
             callCenterFee: n(item.callCenterFee) * quantity,
             hiddenDelivery: n(item.hiddenDelivery) * quantity,
             platformService: n(item.platformService) * quantity,
+          },
+          // BE-41: chek qatori (Elchi kuryeri chiqaradi)
+          fiscal: {
+            mxikCode: (item.mxikCode as string | null) ?? null,
+            packageCode: (item.packageCode as string | null) ?? null,
+            wholesalerTin: (item.wholesalerTin as string | null) ?? null,
           },
         };
       }),

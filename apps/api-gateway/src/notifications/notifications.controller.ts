@@ -1,5 +1,6 @@
 import { Controller, Get, Inject, Param, Patch, Query } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -47,7 +48,11 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Bitta xabarnomani o‘qilgan qilish' })
-  markRead(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+  markRead(
+    @CurrentUser() user: JwtUser,
+    // BE-47: noto‘g‘ri id — 400 (bazaga yetib 500 bermasin)
+    @Param('id', ParseLeadIdPipe) id: string,
+  ) {
     return sendRpc(
       this.notifications,
       { cmd: 'notifications.mark-read' },

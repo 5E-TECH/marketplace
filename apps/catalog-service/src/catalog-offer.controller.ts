@@ -1,6 +1,9 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  CATALOG_DISPLAY_LOOKUP,
+  CatalogDisplayLookupRequest,
+  CATALOG_MODERATION_RPC,
   CatalogOfferListQuery,
   LEAD_CATALOG_RPC,
   LEAD_ORDER_RPC,
@@ -36,8 +39,34 @@ export class CatalogOfferController {
     );
   }
 
+  /** BE-34: saytdan ko‘p tovarli buyurtma — har tovar nusxasi va butun posilka yetkazishi. */
+  @MessagePattern({ cmd: LEAD_ORDER_RPC.CATALOG_SNAPSHOT_MANY })
+  orderSnapshotMany(
+    @Payload()
+    data: {
+      items: Array<{ productId: string; quantity: number }>;
+      whereDeliver: string;
+    },
+  ) {
+    return this.offers.orderSnapshotMany(
+      data?.items ?? [],
+      String(data?.whereDeliver ?? ''),
+    );
+  }
+
+  @MessagePattern({ cmd: CATALOG_MODERATION_RPC.SUMMARY })
+  moderationSummary() {
+    return this.offers.moderationSummary();
+  }
+
   @MessagePattern({ cmd: LEAD_CATALOG_RPC.OFFER_LIST })
   list(@Payload() query: CatalogOfferListQuery) {
     return this.offers.list(query ?? {});
+  }
+
+  /** BE-29: checkout (eski qaytarishlar ro‘yxati) uchun do‘kon nomi va mahsulot rasmi. */
+  @MessagePattern({ cmd: CATALOG_DISPLAY_LOOKUP })
+  displayLookup(@Payload() data: CatalogDisplayLookupRequest) {
+    return this.offers.displayLookup(data);
   }
 }

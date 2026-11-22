@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   Allow,
+  IsIn,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -66,6 +67,8 @@ export enum LandingPageState {
 }
 
 const PHONE_UZ = /^\+998\d{9}$/;
+/** BE-34: sayt buyurtmasi formasida ham shu qoida. */
+export const PHONE_UZ_PATTERN = PHONE_UZ;
 /** BIGINT ID satr ko‘rinishida (repo namunasi: cart.dto.ts `cartItemIds`). */
 export const LEAD_BIGINT_ID = /^[1-9]\d{0,18}$/;
 /** PostgreSQL BIGINT eng kattasi: undan katta ID bazada 22003 (500) beradi. */
@@ -395,6 +398,16 @@ export class CreateLeadDto extends LeadTrackingDto {
   @MaxLength(32)
   consentVersion: string;
 
+  @ApiPropertyOptional({
+    enum: ['CALL', 'SMS'],
+    description:
+      'BE-34: SMS bilan tasdiq faqat asosiy saytda; sotuvchi sahifasi lidini har doim operator tasdiqlaydi — qiymat ' +
+      'e’tiborga olinmaydi (TC8)',
+  })
+  @IsOptional()
+  @IsIn(['CALL', 'SMS'])
+  confirmMode?: 'CALL' | 'SMS';
+
   @ApiPropertyOptional({ example: '90311', description: 'POST /clicks javobi' })
   @IsOptional()
   @IsLeadBigintId('clickId')
@@ -588,7 +601,13 @@ export interface CatalogOfferSnapshot {
   /** Band qilinmagan qoldiq, dona; null — noma’lum (inventory javob bermadi): lid qabul ochiq, yangi sahifa yopiq. */
   stock: number | null;
   /** Admin yuklagan kreativlar (BE-08 fayl servisi). */
-  creatives: Array<{ id: string; type: 'IMAGE' | 'VIDEO'; url: string }>;
+  creatives: Array<{
+    id: string;
+    type: 'IMAGE' | 'VIDEO';
+    url: string;
+    /** Kutubxonaga qo‘shilgan vaqt (BE-08). */
+    createdAt?: string;
+  }>;
   createdAt: string;
 }
 

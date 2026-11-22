@@ -40,6 +40,7 @@ import {
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
+import { RETURNS_EXAMPLE } from './warehouse.examples';
 
 /**
  * Qaytgan tovarni saralash (BE-17; TZ OMB-6, T5 «RETURNING → RETURNED_GRADED — omborchi»). Saralash — omborchi va
@@ -58,6 +59,11 @@ export class WarehouseReturnsController {
 
   @Get()
   @ApiOperation({ summary: 'Omborga qaytayotgan posilkalar (saralanadi)' })
+  @ApiOkResponse({
+    description:
+      '«Qaytmoqda» holatidagi lid buyurtmalari, eng eskisi birinchi, 200 tagacha',
+    schema: { example: RETURNS_EXAMPLE },
+  })
   list(): Promise<WarehouseReturnView[]> {
     return sendRpc(this.checkout, { cmd: WAREHOUSE_RPC.RETURNS }, {});
   }
@@ -132,6 +138,12 @@ export class WarehouseReturnsController {
   @ApiProduces('application/pdf')
   @ApiOperation({
     summary: 'Brak akti PDF (har posilka uchun) — optovikka qo‘lda',
+  })
+  @ApiOkResponse({
+    description: 'PDF fayl: `brak-akti_<buyurtma ID>.pdf`',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
   })
   @ApiConflictResponse({ description: 'Bu posilkada brak yo‘q' })
   async defectAct(

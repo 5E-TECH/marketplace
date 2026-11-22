@@ -11,6 +11,7 @@ import {
   ErrorCode,
   LEAD_ORDER_RPC,
   LeadConfirmedEvent,
+  LeadConfirmedVia,
   LeadOrderActorType,
   LeadOrderStatus,
   LeadSource,
@@ -24,11 +25,16 @@ import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { SellerOrdersService } from './seller-orders.service';
+import { LeadReturnService } from './lead-return.service';
+import { ReturnRequestQueryService } from './return-request-query.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
 import { ReservationSweeperService } from '../../inventory-service/src/reservation-sweeper.service';
 import { splitDelivered } from '../../finance-service/src/ledger/split';
-import { ParcelService } from '../../elchi-integration/src/parcel.service';
+import {
+  ParcelService,
+  fiscalProblem,
+} from '../../elchi-integration/src/parcel.service';
 import { Reservation } from '../../inventory-service/src/entities/reservation.entity';
 import { Stock } from '../../inventory-service/src/entities/stock.entity';
 
@@ -41,6 +47,9 @@ const CHECKOUT_SCHEMA_TEST_LOCK = 2_304_006;
 
 const PRODUCT = '42';
 const VARIANT = '901';
+/** BE-34: saytdan ko‘p tovarli buyurtma — ikkinchi tovar, boshqa optovikniki. */
+const PRODUCT2 = '43';
+const VARIANT2 = '902';
 const ACTOR = {
   type: LeadOrderActorType.USER,
   id: '41',
@@ -66,6 +75,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
   let loseReserveReply = false;
   let relay: CheckoutOutboxRelayService;
   let offer: CatalogOrderSnapshot;
+  let offer2: CatalogOrderSnapshot;
   const catalogCalls: unknown[] = [];
   const inventoryCalls: Array<{ cmd: string; data: Record<string, unknown> }> =
     [];
@@ -109,6 +119,11 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     hiddenDelivery: 11_000,
     platformService: 25_000,
     delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+    fiscal: {
+      mxikCode: '03304001001000000',
+      packageCode: '1500012',
+      wholesalerTin: '305123456',
+    },
   });
 
   const confirmed = (
@@ -216,10 +231,57 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       send: (pattern: { cmd: string }, data: Record<string, unknown>) =>
         rpc(async () => {
           catalogCalls.push({ pattern, data });
-          if (pattern.cmd !== LEAD_ORDER_RPC.CATALOG_SNAPSHOT)
-            throw new Error(`kutilmagan katalog so‘rovi: ${pattern.cmd}`);
           if (catalogDown)
             throw new HttpException('katalog javob bermadi', 503);
+          if (pattern.cmd === LEAD_ORDER_RPC.CATALOG_SNAPSHOT_MANY) {
+            const kind =
+              data.whereDeliver === 'ADDRESS'
+                ? DeliveryKind.ADDRESS
+                : DeliveryKind.CENTER;
+            const lines = data.items as Array<{
+              productId: string;
+              quantity: number;
+            }>;
+            const snapshots = lines.map((line) =>
+              line.productId === PRODUCT
+                ? offer
+                : line.productId === PRODUCT2
+                  ? offer2
+                  : null,
+            );
+            if (snapshots.some((snap) => !snap))
+              return { items: snapshots, delivery: null };
+            const weight = lines.reduce(
+              (sum, line, index) =>
+                sum + snapshots[index]!.weightGrams * line.quantity,
+              0,
+            );
+            const tariff = elchiTariffFor(
+              TZ_DEFAULT_ELCHI_TARIFF,
+              weight,
+              kind,
+            );
+            // eng og‘ir bir donaning tarifi (ikkalasi ham «qisman», ko‘rinadigan 30 000)
+            const unitTariff = Math.max(
+              ...snapshots.map((snap) =>
+                elchiTariffFor(
+                  TZ_DEFAULT_ELCHI_TARIFF,
+                  snap!.weightGrams,
+                  kind,
+                ),
+              ),
+            );
+            return {
+              items: snapshots,
+              delivery: {
+                mode: 'PARTIAL',
+                shown: Math.min(tariff, 30_000 + (tariff - unitTariff)),
+                elchiTariff: tariff,
+              },
+            };
+          }
+          if (pattern.cmd !== LEAD_ORDER_RPC.CATALOG_SNAPSHOT)
+            throw new Error(`kutilmagan katalog so‘rovi: ${pattern.cmd}`);
           const quantity = Number(data.quantity);
           const kind =
             data.whereDeliver === 'ADDRESS'
@@ -291,6 +353,22 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
 
   beforeEach(() => {
     offer = baseOffer();
+    offer2 = {
+      ...baseOffer(2_000),
+      productId: PRODUCT2,
+      productName: 'Termos 1 l',
+      variantId: VARIANT2,
+      sku: 'T-1',
+      barcode: '4780012345999',
+      wholesalerId: '16',
+      approvedPrice: 120_000,
+      recommendedPrice: 120_000,
+      basePrice: 60_000,
+      affiliateFee: 25_000,
+      callCenterFee: 10_000,
+      hiddenDelivery: 11_000,
+      platformService: 14_000,
+    };
     catalogDown = false;
     inventoryDown = false;
     loseReserveReply = false;
@@ -345,7 +423,8 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     const [item] = (await checkoutDs.query(
       `SELECT i.unit_price::int AS "salePrice", i.approved_price::int AS "approvedPrice",
               i.base_price::int AS "basePrice", i.markup::int AS markup,
-              i.variant_id::text AS "variantId", i.sku
+              i.variant_id::text AS "variantId", i.sku, i.mxik_code AS "mxikCode",
+              i.package_code AS "packageCode", i.wholesaler_tin AS "wholesalerTin"
          FROM checkout.sales_order_item i
          JOIN checkout.sales_order_seller s ON s.id = i.sales_order_seller_id
         WHERE s.sales_order_id = $1`,
@@ -359,6 +438,10 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       markup: 25_000,
       variantId: VARIANT,
       sku: 'Q-1',
+      // BE-41: chek nusxasi — buyurtma paytidagi kodlar va optovik STIR i
+      mxikCode: '03304001001000000',
+      packageCode: '1500012',
+      wholesalerTin: '305123456',
     });
 
     const [created] = await outboxOf('order.status.changed', String(order.id));
@@ -397,6 +480,11 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
             hiddenDelivery: 11_000,
             platformService: 25_000,
           },
+          fiscal: {
+            mxikCode: '03304001001000000',
+            packageCode: '1500012',
+            wholesalerTin: '305123456',
+          },
         },
       ],
       delivery: { mode: 'PARTIAL', cost: 30_000, elchiTariff: 40_000 },
@@ -408,6 +496,8 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       invalidReason(event: OrderStatusChangedEvent): string | null;
     };
     expect(parcels.invalidReason(payload)).toBeNull();
+    // BE-41 TC3: qisman rejim — chek jami (276 000 + ko‘rinadigan yetkazish 30 000) = COD = sotuvchi sahifasidagi jami
+    expect(fiscalProblem(payload)).toBeNull();
 
     // band — HQ dan, muddatsiz (TC8 asosi)
     const reserve = inventoryCalls.find((c) => c.cmd === 'inventory.reserve');
@@ -832,5 +922,326 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
         [order.id],
       ),
     ).rejects.toThrow(/chk_checkout_sales_order_lead/);
+  });
+
+  describe('BE-34: saytdan ko‘p tovarli buyurtma', () => {
+    const site = (leadId: string, over: Partial<LeadConfirmedEvent> = {}) =>
+      confirmed({
+        leadId,
+        source: LeadSource.SITE,
+        streamId: null,
+        affiliateId: null,
+        productId: PRODUCT,
+        quantity: 1,
+        salePrice: 251_000,
+        items: [
+          { productId: PRODUCT, quantity: 1, salePrice: 251_000 },
+          { productId: PRODUCT2, quantity: 2, salePrice: 120_000 },
+        ],
+        confirmedVia: LeadConfirmedVia.SMS,
+        confirmedBy: null,
+        addressConfirmedBy: null,
+        ...over,
+      });
+    const inbound2 = async (quantity: number, key: string) =>
+      inventory.inbound({
+        variantId: VARIANT2,
+        warehouseId: await inventory.hqWarehouseId(),
+        quantity,
+        reason: 'Qabul (test)',
+        actorId: '1',
+        idempotencyKey: key,
+      });
+
+    it('TC10: ikkinchi tovar qoldig‘i 0 → buyurtma yo‘q, birinchisi ham band qilinmaydi, lid «qoldiq yo‘q» bilan', async () => {
+      const before = await stockRow();
+      await orders.onLeadConfirmed(site('7002'));
+      expect(await orderOfLead('7002')).toBeUndefined();
+      const [failed] = await outboxOf('order.create-failed', '7002');
+      expect(failed.payload).toMatchObject({
+        leadId: '7002',
+        reason: 'OUT_OF_STOCK',
+      });
+      const after = await stockRow();
+      expect(after.quantityReserved).toBe(before.quantityReserved);
+    });
+
+    it('TC9/TC6: savatda 2 tovar → bitta buyurtma, ikki qator (har biri o‘z optovigi), bitta posilka, og‘irliklar yig‘indisi; SMS bilan tasdiqlangan', async () => {
+      await inbound2(5, 'in-site-1');
+      await expect(orders.onLeadConfirmed(site('7001'))).resolves.toMatchObject(
+        { accepted: true },
+      );
+      const order = await orderOfLead('7001');
+      // 1 000 g + 2 × 2 000 g = 5 000 g → tarif 48 000 (TC5: 4,2 kg ham 48 000); bir dona (2 kg) tarifi 40 000 —
+      // ko‘rinadigan 30 000 + (48 000 − 40 000)
+      expect(order).toMatchObject({
+        status: LeadOrderStatus.CONFIRMED,
+        source: LeadSource.SITE,
+        affiliateId: null,
+        streamId: null,
+        weightGrams: 5_000,
+        deliveryCost: 48_000,
+        deliveryShown: 38_000,
+        totalAmount: 251_000 + 2 * 120_000 + 38_000,
+      });
+      const [meta] = (await checkoutDs.query(
+        `SELECT confirmed_by AS "confirmedBy", confirmed_via AS "confirmedVia" FROM checkout.sales_order WHERE lead_id = 7001`,
+      )) as Array<Record<string, unknown>>;
+      expect(meta).toEqual({ confirmedBy: null, confirmedVia: 'SMS' });
+      const items = (await checkoutDs.query(
+        `SELECT i.product_id::text AS "productId", i.quantity, i.unit_price::int AS "unitPrice",
+                i.wholesaler_id::text AS "wholesalerId", i.sales_order_seller_id::text AS parcel
+           FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id
+          WHERE p.sales_order_id = $1 ORDER BY i.id`,
+        [order.id],
+      )) as Array<Record<string, unknown>>;
+      expect(items.map(({ parcel: _parcel, ...rest }) => rest)).toEqual([
+        {
+          productId: PRODUCT,
+          quantity: 1,
+          unitPrice: 251_000,
+          wholesalerId: '15',
+        },
+        {
+          productId: PRODUCT2,
+          quantity: 2,
+          unitPrice: 120_000,
+          wholesalerId: '16',
+        },
+      ]);
+      expect(new Set(items.map((item) => item.parcel)).size).toBe(1);
+      const [task] = (await checkoutDs.query(
+        `SELECT required_qty AS qty FROM checkout.fulfillment_task WHERE order_id = $1`,
+        [order.id],
+      )) as Array<{ qty: number }>;
+      expect(task.qty).toBe(3);
+      // moliya va Elchi: har tovar o‘z optovigi va og‘irligi bilan
+      const [changed] = await outboxOf(
+        'order.status.changed',
+        String(order.id),
+      );
+      expect(
+        (changed.payload as { items: Array<Record<string, unknown>> }).items,
+      ).toEqual([
+        expect.objectContaining({
+          productId: PRODUCT,
+          wholesalerId: '15',
+          quantity: 1,
+        }),
+        expect.objectContaining({
+          productId: PRODUCT2,
+          wholesalerId: '16',
+          quantity: 2,
+        }),
+      ]);
+    });
+
+    it('hodisa tekshiruvi: SMS faqat saytda, qatorlar takrorlanmaydi, birinchi qator lidga mos', async () => {
+      for (const [leadId, over] of [
+        [
+          '7101',
+          { source: LeadSource.LANDING, streamId: '301', affiliateId: '77' },
+        ],
+        [
+          '7102',
+          {
+            items: [
+              { productId: PRODUCT, quantity: 1, salePrice: 251_000 },
+              { productId: PRODUCT, quantity: 1, salePrice: 251_000 },
+            ],
+          },
+        ],
+        ['7103', { quantity: 2 }],
+      ] as Array<[string, Partial<LeadConfirmedEvent>]>) {
+        await orders.onLeadConfirmed(site(leadId, over));
+        expect(await orderOfLead(leadId)).toBeUndefined();
+        const [failed] = await outboxOf('order.create-failed', leadId);
+        expect(failed.payload).toMatchObject({ reason: 'INVALID_ORDER' });
+      }
+    });
+  });
+
+  describe('BE-44: yetkazilgandan keyin qaytarish so‘rovi', () => {
+    const STAFF = { id: '41', role: 'ADMIN' };
+    let windowDays = 10;
+    const returns = () =>
+      new LeadReturnService(
+        checkoutDs,
+        { get: () => windowDays } as never,
+        status,
+        new OutboxService(checkoutDs.getRepository(OutboxEvent)),
+        new ReturnRequestQueryService(checkoutDs),
+      );
+    const deliveredOrder = async (leadId: string, quantity = 1) => {
+      await inbound(2, `in-ret-${leadId}`);
+      await orders.onLeadConfirmed(confirmed({ leadId, quantity }));
+      const id = String((await orderOfLead(leadId)).id);
+      for (const to of [
+        LeadOrderStatus.PICKING,
+        LeadOrderStatus.PACKED,
+        LeadOrderStatus.HANDED_TO_ELCHI,
+      ])
+        await status.transition({ orderId: id, to, actor: ACTOR });
+      const elchi = { type: LeadOrderActorType.ELCHI, id: null };
+      for (const to of [LeadOrderStatus.IN_TRANSIT, LeadOrderStatus.DELIVERED])
+        await status.transition({ orderId: id, to, actor: elchi });
+      const [item] = (await checkoutDs.query(
+        `SELECT i.id::text FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id WHERE p.sales_order_id = $1`,
+        [id],
+      )) as Array<{ id: string }>;
+      return { id, itemId: item.id };
+    };
+    const request = (orderId: string, itemId: string, over: object = {}) =>
+      returns().create({
+        orderId,
+        dto: {
+          items: [{ orderItemId: itemId, quantity: 1 }],
+          reason: 'DEFECTIVE',
+          comment: 'Ekranda chiziq',
+          ...over,
+        } as never,
+        actor: STAFF,
+      });
+
+    beforeEach(() => {
+      windowDays = 10;
+    });
+
+    it('TC1/TC4/TC5: so‘rov → RETURN_REQUESTED, tarixda xodim; tasdiq → RETURNING va order.returned bir marta', async () => {
+      const { id, itemId } = await deliveredOrder('8001');
+      const created = await request(id, itemId);
+      expect(created).toMatchObject({ status: 'SUBMITTED', orderId: id });
+      expect((await orderOfLead('8001')).status).toBe('RETURN_REQUESTED');
+      const [history] = (await checkoutDs.query(
+        `SELECT actor_id::text AS actor, actor_role AS role FROM checkout.return_request_history
+          WHERE return_request_id = $1`,
+        [created.id],
+      )) as Array<{ actor: string; role: string }>;
+      expect(history).toEqual({ actor: '41', role: 'ADMIN' });
+
+      // buyurtma endi RETURN_REQUESTED — ikkinchi so‘rov 400
+      await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 });
+
+      const approved = await returns().decide({
+        returnId: created.id,
+        approve: true,
+        actor: STAFF,
+      });
+      expect(approved.status).toBe('APPROVED');
+      expect((await orderOfLead('8001')).status).toBe('RETURNING');
+      // takror tasdiq — o‘sha natija, ikkinchi hodisa yo‘q (TC5: moliya eventId bo‘yicha ham takrorni tashlaydi)
+      await returns().decide({
+        returnId: created.id,
+        approve: true,
+        actor: STAFF,
+      });
+      const events = await outboxOf('order.returned', id);
+      expect(events).toHaveLength(1);
+      expect(events[0].payload).toMatchObject({
+        eventId: `order.returned:${created.id}`,
+        orderId: id,
+        returnRequestId: created.id,
+        items: [{ productId: PRODUCT, quantity: 1 }],
+      });
+      // qaror yakuniy
+      await expect(
+        returns().decide({
+          returnId: created.id,
+          approve: false,
+          actor: STAFF,
+          comment: 'xato',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('TC2: sababsiz — 400; «Boshqa» izohsiz — 400; muddat o‘tgan — 400', async () => {
+      const { id, itemId } = await deliveredOrder('8002');
+      await expect(
+        request(id, itemId, { reason: undefined }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        request(id, itemId, { reason: 'OTHER', comment: '  ' }),
+      ).rejects.toMatchObject({ status: 400 });
+      await checkoutDs.query(
+        `UPDATE checkout.order_status_history SET created_at = now() - interval '11 days'
+          WHERE order_id = $1 AND to_status = 'DELIVERED'`,
+        [id],
+      );
+      await expect(request(id, itemId)).rejects.toMatchObject({
+        status: 400,
+        response: expect.objectContaining({
+          message: expect.stringContaining('muddati (10 kun)'),
+        }),
+      });
+      expect((await orderOfLead('8002')).status).toBe('DELIVERED');
+    });
+
+    it('TC3: «Yo‘lda» buyurtmaga — 400; rad etilsa buyurtma DELIVERED ga qaytadi, hodisa yo‘q', async () => {
+      await inbound(1, 'in-ret-8003');
+      await orders.onLeadConfirmed(confirmed({ leadId: '8003' }));
+      const transit = String((await orderOfLead('8003')).id);
+      for (const to of [
+        LeadOrderStatus.PICKING,
+        LeadOrderStatus.PACKED,
+        LeadOrderStatus.HANDED_TO_ELCHI,
+      ])
+        await status.transition({ orderId: transit, to, actor: ACTOR });
+      await status.transition({
+        orderId: transit,
+        to: LeadOrderStatus.IN_TRANSIT,
+        actor: { type: LeadOrderActorType.ELCHI, id: null },
+      });
+      const [item] = (await checkoutDs.query(
+        `SELECT i.id::text FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id WHERE p.sales_order_id = $1`,
+        [transit],
+      )) as Array<{ id: string }>;
+      await expect(request(transit, item.id)).rejects.toMatchObject({
+        status: 400,
+      });
+
+      const { id, itemId } = await deliveredOrder('8004');
+      const created = await request(id, itemId);
+      await expect(
+        returns().decide({
+          returnId: created.id,
+          approve: false,
+          actor: STAFF,
+        }),
+      ).rejects.toMatchObject({ status: 400 }); // sababsiz rad
+      await returns().decide({
+        returnId: created.id,
+        approve: false,
+        actor: STAFF,
+        comment: 'Tovar ishlatilgan',
+      });
+      expect((await orderOfLead('8004')).status).toBe('DELIVERED');
+      expect(await outboxOf('order.returned', id)).toEqual([]);
+    });
+
+    it('qisman qaytarish hozircha yo‘q — 400; rad etilgandan keyin muddat birinchi yetkazilishdan', async () => {
+      const { id, itemId } = await deliveredOrder('8005', 2);
+      await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 }); // 2 dan 1
+      const created = await request(id, itemId, {
+        items: [{ orderItemId: itemId, quantity: 2 }],
+      });
+      await returns().decide({
+        returnId: created.id,
+        approve: false,
+        actor: STAFF,
+        comment: 'Tovar ishlatilgan',
+      });
+      // birinchi yetkazilish 11 kun oldin — rad etilgandan keyingi DELIVERED muddatni yangilamaydi
+      await checkoutDs.query(
+        `UPDATE checkout.order_status_history SET created_at = now() - interval '11 days'
+          WHERE order_id = $1 AND to_status = 'DELIVERED' AND from_status = 'IN_TRANSIT'`,
+        [id],
+      );
+      await expect(
+        request(id, itemId, { items: [{ orderItemId: itemId, quantity: 2 }] }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
   });
 });

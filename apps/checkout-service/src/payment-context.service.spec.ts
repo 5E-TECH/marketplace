@@ -2,11 +2,7 @@ import { CheckoutService } from './checkout.service';
 
 describe('Checkout payment ownership/amount', () => {
   const query = jest.fn();
-  const service = new CheckoutService(
-    { query } as never,
-    {} as never,
-    {} as never,
-  );
+  const service = new CheckoutService({ query } as never);
   beforeEach(() => query.mockReset());
   it('uses customer scope and returns database amount', async () => {
     query.mockResolvedValue([

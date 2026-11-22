@@ -132,6 +132,14 @@ export class WarehouseHandoverDto {
   qrTokens: string[];
 }
 
+export interface PickListLine {
+  productName: string;
+  sku: string | null;
+  barcode: string | null;
+  quantity: number;
+  pickedQty: number;
+}
+
 export interface PickListItem {
   taskId: string;
   orderId: string;
@@ -145,6 +153,11 @@ export interface PickListItem {
   barcode: string | null;
   quantity: number;
   pickedQty: number;
+  /**
+   * BE-34: posilkaning hamma tovar qatorlari (saytdan ko‘p tovarli buyurtma). `productName`/`sku`/`barcode` — birinchi
+   * qator (eski maydonlar), `quantity`/`pickedQty` — jami.
+   */
+  lines: PickListLine[];
   parcel: {
     elchiState: ParcelElchiState | null;
     shipmentId: string | null;

@@ -13,7 +13,6 @@
 import amqp from 'amqplib';
 
 const SERVICES = [
-  'echo',
   'identity',
   'catalog',
   'inventory',
@@ -26,6 +25,11 @@ const SERVICES = [
   'file',
   'lead',
 ];
+/**
+ * BE-29: o‘chirilgan servis (echo-service) navbatlari — ko‘chirilmaydi, tinglovchisi yo‘q bo‘lsa xabarlari bilan
+ * o‘chiriladi (echo faqat RPC so‘rovi qabul qilardi, javob kutgan chaqiruvchi yo‘q).
+ */
+const RETIRED = ['echo_queue', 'echo_queue_v2', 'echo_queue_v2.dlq'];
 const apply = process.argv.includes('--apply');
 const url = process.env.RABBITMQ_URL;
 if (!url) {
@@ -43,6 +47,8 @@ const DLQ_OPTIONS = { durable: true, messageTtl: 14 * 24 * 60 * 60 * 1000 };
 
 async function messageCount(connection, queue) {
   const channel = await connection.createChannel();
+  // broker kanalni yopsa (404 navbat yo‘q, 406 ishlatilmoqda) `error` hodisasi — tinglovchisiz jarayon yiqiladi
+  channel.on('error', () => undefined);
   try {
     return (await channel.checkQueue(queue)).messageCount;
   } catch {
@@ -69,6 +75,7 @@ try {
     if (!apply) continue;
     // tasdiqli kanal: eski navbatdan faqat broker nusxani qabul qilgach o‘chiriladi
     const channel = await connection.createConfirmChannel();
+    channel.on('error', () => undefined);
     try {
       await channel.assertQueue(next, queueOptions(next));
       await channel.assertQueue(`${next}.dlq`, DLQ_OPTIONS);
@@ -98,6 +105,31 @@ try {
       failed = true;
       console.error(
         `${old}: ${error.message} (eski servis hali tinglayaptimi?)`,
+      );
+    } finally {
+      await channel.close().catch(() => undefined);
+    }
+  }
+  for (const queue of RETIRED) {
+    const count = await messageCount(connection, queue);
+    if (count === null) {
+      console.log(`${queue}: yo‘q`);
+      continue;
+    }
+    console.log(
+      `${queue}: o‘chirilgan servis navbati, ${count} ta xabar — o‘chiriladi${apply ? '' : ' (faqat ko‘rsatildi)'}`,
+    );
+    if (!apply) continue;
+    const channel = await connection.createChannel();
+    // broker kanalni yopsa (404 navbat yo‘q, 406 ishlatilmoqda) `error` hodisasi — tinglovchisiz jarayon yiqiladi
+    channel.on('error', () => undefined);
+    try {
+      await channel.deleteQueue(queue, { ifUnused: true });
+      console.log(`${queue}: o‘chirildi`);
+    } catch (error) {
+      failed = true;
+      console.error(
+        `${queue}: ${error.message} (echo-service hali ishlayaptimi?)`,
       );
     } finally {
       await channel.close().catch(() => undefined);

@@ -39,6 +39,12 @@ export function elchiOrderRef(orderId: string): string {
   return `${ELCHI_ORDER_REF_PREFIX}${orderId}`;
 }
 
+/** Elchi `external_order_id` dan lid buyurtmasi raqami (BE-21); eski do‘kon buyurtmasi yoki noto‘g‘ri — null. */
+export function leadOrderIdFromElchiRef(ref: string): string | null {
+  const match = /^mp-order:([1-9]\d{0,18})$/.exec(String(ref ?? ''));
+  return match ? match[1] : null;
+}
+
 /** Buyurtma holatlari — TZ T5 holatlar mashinasi (02-texnik-qism.md:92-103). */
 export enum LeadOrderStatus {
   CONFIRMED = 'CONFIRMED',
@@ -113,6 +119,15 @@ export interface OrderStatusChangedEvent {
       hiddenDelivery: number;
       /** Ixtiyoriy tekshiruv: berilsa finance hisoblagan qoldiq bilan teng bo'lishi kerak. */
       platformService?: number;
+    };
+    /**
+     * BE-41 (EQ-09): fiskal chek qatori — MXIK, qadoq kodi, optovik (komitent) STIR i; buyurtma paytidagi nusxa.
+     * Eski hodisalarda yo'q.
+     */
+    fiscal?: {
+      mxikCode: string | null;
+      packageCode: string | null;
+      wholesalerTin: string | null;
     };
   }>;
   /**

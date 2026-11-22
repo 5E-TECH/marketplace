@@ -20,7 +20,12 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Click, Lead, Stream } from './entities';
-import { canOpenStream, effectiveSalePrice, maxSalePrice } from './offer-math';
+import {
+  canOpenStream,
+  effectiveSalePrice,
+  hasVideo,
+  maxSalePrice,
+} from './offer-math';
 
 const CODE_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -55,9 +60,11 @@ export class StreamService {
     if (!offer) throw new NotFoundException('Offer topilmadi');
     if (!canOpenStream(offer))
       throw new ConflictException(
-        (offer.stock ?? 0) <= 0
-          ? 'Qoldiq yo‘q: bu offerga sahifa ochilmaydi'
-          : 'Offer sotuvchilarga ochiq emas',
+        !offer.cpaAvailable || offer.withdrawn || offer.approvedPrice === null
+          ? 'Offer sotuvchilarga ochiq emas'
+          : !hasVideo(offer)
+            ? 'Offerda video yo‘q: sahifa ochilmaydi'
+            : 'Qoldiq yo‘q: bu offerga sahifa ochilmaydi',
       );
     for (let attempt = 1; ; attempt++) {
       try {
@@ -176,6 +183,17 @@ export class StreamService {
       { status },
     );
     return { updated: res.affected ?? 0 };
+  }
+
+  /** BE-47: shu mahsulotda sahifasi (oqimi) bor sotuvchilar — «Offer qoldig‘i tugadi» xabari uchun. */
+  async affiliatesOf(productId: string): Promise<string[]> {
+    if (!/^[1-9]\d{0,18}$/.test(String(productId ?? ''))) return [];
+    const rows = (await this.streams.query(
+      `SELECT DISTINCT affiliate_id::text AS id FROM lead.stream
+        WHERE product_id = $1 AND is_deleted = FALSE`,
+      [String(productId)],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
   }
 
   private async counts(

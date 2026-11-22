@@ -15,16 +15,10 @@ import {
 } from '@app/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { EchoController } from './echo.controller';
 import { AuthController } from './auth/auth.controller';
-import { SellersController } from './sellers/sellers.controller';
 import { CategoriesController } from './categories/categories.controller';
-import { ProductsController } from './products/products.controller';
-import { ProductVariantsController } from './products/product-variants.controller';
-import { FilesController } from './files/files.controller';
-import { SellerOrdersController } from './sellers/seller-orders.controller';
+import { StorefrontController } from './storefront/storefront.controller';
 import { NotificationsController } from './notifications/notifications.controller';
-import { AdminShopsController } from './shops/admin-shops.controller';
 import { AdminDashboardController } from './admin/admin-dashboard.controller';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { AdminOrdersController } from './admin/admin-orders.controller';
@@ -33,6 +27,7 @@ import { SupportController } from './support/support.controller';
 import { ElchiWebhookController } from './webhooks/elchi-webhook.controller';
 import { AdminFinanceController } from './admin/admin-finance.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { AdminCreativesController } from './admin/admin-creatives.controller';
 import { AdminWholesalersController } from './admin/admin-wholesalers.controller';
 import { AdminPricingController } from './admin/admin-pricing.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
@@ -43,19 +38,31 @@ import { AdminIntegrationController } from './admin/admin-integration.controller
 import { AdminContentController } from './admin/admin-content.controller';
 import { RegionsController } from './geo/regions.controller';
 import { ReadinessService } from './readiness.service';
-import { BuyerOrdersController } from './orders/buyer-orders.controller';
 import { CurrentRoleGuard } from './auth/current-role.guard';
 import { AdminInventoryController } from './admin/admin-inventory.controller';
-import { BuyerReturnsController } from './returns/buyer-returns.controller';
-import { SellerReturnsController } from './sellers/seller-returns.controller';
-import { SellerFinanceController } from './sellers/seller-finance.controller';
 import { AdminVariantReportController } from './leads/admin-variant-report.controller';
 import { AdminReturnsController } from './admin/admin-returns.controller';
+import { AdminOrderReturnsController } from './admin/admin-order-returns.controller';
 import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { AffiliateProfileController } from './affiliate-account/affiliate-profile.controller';
+import { LegalDocumentsController } from './affiliate-account/legal-documents.controller';
+import { AdminFinanceSettingsController } from './withdrawals/admin-finance-settings.controller';
+import { AdminModerationController } from './admin/admin-moderation.controller';
+import { OpsHealthController } from './ops-health.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
+import { AdminReconciliationController } from './withdrawals/admin-reconciliation.controller';
+import { AdminActResponsesController } from './withdrawals/admin-act-responses.controller';
+import { WholesalerSettlementsController } from './withdrawals/wholesaler-settlements.controller';
+import { AdminWholesalerCabinetController } from './wholesaler-cabinet/admin-wholesaler-cabinet.controller';
+import { SignedFilesController } from './wholesaler-cabinet/signed-files.controller';
+import { SignedLinkService } from './wholesaler-cabinet/signed-link';
+import { WholesalerCabinetController } from './wholesaler-cabinet/wholesaler-cabinet.controller';
+import { WholesalerProductsController } from './wholesaler-cabinet/wholesaler-products.controller';
+import { WholesalerShipmentsController } from './wholesaler-cabinet/wholesaler-shipments.controller';
+import { AdminMetricsController } from './metrics/admin-metrics.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { WarehouseController } from './warehouse/warehouse.controller';
@@ -83,14 +90,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
         ],
       }),
     }),
-    // Servislarga RMQ client'lari (echo demo + identity; keyin catalog/...)
+    // Servislarga RMQ client'lari
     ClientsModule.registerAsync([
-      {
-        name: RmqClient.ECHO,
-        inject: [ConfigService],
-        useFactory: (config: ConfigService) =>
-          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.ECHO),
-      },
       {
         name: RmqClient.IDENTITY,
         inject: [ConfigService],
@@ -167,16 +168,10 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
   ],
   controllers: [
     AppController,
-    EchoController,
     AuthController,
-    SellersController,
     CategoriesController,
-    ProductsController,
-    ProductVariantsController,
-    FilesController,
-    SellerOrdersController,
+    StorefrontController,
     NotificationsController,
-    AdminShopsController,
     AdminDashboardController,
     AdminUsersController,
     AdminOrdersController,
@@ -185,6 +180,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     ElchiWebhookController,
     AdminFinanceController,
     AdminProductsController,
+    AdminCreativesController,
     AdminWholesalersController,
     AdminPricingController,
     AdminAuditController,
@@ -194,20 +190,35 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     AdminIntegrationController,
     AdminContentController,
     RegionsController,
-    BuyerOrdersController,
     AdminInventoryController,
-    BuyerReturnsController,
-    SellerReturnsController,
     AdminReturnsController,
-    SellerFinanceController,
+    AdminOrderReturnsController,
     AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,
     // BE-23: pul yechish
     AffiliateWithdrawalsController,
     AdminWithdrawalsController,
+    // BE-06
+    AffiliateProfileController,
+    LegalDocumentsController,
+    // BE-27
+    AdminFinanceSettingsController,
+    AdminModerationController,
+    // BE-26
+    OpsHealthController,
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
+    AdminReconciliationController,
+    AdminActResponsesController,
+    WholesalerSettlementsController,
+    // BE-30: optovik kabineti
+    WholesalerCabinetController,
+    WholesalerProductsController,
+    WholesalerShipmentsController,
+    AdminWholesalerCabinetController,
+    SignedFilesController,
+    AdminMetricsController,
     OperatorLeadsController,
     OperatorOrdersController,
     WarehouseController,
@@ -220,6 +231,7 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
   providers: [
     AppService,
     ReadinessService,
+    SignedLinkService, // BE-30: yopiq hujjatlarga imzolangan havola
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },

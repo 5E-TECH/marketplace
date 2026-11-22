@@ -53,6 +53,7 @@ import { AddApiLeads1795132800000 } from './migrations/1795132800000-add-api-lea
 import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-stats';
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
+import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -120,6 +121,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddLeadStats1795564800000,
         AddCapiFields1795651200000,
         AddFraudCenter1795824000000,
+        SiteOrder1798070400000,
       ],
       synchronize: false,
       logging: false,
@@ -475,6 +477,43 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         '501': offer('501'),
         '502': offer('502', { name: 'Choynak' }),
       };
+    });
+
+    it('BE-08 (QA TC5): offer kartasi — video ochiq havola bilan; yopiq offer — 404', async () => {
+      catalog['501'] = offer('501', {
+        creatives: [
+          {
+            id: '31',
+            type: 'VIDEO',
+            url: 'https://media.test/creatives/501/v.mp4',
+            createdAt: '2026-11-21T10:00:00.000Z',
+          },
+        ],
+      });
+      const card = await offers().getForAffiliate('501');
+      expect(card).toMatchObject({
+        productId: '501',
+        name: 'Simsiz quloqchinlar',
+        hasVideo: true,
+        state: 'OPEN',
+        results: null,
+        priceSplit: null,
+        creatives: [
+          {
+            id: '31',
+            type: 'VIDEO',
+            url: 'https://media.test/creatives/501/v.mp4',
+            caption: null,
+            processing: false,
+            approvedAt: '2026-11-21T10:00:00.000Z',
+          },
+        ],
+      });
+      catalog['502'] = offer('502', { withdrawn: true });
+      for (const id of ['502', '999', 'x'])
+        await expect(offers().getForAffiliate(id)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
     });
 
     it('TC1: faqat offer ID → standart shablon, tasdiqlangan narx va tayyor havola', async () => {
@@ -1627,6 +1666,48 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         leadId: '1',
       });
       expect((await outbox.find())[0].status).toBe(OutboxStatus.PROCESSED);
+    });
+
+    it('BE-18 TC1: tasdiqlangan lid 1 s ichida checkout’ga — cron (10 s) kutilmaydi', async () => {
+      const [l] = await seed(1);
+      await addressService().confirmByOperator(l.id, '41', {
+        regionSoato: '1726',
+        districtSoato: '1726266',
+        addressLine: 'Turkiston 27',
+        whereDeliver: CheckoutDeliveryDestination.CENTER,
+      });
+      await online('41');
+      let delivered!: () => void;
+      const emitted = new Promise<void>((resolve) => (delivered = resolve));
+      const checkout = {
+        emit: jest.fn(() => {
+          delivered();
+          return of(undefined);
+        }),
+      };
+      const relay = new LeadOutboxRelayService(
+        db.getRepository(OutboxEvent),
+        checkout as never,
+        { emit: jest.fn(() => of(undefined)) } as never,
+        new ConfigService({ LEAD_OUTBOX_RELAY: 'on' }),
+      );
+      const fast = new LeadQueueService(db, addressService(), undefined, relay);
+      await fast.takeNext('41');
+      const started = Date.now();
+      await fast.submitResult('41', l.id, { outcome: LeadOutcome.CONFIRMED });
+      await Promise.race([
+        emitted,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('1 s ichida yuborilmadi')), 1_000),
+        ),
+      ]);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(checkout.emit).toHaveBeenCalledWith(
+        LEAD_EVENTS.CONFIRMED,
+        expect.objectContaining({ leadId: l.id }),
+      );
+      // relay tugashini kutamiz (keyingi testga qulf qoldirmasin)
+      await relay.relay();
     });
   });
 

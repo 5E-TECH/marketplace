@@ -4,14 +4,21 @@ import { firstValueFrom, timeout } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import {
+  CatalogDisplayLookupRequest,
+  CatalogDisplayLookupResult,
   CatalogOfferListQuery,
   CatalogOfferSnapshot,
   CatalogOrderSnapshot,
+  CatalogOrderSnapshotMany,
+  isLeadBigintId,
+  INBOUND_RPC,
+  ModerationSummaryDto,
   ProductStatus,
   RmqClient,
   ShopStatus,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
+import { CreativeService } from './creative.service';
 import { Product } from './entities/product.entity';
 import {
   OfferPricing,
@@ -40,6 +47,7 @@ export class CatalogOfferService {
     @InjectRepository(ProductVariant)
     private readonly variants: Repository<ProductVariant>,
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
+    private readonly creatives: CreativeService,
   ) {}
 
   /**
@@ -90,11 +98,13 @@ export class CatalogOfferService {
       .getOne();
     if (!product) return null;
     const stock = await this.stockOf([String(product.id)]);
+    const creatives = await this.creatives.forProducts([String(product.id)]);
     return toSnapshot(
       product,
       this.pricingOf(product, await this.pricing.context()),
       // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
       stock.get(String(product.id)),
+      creatives.get(String(product.id)) ?? [],
     );
   }
 
@@ -143,8 +153,16 @@ export class CatalogOfferService {
     if (!rows.length) return [];
     const ctx = await this.pricing.context();
     const stock = await this.stockOf(rows.map((row) => String(row.id)));
+    const creatives = await this.creatives.forProducts(
+      rows.map((row) => String(row.id)),
+    );
     return rows.map((row) =>
-      toSnapshot(row, this.pricingOf(row, ctx), stock.get(String(row.id))),
+      toSnapshot(
+        row,
+        this.pricingOf(row, ctx),
+        stock.get(String(row.id)),
+        creatives.get(String(row.id)) ?? [],
+      ),
     );
   }
 
@@ -170,10 +188,58 @@ export class CatalogOfferService {
     whereDeliver: string,
   ): Promise<CatalogOrderSnapshot | null> {
     if (!/^\d+$/.test(String(productId ?? ''))) return null;
+    // BE-41: optovik STIR i (`select: false`) faqat shu ichki nusxada o‘qiladi — chekdagi komitent
     const product = await this.base()
+      .addSelect('shop.tin')
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
+    return this.snapshotOf(product, quantity, whereDeliver);
+  }
+
+  /**
+   * BE-34: ko‘p tovarli buyurtma (saytdan) — har tovar narx nusxasi so‘rov tartibida (topilmagani — null) va butun
+   * posilka yetkazishi jami og‘irlik bo‘yicha (`PricingService.combinedDelivery`).
+   */
+  async orderSnapshotMany(
+    items: Array<{ productId: string; quantity: number }>,
+    whereDeliver: string,
+  ): Promise<CatalogOrderSnapshotMany> {
+    const list = Array.isArray(items) ? items : [];
+    const ids = list
+      .map((item) => String(item?.productId ?? ''))
+      .filter((id) => /^\d+$/.test(id));
+    const products = ids.length
+      ? await this.base().where('product.id IN (:...ids)', { ids }).getMany()
+      : [];
+    const byId = new Map(products.map((p) => [String(p.id), p]));
+    const snapshots: Array<CatalogOrderSnapshot | null> = [];
+    for (const item of list) {
+      const product = byId.get(String(item?.productId ?? ''));
+      snapshots.push(
+        product
+          ? await this.snapshotOf(product, Number(item.quantity), whereDeliver)
+          : null,
+      );
+    }
+    const delivery =
+      list.length && snapshots.every(Boolean)
+        ? await this.pricing.combinedDelivery(
+            list.map((item) => ({
+              product: byId.get(String(item.productId))!,
+              quantity: Number(item.quantity),
+            })),
+            whereDeliver,
+          )
+        : null;
+    return { items: snapshots, delivery };
+  }
+
+  private async snapshotOf(
+    product: Product,
+    quantity: number,
+    whereDeliver: string,
+  ): Promise<CatalogOrderSnapshot> {
     const variant = await this.variants.findOne({
       where: {
         productId: String(product.id),
@@ -198,7 +264,77 @@ export class CatalogOfferService {
       cpaAvailable: isCpaAvailable(product),
       withdrawn: isWithdrawn(product),
       ...pricing,
+      fiscal: {
+        mxikCode: product.mxikCode ?? null,
+        packageCode: product.packageCode ?? null,
+        wholesalerTin: product.shop.tin ?? null,
+      },
     };
+  }
+
+  /**
+   * BE-27: moderatsiya hisoblagichlari (FE-12). Pilotda mahsulotlar soni kichik (TZ: 30–50 SKU) — narx holati
+   * har mahsulot uchun kalkulyator bilan hisoblanadi (bazada saqlanmaydi, tarif va siyosatga bog‘liq).
+   */
+  async moderationSummary(): Promise<ModerationSummaryDto> {
+    const products = await this.base()
+      .where('product.is_deleted = FALSE')
+      .getMany();
+    const byStatus: Record<string, number> = {
+      ALL: products.length,
+      PENDING_REVIEW: 0,
+      ACTIVE: 0,
+      REJECTED: 0,
+      BLOCKED: 0,
+      DRAFT: 0,
+    };
+    for (const p of products) {
+      if (p.isBlocked) byStatus.BLOCKED++;
+      else if (p.status in byStatus) byStatus[p.status]++;
+    }
+    const ctx = await this.pricing.context();
+    const priced = products.filter(
+      (p) =>
+        p.cpaEnabled &&
+        !p.isBlocked &&
+        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(p.status),
+    );
+    const onSale = products.filter(isCpaAvailable);
+    const stock = await this.stockOf(onSale.map((p) => String(p.id)));
+    const stockValues = [...stock.values()];
+    let expirySoon: number | null = null;
+    try {
+      const lots = await firstValueFrom(
+        this.inventory
+          .send<unknown[]>({ cmd: INBOUND_RPC.LOTS }, { state: 'BLOCKED' })
+          .pipe(timeout(INVENTORY_TIMEOUT_MS)),
+      );
+      expirySoon = Array.isArray(lots) ? lots.length : null;
+    } catch (error) {
+      this.logger.warn(`Partiyalar olinmadi: ${(error as Error).message}`);
+    }
+    return {
+      productsPending: byStatus.PENDING_REVIEW,
+      pricesPending: priced.filter((p) => !this.approvalCurrentSafe(p, ctx))
+        .length,
+      byStatus,
+      outOfStock: stockValues.some((v) => v === null)
+        ? null
+        : stockValues.filter((v) => (v ?? 0) <= 0).length,
+      expirySoon,
+    };
+  }
+
+  /** Bitta mahsulotning buzilgan narx sozlamasi hisoblagichni yiqitmasin — u narx qarorini kutadi deb sanaladi. */
+  private approvalCurrentSafe(product: Product, ctx: PricingContext): boolean {
+    try {
+      return this.pricing.approvalCurrent(product, ctx);
+    } catch (error) {
+      this.logger.warn(
+        `Narx holati hisoblanmadi (${product.id}): ${(error as Error).message}`,
+      );
+      return false;
+    }
   }
 
   private base() {
@@ -206,6 +342,64 @@ export class CatalogOfferService {
       .createQueryBuilder('product')
       .innerJoinAndSelect('product.shop', 'shop')
       .leftJoinAndSelect('product.category', 'category');
+  }
+
+  /**
+   * BE-29: do‘kon nomi, mahsulot va variant rasmi ID lar bo‘yicha (checkout boshqa sxemaga SQL yozmasligi uchun). Eski
+   * JOIN lar kabi o‘chirilganlari ham qaytadi; noto‘g‘ri yoki takroriy ID tashlanadi.
+   */
+  async displayLookup(
+    request: Partial<CatalogDisplayLookupRequest> | null | undefined,
+  ): Promise<CatalogDisplayLookupResult> {
+    const ids = (list: unknown) => [
+      ...new Set(
+        (Array.isArray(list) ? list : []).map(String).filter(isLeadBigintId),
+      ),
+    ];
+    const shopIds = ids(request?.shopIds);
+    const productIds = ids(request?.productIds);
+    const variantIds = ids(request?.variantIds);
+    const db = this.products.manager;
+    const shops = shopIds.length
+      ? ((await db.query(
+          `SELECT id::text AS id, name FROM catalog.shop WHERE id = ANY($1::bigint[])`,
+          [shopIds],
+        )) as Array<{ id: string; name: string | null }>)
+      : [];
+    const products = productIds.length
+      ? ((await db.query(
+          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl"
+             FROM catalog.product WHERE id = ANY($1::bigint[])`,
+          [productIds],
+        )) as Array<{ id: string; imageUrl: string | null }>)
+      : [];
+    const variants = variantIds.length
+      ? ((await db.query(
+          `SELECT v.id::text AS id, p.name,
+                  COALESCE(NULLIF(v.image_url, ''), NULLIF(p.image_url, ''),
+                           p.images->>0) AS "imageUrl"
+             FROM catalog.product_variant v
+             JOIN catalog.product p ON p.id = v.product_id
+            WHERE v.id = ANY($1::bigint[])`,
+          [variantIds],
+        )) as Array<{
+          id: string;
+          name: string | null;
+          imageUrl: string | null;
+        }>)
+      : [];
+    return {
+      shops: shops.map((row) => ({ id: row.id, name: row.name ?? null })),
+      products: products.map((row) => ({
+        id: row.id,
+        imageUrl: row.imageUrl ?? null,
+      })),
+      variants: variants.map((row) => ({
+        id: row.id,
+        name: row.name ?? null,
+        imageUrl: row.imageUrl || null,
+      })),
+    };
   }
 }
 
@@ -239,6 +433,7 @@ export function toSnapshot(
   product: Product,
   pricing?: OfferPricing,
   stock: number | null = 0,
+  creatives: CatalogOfferSnapshot['creatives'] = [],
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
@@ -270,7 +465,8 @@ export function toSnapshot(
     centerDeliveryFee: pricing?.centerDeliveryFee ?? 0,
     addressDeliveryFee: pricing?.addressDeliveryFee ?? 0,
     stock, // BE-16: HQ ombordagi bo‘sh (band qilinmagan) qoldiq
-    creatives: [], // BE-08
+    // BE-08: admin yuklagan kreativlar (SOT-9), tartib bilan
+    creatives,
     createdAt: new Date(product.createdAt).toISOString(),
   };
 }

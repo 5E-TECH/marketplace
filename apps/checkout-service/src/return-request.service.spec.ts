@@ -1,10 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ReturnReason, ReturnRequestStatus } from '@app/common';
+import { ReturnRequestStatus } from '@app/common';
 import { ReturnRequestService } from './return-request.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -108,134 +107,6 @@ describe('ReturnRequestService (C4.2)', () => {
       calls.filter((call) => call.sql.includes(fragment));
     return { service, dataSource, queries, notifier, sqls };
   }
-
-  const create = (
-    service: ReturnRequestService,
-    dto: Partial<{
-      items: Array<{ orderItemId: string; quantity: number }>;
-      reason: ReturnReason;
-      comment: string;
-    }> = {},
-    customerId = '5',
-  ) =>
-    service.create({
-      orderId: '10',
-      customerId,
-      dto: {
-        items: [{ orderItemId: '31', quantity: 1 }],
-        reason: ReturnReason.CHANGED_MIND,
-        ...dto,
-      },
-    });
-
-  describe('create', () => {
-    it('TC1: ikki do‘kon tovari ikki alohida so‘rovga bo‘linadi va sotuvchilar xabar oladi', async () => {
-      const { service, notifier, sqls } = setup({
-        items: [
-          item(),
-          item({
-            orderItemId: '32',
-            sellerOrderId: '52',
-            shopId: '8',
-            quantity: 1,
-            unitPrice: '50000',
-          }),
-        ],
-      });
-
-      const result = await create(service, {
-        items: [
-          { orderItemId: '31', quantity: 1 },
-          { orderItemId: '32', quantity: 1 },
-        ],
-      });
-
-      expect(result.items).toHaveLength(2);
-      const inserts = sqls('INSERT INTO checkout.return_request\n');
-      expect(inserts.map((call) => call.params)).toEqual([
-        ['10', '51', '7', '5', 'SUBMITTED', 'CHANGED_MIND', null, 100000],
-        ['10', '52', '8', '5', 'SUBMITTED', 'CHANGED_MIND', null, 50000],
-      ]);
-      expect(sqls('INSERT INTO checkout.return_request_history')).toHaveLength(
-        2,
-      );
-      expect(notifier.notify).toHaveBeenCalledTimes(2);
-      expect(notifier.notify).toHaveBeenCalledWith(
-        expect.objectContaining({ status: ReturnRequestStatus.SUBMITTED }),
-        { shopId: '8' },
-      );
-    });
-
-    it('yetkazilmagan posilkadagi tovar qaytarilmaydi', async () => {
-      const { service } = setup({
-        items: [item({ sellerOrderStatus: 'ON_THE_ROAD' })],
-      });
-      await expect(create(service)).rejects.toThrow('Faqat yetkazib berilgan');
-    });
-
-    it('muddat (10 kun) o‘tgan bo‘lsa rad etiladi', async () => {
-      const { service } = setup({
-        items: [item({ deliveredAt: new Date(Date.now() - 11 * DAY) })],
-      });
-      await expect(create(service)).rejects.toThrow('10 kun');
-    });
-
-    it('DELIVERED tarixi yo‘q eski posilkada oxirgi o‘zgarish sanasi olinadi', async () => {
-      const { service } = setup({
-        items: [
-          item({
-            deliveredAt: null,
-            sellerOrderUpdatedAt: new Date(Date.now() - 3 * DAY),
-          }),
-        ],
-      });
-      await expect(create(service)).resolves.toMatchObject({
-        items: [{ id: '100' }],
-      });
-    });
-
-    it('boshqa so‘rovda band qilingan miqdordan ortig‘i qaytarilmaydi', async () => {
-      const { service } = setup({ items: [item({ reservedQuantity: 2 })] });
-      await expect(create(service)).rejects.toThrow('ko‘pi bilan 0 dona');
-    });
-
-    it('buyurtmaga tegishli bo‘lmagan tovar rad etiladi', async () => {
-      const { service } = setup({ items: [] });
-      await expect(create(service)).rejects.toThrow(
-        '#31 tovar bu buyurtmaga tegishli emas',
-      );
-    });
-
-    it('begona xaridor buyurtmasi — 403', async () => {
-      const { service } = setup();
-      await expect(create(service, {}, '999')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-    });
-
-    it('bekor qilingan buyurtma qaytarilmaydi', async () => {
-      const { service } = setup({
-        order: { customerId: '5', status: 'CANCELLED' },
-      });
-      await expect(create(service)).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it('OTHER sababida izoh majburiy, takroriy tovar rad etiladi', async () => {
-      const { service, dataSource } = setup();
-      await expect(
-        create(service, { reason: ReturnReason.OTHER }),
-      ).rejects.toThrow('izoh');
-      await expect(
-        create(service, {
-          items: [
-            { orderItemId: '31', quantity: 1 },
-            { orderItemId: '31', quantity: 1 },
-          ],
-        }),
-      ).rejects.toThrow('ikki marta');
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-    });
-  });
 
   describe('transition', () => {
     const actor = { id: '70', role: 'SELLER' };

@@ -2,6 +2,11 @@ import type { DatabaseDefinition } from '@app/common';
 import { FixProductStatusDefault1795910400000 } from './migrations/1795910400000-fix-product-status-default';
 import { WholesalerCpaProduct1796083200000 } from './migrations/1796083200000-wholesaler-cpa-product';
 import { Pricing1796169600000 } from './migrations/1796169600000-pricing';
+import { Creative1796515200000 } from './migrations/1796515200000-creative';
+import { WholesalerCabinet1798329600000 } from './migrations/1798329600000-wholesaler-cabinet';
+import { ProductBlockReason1797379200000 } from './migrations/1797379200000-product-block-reason';
+import { Creative } from './entities/creative.entity';
+import { ProductFiscalCodes1797033600000 } from './migrations/1797033600000-product-fiscal-codes';
 import {
   ElchiTariffEntity,
   PriceDecision,
@@ -42,6 +47,7 @@ export const CATALOG_DB: DatabaseDefinition = {
     PricePolicy,
     ElchiTariffEntity,
     PriceDecision,
+    Creative,
   ],
   migrations: [
     CreateCatalogTables1721736000000,
@@ -57,5 +63,9 @@ export const CATALOG_DB: DatabaseDefinition = {
     FixProductStatusDefault1795910400000,
     WholesalerCpaProduct1796083200000,
     Pricing1796169600000,
+    Creative1796515200000,
+    WholesalerCabinet1798329600000,
+    ProductBlockReason1797379200000,
+    ProductFiscalCodes1797033600000,
   ],
 };

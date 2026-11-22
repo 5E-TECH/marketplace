@@ -1,7 +1,8 @@
 import { of, throwError } from 'rxjs';
 import { ConfirmSalesOrderService } from './confirm-sales-order.service';
 
-describe('ConfirmSalesOrderService (C2.10)', () => {
+/** BE-29: eski COD tasdiq yo‘li o‘chirildi — qolgan yo‘l onlayn to‘lovdan keyin (`payment.paid` → `confirmPaid`). */
+describe('ConfirmSalesOrderService (C2.10, to‘lovdan keyin)', () => {
   function setup(
     options: {
       failingShipment?: boolean;
@@ -37,8 +38,8 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
               customer_id: '5',
               session_id: 'guest-session',
               buyer_name: 'Ali',
-              status: 'DRAFT',
-              payment_method: 'cod',
+              status: 'PENDING_PAYMENT',
+              payment_method: 'online',
               total_amount: '500',
               delivery_address: 'Toshkent\n+998901234567',
               region_id: '1',
@@ -100,9 +101,9 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
     };
   }
 
-  it('TC1/TC3: har sellerga COD shipment ochib id sini saqlaydi', async () => {
+  it('TC1/TC3: har sellerga shipment ochib id sini saqlaydi', async () => {
     const { service, integration, queries } = setup();
-    const result = await service.confirm('1', '5');
+    const result = await service.confirmPaid('1', 'pay-1', 500);
 
     expect(result.sellerOrders).toHaveLength(2);
     expect(integration.send).toHaveBeenCalledTimes(2);
@@ -111,8 +112,6 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       { cmd: 'integration.shipment.create' },
       expect.objectContaining({
         external_order_id: '11',
-        // BE-18 (T9-5): yagona COD — tovarlar + yetkazish (avval yetkazishsiz 200 ketardi)
-        cod_amount: 230,
         elchi_market_id: 'market-101',
       }),
     );
@@ -132,7 +131,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
    */
   it('C1.45 TC1: Elchi qaytargan qr_code_token va to_be_paid saqlanadi, tarixga yoziladi', async () => {
     const { service, queries } = setup();
-    await service.confirm('1', '5');
+    await service.confirmPaid('1', 'pay-1', 500);
 
     const updates = queries.filter(
       (entry) =>
@@ -159,7 +158,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
 
   it('TC2: shipmentlardan keyin inventory commit va confirmed qiladi', async () => {
     const { service, inventory, queries } = setup();
-    await service.confirm('1', '5');
+    await service.confirmPaid('1', 'pay-1', 500);
 
     expect(inventory.send).toHaveBeenCalledWith(
       { cmd: 'inventory.commit' },
@@ -179,7 +178,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
 
   it('TC3: buyer va sellerlarga notification yuboradi', async () => {
     const { service, notifications } = setup();
-    await service.confirm('1', '5');
+    await service.confirmPaid('1', 'pay-1', 500);
     expect(notifications.emit).toHaveBeenCalledWith(
       'order.created',
       expect.objectContaining({
@@ -198,7 +197,7 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
       failingShipment: true,
     });
     // Elchi'ning xom xatosi mijozga ketmaydi — faqat umumiy xabar (sendRpc).
-    await expect(service.confirm('1', '5')).rejects.toThrow(
+    await expect(service.confirmPaid('1', 'pay-1', 500)).rejects.toThrow(
       'Birozdan so‘ng qayta urinib ko‘ring',
     );
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
@@ -213,30 +212,10 @@ describe('ConfirmSalesOrderService (C2.10)', () => {
     ).toBe(false);
   });
 
-  it('guest o‘z sessioni bilan COD orderni confirm qiladi', async () => {
-    const { service } = setup();
-
-    await expect(
-      service.confirm('1', undefined, 'guest-session'),
-    ).resolves.toMatchObject({ id: '1', status: 'CONFIRMED' });
-  });
-
-  it.each([
-    ['begona buyer', '99', undefined],
-    ['begona guest session', undefined, 'other-session'],
-  ])('%s confirm qilsa 403 qaytaradi', async (_name, buyerId, sessionId) => {
-    const { service, integration } = setup();
-
-    await expect(service.confirm('1', buyerId, sessionId)).rejects.toThrow(
-      'ruxsat yo‘q',
-    );
-    expect(integration.send).not.toHaveBeenCalled();
-  });
-
   it('mavjud bo‘lmagan order uchun 404 qaytaradi', async () => {
     const { service } = setup({ orderMissing: true });
 
-    await expect(service.confirm('999', '5')).rejects.toThrow(
+    await expect(service.confirmPaid('999', 'pay-1', 500)).rejects.toThrow(
       'Buyurtma topilmadi',
     );
   });

@@ -13,6 +13,10 @@ import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-
 import { CreateCheckoutOutbox1795305600000 } from './migrations/1795305600000-create-checkout-outbox';
 import { LeadOrder1796342400000 } from './migrations/1796342400000-lead-order';
 import { ParcelFulfillment1796428800000 } from './migrations/1796428800000-parcel-fulfillment';
+import { SiteMultiItemOrder1797984000000 } from './migrations/1797984000000-site-multi-item-order';
+import { StaffReturnRequest1798243200000 } from './migrations/1798243200000-staff-return-request';
+import { ElchiWebhookResult1796601600000 } from './migrations/1796601600000-elchi-webhook-result';
+import { OrderItemFiscal1797120000000 } from './migrations/1797120000000-order-item-fiscal';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { OutboxEvent } from '@app/common';
@@ -39,5 +43,9 @@ export const CHECKOUT_DB: DatabaseDefinition = {
     CreateCheckoutOutbox1795305600000,
     LeadOrder1796342400000,
     ParcelFulfillment1796428800000,
+    SiteMultiItemOrder1797984000000,
+    StaffReturnRequest1798243200000,
+    ElchiWebhookResult1796601600000,
+    OrderItemFiscal1797120000000,
   ],
 };

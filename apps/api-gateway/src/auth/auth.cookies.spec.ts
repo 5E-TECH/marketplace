@@ -177,4 +177,84 @@ describe('AuthController — AUTH_TOKENS_IN_BODY=false', () => {
 
     expect(body).toEqual({ user: { id: '42' } });
   });
+
+  it('BE-06: SMS kod — REGISTER token qaytaradi (cookie yo‘q); LOGIN va ro‘yxat sessiya cookie’larini yozadi', async () => {
+    const send = jest
+      .fn()
+      .mockReturnValueOnce(of({ registrationToken: 'reg-1' }))
+      .mockReturnValueOnce(of(tokens))
+      .mockReturnValueOnce(of(tokens));
+    const controller = new AuthController({ send } as never, jwt);
+    const phone = '+998901234567';
+
+    const reg = response();
+    await expect(
+      controller.verifyOtp(
+        { phone, code: '305918', purpose: 'REGISTER' as never },
+        request,
+        reg as never,
+      ),
+    ).resolves.toEqual({ registrationToken: 'reg-1' });
+    expect(reg.cookie).not.toHaveBeenCalled();
+
+    const login = response();
+    await controller.verifyOtp(
+      { phone, code: '305918', purpose: 'LOGIN' as never },
+      request,
+      login as never,
+    );
+    expect(login.cookie).toHaveBeenCalledWith(
+      'refreshToken',
+      refreshToken,
+      expect.objectContaining({ httpOnly: true }),
+    );
+
+    const created = response();
+    await controller.registerAffiliate(
+      {
+        registrationToken: 'reg-1',
+        offerVersion: '1.0',
+        consentVersion: '1.0',
+      },
+      '10.0.0.1',
+      request,
+      created as never,
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      { cmd: 'auth.register.affiliate' },
+      {
+        dto: {
+          registrationToken: 'reg-1',
+          offerVersion: '1.0',
+          consentVersion: '1.0',
+        },
+        ip: '10.0.0.1',
+      },
+    );
+    expect(created.cookie).toHaveBeenCalledWith(
+      'accessToken',
+      'access-1',
+      expect.objectContaining({ httpOnly: true }),
+    );
+  });
+
+  it('BE-26: 2FA kerak bo‘lsa login sessiya ochmaydi — cookie yo‘q, challengeToken qaytadi', async () => {
+    const challenge = {
+      twoFactorRequired: true,
+      twoFactorSetupRequired: false,
+      challengeToken: 'challenge-1',
+    };
+    const controller = new AuthController(
+      { send: jest.fn(() => of(challenge)) } as never,
+      jwt,
+    );
+    const res = response();
+    const body = await controller.login(
+      { phone: '+998901234567', password: 'secret123' },
+      request,
+      res as never,
+    );
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(body).toMatchObject(challenge);
+  });
 });

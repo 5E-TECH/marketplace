@@ -21,6 +21,7 @@ import {
 } from './inventory.assertions';
 import {
   emitStockDepletedIfNeeded,
+  recordOfferOutOfStock,
   lockStock,
   runInTransaction,
   saveMovement,
@@ -124,6 +125,18 @@ export class InventoryService {
           );
         }
 
+        // BE-47: band qilingandan keyin sotuvga yaroqli qoldiq 0 — «Offer qoldig‘i tugadi» (outbox)
+        for (const warehouseId of new Set(
+          input.items.map((item) => String(item.warehouseId)),
+        ))
+          await recordOfferOutOfStock(
+            manager,
+            input.items
+              .filter((item) => String(item.warehouseId) === warehouseId)
+              .map((item) => String(item.variantId)),
+            warehouseId,
+            blockedByVariant,
+          );
         return {
           operation: StockMovementType.RESERVE,
           orderRef: input.orderRef,
@@ -422,6 +435,14 @@ export class InventoryService {
           input.reason,
           input.actorId,
         );
+        // BE-47: hisobdan chiqarish yoki kamaytirish — sotuvga yaroqli qoldiq 0 bo‘lsa xabar (outbox)
+        if (input.quantityDelta < 0)
+          await recordOfferOutOfStock(
+            manager,
+            [String(stock.variantId)],
+            String(stock.warehouseId),
+            blockedByVariant,
+          );
         return stockResult(StockMovementType.ADJUST, stock);
       },
     );

@@ -33,6 +33,7 @@ describe('ProductService', () => {
     // Optovik rekvizitlari `select: false` — servis ularni query builder bilan o‘qiydi; mock findOne natijasini beradi
     shopRepo.createQueryBuilder.mockImplementation(() => {
       const qb: Record<string, unknown> = {};
+      qb.select = () => qb;
       qb.addSelect = () => qb;
       qb.where = () => qb;
       qb.getOne = () => shopRepo.findOne();
@@ -295,6 +296,8 @@ describe('ProductService', () => {
       cpaEnabled: true,
       isBad: false,
       moderationNote: null,
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
       ...PHYS,
       ...over,
     });
@@ -304,6 +307,7 @@ describe('ProductService', () => {
         name: 'Gadget Trade',
         status: ShopStatus.ACTIVE,
         isDeleted: false,
+        tin: '305123456',
         ...CONTRACT,
       });
       (variantRepo as any).count = jest.fn(async () => 1);
@@ -350,6 +354,91 @@ describe('ProductService', () => {
       await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+
+    it('BE-41: CPA mahsuloti MXIK yoki qadoq kodisiz tasdiqlanmaydi — 400; CPA emas — kodsiz ham tasdiqlanadi', async () => {
+      productRepo.findOne.mockResolvedValue(pending({ mxikCode: null }));
+      await expect(service.adminApprove('10')).rejects.toThrow(
+        'CPA mahsuloti uchun MXIK va qadoq kodini kiriting (fiskal chek)',
+      );
+      productRepo.findOne.mockResolvedValue(pending({ packageCode: null }));
+      await expect(service.adminApprove('10')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      productRepo.findOne.mockResolvedValue(
+        pending({ cpaEnabled: false, mxikCode: null, packageCode: null }),
+      );
+      await expect(service.adminApprove('10')).resolves.toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+    });
+
+    it('BE-41: STIRsiz optovikning CPA mahsuloti tasdiqlanmaydi — 409 (chekda komitent bo‘lmaydi)', async () => {
+      productRepo.findOne.mockResolvedValue(pending());
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        tin: null,
+        ...CONTRACT,
+      });
+      await expect(service.adminApprove('10')).rejects.toThrow(
+        'Optovik STIR i kiritilmagan — CPA mahsulotini tasdiqlab bo‘lmaydi (fiskal chek)',
+      );
+    });
+
+    it('BE-41: STIRsiz optovikda CPA emas mahsulot tasdiqlanadi, lekin keyin CPA ni yoqib bo‘lmaydi — 409', async () => {
+      shopRepo.findOne.mockResolvedValue({
+        id: '9',
+        status: ShopStatus.ACTIVE,
+        isDeleted: false,
+        tin: null,
+        ...CONTRACT,
+      });
+      productRepo.findOne.mockResolvedValue(pending({ cpaEnabled: false }));
+      await expect(service.adminApprove('10')).resolves.toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+      productRepo.findOne.mockResolvedValue(
+        pending({ status: ProductStatus.ACTIVE, cpaEnabled: false }),
+      );
+      await expect(
+        service.adminUpdate('10', { cpaEnabled: true }),
+      ).rejects.toThrow('Optovik STIR i kiritilmagan — CPA ni yoqib bo‘lmaydi');
+    });
+
+    it('BE-41: sotuvdagi CPA mahsulotidan kodni olib tashlab bo‘lmaydi; kodsiz eskisida CPA ni o‘chirish va kod kiritish mumkin', async () => {
+      const active = () => pending({ status: ProductStatus.ACTIVE });
+      productRepo.findOne.mockResolvedValue(active());
+      await expect(
+        service.adminUpdate('10', { mxikCode: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      const legacy = () =>
+        pending({
+          status: ProductStatus.ACTIVE,
+          mxikCode: null,
+          packageCode: null,
+        });
+      productRepo.findOne.mockResolvedValue(legacy());
+      // boshqa maydonni tahrirlashdan oldin kod kiritilishi kerak
+      await expect(
+        service.adminUpdate('10', { affiliateFee: 60000 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      productRepo.findOne.mockResolvedValue(legacy());
+      await expect(
+        service.adminUpdate('10', { cpaEnabled: false }),
+      ).resolves.toMatchObject({ cpaEnabled: false });
+      productRepo.findOne.mockResolvedValue(legacy());
+      await expect(
+        service.adminUpdate('10', {
+          mxikCode: '08517001001000000',
+          packageCode: '1500012',
+        }),
+      ).resolves.toMatchObject({
+        mxikCode: '08517001001000000',
+        packageCode: '1500012',
+      });
     });
 
     it('tasdiqlangan mahsulotni qayta tasdiqlash — 409', async () => {

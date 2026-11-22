@@ -104,14 +104,17 @@ describe('ElchiWebhookController (C2.4 / C1.40)', () => {
     expect(sent).not.toHaveProperty('market_amount');
   });
 
-  it('`closed` statusi 200 bilan e’tiborsiz qoldiriladi — checkout chaqirilmaydi', async () => {
+  it('BE-21: `closed` endi checkout’ga boradi (holatga ta’siri u yerda), pul maydonlari bilan', async () => {
     const { controller, checkout } = setup();
-    const { request, signature } = req(elchiBody({ status: 'closed' }));
-
-    await expect(controller.receive(request, signature)).resolves.toMatchObject(
-      { received: true, ignored: 'closed' },
+    const { request, signature } = req(
+      elchiBody({ status: 'closed', extra_cost: 20000 }),
     );
-    expect(checkout.send).not.toHaveBeenCalled();
+
+    await controller.receive(request, signature);
+    expect(checkout.send).toHaveBeenCalledWith(
+      { cmd: 'checkout.elchi-webhook.process' },
+      expect.objectContaining({ status: 'closed', extraCost: 20000 }),
+    );
   });
 
   it('outbox qayta urinishi (25 daqiqa kechikkan) QABUL qilinadi', async () => {

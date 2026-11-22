@@ -1,3 +1,5 @@
+import { of, throwError } from 'rxjs';
+import { CATALOG_DISPLAY_LOOKUP } from '@app/common';
 import { CartService } from './cart.service';
 import { Cart } from './entities/cart.entity';
 
@@ -5,7 +7,7 @@ describe('CartService', () => {
   let carts: any[];
   let items: any[];
   let catalogRows: any[];
-  let catalogQuery: jest.Mock;
+  let catalogSend: jest.Mock;
   let service: CartService;
 
   beforeEach(() => {
@@ -54,16 +56,37 @@ describe('CartService', () => {
         },
       };
     };
-    // `catalog.product_variant` JOIN `catalog.product` — so'ralgan variantlar.
-    catalogQuery = jest.fn(async (_sql: string, [variantIds]: string[][]) =>
-      catalogRows.filter((row) => variantIds.includes(row.variantId)),
+    // BE-29: katalog RPC (`catalog.display.lookup`) — so'ralgan variantlar; checkout `catalog.*` ga SQL yozmaydi.
+    catalogSend = jest.fn(
+      (_pattern, { variantIds }: { variantIds: string[] }) =>
+        of({
+          shops: [],
+          products: [],
+          variants: catalogRows
+            .filter((row) => variantIds.includes(row.variantId))
+            .map((row) => ({
+              id: row.variantId,
+              name: row.name,
+              imageUrl: row.imageUrl,
+            })),
+        }),
     );
-    const manager = { getRepository: jest.fn(repository), query: catalogQuery };
+    const manager = {
+      getRepository: jest.fn(repository),
+      query: jest.fn(() => {
+        throw new Error('savat SQL so‘rovi kutilmagan');
+      }),
+    };
     const dataSource = {
       manager,
       transaction: jest.fn((run) => run(manager)),
     };
-    service = new CartService(dataSource as never);
+    service = new CartService(
+      dataSource as never,
+      {
+        send: catalogSend,
+      } as never,
+    );
   });
 
   it('TC1: item qo‘shadi va catalog narxini snapshot qiladi', async () => {
@@ -235,9 +258,9 @@ describe('CartService', () => {
           imageUrl: 'https://cdn/variant-11.webp',
         }),
       );
-      expect(catalogQuery).toHaveBeenLastCalledWith(
-        expect.stringContaining('catalog.product_variant'),
-        [['11']],
+      expect(catalogSend).toHaveBeenLastCalledWith(
+        { cmd: CATALOG_DISPLAY_LOOKUP },
+        { variantIds: ['11'] },
       );
     });
 
@@ -271,7 +294,46 @@ describe('CartService', () => {
       const cart = await service.get({ sessionId: 'empty' });
 
       expect(cart.items).toEqual([]);
-      expect(catalogQuery).not.toHaveBeenCalled();
+      expect(catalogSend).not.toHaveBeenCalled();
     });
+
+    it('BE-29: katalog javob bermasa savat yiqilmaydi — nom suratdan, rasm null', async () => {
+      await service.add(
+        { sessionId: 'anon-down' },
+        { productId: '10', variantId: '11', quantity: 1 },
+        variant,
+      );
+      catalogSend.mockImplementation(() =>
+        throwError(() => new Error('catalog o‘chiq')),
+      );
+
+      const cart = await service.get({ sessionId: 'anon-down' });
+
+      expect(cart.items).toEqual([
+        expect.objectContaining({ productName: 'Smartfon X', imageUrl: null }),
+      ]);
+    });
+  });
+
+  it('BE-34: bitta tovar qatori 1 000 donagacha — oshsa 400', async () => {
+    const variant = {
+      productId: '10',
+      variantId: '11',
+      shopId: '7',
+      unitPrice: 100,
+      productName: 'Smartfon X',
+    };
+    await service.add(
+      { sessionId: 'anon-cap' },
+      { productId: '10', variantId: '11', quantity: 999 },
+      variant,
+    );
+    await expect(
+      service.add(
+        { sessionId: 'anon-cap' },
+        { productId: '10', variantId: '11', quantity: 2 },
+        variant,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

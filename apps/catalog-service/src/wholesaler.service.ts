@@ -18,6 +18,7 @@ import {
   UpdateWholesalerDto,
   WholesalerDto,
   WholesalerPageDto,
+  WholesalerPaymentDetails,
 } from '@app/common';
 import { Shop, WHOLESALER_PRIVATE_COLUMNS } from './entities/shop.entity';
 
@@ -120,6 +121,30 @@ export class WholesalerService {
     return this.view(await this.save(shop));
   }
 
+  /**
+   * BE-33: bank fayli uchun oluvchi rekvizitlari (finance ichki RPC). O‘chirilgan yoki topilmagan optovik — ro‘yxatda
+   * yo‘q (finance «rekvizit yo‘q» deb to‘xtaydi).
+   */
+  async paymentDetails(ids: string[]): Promise<WholesalerPaymentDetails[]> {
+    const unique = [...new Set((ids ?? []).map(String))].filter((id) =>
+      /^[1-9]\d{0,18}$/.test(id),
+    );
+    if (!unique.length) return [];
+    const shops = await this.withPrivate(this.shops.createQueryBuilder('shop'))
+      .where('shop.id IN (:...ids) AND shop.is_deleted = FALSE', {
+        ids: unique,
+      })
+      .getMany();
+    return shops.map((shop) => ({
+      id: String(shop.id),
+      name: shop.name,
+      tin: shop.tin,
+      bankName: shop.bankName,
+      bankAccount: shop.bankAccount,
+      bankMfo: shop.bankMfo,
+    }));
+  }
+
   private async find(id: string): Promise<Shop> {
     if (!/^\d+$/.test(String(id ?? '')))
       throw new NotFoundException('Optovik topilmadi');
@@ -151,25 +176,35 @@ export class WholesalerService {
   }
 
   private view(shop: Shop): WholesalerDto {
-    return {
-      id: String(shop.id),
-      name: shop.name,
-      slug: shop.slug,
-      status: shop.status,
-      legalType: shop.legalType,
-      tin: shop.tin,
-      bankName: shop.bankName,
-      bankAccount: shop.bankAccount,
-      bankMfo: shop.bankMfo,
-      contractNumber: shop.contractNumber,
-      contractDate: shop.contractDate,
-      phone: shop.phone,
-      address: shop.address,
-      description: shop.description,
-      ownerUserId: shop.ownerUserId ?? null,
-      createdAt: shop.createdAt,
-    };
+    return toWholesalerDto(shop);
   }
+}
+
+/** Optovik javobi (admin va optovik kabineti — BE-30): rekvizitlar bilan, shuning uchun faqat yopiq API larda. */
+export function toWholesalerDto(shop: Shop): WholesalerDto {
+  return {
+    id: String(shop.id),
+    name: shop.name,
+    slug: shop.slug,
+    status: shop.status,
+    legalType: shop.legalType,
+    tin: shop.tin,
+    bankName: shop.bankName,
+    bankAccount: shop.bankAccount,
+    bankMfo: shop.bankMfo,
+    contractNumber: shop.contractNumber,
+    contractDate: shop.contractDate,
+    phone: shop.phone,
+    address: shop.address,
+    description: shop.description,
+    ownerUserId: shop.ownerUserId ?? null,
+    contractVersion: shop.contractVersion ?? null,
+    contractAcceptedAt: shop.contractAcceptedAt
+      ? new Date(shop.contractAcceptedAt).toISOString()
+      : null,
+    moderationNote: shop.moderationNote ?? null,
+    createdAt: shop.createdAt,
+  };
 }
 
 /** OPT-1: komissiya shartnomasi kiritilganmi (raqami va sanasi). Shartnomasiz mahsulot qo‘shib bo‘lmaydi. */
@@ -177,7 +212,7 @@ export const hasContract = (
   shop: Pick<Shop, 'contractNumber' | 'contractDate'>,
 ) => !!shop.contractNumber?.trim() && !!shop.contractDate;
 
-function slugify(name: string): string {
+export function slugify(name: string): string {
   return (
     name
       .trim()

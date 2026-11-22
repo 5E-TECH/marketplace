@@ -20,6 +20,8 @@ interface CreateNotificationInput {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** BE-24: berilsa — shu kalit bilan xabar bor bo‘lsa qayta yaratilmaydi (hodisa takrori). */
+  dedupeKey?: string;
 }
 
 @Injectable()
@@ -39,17 +41,51 @@ export class NotificationService {
   ) {}
 
   async create(input: CreateNotificationInput): Promise<Notification> {
-    const notification = await this.notifications.save(
-      this.notifications.create({
-        userId: input.recipient.userId,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        data: input.data ?? {},
-        isRead: false,
-        readAt: null,
-      }),
-    );
+    if (input.dedupeKey) {
+      const existing = await this.notifications.findOne({
+        where: { dedupeKey: input.dedupeKey },
+      });
+      // takror hodisa: xabar bor — lekin oldingi urinishda yetkazish yozilmay qolgan bo‘lsa (DLQ dan qayta), yoziladi
+      if (existing) return this.ensureDeliveries(existing, input);
+    }
+    let notification: Notification;
+    try {
+      notification = await this.notifications.save(
+        this.notifications.create({
+          userId: input.recipient.userId ?? null,
+          dedupeKey: input.dedupeKey ?? null,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          data: input.data ?? {},
+          isRead: false,
+          readAt: null,
+        }),
+      );
+    } catch (error) {
+      // bir vaqtda kelgan takror hodisa — birinchisi yozdi, ikkinchisi jim o‘tadi
+      if ((error as { code?: string }).code === '23505' && input.dedupeKey) {
+        const existing = await this.notifications.findOne({
+          where: { dedupeKey: input.dedupeKey },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
+    return this.ensureDeliveries(notification, input);
+  }
+
+  /** Xabarning yetkazish qatorlari (bo‘lmasa yaratiladi) va darhol birinchi urinish. */
+  private async ensureDeliveries(
+    notification: Notification,
+    input: CreateNotificationInput,
+  ): Promise<Notification> {
+    if (input.dedupeKey) {
+      const existing = await this.deliveries.count({
+        where: { notificationId: notification.id },
+      });
+      if (existing > 0) return notification;
+    }
     const channels = input.recipient.channels ?? [
       NotificationChannel.EMAIL,
       NotificationChannel.TELEGRAM,
@@ -62,14 +98,22 @@ export class NotificationService {
         recipient: this.recipientFor(input.recipient, channel),
         status: DeliveryStatus.PENDING,
         attempts: 0,
-        nextRetryAt: new Date(),
+        // BE-24: darhol shu yerda yuboriladi; qayta urinish ishi (30 s) yo‘ldagi so‘rovni ikkinchi marta olmasin
+        nextRetryAt: new Date(Date.now() + 60_000),
         lastError: null,
         sentAt: null,
       }),
     );
-    const savedDeliveries = pending.length
-      ? await this.deliveries.save(pending)
-      : [];
+    let savedDeliveries: NotificationDelivery[] = [];
+    try {
+      savedDeliveries = pending.length
+        ? await this.deliveries.save(pending)
+        : [];
+    } catch (error) {
+      // parallel takror hodisa yetkazishni allaqachon yozgan (notification_id + channel noyob)
+      if ((error as { code?: string }).code === '23505') return notification;
+      throw error;
+    }
     await Promise.allSettled(
       savedDeliveries.map((delivery) =>
         this.attemptDelivery(delivery, notification),

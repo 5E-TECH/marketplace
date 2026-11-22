@@ -5,8 +5,11 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
+  Optional,
   Param,
   Post,
+  Put,
   Query,
   Res,
 } from '@nestjs/common';
@@ -25,15 +28,19 @@ import {
   BankFileQueryDto,
   CurrentUser,
   FINANCE_SETTLEMENT_RPC,
+  JwtUser,
   RmqClient,
   Role,
   Roles,
   RunSettlementDto,
   sendRpc,
   SettlementRunResultDto,
+  SettlementSettingsDto,
+  UpdateSettlementSettingsDto,
   WholesalerSettlementDto,
   WholesalerSettlementPageDto,
   WholesalerSettlementQueryDto,
+  SETTLEMENT_PAID_EVENT,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
@@ -46,8 +53,14 @@ import { LabelDocument, labelPdf } from '../orders/label-pdf';
 @ApiBearerAuth()
 @Controller('admin/finance/settlements')
 export class AdminSettlementsController {
+  private readonly logger = new Logger(AdminSettlementsController.name);
+
   constructor(
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    // BE-47: optovikka «Pul o‘tkazildi» (SMS va kabinet)
+    @Optional()
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notification?: ClientProxy,
   ) {}
 
   @Get()
@@ -74,6 +87,11 @@ export class AdminSettlementsController {
       'Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).',
   })
   @ApiProduces('text/csv')
+  @ApiOkResponse({
+    description:
+      'CSV fayl (UTF-8 BOM, «;»): `bank-topshiriqnoma_<sana>.csv`, har akt — bitta qator',
+    content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+  })
   @ApiNotFoundResponse({ description: 'Bu davrda to‘lanadigan akt yo‘q' })
   async bankFile(
     @Query() query: BankFileQueryDto,
@@ -104,6 +122,41 @@ export class AdminSettlementsController {
     );
   }
 
+  /** BE-33 (QA): qaytarish muddati (EQ-10) va to‘lovchi rekvizitlari (EQ-05) — bank fayli shulardan. */
+  @Get('settings')
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
+  @ApiOperation({
+    summary:
+      'Hisob-kitob sozlamalari: qaytarish muddati, to‘lovchi rekvizitlari',
+  })
+  @ApiOkResponse({ type: SettlementSettingsDto })
+  settings(): Promise<SettlementSettingsDto> {
+    return sendRpc(
+      this.finance,
+      { cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET },
+      {},
+    );
+  }
+
+  @Put('settings')
+  @Roles(Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Hisob-kitob sozlamalarini o‘zgartirish (superadmin) [taklif]',
+    description:
+      'Berilgan maydonlar tarixga yoziladi (kim, qachon); berilmagani o‘zgarmaydi. Bank fayli to‘lovchi hisob raqami, MFO va to‘lov maqsadi kodisiz chiqmaydi (409).',
+  })
+  @ApiOkResponse({ type: SettlementSettingsDto })
+  updateSettings(
+    @Body() dto: UpdateSettlementSettingsDto,
+    @CurrentUser() user: JwtUser,
+  ): Promise<SettlementSettingsDto> {
+    return sendRpc(
+      this.finance,
+      { cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_UPDATE },
+      { dto, changedBy: user.sub },
+    );
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Akt va uning tovar qatorlari' })
@@ -119,6 +172,12 @@ export class AdminSettlementsController {
   @Roles(Role.ADMIN, Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({ summary: 'Akt-sverka PDF' })
   @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    description: 'PDF fayl: `akt-sverka_<akt raqami>_<davr oxiri>.pdf`',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiNotFoundResponse({ description: 'Akt topilmadi' })
   async actPdf(
     @Param('id', ParseLeadIdPipe) id: string,
@@ -146,14 +205,34 @@ export class AdminSettlementsController {
     description:
       'INVALID_STATE: akt bank fayliga chiqmagan (READY, NETTED, VOID)',
   })
-  paid(
+  async paid(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser('sub') paidBy: string,
   ): Promise<WholesalerSettlementDto> {
-    return sendRpc(
+    const result = await sendRpc<WholesalerSettlementDto>(
       this.finance,
       { cmd: FINANCE_SETTLEMENT_RPC.PAID },
       { id, paidBy },
     );
+    // BE-47 (TC3): optovikka «Pul o‘tkazildi» — takror bosilsa ham bitta xabar (notification `dedupeKey`). BE-24 dagi
+    // sotuvchi «pul o‘tkazildi» kabi gateway’dan, outbox’siz [taklif]: yuborilmasa — log; «To‘landi» ni qayta bosish
+    // xabarni qayta yuboradi (holat idempotent)
+    if (this.notification)
+      this.notification
+        .emit(SETTLEMENT_PAID_EVENT, {
+          settlementId: String(result.id),
+          number: result.number,
+          wholesalerId: String(result.wholesalerId),
+          amount: result.exportedTotal ?? result.totalAmount,
+          periodStart: result.periodStart,
+          periodEnd: result.periodEnd,
+        })
+        .subscribe({
+          error: (error: Error) =>
+            this.logger.warn(
+              `Optovikka «Pul o‘tkazildi» xabari yuborilmadi: ${error.message}`,
+            ),
+        });
+    return result;
   }
 }

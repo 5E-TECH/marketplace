@@ -4,9 +4,13 @@ import {
   CreateLeadDto,
   PartnerLeadDto,
   RpcHttpExceptionFilter,
+  SITE_ORDER_RPC,
+  SiteOrderDto,
+  SiteOrderLine,
 } from '@app/common';
 import { ApiKeyService } from './api-key.service';
 import { LeadIntakeService } from './lead-intake.service';
+import { SiteOrderService } from './site-order.service';
 
 /** POST /leads RPC (BE-12). */
 @Controller()
@@ -15,6 +19,7 @@ export class LeadIntakeController {
   constructor(
     private readonly intake: LeadIntakeService,
     private readonly keys: ApiKeyService,
+    private readonly site: SiteOrderService,
   ) {}
 
   /** POST /partner/leads (BE-43): kalit tekshiruvi va chegarasi, keyin BE-12 qoidalari. */
@@ -64,5 +69,25 @@ export class LeadIntakeController {
     },
   ) {
     return this.intake.create(input);
+  }
+
+  /** BE-34: POST /storefront/orders — savatdan lid (gateway savat qatorlarini checkout’dan oladi). */
+  @MessagePattern({ cmd: SITE_ORDER_RPC.CREATE })
+  createFromSite(
+    @Payload()
+    input: {
+      order: SiteOrderDto;
+      lines: SiteOrderLine[];
+      ip: string | null;
+      userAgent: string | null;
+    },
+  ) {
+    return this.site.create(input);
+  }
+
+  /** BE-34: SMS havola bosildi. */
+  @MessagePattern({ cmd: SITE_ORDER_RPC.CONFIRM })
+  confirmFromSite(@Payload() data: { token: string }) {
+    return this.site.confirm(String(data?.token ?? ''));
   }
 }

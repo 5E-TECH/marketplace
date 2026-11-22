@@ -54,6 +54,19 @@ export const envValidationSchema = Joi.object({
   MINIO_PUBLIC_URL: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .required(),
+  // BE-08: kreativlar sozlamasi (fayl turi va hajm) [taklif]. Tur faqat ma’lum ro‘yxatdan — noma’lum tur jim
+  // tushib qolib, ro‘yxat bo‘sh qolmasin.
+  CREATIVE_VIDEO_TYPES: Joi.string()
+    .pattern(/^\s*video\/(mp4|webm)\s*(,\s*video\/(mp4|webm)\s*)*$/i)
+    .default('video/mp4,video/webm'),
+  CREATIVE_VIDEO_MAX_MB: Joi.number().integer().min(1).max(2048).default(100),
+  CREATIVE_IMAGE_TYPES: Joi.string()
+    .pattern(/^\s*image\/(jpeg|png|webp)\s*(,\s*image\/(jpeg|png|webp)\s*)*$/i)
+    .default('image/jpeg,image/png,image/webp'),
+  CREATIVE_IMAGE_MAX_MB: Joi.number().integer().min(1).max(100).default(10),
+  // Yuklash policy sini imzolovchi alohida MinIO kaliti (faqat `creative-uploads/*` ga yozish); bo‘sh — asosiy kalit
+  CREATIVE_UPLOAD_ACCESS_KEY: Joi.string().allow('').optional(),
+  CREATIVE_UPLOAD_SECRET_KEY: Joi.string().allow('').optional(),
 
   // Auth (JWT)
   JWT_SECRET: Joi.string().min(16).required(),
@@ -63,6 +76,18 @@ export const envValidationSchema = Joi.object({
   // false — login/register/refresh tokenni body'da qaytarmaydi, faqat
   // HttpOnly cookie'da (API_CONTRACT.md §2.2.1). Frontend cookie'ga o'tgach.
   AUTH_TOKENS_IN_BODY: Joi.boolean().default(true),
+
+  // BE-26 (T8): admin va moliya uchun 2FA (TOTP). Yoqilganda sirlar kaliti majburiy — aks holda hamma admin
+  // panelga kira olmay qoladi (birinchi kirishda 500).
+  ADMIN_2FA: Joi.string().valid('on', 'off').default('off'),
+  TWO_FACTOR_SECRET_KEY: Joi.string().min(32).when('ADMIN_2FA', {
+    is: 'on',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  // BE-26: prod’da Swagger sukut bo‘yicha yopiq; monitor ko‘rsatkichlari tokeni (gateway `health/ops`)
+  SWAGGER_ENABLED: Joi.string().valid('on', 'off', 'true', 'false').optional(),
+  MONITOR_TOKEN: Joi.string().min(16).optional(),
 
   // Integratsiya kalitlari shifri (AES)
   INTEGRATION_CREDENTIAL_SECRET: Joi.string().min(16).required(),

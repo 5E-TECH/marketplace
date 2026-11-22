@@ -30,7 +30,12 @@ export class CartController {
       { cmd: 'cart.variant.get' },
       { productId: data.dto.productId, variantId: data.dto.variantId },
     );
-    return this.carts.add(data.owner, data.dto, variant);
+    // BE-34: sayt variant yubormaydi — CPA mahsulotining yagona faol varianti (katalog tanlaydi)
+    return this.carts.add(
+      data.owner,
+      { ...data.dto, variantId: data.dto.variantId ?? variant.variantId },
+      variant,
+    );
   }
 
   @MessagePattern({ cmd: 'cart.item.update' })

@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { PriceStatus } from '@app/common';
+import { CreativeType, PriceStatus } from '@app/common';
 import { CATALOG_DB } from './database';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -15,6 +15,8 @@ import {
   PricePolicyScope,
 } from './entities/pricing.entity';
 import { CatalogOfferService } from './catalog-offer.service';
+import { CreativeService } from './creative.service';
+import { Creative } from './entities/creative.entity';
 import { PricingService } from './pricing.service';
 import { ProductService } from './product.service';
 import { WholesalerService } from './wholesaler.service';
@@ -34,6 +36,7 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
   let ds: DataSource;
   let pricing: PricingService;
   let offers: CatalogOfferService;
+  let creatives: CreativeService;
   let productId: string;
   const emitted: Array<[string, unknown]> = [];
 
@@ -78,6 +81,10 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       pricing,
       ds.getRepository(ProductVariant),
       { send: () => of({}) } as never, // qoldiq — BE-16 testida
+      (creatives = new CreativeService(
+        ds.getRepository(Creative),
+        ds.getRepository(Product),
+      )),
     );
     const wholesalers = new WholesalerService(ds.getRepository(Shop));
     const products = new ProductService(
@@ -108,6 +115,8 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       lengthMm: 200,
       widthMm: 120,
       heightMm: 80,
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
     });
     productId = String(p.id);
     await products.adminApprove(productId);
@@ -265,6 +274,12 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       affiliateFee: 65_000,
       hiddenDelivery: 11_000,
       delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+      // BE-41: chek qatori — kodlar va optovik (komitent) STIR i (`select: false` ustun faqat shu nusxada)
+      fiscal: {
+        mxikCode: '08517001001000000',
+        packageCode: '1500012',
+        wholesalerTin: '305123456',
+      },
     });
     // to‘rt qator + yashirilgan yetkazish = tasdiqlangan narx (TZ 2.2; platforma xizmati — qoldiq)
     const s = snapshot!;
@@ -294,6 +309,47 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     await expect(offers.orderSnapshot('999999', 1, 'CENTER')).resolves.toBe(
       null,
     );
+  });
+
+  it('BE-34: ko‘p tovarli posilka — har tovar nusxasi, yetkazish jami og‘irlik bo‘yicha (bitta tovar qoidasi bilan bir xil)', async () => {
+    // bitta qator — orderSnapshot bilan bir xil
+    const one = await offers.orderSnapshotMany(
+      [{ productId, quantity: 1 }],
+      'CENTER',
+    );
+    expect(one.delivery).toEqual({
+      mode: 'PARTIAL',
+      shown: 30_000,
+      elchiTariff: 40_000,
+    });
+    expect(one.items[0]).toMatchObject({ productId, approvedPrice: 262_000 });
+    // 450 g × (1 + 7) = 3 600 g → +1 kg → tarif 44 000; ko‘rinadigan 30 000 + 4 000 (quote(8) bilan bir xil)
+    const two = await offers.orderSnapshotMany(
+      [
+        { productId, quantity: 1 },
+        { productId, quantity: 7 },
+      ],
+      'CENTER',
+    );
+    expect(two.delivery).toEqual({
+      mode: 'PARTIAL',
+      shown: 34_000,
+      elchiTariff: 44_000,
+    });
+    expect(two.items).toHaveLength(2);
+    // topilmagan mahsulot — null, posilka yetkazishi hisoblanmaydi
+    await expect(
+      offers.orderSnapshotMany(
+        [
+          { productId, quantity: 1 },
+          { productId: '999999', quantity: 1 },
+        ],
+        'CENTER',
+      ),
+    ).resolves.toMatchObject({
+      items: [expect.any(Object), null],
+      delivery: null,
+    });
   });
 
   it('yashil → sariq (M oshdi, hech kim zarar ko‘rmaydi) — tasdiq saqlanadi; soliq + to‘lov ≥ 50% — 400', async () => {
@@ -426,5 +482,118 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       elchiTariff: 45_000,
     });
     expect((await pricing.listTariffs()).length).toBe(3);
+  });
+
+  it('BE-08: kreativlar — mahsulotga bog‘lanadi, offer ularni tartib bilan beradi; o‘chirilgani chiqadi; chegara 20', async () => {
+    const file = (n: number, type: CreativeType) => ({
+      objectKey: `creatives/${productId}/0000000${n}-1111-4222-8333-944455556666.${type === CreativeType.VIDEO ? 'mp4' : 'png'}`,
+      url: `https://api.elchi.test/media/m/creatives/${productId}/${n}`,
+      type,
+      mimeType: type === CreativeType.VIDEO ? 'video/mp4' : 'image/png',
+      size: type === CreativeType.VIDEO ? 80 * 1024 * 1024 : 2048,
+    });
+    const video = await creatives.create({
+      productId,
+      file: file(1, CreativeType.VIDEO),
+      actorId: '7',
+    });
+    const image = await creatives.create({
+      productId,
+      file: file(2, CreativeType.IMAGE),
+      actorId: '7',
+    });
+    expect(video).toMatchObject({
+      type: 'VIDEO',
+      size: 80 * 1024 * 1024,
+      position: 0,
+    });
+    expect(image.position).toBe(1);
+    // takroriy tasdiq — o‘sha kreativ
+    await expect(
+      creatives.create({
+        productId,
+        file: file(1, CreativeType.VIDEO),
+        actorId: '7',
+      }),
+    ).resolves.toMatchObject({ id: video.id });
+    // boshqa mahsulot kaliti — rad
+    await expect(
+      creatives.create({
+        productId,
+        file: {
+          ...file(3, CreativeType.IMAGE),
+          objectKey: 'creatives/999/x.png',
+        },
+        actorId: '7',
+      }),
+    ).rejects.toThrow('noto‘g‘ri');
+
+    await expect(offers.get(productId)).resolves.toMatchObject({
+      creatives: [
+        {
+          id: video.id,
+          type: 'VIDEO',
+          url: video.url,
+          createdAt: expect.any(String),
+        },
+        {
+          id: image.id,
+          type: 'IMAGE',
+          url: image.url,
+          createdAt: expect.any(String),
+        },
+      ],
+    });
+    await expect(creatives.list(productId)).resolves.toHaveLength(2);
+    // gateway tasdiqdan oldin so‘raydi: bor — o‘sha kreativ, yo‘q — null
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(1, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toMatchObject({ creative: { id: video.id } });
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(7, CreativeType.VIDEO).objectKey,
+      }),
+    ).resolves.toEqual({ creative: null });
+
+    await expect(
+      creatives.delete({ productId, creativeId: image.id }),
+    ).resolves.toEqual({
+      id: image.id,
+      objectKey: file(2, CreativeType.IMAGE).objectKey,
+    });
+    // o‘chirilgan kreativ fayli qayta tasdiqlanmaydi
+    await expect(
+      creatives.find({
+        productId,
+        objectKey: file(2, CreativeType.IMAGE).objectKey,
+      }),
+    ).rejects.toThrow('o‘chirilgan');
+    const after = await offers.list({ productIds: [productId] } as never);
+    expect(after.find((o) => o.productId === productId)?.creatives).toEqual([
+      {
+        id: video.id,
+        type: 'VIDEO',
+        url: video.url,
+        createdAt: expect.any(String),
+      },
+    ]);
+
+    for (let n = 10; n < 29; n++)
+      await creatives.create({
+        productId,
+        file: file(n, CreativeType.IMAGE),
+        actorId: null,
+      });
+    await expect(
+      creatives.create({
+        productId,
+        file: file(29, CreativeType.IMAGE),
+        actorId: null,
+      }),
+    ).rejects.toThrow('20');
   });
 });

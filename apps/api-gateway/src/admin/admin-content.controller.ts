@@ -79,8 +79,7 @@ export class AdminContentController {
   }
 
   /**
-   * Banner rasmi. `POST /files/upload` sotuvchi uchun va rasmni mahsulotga
-   * biriktiradi, shuning uchun admin undan foydalana olmaydi. Bu endpoint
+   * Banner rasmi (eski sotuvchi `POST /files/upload` BE-29 da o‘chirildi). Bu endpoint
    * rasmni MinIO'ning ochiq `banners/` papkasiga yuklaydi; qaytgan `url`
    * banner yaratish/tahrirlashda `imageUrl` sifatida yuboriladi.
    */

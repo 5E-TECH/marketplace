@@ -1,26 +1,42 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   AddCartItemDto,
   CartCatalogVariantDto,
   CartDto,
   CartOwnerDto,
+  RmqClient,
 } from '@app/common';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
+import { catalogDisplayLookup } from './catalog-display.util';
+
+/** BE-34: savat qatori chegarasi — liddan buyurtma (BE-18) bilan bir xil. */
+const MAX_LINE_QUANTITY = 1000;
 
 @Injectable()
 export class CartService {
-  constructor(private readonly dataSource: DataSource) {}
+  private readonly logger = new Logger(CartService.name);
+
+  constructor(
+    private readonly dataSource: DataSource,
+    // BE-29: nom va rasm katalogdan RPC bilan (avval `catalog.*` ga JOIN edi)
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
+  ) {}
 
   async get(owner: CartOwnerDto): Promise<CartDto> {
     this.assertOwner(owner);
-    const manager = this.dataSource.manager;
-    return this.toDto(manager, await this.findActive(manager, owner));
+    return this.toDto(await this.findActive(this.dataSource.manager, owner));
   }
 
   async add(
@@ -35,12 +51,17 @@ export class CartService {
     ) {
       throw new BadRequestException('Mahsulot va variant bir-biriga mos emas');
     }
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const cart = await this.getOrCreate(manager, owner);
       const repository = manager.getRepository(CartItem);
       const existing = await repository.findOne({
         where: { cartId: cart.id, variantId: dto.variantId },
       });
+      // BE-18 chegarasi: bitta tovar qatori 1 000 donagacha (undan ko‘pi buyurtmada rad etiladi)
+      if ((existing?.quantity ?? 0) + dto.quantity > MAX_LINE_QUANTITY)
+        throw new BadRequestException(
+          `Bitta tovardan ${MAX_LINE_QUANTITY} donagacha`,
+        );
       if (existing) {
         existing.quantity += dto.quantity;
         existing.unitPriceSnapshot = variant.unitPrice;
@@ -61,8 +82,9 @@ export class CartService {
           }),
         );
       }
-      return this.toDto(manager, await this.findById(manager, cart.id));
+      return this.findById(manager, cart.id);
     });
+    return this.toDto(result);
   }
 
   async update(
@@ -71,7 +93,7 @@ export class CartService {
     quantity: number,
   ): Promise<CartDto> {
     this.assertOwner(owner);
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const cart = await this.requiredCart(manager, owner);
       const item = await manager.getRepository(CartItem).findOne({
         where: { id: itemId, cartId: cart.id },
@@ -79,22 +101,24 @@ export class CartService {
       if (!item) throw new NotFoundException('Savat elementi topilmadi');
       item.quantity = quantity;
       await manager.getRepository(CartItem).save(item);
-      return this.toDto(manager, await this.findById(manager, cart.id));
+      return this.findById(manager, cart.id);
     });
+    return this.toDto(result);
   }
 
   async remove(owner: CartOwnerDto, itemId: string): Promise<CartDto> {
     this.assertOwner(owner);
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const cart = await this.requiredCart(manager, owner);
-      const result = await manager.getRepository(CartItem).delete({
+      const deleted = await manager.getRepository(CartItem).delete({
         id: itemId,
         cartId: cart.id,
       });
-      if (!result.affected)
+      if (!deleted.affected)
         throw new NotFoundException('Savat elementi topilmadi');
-      return this.toDto(manager, await this.findById(manager, cart.id));
+      return this.findById(manager, cart.id);
     });
+    return this.toDto(result);
   }
 
   /**
@@ -105,33 +129,31 @@ export class CartService {
    */
   async clear(owner: CartOwnerDto): Promise<CartDto> {
     this.assertOwner(owner);
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const cart = await this.findActive(manager, owner);
-      if (!cart) return this.toDto(manager, null);
+      if (!cart) return null;
       await manager.getRepository(CartItem).delete({ cartId: cart.id });
-      return this.toDto(manager, await this.findById(manager, cart.id));
+      return this.findById(manager, cart.id);
     });
+    return this.toDto(result);
   }
 
   async merge(customerId: string, sessionId: string): Promise<CartDto> {
     if (!customerId || !sessionId) {
       throw new BadRequestException('customerId va sessionId majburiy');
     }
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const carts = manager.getRepository(Cart);
       const sessionCart = await this.findActive(manager, { sessionId });
       let userCart = await this.findActive(manager, { customerId });
-      if (!sessionCart) return this.toDto(manager, userCart);
+      if (!sessionCart) return userCart;
       if (!userCart) {
         sessionCart.customerId = customerId;
         sessionCart.sessionId = null;
         await carts.save(sessionCart);
-        return this.toDto(
-          manager,
-          await this.findById(manager, sessionCart.id),
-        );
+        return this.findById(manager, sessionCart.id);
       }
-      if (userCart.id === sessionCart.id) return this.toDto(manager, userCart);
+      if (userCart.id === sessionCart.id) return userCart;
 
       const items = manager.getRepository(CartItem);
       for (const source of sessionCart.items) {
@@ -153,8 +175,9 @@ export class CartService {
       sessionCart.status = 'converted';
       await carts.save(sessionCart);
       userCart = (await this.findById(manager, userCart.id))!;
-      return this.toDto(manager, userCart);
+      return userCart;
     });
+    return this.toDto(result);
   }
 
   private assertOwner(owner: CartOwnerDto) {
@@ -185,57 +208,53 @@ export class CartService {
     const where = owner.customerId
       ? { customerId: owner.customerId, status: 'active' }
       : { sessionId: owner.sessionId, status: 'active' };
-    return manager
-      .getRepository(Cart)
-      .findOne({ where, relations: { items: true } });
+    return manager.getRepository(Cart).findOne({
+      where,
+      relations: { items: true },
+      // BE-34: qatorlar savatga qo‘shilgan tartibda (birinchi tovar — lidning asosiy tovari)
+      order: { items: { id: 'ASC' } },
+    });
   }
 
   private findById(manager: EntityManager, id: string) {
-    return manager
-      .getRepository(Cart)
-      .findOne({ where: { id }, relations: { items: true } });
+    return manager.getRepository(Cart).findOne({
+      where: { id },
+      relations: { items: true },
+      order: { items: { id: 'ASC' } },
+    });
   }
 
   /**
-   * Savat qatori uchun katalogdagi nom va rasm — storefront har qatorga
-   * alohida katalog so'rovi yubormasligi uchun. Rasm jonli olinadi (sotuvchi
-   * almashtirsa savatda ham yangilanadi): variant rasmi, u bo'lmasa
-   * mahsulotniki. `seller-orders.service.ts` dagi `catalog.product` JOIN bilan
-   * bir xil yondashuv. O'chirilgan (soft-delete) mahsulot qatori ham qaytadi —
-   * xaridor savatdan nimani olib tashlayotganini ko'rsin.
+   * Savat qatori uchun katalogdagi nom va rasm — storefront har qatorga alohida katalog so'rovi yubormasligi uchun.
+   * Rasm jonli olinadi (sotuvchi almashtirsa savatda ham yangilanadi): variant rasmi, u bo'lmasa mahsulotniki.
+   * O'chirilgan (soft-delete) mahsulot qatori ham qaytadi — xaridor savatdan nimani olib tashlayotganini ko'rsin.
+   * BE-29: katalog RPC (`catalog.display.lookup`), tranzaksiyadan tashqarida; katalog javob bermasa savat yiqilmaydi —
+   * nom suratdan, rasm `null` [taklif].
    */
   private async catalogInfo(
-    manager: EntityManager,
     variantIds: string[],
   ): Promise<Map<string, { name: string | null; imageUrl: string | null }>> {
-    if (!variantIds.length) return new Map();
-    const rows = (await manager.query(
-      `SELECT v.id::text AS "variantId", p.name,
-              COALESCE(NULLIF(v.image_url, ''), NULLIF(p.image_url, ''),
-                       p.images->>0) AS "imageUrl"
-         FROM catalog.product_variant v
-         JOIN catalog.product p ON p.id = v.product_id
-        WHERE v.id = ANY($1::bigint[])`,
-      [variantIds],
-    )) as Array<{
-      variantId: string;
-      name: string | null;
-      imageUrl: string | null;
-    }>;
-    return new Map(
-      rows.map((row) => [
-        String(row.variantId),
-        { name: row.name ?? null, imageUrl: row.imageUrl || null },
-      ]),
-    );
+    if (!variantIds.length || !this.catalog) return new Map();
+    try {
+      const result = await catalogDisplayLookup(this.catalog, {
+        variantIds: [...new Set(variantIds)],
+      });
+      return new Map(
+        (result?.variants ?? []).map((row) => [
+          String(row.id),
+          { name: row.name ?? null, imageUrl: row.imageUrl || null },
+        ]),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Katalogdan savat nomi va rasmi olinmadi: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return new Map();
+    }
   }
 
-  private async toDto(
-    manager: EntityManager,
-    cart: Cart | null,
-  ): Promise<CartDto> {
+  private async toDto(cart: Cart | null): Promise<CartDto> {
     const catalog = await this.catalogInfo(
-      manager,
       (cart?.items ?? []).map((item) => String(item.variantId)),
     );
     const items = (cart?.items ?? []).map((item) => {

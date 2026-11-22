@@ -9,6 +9,8 @@ import { Product } from './entities/product.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { Shop } from './entities/shop.entity';
 import { CatalogOfferService } from './catalog-offer.service';
+import { CreativeService } from './creative.service';
+import { Creative } from './entities/creative.entity';
 import { ProductService } from './product.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
@@ -41,6 +43,9 @@ const PHYS = {
   lengthMm: 200,
   widthMm: 120,
   heightMm: 80,
+  // BE-41: CPA mahsuloti tasdiqdan oldin fiskal chek kodlari bilan
+  mxikCode: '08517001001000000',
+  packageCode: '1500012',
 };
 
 /**
@@ -75,8 +80,11 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       type: 'postgres',
       url,
       schema: 'catalog',
+      // faqat BE-07 dan oldingilari (keyingi migratsiyalar BE-07 jadvallariga tayanadi — BE-30 STIR indeksi)
       migrations: CATALOG_DB.migrations.filter(
-        (m) => m !== WholesalerCpaProduct1796083200000,
+        (m) =>
+          Number(/\d{13}$/.exec(m.name)?.[0]) <
+          Number(/\d{13}$/.exec(WholesalerCpaProduct1796083200000.name)?.[0]),
       ),
       migrationsRun: true,
       synchronize: false,
@@ -125,9 +133,16 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       ds.getRepository(ProductVariant),
       // BE-16: inventory — har bir faol variantda 5 dona bo‘sh qoldiq
       {
-        send: (_p: unknown, d: { variantIds: string[] }) =>
-          of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
+        send: (p: { cmd: string }, d: { variantIds: string[] }) =>
+          // BE-27: sotuvdan chiqqan partiyalar (moderatsiya hisoblagichi) — bitta
+          p.cmd === 'inventory.lots.list'
+            ? of([{ id: '1', blocked: true }])
+            : of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
       } as never,
+      new CreativeService(
+        ds.getRepository(Creative),
+        ds.getRepository(Product),
+      ),
     );
     const rows = (await ds.query(
       `SELECT id::text, slug, cpa_enabled FROM catalog.product WHERE id >= 9000 ORDER BY id`,
@@ -178,6 +193,19 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       .findOneByOrFail({ id: created.id });
     expect(plain).not.toHaveProperty('tin');
     expect(plain).not.toHaveProperty('bankAccount');
+    // BE-33: bank fayli uchun ichki RPC — rekvizitlar bilan; noma’lum id — ro‘yxatda yo‘q
+    await expect(
+      wholesalers.paymentDetails([created.id, '999999', 'x']),
+    ).resolves.toEqual([
+      {
+        id: created.id,
+        name: WHOLESALER.name,
+        tin: '305123456',
+        bankName: WHOLESALER.bankName,
+        bankAccount: '20208000900123456001',
+        bankMfo: '01158',
+      },
+    ]);
     expect(plain).not.toHaveProperty('contractNumber');
     const withProduct = await ds
       .getRepository(Product)
@@ -357,5 +385,55 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     expect((await offers.list()).map((o) => o.productId)).not.toContain(
       productId,
     );
+  });
+
+  it('BE-27: moderatsiya hisoblagichlari bazadagi holat bilan bir xil; yashirish sababi saqlanadi', async () => {
+    const counts = async () =>
+      Object.fromEntries(
+        (
+          (await ds.query(
+            `SELECT CASE WHEN p.is_blocked THEN 'BLOCKED' ELSE p.status END AS k, count(*)::int AS n
+               FROM catalog.product p JOIN catalog.shop s ON s.id = p.shop_id
+              WHERE p.is_deleted = FALSE GROUP BY 1`,
+          )) as Array<{ k: string; n: number }>
+        ).map((r) => [r.k, r.n]),
+      );
+    const before = await offers.moderationSummary();
+    const db = await counts();
+    const total = Object.values(db).reduce((a, b) => a + b, 0);
+    expect(before.byStatus.ALL).toBe(total);
+    expect(before.productsPending).toBe(db.PENDING_REVIEW ?? 0);
+    expect(before.byStatus.ACTIVE).toBe(db.ACTIVE ?? 0);
+    expect(before.byStatus.REJECTED).toBe(db.REJECTED ?? 0);
+    expect(before.expirySoon).toBe(1);
+    expect(before.outOfStock).toBe(0);
+
+    const extra = await products.adminCreate(wholesalerId, {
+      wholesalerId,
+      name: 'Moderatsiya hisobi',
+      imageUrl: 'https://cdn.example.com/m.jpg',
+      ...PHYS,
+    });
+    let s = await offers.moderationSummary();
+    expect(s.productsPending).toBe(before.productsPending + 1);
+    // tasdiqlanmagan narx — narx qarori kutadi
+    expect(s.pricesPending).toBeGreaterThanOrEqual(1);
+
+    await products.adminApprove(String(extra.id));
+    await products.adminHide(
+      String(extra.id),
+      '  Sertifikat muddati tugagan  ',
+    );
+    s = await offers.moderationSummary();
+    expect(s.byStatus.BLOCKED).toBe((before.byStatus.BLOCKED ?? 0) + 1);
+    await expect(products.adminGet(String(extra.id))).resolves.toMatchObject({
+      isBlocked: true,
+      blockReason: 'Sertifikat muddati tugagan',
+    });
+    await products.adminReactivate(String(extra.id));
+    await expect(products.adminGet(String(extra.id))).resolves.toMatchObject({
+      isBlocked: false,
+      blockReason: null,
+    });
   });
 });

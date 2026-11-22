@@ -1,62 +1,41 @@
-import { of } from 'rxjs';
 import { ReturnRequestsController } from './return-requests.controller';
 
 describe('ReturnRequestsController (C4.2)', () => {
   function setup() {
-    const returns = { transition: jest.fn(), create: jest.fn() };
+    const returns = { transition: jest.fn() };
     const refunds = { refund: jest.fn() };
     const queries = { list: jest.fn(), get: jest.fn() };
-    const catalog = { send: jest.fn(() => of({ id: '7' })) };
     const controller = new ReturnRequestsController(
       returns as never,
       refunds as never,
       queries as never,
-      catalog as never,
+      { isStaffRequest: jest.fn(async () => false) } as never,
     );
-    return { controller, returns, refunds, queries, catalog };
+    return { controller, returns, refunds, queries };
   }
 
-  const actor = { id: '70', role: 'SELLER' };
+  it('admin ro‘yxati filtrni o‘zgarishsiz uzatadi', async () => {
+    const { controller, queries } = setup();
+    await controller.adminList({ query: { page: 1, limit: 5 } as never });
+    expect(queries.list).toHaveBeenCalledWith({ page: 1, limit: 5 });
+  });
 
-  it('owner scope catalog orqali do‘konga aylanadi va faqat shu do‘konda amal qiladi', async () => {
-    const { controller, returns, catalog } = setup();
-    await controller.sellerApprove({
-      ownerUserId: '70',
+  it('admin tasdiqlash — aktor va izoh bilan, do‘kon chegarasisiz', async () => {
+    const { controller, returns } = setup();
+    await controller.adminApprove({
       returnId: '3',
-      actor,
+      actor: { id: '1', role: 'ADMIN' },
       comment: 'OK',
     });
-    expect(catalog.send).toHaveBeenCalledWith(
-      { cmd: 'seller.shop.get-me' },
-      { ownerUserId: '70' },
-    );
-    expect(returns.transition).toHaveBeenCalledWith('sellerApprove', {
+    expect(returns.transition).toHaveBeenCalledWith('adminApprove', {
       returnId: '3',
-      actor,
+      actor: { id: '1', role: 'ADMIN' },
       comment: 'OK',
-      shopId: '7',
     });
   });
 
-  it('operator shopId to‘g‘ridan ishlatiladi', async () => {
-    const { controller, queries, catalog } = setup();
-    await controller.sellerList({ shopId: '9', query: { page: 1, limit: 5 } });
-    expect(catalog.send).not.toHaveBeenCalled();
-    expect(queries.list).toHaveBeenCalledWith({
-      page: 1,
-      limit: 5,
-      shopId: '9',
-    });
-  });
-
-  it('xaridor ro‘yxati customerId bilan cheklanadi, admin refund summa/restock oladi', async () => {
-    const { controller, queries, refunds } = setup();
-    await controller.listByBuyer({
-      customerId: '5',
-      query: { customerId: '999' } as never,
-    });
-    expect(queries.list).toHaveBeenCalledWith({ customerId: '5' });
-
+  it('admin refund summa va restock oladi', async () => {
+    const { controller, refunds } = setup();
     await controller.adminRefund({
       returnId: '3',
       actor: { id: '1', role: 'SUPERADMIN' },
@@ -70,5 +49,22 @@ describe('ReturnRequestsController (C4.2)', () => {
       amount: 1000,
       restock: false,
     });
+  });
+
+  it('BE-44: xodim so‘rovida eski refund yo‘li — 409 (pul va tovar avtomatik)', async () => {
+    const refunds = { refund: jest.fn() };
+    const controller = new ReturnRequestsController(
+      { transition: jest.fn() } as never,
+      refunds as never,
+      { list: jest.fn(), get: jest.fn() } as never,
+      { isStaffRequest: jest.fn(async () => true) } as never,
+    );
+    await expect(
+      controller.adminRefund({
+        returnId: '3',
+        actor: { id: '1', role: 'SUPERADMIN' },
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(refunds.refund).not.toHaveBeenCalled();
   });
 });

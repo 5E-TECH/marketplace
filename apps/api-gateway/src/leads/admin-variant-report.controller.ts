@@ -50,6 +50,11 @@ export class AdminVariantReportController {
   @Get('csv')
   @ApiOperation({ summary: 'Xuddi shu hisobot CSV da (UTF-8, «;»)' })
   @ApiProduces('text/csv')
+  @ApiOkResponse({
+    description:
+      'CSV fayl (UTF-8 BOM, «;»): `s1-s3-sinov_<from>_<to>.csv`, qatorlari JSON hisobotdagi `rows` bilan bir xil',
+    content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+  })
   async csv(
     @Query() query: VariantReportQueryDto,
     @Res({ passthrough: true }) res: Response,

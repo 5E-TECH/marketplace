@@ -1,6 +1,10 @@
 import { Controller, Inject, Logger } from '@nestjs/common';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
+  COD_RECONCILIATION_MISMATCH_EVENT,
+  CodReconciliationMismatchEvent,
+  ELCHI_STATUS_CONFLICT_EVENT,
+  ElchiStatusConflictEvent,
   LOT_BLOCKED_EVENT,
   LotBlockedEvent,
   RmqClient,
@@ -68,6 +72,74 @@ export class NotificationEventsController {
         ...content,
         data: { productId: event.productId, decidedBy: event.decidedBy },
       });
+  }
+
+  /** BE-21 (TZ ELC-4, bildirishnomalar «Sverka farqi» → nazoratchi va moliya): kunlik sverkada farq. */
+  @EventPattern(COD_RECONCILIATION_MISMATCH_EVENT)
+  async codMismatch(@Payload() event: CodReconciliationMismatchEvent) {
+    const recipients = await this.financeAndSupervisors();
+    if (!recipients.length) {
+      this.logger.warn(
+        `Sverka farqi (${event.date}): faol moliya yoki nazoratchi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('cod_reconciliation_mismatch', {
+      date: event.date,
+      mismatchCount: event.mismatchCount,
+      diffTotal: event.diffTotal,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'cod_reconciliation_mismatch',
+        ...content,
+        data: { date: event.date, orders: event.orders },
+      });
+  }
+
+  /** BE-21: Elchi yetkazilgan sotuvni bekor qildi — buyurtma o‘zgarmaydi, moliya va nazoratchi qo‘lda hal qiladi. */
+  @EventPattern(ELCHI_STATUS_CONFLICT_EVENT)
+  async elchiStatusConflict(@Payload() event: ElchiStatusConflictEvent) {
+    const recipients = await this.financeAndSupervisors();
+    if (!recipients.length) {
+      this.logger.warn(
+        `Elchi holati zid (${event.orderId}): faol moliya yoki nazoratchi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('elchi_status_conflict', {
+      orderId: event.orderId,
+      orderStatus: event.orderStatus,
+      elchiStatus: event.elchiStatus,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'elchi_status_conflict',
+        ...content,
+        data: {
+          orderId: event.orderId,
+          shipmentId: event.shipmentId,
+          eventId: event.eventId,
+        },
+      });
+  }
+
+  /** Moliya va nazoratchi (ikki rolda bitta odam — bir marta). */
+  private async financeAndSupervisors(): Promise<
+    Array<{ id: string; phone: string; email: string | null }>
+  > {
+    const recipients = new Map<
+      string,
+      { id: string; phone: string; email: string | null }
+    >();
+    for (const role of ['FINANCE', 'SUPERVISOR'])
+      for (const user of await sendRpc<
+        Array<{ id: string; phone: string; email: string | null }>
+      >(this.identity, { cmd: 'identity.user.active-by-role' }, { role }))
+        recipients.set(String(user.id), user);
+    return [...recipients.values()];
   }
 
   /** BE-17 (TZ OMB-3): partiya muddatiga 60 kundan kam qoldi — sotuvdan chiqdi; admin va superadminga. */

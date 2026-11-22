@@ -41,6 +41,8 @@ describe('normalizeElchiWebhook', () => {
       status: 'on_the_road',
       occurredAt: '2026-09-21T10:00:00.000Z',
       codCollected: 0,
+      // BE-21: pul maydonlari o‘tkaziladi (null — yo‘q)
+      marketPaidAmount: 0,
     });
   });
 
@@ -77,15 +79,46 @@ describe('normalizeElchiWebhook', () => {
     expect(event?.status).toBe('sold');
   });
 
-  it('`paid` va `partly_paid` e\u2019tiborsiz \u2014 noto\u2018g\u2018ri payout otilmaydi', () => {
-    // `partly_paid` -> `sold` -> DELIVERED bo'lsa, naqd bo'lmagan buyurtmada
-    // `finance.payout.requested` TO'LIQ subtotal bilan otilardi.
+  it('BE-21: `paid` va `partly_paid` — pul maydonlari bilan o‘tadi (TZ T9-7)', () => {
     for (const raw of ['paid', 'partly_paid']) {
       const { event, ignored } = normalizeElchiWebhook(
-        elchiBody({ status: raw }),
+        elchiBody({
+          status: raw,
+          collected_from_customer: 499000,
+          elchi_fee: '50000',
+          market_paid_amount: 449000,
+        }),
       );
-      expect(event).toBeUndefined();
-      expect(ignored?.status).toBe(raw);
+      expect(ignored).toBeUndefined();
+      expect(event).toMatchObject({
+        status: raw,
+        collectedFromCustomer: 499000,
+        elchiFee: 50000,
+        marketPaidAmount: 449000,
+      });
+    }
+  });
+
+  it('BE-21: lid buyurtmasi `mp-order:` kaliti saqlanadi; tiyin so‘mga yaxlitlanadi, noto‘g‘ri summa holatni to‘smaydi', () => {
+    expect(
+      normalizeElchiWebhook(elchiBody({ external_order_id: 'mp-order:42' }))
+        .event?.externalOrderId,
+    ).toBe('mp-order:42');
+    expect(
+      normalizeElchiWebhook(
+        elchiBody({
+          status: 'sold',
+          elchi_fee: '40000.40',
+          market_paid_amount: 0.5,
+        }),
+      ).event,
+    ).toMatchObject({ status: 'sold', elchiFee: 40000, marketPaidAmount: 1 });
+    for (const bad of [-1, 'abc'] as const) {
+      const { event } = normalizeElchiWebhook(
+        elchiBody({ status: 'sold', market_paid_amount: bad }),
+      );
+      expect(event?.status).toBe('sold');
+      expect(event).not.toHaveProperty('marketPaidAmount');
     }
   });
 
@@ -123,14 +156,13 @@ describe('normalizeElchiWebhook', () => {
     expect(event?.codCollected).toBe(450000);
   });
 
-  it('`closed` ataylab e’tiborsiz qoldiriladi — pul harakati boshlanmaydi', () => {
+  it('BE-21: `closed` o‘tadi (holatga ta’siri checkout’da), `extra_cost` bilan', () => {
     const { event, ignored } = normalizeElchiWebhook(
-      elchiBody({ status: 'closed' }),
+      elchiBody({ status: 'closed', extra_cost: 20000 }),
     );
-    expect(event).toBeUndefined();
-    expect(ignored?.status).toBe('closed');
-    expect(ELCHI_IGNORED_STATUSES.has('closed')).toBe(true);
-    expect(ELCHI_IGNORED_STATUSES.has('partly_paid')).toBe(true);
+    expect(ignored).toBeUndefined();
+    expect(event).toMatchObject({ status: 'closed', extraCost: 20000 });
+    expect(ELCHI_IGNORED_STATUSES.size).toBe(0);
   });
 
   it('noma’lum status 400 beradi (jimgina yutilmaydi)', () => {

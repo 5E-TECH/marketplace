@@ -1,16 +1,26 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { Cron } from '@nestjs/schedule';
 import PDFDocument from 'pdfkit';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  CATALOG_WHOLESALER_PAYMENT_DETAILS,
   ErrorCode,
   moneyFromDb,
+  RmqClient,
+  sendRpc,
+  SettlementSettingsDto,
+  UpdateSettlementSettingsDto,
+  WholesalerPaymentDetails,
   returningRows,
   runAsLeader,
   registerPdfFonts,
@@ -74,7 +84,8 @@ const fmt = (n: number) =>
 /**
  * Bank to‘lov topshiriqnomasi fayli — format almashtiriladigan (bank tanlanmagan, TZ T7 «to‘lov topshiriqnomasi
  * fayli» — T02:166). Hozirgisi: dizayn `hujjat-bank-fayli` dagi 11 ustunli CSV (UTF-8 BOM, «;») [taklif — bank
- * tasdiqlaydi]. Rekvizitlar (to‘lovchi — platforma, oluvchi — optovik) BE-07/EQ-05 dan keyin; hozir bo‘sh.
+ * tasdiqlaydi]. Oluvchi (optovik) rekvizitlari katalogdan (BE-07); to‘lovchi (platforma) rekvizitlari va to‘lov
+ * maqsadi kodi — EQ-05 dan keyin, hozir bo‘sh.
  */
 export interface BankFileFormat {
   build(
@@ -84,6 +95,15 @@ export interface BankFileFormat {
       wholesalerId: string;
       amount: number;
       purpose: string;
+      recipient: {
+        name: string;
+        tin: string;
+        account: string;
+        mfo: string;
+      };
+      /** To‘lovchi (platforma) — EQ-05 sozlamasi. */
+      payer: { account: string; mfo: string };
+      purposeCode: string;
     }>,
   ): SettlementFile;
 }
@@ -109,14 +129,14 @@ export const csvBankFile: BankFileFormat = {
       [
         r.number,
         r.date,
-        '',
-        '',
-        `Optovik #${r.wholesalerId}`,
-        '',
-        '',
-        '',
+        r.payer.account,
+        r.payer.mfo,
+        r.recipient.name,
+        r.recipient.tin,
+        r.recipient.account,
+        r.recipient.mfo,
         String(r.amount),
-        '',
+        r.purposeCode,
         r.purpose,
       ]
         .map(esc)
@@ -186,6 +206,10 @@ export class SettlementService {
   constructor(
     private readonly db: DataSource,
     private readonly ledger: LedgerService,
+    // BE-33 (QA 2026-11-21): bank faylidagi oluvchi rekvizitlari katalogdan
+    @Optional()
+    @Inject(RmqClient.CATALOG)
+    private readonly catalog?: ClientProxy,
   ) {}
 
   @Cron('0 0 9 * * 1', {
@@ -204,6 +228,81 @@ export class SettlementService {
   }
 
   /** Hozirgi vaqt (testda almashtiriladi). */
+  /** BE-33 (QA): qaytarish muddati (EQ-10) va to‘lovchi rekvizitlari (EQ-05) — joriy qiymatlar. */
+  async settings(): Promise<SettlementSettingsDto> {
+    const text = (await this.db.query(
+      `SELECT DISTINCT ON (key) key, value FROM finance.text_setting
+        WHERE effective_from <= now()
+        ORDER BY key, effective_from DESC`,
+    )) as Array<{ key: string; value: string }>;
+    const value = (key: string) =>
+      text.find((row) => row.key === key)?.value ?? null;
+    return {
+      returnWindowDays: await this.returnWindowDays(
+        this.db.manager,
+        new Date(this.nowMs()),
+      ),
+      payerName: value('payer_name'),
+      payerTin: value('payer_tin'),
+      payerAccount: value('payer_account'),
+      payerMfo: value('payer_mfo'),
+      paymentPurposeCode: value('payment_purpose_code'),
+    };
+  }
+
+  /** Superadmin kiritadi; har o‘zgarish tarixda (kim, qachon). Berilmagan maydon o‘zgarmaydi. */
+  async updateSettings(input: {
+    dto: UpdateSettlementSettingsDto;
+    changedBy: string;
+  }): Promise<SettlementSettingsDto> {
+    const dto = input?.dto ?? {};
+    const changedBy = String(input?.changedBy ?? '');
+    if (!ID.test(changedBy))
+      throw new BadRequestException('changedBy noto‘g‘ri');
+    const patterns: Record<string, RegExp> = {
+      payer_tin: /^\d{9}$/,
+      payer_account: /^\d{20}$/,
+      payer_mfo: /^\d{5}$/,
+      payment_purpose_code: /^\d{5}$/,
+    };
+    const text: Array<[string, string | undefined]> = [
+      ['payer_name', dto.payerName?.trim()],
+      ['payer_tin', dto.payerTin],
+      ['payer_account', dto.payerAccount],
+      ['payer_mfo', dto.payerMfo],
+      ['payment_purpose_code', dto.paymentPurposeCode],
+    ];
+    for (const [key, value] of text)
+      if (
+        value !== undefined &&
+        (value.length < 2 || (patterns[key] && !patterns[key].test(value)))
+      )
+        throw new BadRequestException(`${key}: qiymat noto‘g‘ri`);
+    if (
+      dto.returnWindowDays !== undefined &&
+      (!Number.isSafeInteger(dto.returnWindowDays) ||
+        dto.returnWindowDays < 0 ||
+        dto.returnWindowDays > 365)
+    )
+      throw new BadRequestException('returnWindowDays 0–365 kun');
+    await this.db.transaction(async (m) => {
+      for (const [key, value] of text)
+        if (value !== undefined)
+          await m.query(
+            `INSERT INTO finance.text_setting (key, value, effective_from, changed_by)
+             VALUES ($1, $2, clock_timestamp(), $3)`,
+            [key, value, changedBy],
+          );
+      if (dto.returnWindowDays !== undefined)
+        await m.query(
+          `INSERT INTO finance.setting (key, value, effective_from, changed_by)
+           VALUES ('return_window_days', $1, clock_timestamp(), $2)`,
+          [dto.returnWindowDays, changedBy],
+        );
+    });
+    return this.settings();
+  }
+
   protected nowMs(): number {
     return Date.now();
   }
@@ -467,12 +566,33 @@ export class SettlementService {
    */
   async bankFile(input: { periodEnd: string }): Promise<SettlementFile> {
     const periodEnd = validDay(input?.periodEnd, 'periodEnd');
+    let payees = new Map<string, WholesalerPaymentDetails>();
+    // To‘lovchi rekvizitlarisiz fayl bankda qabul qilinmaydi (EQ-05) — muzlatishdan oldin
+    const settings = await this.settings();
+    if (
+      !settings.payerAccount ||
+      !settings.payerMfo ||
+      !settings.paymentPurposeCode
+    )
+      throw new ConflictException({
+        message:
+          'To‘lovchi (platforma) rekvizitlari sozlanmagan: hisob raqami, MFO va to‘lov maqsadi kodi (Moliya → Sozlamalar, EQ-05)',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     const rows = await this.db.transaction(async (m) => {
       await lockRun(m);
       const ready = (await m.query(
         `${SELECT} WHERE s.period_end = $1::date AND s.status = 'READY' ORDER BY s.wholesaler_id, s.id`,
         [periodEnd],
       )) as Row[];
+      const exported = (await m.query(
+        `${SELECT} WHERE s.period_end = $1::date AND s.status = 'EXPORTED' ORDER BY s.id`,
+        [periodEnd],
+      )) as Row[];
+      // Rekvizitsiz to‘lov topshiriqnomasini bank qabul qilmaydi — muzlatishdan oldin tekshiriladi (hech narsa o‘zgarmaydi)
+      payees = await this.payees([
+        ...new Set([...ready, ...exported].map((r) => r.wholesalerId)),
+      ]);
       for (const s of ready) await this.freeze(m, s);
       return (await m.query(
         `${SELECT} WHERE s.period_end = $1::date AND s.status = 'EXPORTED' ORDER BY s.id`,
@@ -483,14 +603,60 @@ export class SettlementService {
       throw new NotFoundException('Bu davrda to‘lanadigan akt yo‘q');
     const today = new Date().toISOString().slice(0, 10);
     return this.bankFormat.build(
-      rows.map((r) => ({
-        number: actNumber(r.id),
-        date: today,
-        wholesalerId: r.wholesalerId,
-        amount: moneyFromDb(r.exportedTotal),
-        purpose: `${r.periodStart}–${r.periodEnd} davr uchun sotilgan tovarlar, akt ${actNumber(r.id)}`,
-      })),
+      rows.map((r) => {
+        const payee = payees.get(String(r.wholesalerId))!;
+        return {
+          number: actNumber(r.id),
+          date: today,
+          wholesalerId: r.wholesalerId,
+          amount: moneyFromDb(r.exportedTotal),
+          purpose: `${r.periodStart}–${r.periodEnd} davr uchun sotilgan tovarlar, akt ${actNumber(r.id)}`,
+          recipient: {
+            name: payee.name,
+            tin: payee.tin!,
+            account: payee.bankAccount!,
+            mfo: payee.bankMfo!,
+          },
+          payer: {
+            account: settings.payerAccount!,
+            mfo: settings.payerMfo!,
+          },
+          purposeCode: settings.paymentPurposeCode!,
+        };
+      }),
     );
+  }
+
+  /**
+   * Oluvchi rekvizitlari (BE-07 katalogi). STIR, hisob raqami yoki MFO bo‘lmasa — 409: qaysi optovikda yetishmasligi
+   * aytiladi (admin «Optoviklar» sahifasida to‘ldiradi). Katalog javob bermasa — 503.
+   */
+  private async payees(
+    ids: string[],
+  ): Promise<Map<string, WholesalerPaymentDetails>> {
+    if (!ids.length) return new Map();
+    if (!this.catalog)
+      throw new ServiceUnavailableException('Katalog ulanmagan');
+    const list = await sendRpc<WholesalerPaymentDetails[]>(
+      this.catalog,
+      { cmd: CATALOG_WHOLESALER_PAYMENT_DETAILS },
+      { ids },
+    );
+    const byId = new Map(list.map((p) => [String(p.id), p]));
+    const missing = ids.filter((id) => {
+      const p = byId.get(String(id));
+      return (
+        !p || !p.tin?.trim() || !p.bankAccount?.trim() || !p.bankMfo?.trim()
+      );
+    });
+    if (missing.length)
+      throw new ConflictException({
+        message: `Optovik rekvizitlari to‘liq emas (STIR, hisob raqami, MFO): ${missing
+          .map((id) => byId.get(String(id))?.name ?? `#${id}`)
+          .join(', ')}`,
+        errorCode: ErrorCode.INVALID_STATE,
+      });
+    return byId;
   }
 
   /**

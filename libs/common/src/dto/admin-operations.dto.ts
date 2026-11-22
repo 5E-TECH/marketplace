@@ -224,10 +224,26 @@ export class AdminWebhooksQueryDto extends AdminPageQueryDto {
   @Matches(/^[1-9]\d*$/)
   sellerOrderId?: string;
 
-  @ApiPropertyOptional({ enum: SalesOrderSellerStatus })
+  /** BE-21: lid buyurtmasi raqami. */
+  @ApiPropertyOptional({ example: '55' })
   @IsOptional()
-  @IsEnum(SalesOrderSellerStatus)
-  status?: SalesOrderSellerStatus;
+  @Matches(/^[1-9]\d*$/)
+  orderId?: string;
+
+  /**
+   * Eski do‘kon buyurtmasida — marketplace holati (`SalesOrderSellerStatus`), lid buyurtmasida — Elchi holati
+   * (`on_the_road`, `sold`, `paid`, …; BE-21).
+   */
+  @ApiPropertyOptional({ example: 'ON_THE_ROAD' })
+  @IsOptional()
+  @Matches(/^[A-Za-z_]{1,20}$/)
+  status?: string;
+
+  /** BE-21: webhook natijasi — REJECTED (orqaga yoki ruxsatsiz), NOOP, IGNORED, APPLIED. */
+  @ApiPropertyOptional({ enum: ['APPLIED', 'NOOP', 'REJECTED', 'IGNORED'] })
+  @IsOptional()
+  @IsIn(['APPLIED', 'NOOP', 'REJECTED', 'IGNORED'])
+  result?: string;
 
   @ApiPropertyOptional({ example: '2026-09-01T00:00:00.000Z' })
   @IsOptional()

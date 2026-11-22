@@ -18,7 +18,7 @@ import {
 import {
   AffiliatePostbackEvent,
   LEAD_EVENTS,
-  LeadConfirmedEvent,
+  LeadConfirmedVia,
   LeadErrorCode,
   LeadOutcome,
   LeadResultAcceptedDto,
@@ -33,6 +33,7 @@ import {
 } from '@app/common';
 import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
+import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { PostbackService } from './postback.service';
 import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
@@ -45,6 +46,7 @@ import {
   reminderHorizon,
   retryAt,
 } from './lead-schedule';
+import { enqueueLeadConfirmed } from './lead-confirmed.event';
 
 /** 1-qoida zinapoyasi faqat aloqa bo‘lmagan natijalar soniga qarab yuradi (TZ 5-bo‘lim jadvali). */
 const MISSED_OUTCOMES = [
@@ -63,12 +65,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * - egasiz — avtomatik qayta urinish («javob bermadi», «band», «o‘chiq», vaqtsiz «o‘ylab ko‘radi»): navbatdagi har
  *   operatorga, 5 ta chegaraga kiradi.
  */
+
 @Injectable()
 export class LeadQueueService {
   constructor(
     private readonly db: DataSource,
     private readonly address: LeadAddressService,
     @Optional() private readonly postback?: PostbackService,
+    // BE-18 TC1: tasdiqlangan lid commit dan keyin darhol checkout’ga (cron 10 s — zaxira)
+    @Optional() private readonly relay?: LeadOutboxRelayService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -156,7 +161,7 @@ export class LeadQueueService {
     leadId: string,
     dto: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
-    return this.db.transaction(async (manager) => {
+    const accepted = await this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
       const lead = await leads.findOne({
         where: { id: leadId, isDeleted: false },
@@ -196,6 +201,7 @@ export class LeadQueueService {
           lead.stockShortageAt = null;
           lead.confirmedAt = now; // BE-28: tasdiq kuni va operatori (statistika)
           lead.confirmedBy = operatorId;
+          lead.confirmedVia = LeadConfirmedVia.OPERATOR;
           note = 'Tasdiqlandi';
           await this.enqueueConfirmed(manager, lead, operatorId, now);
           await this.postback?.enqueue(
@@ -274,6 +280,8 @@ export class LeadQueueService {
         nextAttemptAt: lead.nextAttemptAt?.toISOString() ?? null,
       };
     });
+    if (accepted.status === LeadStatus.CONFIRMED) this.relay?.trigger();
+    return accepted;
   }
 
   /** Nazoratchi: navbat hajmi va operatorlar holati (BE-13). Ism — identity bilan (BE-05 dan keyin). */
@@ -580,40 +588,17 @@ export class LeadQueueService {
       });
   }
 
-  private async enqueueConfirmed(
+  private enqueueConfirmed(
     manager: EntityManager,
     lead: Lead,
     operatorId: string,
     now: Date,
   ): Promise<void> {
-    const payload: LeadConfirmedEvent = {
-      eventId: randomUUID(),
-      leadId: lead.id,
-      source: lead.source,
-      streamId: lead.streamId,
-      affiliateId: lead.affiliateId,
-      productId: lead.productId,
-      quantity: lead.quantity,
-      salePrice: Number(lead.salePrice),
-      customerName: lead.name,
-      customerPhone: lead.phoneE164,
-      regionSoato: lead.regionSoato!,
-      districtSoato: lead.districtSoato!,
-      addressLine: lead.addressLine!,
-      whereDeliver: lead.whereDeliver!,
+    return enqueueLeadConfirmed(manager, lead, {
       confirmedBy: operatorId,
-      addressConfirmedBy: lead.addressConfirmedBy,
-      confirmedAt: now.toISOString(),
-    };
-    const outbox = manager.getRepository(OutboxEvent);
-    await outbox.save(
-      outbox.create({
-        aggregateType: 'lead',
-        aggregateId: lead.id,
-        eventType: LEAD_EVENTS.CONFIRMED,
-        payload,
-      }),
-    );
+      via: LeadConfirmedVia.OPERATOR,
+      now,
+    });
   }
 
   private async history(

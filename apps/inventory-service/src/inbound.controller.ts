@@ -4,9 +4,11 @@ import {
   INBOUND_RPC,
   InboundShipmentStatus,
   RpcHttpExceptionFilter,
+  WHOLESALER_CABINET_RPC,
 } from '@app/common';
 import { InboundService } from './inbound.service';
 import { ReturnInspectionService } from './return-inspection.service';
+import { WholesalerStockService } from './wholesaler-stock.service';
 
 /** BE-17: ombor qabuli, partiyalar va qaytganlarni saralash (gateway `admin/inventory/*`, `warehouse/returns`). */
 @Controller()
@@ -15,7 +17,17 @@ export class InboundController {
   constructor(
     private readonly inbound: InboundService,
     private readonly returns: ReturnInspectionService,
+    private readonly wholesalerStock: WholesalerStockService,
   ) {}
+
+  /** BE-30 (OPT-3): optovik paneli — ombor raqamlari. */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.STOCK_SUMMARY })
+  wholesalerSummary(
+    @Payload()
+    data: Parameters<WholesalerStockService['summary']>[0],
+  ) {
+    return this.wholesalerStock.summary(data);
+  }
 
   @MessagePattern({ cmd: INBOUND_RPC.DECLARE })
   declare(

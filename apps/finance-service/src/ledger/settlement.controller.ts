@@ -3,15 +3,43 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   FINANCE_SETTLEMENT_RPC,
   RpcHttpExceptionFilter,
+  WHOLESALER_CABINET_RPC,
   WholesalerSettlementQueryDto,
+  UpdateSettlementSettingsDto,
 } from '@app/common';
 import { SettlementService } from './settlement.service';
+import { WholesalerBalanceService } from './wholesaler-balance.service';
 
 /** BE-33: optovik bilan haftalik hisob-kitob va akt-sverka (moliya). */
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class SettlementController {
-  constructor(private readonly settlements: SettlementService) {}
+  constructor(
+    private readonly settlements: SettlementService,
+    private readonly balances: WholesalerBalanceService,
+  ) {}
+
+  /** BE-30 (OPT-3): optovik paneli — pul holati. */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.BALANCE })
+  balance(@Payload() input: { wholesalerId: string }) {
+    return this.balances.balance(input);
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET })
+  settings() {
+    return this.settlements.settings();
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_UPDATE })
+  updateSettings(
+    @Payload()
+    input: {
+      dto: UpdateSettlementSettingsDto;
+      changedBy: string;
+    },
+  ) {
+    return this.settlements.updateSettings(input);
+  }
 
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.RUN })
   run(@Payload() input: { asOf?: string }) {

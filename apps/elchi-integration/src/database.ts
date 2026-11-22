@@ -4,6 +4,7 @@ import { AddGeoSatoCode1725285600000 } from './migrations/1725285600000-add-geo-
 import { AddProvisionTariffs1725375600000 } from './migrations/1725375600000-add-provision-tariffs';
 import { MoneyToBigint1795219200000 } from './migrations/1795219200000-money-to-bigint';
 import { CreateParcelQueue1795392000000 } from './migrations/1795392000000-create-parcel-queue';
+import { ElchiApiError1797638400000 } from './migrations/1797638400000-elchi-api-error';
 import { ElchiMarketProvision } from './entities/elchi-market-provision.entity';
 import { GeoCache } from './entities/geo-cache.entity';
 import { OutboxEvent } from '@app/common';
@@ -21,5 +22,6 @@ export const INTEGRATION_DB: DatabaseDefinition = {
     AddProvisionTariffs1725375600000,
     MoneyToBigint1795219200000,
     CreateParcelQueue1795392000000,
+    ElchiApiError1797638400000,
   ],
 };

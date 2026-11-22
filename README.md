@@ -57,7 +57,6 @@ Bog'liqliklar bilan birga: `http://localhost:3000/api/v1/health/readiness` (barc
 apps/
   api-gateway/      HTTP kirish nuqtasi (JWT, Swagger, RMQ client)
   identity-service/ foydalanuvchi + auth (register/login)
-  echo-service/     RMQ microservice shabloni
   payment-service/ online to'lovlar va provider konfiguratsiyasi
 libs/
   common/           umumiy kod (BaseEntity, guards, filter, outbox, ...)

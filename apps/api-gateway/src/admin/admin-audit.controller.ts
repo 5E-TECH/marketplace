@@ -1,9 +1,18 @@
-import { Controller, Get, Inject, Query } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Query,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
   ApiForbiddenResponse,
+  ApiResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -40,5 +49,26 @@ export class AdminAuditController {
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminAuditQueryDto) {
     return sendRpc(this.identity, { cmd: 'identity.audit.list' }, { query });
+  }
+
+  /**
+   * BE-27 TC3 (ADM-6): audit yozuvini o‘chirib bo‘lmaydi — yo‘l bor, lekin har doim 405. Nest yo‘q yo‘lga 404
+   * berardi va «yo‘l yo‘q» deb tushunilardi; 405 — «bu amal taqiqlangan». Bazada ham trigger bilan yopiq.
+   */
+  @Delete(['admin/audit', 'admin/audit/:id'])
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Audit yozuvini o‘chirish — taqiqlangan (405)' })
+  @ApiResponse({
+    status: HttpStatus.METHOD_NOT_ALLOWED,
+    description: 'Audit jurnali o‘zgartirilmaydi va o‘chirilmaydi',
+  })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  remove(): never {
+    throw new HttpException(
+      'Audit yozuvini o‘chirib bo‘lmaydi',
+      HttpStatus.METHOD_NOT_ALLOWED,
+    );
   }
 }

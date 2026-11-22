@@ -7,6 +7,7 @@ import { NotificationTemplate } from './entities/notification-template.entity';
 import { Notification } from './entities/notification.entity';
 import { CreateNotificationTables1722686400000 } from './migrations/1722686400000-create-notification-tables';
 import { CreateTemplatesAndBroadcasts1727136000000 } from './migrations/1727136000000-create-templates-and-broadcasts';
+import { CustomerSms1797811200000 } from './migrations/1797811200000-customer-sms';
 import {
   BROADCAST_BATCH,
   BROADCAST_MAX_ATTEMPTS,
@@ -16,6 +17,8 @@ import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+const NOTIFICATION_SCHEMA_TEST_LOCK = 2_304_024;
+let schemaLock: Client | undefined;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
 
 /** 120 ta sotuvchi — BROADCAST_BATCH (50) bo'yicha 3 bo'lak. */
@@ -107,6 +110,12 @@ describeWithPostgres('BroadcastService PostgreSQL (C6.8)', () => {
         'TEST_DATABASE_URL faqat nomida "test" bor alohida bazaga ishora qilishi kerak',
       );
     }
+    // BE-24: notification sxemasini tashlaydigan spec’lar ketma-ket (order-sms.integration.spec bilan bir qulf)
+    schemaLock = new Client({ connectionString: testDatabaseUrl });
+    await schemaLock.connect();
+    await schemaLock.query('SELECT pg_advisory_lock($1)', [
+      NOTIFICATION_SCHEMA_TEST_LOCK,
+    ]);
     const admin = new Client({ connectionString: testDatabaseUrl });
     await admin.connect();
     await admin.query('DROP SCHEMA IF EXISTS notification CASCADE');
@@ -126,6 +135,7 @@ describeWithPostgres('BroadcastService PostgreSQL (C6.8)', () => {
       migrations: [
         CreateNotificationTables1722686400000,
         CreateTemplatesAndBroadcasts1727136000000,
+        CustomerSms1797811200000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -157,7 +167,16 @@ describeWithPostgres('BroadcastService PostgreSQL (C6.8)', () => {
   });
 
   afterAll(async () => {
-    if (dataSource?.isInitialized) await dataSource.destroy();
+    try {
+      if (dataSource?.isInitialized) await dataSource.destroy();
+    } finally {
+      if (schemaLock) {
+        await schemaLock.query('SELECT pg_advisory_unlock($1)', [
+          NOTIFICATION_SCHEMA_TEST_LOCK,
+        ]);
+        await schemaLock.end();
+      }
+    }
   });
 
   it('TC3: ko‘rib chiqilgan xabar tanlangan guruhning har biriga bir marta boradi', async () => {

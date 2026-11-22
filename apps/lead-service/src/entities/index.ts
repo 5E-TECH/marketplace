@@ -5,6 +5,7 @@ import { CapiDelivery, PostbackDelivery } from './delivery.entity';
 import { FraudAction, FraudIncident } from './fraud.entity';
 import { LeadAttempt } from './lead-attempt.entity';
 import { LeadHistory } from './lead-history.entity';
+import { LeadItem } from './lead-item.entity';
 import { Lead } from './lead.entity';
 import { OfferContent } from './offer-content.entity';
 import { OperatorState } from './operator-state.entity';
@@ -19,6 +20,7 @@ export {
   Lead,
   LeadAttempt,
   LeadHistory,
+  LeadItem,
   OfferContent,
   OperatorState,
   PostbackDelivery,
@@ -32,6 +34,7 @@ export const LEAD_ENTITIES = [
   Lead,
   LeadAttempt,
   LeadHistory,
+  LeadItem,
   OperatorState,
   PostbackDelivery,
   CapiDelivery,

@@ -1,19 +1,15 @@
-import { Controller, Inject, UseFilters } from '@nestjs/common';
-import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
+import { ConflictException, Controller, UseFilters } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AdminReturnRequestsQueryDto,
   CreateReturnRequestDto,
-  ReturnRequestsQueryDto,
-  RmqClient,
+  ErrorCode,
   RpcHttpExceptionFilter,
 } from '@app/common';
-import { resolveSellerShopId, SellerScope } from './catalog-shop.util';
+import { LeadReturnService } from './lead-return.service';
 import { ReturnActor } from './return-history';
 import { ReturnRequestQueryService } from './return-request-query.service';
-import {
-  ReturnRequestService,
-  ReturnTransition,
-} from './return-request.service';
+import { ReturnRequestService } from './return-request.service';
 import { ReturnRefundService } from './return-refund.service';
 
 interface ActionPayload {
@@ -22,7 +18,7 @@ interface ActionPayload {
   comment?: string;
 }
 
-/** C4.2 — qaytarish so'rovlari: xaridor, sotuvchi/operator va admin. */
+/** C4.2 — qaytarish so'rovlari: admin (xaridor va sotuvchi yo‘llari BE-29 da o‘chirildi). */
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class ReturnRequestsController {
@@ -30,69 +26,24 @@ export class ReturnRequestsController {
     private readonly returns: ReturnRequestService,
     private readonly refunds: ReturnRefundService,
     private readonly queries: ReturnRequestQueryService,
-    @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
+    private readonly leadReturns: LeadReturnService,
   ) {}
 
-  // ─── Xaridor ──────────────────────────────────────────────────────────────
-
-  @MessagePattern({ cmd: 'checkout.returns.create' })
-  create(
+  /** BE-44: xodim (admin, operator) mijoz nomidan yetkazilgan buyurtmaga qaytarish so‘rovini kiritadi. */
+  @MessagePattern({ cmd: 'checkout.admin.order-return-create' })
+  createForOrder(
     @Payload()
     data: {
       orderId: string;
-      customerId: string;
       dto: CreateReturnRequestDto;
+      actor: ReturnActor;
     },
   ) {
-    return this.returns.create(data);
-  }
-
-  @MessagePattern({ cmd: 'checkout.returns.list-by-buyer' })
-  listByBuyer(
-    @Payload() data: { customerId: string; query?: ReturnRequestsQueryDto },
-  ) {
-    return this.queries.list({
-      ...(data.query ?? {}),
-      customerId: String(data.customerId),
+    return this.leadReturns.create({
+      orderId: String(data?.orderId ?? ''),
+      dto: data.dto,
+      actor: { id: String(data.actor.id), role: String(data.actor.role) },
     });
-  }
-
-  @MessagePattern({ cmd: 'checkout.returns.get-by-buyer' })
-  getByBuyer(@Payload() data: { customerId: string; returnId: string }) {
-    return this.queries.get(String(data.returnId), {
-      customerId: String(data.customerId),
-    });
-  }
-
-  // ─── Sotuvchi / operator (o'z do'koni bilan cheklangan) ──────────────────
-
-  @MessagePattern({ cmd: 'seller.returns.list' })
-  async sellerList(
-    @Payload() data: SellerScope & { query?: ReturnRequestsQueryDto },
-  ) {
-    const shopId = await resolveSellerShopId(this.catalog, data);
-    return this.queries.list({ ...(data.query ?? {}), shopId });
-  }
-
-  @MessagePattern({ cmd: 'seller.returns.get' })
-  async sellerGet(@Payload() data: SellerScope & { returnId: string }) {
-    const shopId = await resolveSellerShopId(this.catalog, data);
-    return this.queries.get(String(data.returnId), { shopId });
-  }
-
-  @MessagePattern({ cmd: 'seller.returns.review' })
-  sellerReview(@Payload() data: SellerScope & ActionPayload) {
-    return this.sellerAction('review', data);
-  }
-
-  @MessagePattern({ cmd: 'seller.returns.approve' })
-  sellerApprove(@Payload() data: SellerScope & ActionPayload) {
-    return this.sellerAction('sellerApprove', data);
-  }
-
-  @MessagePattern({ cmd: 'seller.returns.reject' })
-  sellerReject(@Payload() data: SellerScope & ActionPayload) {
-    return this.sellerAction('sellerReject', data);
   }
 
   // ─── Admin ────────────────────────────────────────────────────────────────
@@ -108,33 +59,38 @@ export class ReturnRequestsController {
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-approve' })
-  adminApprove(@Payload() data: ActionPayload) {
+  async adminApprove(@Payload() data: ActionPayload) {
+    // BE-44: liddan buyurtmaga xodim so‘rovi — buyurtma holati va order.returned shu yerda
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      return this.leadReturns.decide({ ...this.action(data), approve: true });
     return this.returns.transition('adminApprove', this.action(data));
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-reject' })
-  adminReject(@Payload() data: ActionPayload) {
+  async adminReject(@Payload() data: ActionPayload) {
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      return this.leadReturns.decide({ ...this.action(data), approve: false });
     return this.returns.transition('adminReject', this.action(data));
   }
 
   @MessagePattern({ cmd: 'checkout.admin.return-refund' })
-  adminRefund(
+  async adminRefund(
     @Payload()
     data: ActionPayload & { amount?: number; restock?: boolean },
   ) {
+    // BE-44: xodim so‘rovida pul `order.returned` (moliya teskari yozuvlari), tovar — ombor saralashi (BE-17);
+    // eski onlayn refund va darhol qoldiqqa qaytarish ikki marta yozardi
+    if (await this.leadReturns.isStaffRequest(String(data.returnId)))
+      throw new ConflictException({
+        message:
+          'Liddan buyurtma qaytarishida pul va tovar avtomatik (moliya va ombor) — refund yo‘q',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     return this.refunds.refund({
       ...this.action(data),
       amount: data.amount,
       restock: data.restock,
     });
-  }
-
-  private async sellerAction(
-    kind: ReturnTransition,
-    data: SellerScope & ActionPayload,
-  ) {
-    const shopId = await resolveSellerShopId(this.catalog, data);
-    return this.returns.transition(kind, { ...this.action(data), shopId });
   }
 
   private action(data: ActionPayload) {

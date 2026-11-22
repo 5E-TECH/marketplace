@@ -245,3 +245,25 @@ export class CreateReturnRequestsResultDto {
   })
   items: ReturnRequestDto[];
 }
+
+// ─── Katalogdan ko‘rinish ma’lumoti (BE-29) ─────────────────────────────────
+
+/**
+ * BE-29: checkout qaytarishlar ro‘yxati va savat uchun do‘kon nomi, mahsulot va variant rasmini katalogdan RPC bilan
+ * oladi — boshqa servis sxemasiga (`catalog.*`) SQL bilan murojaat qilinmaydi. O‘chirilgan (soft-delete) do‘kon,
+ * mahsulot va variant ham qaytadi (tarix; xaridor savatdan nimani olib tashlayotganini ko‘rsin).
+ */
+export const CATALOG_DISPLAY_LOOKUP = 'catalog.display.lookup';
+
+export interface CatalogDisplayLookupRequest {
+  shopIds?: string[];
+  productIds?: string[];
+  variantIds?: string[];
+}
+
+export interface CatalogDisplayLookupResult {
+  shops: Array<{ id: string; name: string | null }>;
+  products: Array<{ id: string; imageUrl: string | null }>;
+  /** Variant rasmi, u bo‘lmasa mahsulot rasmi yoki birinchi rasmi; nomi — mahsulot nomi. */
+  variants: Array<{ id: string; name: string | null; imageUrl: string | null }>;
+}
