@@ -55,6 +55,7 @@ import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { OpsHealthController } from './ops-health.controller';
 import { AdminSettlementsController } from './withdrawals/admin-settlements.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
@@ -206,6 +207,8 @@ import { AdminOfferContentController } from './leads/admin-offer-content.control
     // BE-23: pul yechish
     AffiliateWithdrawalsController,
     AdminWithdrawalsController,
+    // BE-26
+    OpsHealthController,
     // BE-33: optovik hisob-kitobi
     AdminSettlementsController,
     OperatorLeadsController,
