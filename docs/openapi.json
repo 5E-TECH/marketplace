@@ -8906,7 +8906,7 @@
             "bearer": []
           }
         ],
-        "summary": "Ro‘yxatni yakunlash: rekvizitlar, shartnoma va rozilik (yozuv bor bo‘lsa — o‘sha qaytadi, o‘zgarmaydi)",
+        "summary": "Ro‘yxatni yakunlash yoki rad etilgan arizani qayta yuborish: rekvizitlar, shartnoma va rozilik (boshqa holatda yozuv o‘zgarmaydi)",
         "tags": [
           "wholesaler"
         ]

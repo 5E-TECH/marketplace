@@ -34,6 +34,7 @@ import {
   Role,
   Roles,
   sendRpc,
+  ShopStatus,
   SignedLinkDto,
   WHOLESALER_CABINET_RPC as RPC,
   WholesalerDashboardDto,
@@ -82,7 +83,7 @@ export class WholesalerCabinetController {
   @Post('profile')
   @ApiOperation({
     summary:
-      'Ro‘yxatni yakunlash: rekvizitlar, shartnoma va rozilik (yozuv bor bo‘lsa — o‘sha qaytadi, o‘zgarmaydi)',
+      'Ro‘yxatni yakunlash yoki rad etilgan arizani qayta yuborish: rekvizitlar, shartnoma va rozilik (boshqa holatda yozuv o‘zgarmaydi)',
   })
   @ApiCreatedResponse({ type: WholesalerProfileDto })
   @ApiOkResponse({ type: WholesalerProfileDto })
@@ -119,7 +120,8 @@ export class WholesalerCabinetController {
       if (e instanceof HttpException && e.getStatus() === 404) return null;
       throw e;
     });
-    if (existing) return existing;
+    // rad etilgan ariza — yangi rekvizitlar bilan qayta yuboriladi (catalog yana PENDING qiladi)
+    if (existing && existing.status !== ShopStatus.REJECTED) return existing;
     if (!free)
       throw new ConflictException('Bu STIR bilan optovik allaqachon bor');
     return sendRpc(

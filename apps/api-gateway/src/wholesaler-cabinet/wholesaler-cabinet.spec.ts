@@ -1,9 +1,14 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { Role, ShopStatus } from '@app/common';
 import { safeFileName, SignedFilesController } from './signed-files.controller';
 import { SignedLinkService } from './signed-link';
+import { WholesalerCabinetController } from './wholesaler-cabinet.controller';
 import { WholesalerShipmentsController } from './wholesaler-shipments.controller';
 
 const links = () =>
@@ -194,5 +199,85 @@ describe('BE-30 postavka: faqat o‘z postavkasi, e’lon — faqat tasdiqlangan
     await expect(
       make(ShopStatus.ACTIVE, '15').controller.get('9', user),
     ).resolves.toMatchObject({ id: '9' });
+  });
+});
+
+describe('BE-30 ro‘yxatni yakunlash (POST /wholesaler/profile)', () => {
+  const make = (status: ShopStatus | null, tinFree = true) => {
+    const catalog = {
+      send: jest.fn((pattern: { cmd: string }) => {
+        if (pattern.cmd === 'catalog.wholesaler.me')
+          return status
+            ? of({ id: '15', status })
+            : throwError(() => new NotFoundException('yo‘q'));
+        if (pattern.cmd === 'catalog.wholesaler.tin-free')
+          return of({ free: tinFree });
+        return of({ id: '15', status: ShopStatus.PENDING });
+      }),
+    };
+    const identity = {
+      send: jest.fn((pattern: { cmd: string }) =>
+        of(
+          pattern.cmd === 'auth.me'
+            ? { phone: '+998901110015' }
+            : { contractVersion: '1.1', consentVersion: '1.1' },
+        ),
+      ),
+    };
+    return {
+      controller: new WholesalerCabinetController(
+        catalog as never,
+        identity as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        links(),
+      ),
+      catalog,
+    };
+  };
+  const dto = {
+    name: 'Termos Savdo',
+    legalType: 'LEGAL_ENTITY',
+    tin: '305999001',
+    bankName: 'Ipotekabank',
+    bankAccount: '20208000900999000001',
+    bankMfo: '00873',
+    contractVersion: '1.1',
+    consentVersion: '1.1',
+  } as never;
+  const selfRegisterCalls = (catalog: { send: jest.Mock }) =>
+    catalog.send.mock.calls.filter(
+      ([pattern]) => pattern.cmd === 'catalog.wholesaler.self-register',
+    );
+
+  it('rad etilgan ariza qayta yuboriladi (catalog ga); PENDING yoki faol — o‘sha yozuv, o‘zgarmaydi', async () => {
+    const rejected = make(ShopStatus.REJECTED);
+    await rejected.controller.complete(dto, user, '10.0.0.1');
+    expect(selfRegisterCalls(rejected.catalog)).toEqual([
+      [
+        { cmd: 'catalog.wholesaler.self-register' },
+        expect.objectContaining({
+          ownerUserId: '501',
+          phone: '+998901110015',
+          contractVersion: '1.1',
+        }),
+      ],
+    ]);
+    for (const status of [ShopStatus.PENDING, ShopStatus.ACTIVE]) {
+      const other = make(status);
+      await expect(
+        other.controller.complete(dto, user, ''),
+      ).resolves.toMatchObject({ status });
+      expect(selfRegisterCalls(other.catalog)).toEqual([]);
+    }
+  });
+
+  it('yozuv yo‘q, STIR band — 409', async () => {
+    const taken = make(null, false);
+    await expect(
+      taken.controller.complete(dto, user, ''),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(selfRegisterCalls(taken.catalog)).toEqual([]);
   });
 });

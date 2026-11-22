@@ -45,6 +45,8 @@ export class WholesalerCabinet1798329600000 implements MigrationInterface {
       DROP COLUMN "moderation_note",
       DROP COLUMN "contract_accepted_at",
       DROP COLUMN "contract_version"`);
+    // eski (qattiqroq) indeks: rad etilgan ariza va faol optovik bir STIR da bo‘lsa — avval rad etilganini qo‘lda hal
+    // qiling (masalan, `tin = NULL`), aks holda qaytarish shu yerda to‘xtaydi
     await q.query(`DROP INDEX "catalog"."uq_catalog_shop_tin"`);
     await q.query(`CREATE UNIQUE INDEX "uq_catalog_shop_tin" ON "catalog"."shop" ("tin")
       WHERE "tin" IS NOT NULL AND "is_deleted" = FALSE`);

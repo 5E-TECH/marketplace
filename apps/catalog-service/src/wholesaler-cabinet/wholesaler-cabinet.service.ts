@@ -85,6 +85,8 @@ export class WholesalerCabinetService {
         bankAccount: input.bankAccount,
         bankMfo: input.bankMfo,
         contractVersion: input.contractVersion,
+        // shartnoma sanasi — qayta qabul kuni (PDF dagi sana qabul vaqti bilan mos)
+        contractDate: tashkentDate(new Date()),
         contractAcceptedAt: new Date(),
         moderationNote: null,
       });
