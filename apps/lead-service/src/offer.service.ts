@@ -15,7 +15,7 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Lead, OfferContent } from './entities';
-import { maxSalePrice, percent } from './offer-math';
+import { isOfferVisible, maxSalePrice, percent } from './offer-math';
 
 /** Yaroqli lid: yaroqsiz va birlashtirilgandan boshqa hammasi (tasdiq foizining maxraji). */
 const NOT_VALID = [LeadStatus.INVALID, LeadStatus.MERGED];
@@ -43,7 +43,7 @@ export class OfferService {
         search: query.search,
         categoryId: query.categoryId,
       })
-    ).filter((o) => o.cpaAvailable && !o.withdrawn && o.approvedPrice !== null);
+    ).filter(isOfferVisible);
     const rates = await this.approveRates(offers.map((o) => o.productId));
     let items = offers.map((o) =>
       this.toDto(o, rates.get(o.productId) ?? null),
@@ -74,8 +74,7 @@ export class OfferService {
   async getForAffiliate(productId: string): Promise<AffiliateOfferDetailDto> {
     const id = String(productId ?? '');
     const o = /^[1-9]\d{0,18}$/.test(id) ? await this.catalog.get(id) : null;
-    if (!o || !o.cpaAvailable || o.withdrawn || o.approvedPrice === null)
-      throw new NotFoundException('Offer topilmadi');
+    if (!isOfferVisible(o)) throw new NotFoundException('Offer topilmadi');
     const rate = (await this.approveRates([o.productId])).get(o.productId);
     const content = await this.contents.findOne({
       where: { productId: o.productId, isDeleted: false },
