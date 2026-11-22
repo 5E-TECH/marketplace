@@ -29,6 +29,16 @@ export const PICK_LIST_EXAMPLE: PickListPage = {
       barcode: null,
       quantity: 1,
       pickedQty: 1,
+      // BE-34: posilkadagi hamma tovar qatorlari (bitta tovarda — shu qator)
+      lines: [
+        {
+          productName: 'Kollagen kukuni, 300 g',
+          sku: 'KOL-300',
+          barcode: null,
+          quantity: 1,
+          pickedQty: 1,
+        },
+      ],
       parcel: {
         elchiState: ParcelElchiState.FAILED,
         shipmentId: null,
@@ -50,6 +60,15 @@ export const PICK_LIST_EXAMPLE: PickListPage = {
       barcode: '4780012345678',
       quantity: 2,
       pickedQty: 0,
+      lines: [
+        {
+          productName: 'Vitamin D3 2000 IU, 60 kapsula',
+          sku: 'VIT-D3-60',
+          barcode: '4780012345678',
+          quantity: 2,
+          pickedQty: 0,
+        },
+      ],
       parcel: {
         elchiState: ParcelElchiState.CREATED,
         shipmentId: '987',

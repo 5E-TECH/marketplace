@@ -74,6 +74,7 @@ describeWithPostgres('BE-26 xodim 2FA (PostgreSQL)', () => {
       config,
       ds,
       { emit: () => ({ subscribe: () => undefined }) } as never,
+      undefined, // BE-06 OtpGuardService — sukut
       gate,
     );
     twoFactor = new TwoFactorService(ds, gate, auth, config);
