@@ -125,20 +125,33 @@ export class BroadcastPreviewResultDto {
   previewToken: string;
 }
 
+/**
+ * Misol — yuborib bo‘lingan xabar (tarix). `POST /admin/broadcast` javobida yangi xabar `QUEUED`, `sentCount` 0,
+ * `finishedAt` null.
+ */
 export class BroadcastDto {
-  @ApiProperty() id: string;
-  @ApiProperty({ enum: BROADCAST_AUDIENCES }) audience: BroadcastAudience;
-  @ApiProperty({ enum: BROADCAST_CHANNELS, isArray: true })
+  @ApiProperty({ example: '12' }) id: string;
+  @ApiProperty({ enum: BROADCAST_AUDIENCES, example: 'sellers' })
+  audience: BroadcastAudience;
+  @ApiProperty({ enum: BROADCAST_CHANNELS, isArray: true, example: ['sms'] })
   channels: BroadcastChannel[];
-  @ApiProperty() title: string;
-  @ApiProperty() body: string;
-  @ApiProperty() recipientsCount: number;
-  @ApiProperty() sentCount: number;
-  @ApiProperty({ enum: BROADCAST_STATUSES }) status: BroadcastStatus;
-  @ApiProperty({ nullable: true, type: String }) createdBy: string | null;
-  @ApiProperty() createdAt: string;
-  @ApiProperty({ nullable: true, type: String }) finishedAt: string | null;
-  @ApiProperty({ nullable: true, type: String }) lastError: string | null;
+  @ApiProperty({ example: 'Yangi aksiya' }) title: string;
+  @ApiProperty({ example: 'Bugundan 20% chegirma!' }) body: string;
+  @ApiProperty({ example: 42 }) recipientsCount: number;
+  @ApiProperty({ example: 42 }) sentCount: number;
+  @ApiProperty({ enum: BROADCAST_STATUSES, example: 'DONE' })
+  status: BroadcastStatus;
+  @ApiProperty({ nullable: true, type: String, example: '1' })
+  createdBy: string | null;
+  @ApiProperty({ example: '2026-11-20T08:00:00.000Z' }) createdAt: string;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: '2026-11-20T08:00:41.000Z',
+  })
+  finishedAt: string | null;
+  @ApiProperty({ nullable: true, type: String, example: null })
+  lastError: string | null;
   @ApiPropertyOptional({
     description:
       'true — shu token bilan allaqachon yuborilgan (ikki marta bosish)',
@@ -165,8 +178,8 @@ export class BroadcastsQueryDto {
 
 export class BroadcastsPageDto {
   @ApiProperty({ type: [BroadcastDto] }) items: BroadcastDto[];
-  @ApiProperty() total: number;
-  @ApiProperty() page: number;
-  @ApiProperty() limit: number;
-  @ApiProperty() totalPages: number;
+  @ApiProperty({ example: 1 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 1 }) totalPages: number;
 }
