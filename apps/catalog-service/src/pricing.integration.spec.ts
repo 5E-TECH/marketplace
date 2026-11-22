@@ -303,6 +303,47 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     );
   });
 
+  it('BE-34: ko‘p tovarli posilka — har tovar nusxasi, yetkazish jami og‘irlik bo‘yicha (bitta tovar qoidasi bilan bir xil)', async () => {
+    // bitta qator — orderSnapshot bilan bir xil
+    const one = await offers.orderSnapshotMany(
+      [{ productId, quantity: 1 }],
+      'CENTER',
+    );
+    expect(one.delivery).toEqual({
+      mode: 'PARTIAL',
+      shown: 30_000,
+      elchiTariff: 40_000,
+    });
+    expect(one.items[0]).toMatchObject({ productId, approvedPrice: 262_000 });
+    // 450 g × (1 + 7) = 3 600 g → +1 kg → tarif 44 000; ko‘rinadigan 30 000 + 4 000 (quote(8) bilan bir xil)
+    const two = await offers.orderSnapshotMany(
+      [
+        { productId, quantity: 1 },
+        { productId, quantity: 7 },
+      ],
+      'CENTER',
+    );
+    expect(two.delivery).toEqual({
+      mode: 'PARTIAL',
+      shown: 34_000,
+      elchiTariff: 44_000,
+    });
+    expect(two.items).toHaveLength(2);
+    // topilmagan mahsulot — null, posilka yetkazishi hisoblanmaydi
+    await expect(
+      offers.orderSnapshotMany(
+        [
+          { productId, quantity: 1 },
+          { productId: '999999', quantity: 1 },
+        ],
+        'CENTER',
+      ),
+    ).resolves.toMatchObject({
+      items: [expect.any(Object), null],
+      delivery: null,
+    });
+  });
+
   it('yashil → sariq (M oshdi, hech kim zarar ko‘rmaydi) — tasdiq saqlanadi; soliq + to‘lov ≥ 50% — 400', async () => {
     await pricing.setPolicy(
       PricePolicyScope.PRODUCT,

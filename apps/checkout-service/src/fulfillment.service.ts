@@ -18,6 +18,7 @@ import {
   LeadOrderStatus,
   ParcelElchiState,
   PickListItem,
+  PickListLine,
   PickListPage,
   RmqClient,
   tashkentDate,
@@ -53,6 +54,7 @@ const SENDER_NAME = 'Elchi Market';
 interface TaskRow {
   id: string;
   orderId: string;
+  parcelId: string;
   status: FulfillmentTaskStatus;
   requiredQty: number;
   pickedQty: number;
@@ -98,7 +100,11 @@ export class FulfillmentService {
               i.product_name AS "productName", i.sku, i.barcode,
               p.elchi_state AS "elchiState", p.elchi_shipment_id::text AS "shipmentId",
               (p.elchi_shipment_id IS NOT NULL AND p.qr_code_token IS NOT NULL) AS "labelReady",
-              p.elchi_error AS "elchiError"
+              p.elchi_error AS "elchiError",
+              (SELECT json_agg(json_build_object(
+                        'productName', x.product_name, 'sku', x.sku, 'barcode', x.barcode,
+                        'quantity', x.quantity, 'pickedQty', x.picked_qty) ORDER BY x.id)
+                 FROM checkout.sales_order_item x WHERE x.sales_order_seller_id = p.id) AS lines
          FROM checkout.fulfillment_task t
          JOIN checkout.parcel p ON p.id = t.parcel_id
          JOIN LATERAL (
@@ -124,6 +130,13 @@ export class FulfillmentService {
       barcode: (r.barcode as string) ?? null,
       quantity: Number(r.requiredQty),
       pickedQty: Number(r.pickedQty),
+      lines: ((r.lines as PickListLine[] | null) ?? []).map((line) => ({
+        productName: String(line.productName ?? ''),
+        sku: line.sku ?? null,
+        barcode: line.barcode ?? null,
+        quantity: Number(line.quantity),
+        pickedQty: Number(line.pickedQty),
+      })),
       parcel: {
         elchiState: (r.elchiState as ParcelElchiState) ?? null,
         shipmentId: (r.shipmentId as string) ?? null,
@@ -161,19 +174,37 @@ export class FulfillmentService {
       if (task.status !== FulfillmentTaskStatus.TO_PICK)
         throw this.taskState(task, 'skanerlash');
       // OMB-2: shtrix-kod bo‘lsa — faqat u; bo‘lmasa SKU. Aniq solishtirish (katalogda SKU katta-kichik harfga sezgir)
-      // bo‘sh shtrix-kod ('' yoki bo‘shliq) — yo‘q hisoblanadi, SKU ishlaydi
-      const expected = task.barcode?.trim() || task.sku?.trim() || '';
-      const matches = expected !== '' && expected === scanned;
+      // bo‘sh shtrix-kod ('' yoki bo‘shliq) — yo‘q hisoblanadi, SKU ishlaydi. BE-34: posilkada bir nechta tovar
+      // bo‘lishi mumkin — kod mos kelgan, hali to‘liq yig‘ilmagan qator sanaladi
+      const codeOf = `COALESCE(NULLIF(btrim(barcode), ''), NULLIF(btrim(sku), ''))`;
+      const [line] = (await manager.query(
+        `SELECT id::text AS id FROM checkout.sales_order_item
+          WHERE sales_order_seller_id = $1 AND picked_qty < quantity AND ${codeOf} = $2
+          ORDER BY id LIMIT 1
+          FOR UPDATE`,
+        [task.parcelId, scanned],
+      )) as Array<{ id: string }>;
       await manager.query(
         `INSERT INTO checkout.fulfillment_scan (task_id, code, matched, actor_id)
          VALUES ($1, $2, $3, $4)`,
-        [task.id, scanned, matches, who.id],
+        [task.id, scanned, !!line, who.id],
       );
-      if (!matches) {
+      if (!line) {
+        const [known] = (await manager.query(
+          `SELECT 1 FROM checkout.sales_order_item
+            WHERE sales_order_seller_id = $1 AND ${codeOf} = $2 LIMIT 1`,
+          [task.parcelId, scanned],
+        )) as unknown[];
         // kutilgan kod aytilmaydi — qo‘lda terib o‘tkazib yuborilmasin
-        outcome.wrong = `Boshqa tovar: «${scanned}» bu buyurtmaga tegishli emas`;
+        outcome.wrong = known
+          ? `«${scanned}» — bu tovardan hamma dona yig‘ilgan`
+          : `Boshqa tovar: «${scanned}» bu buyurtmaga tegishli emas`;
         return null;
       }
+      await manager.query(
+        `UPDATE checkout.sales_order_item SET picked_qty = picked_qty + 1 WHERE id = $1`,
+        [line.id],
+      );
       let applied: AppliedTransition | null = null;
       if (task.orderStatus === LeadOrderStatus.CONFIRMED)
         applied = await this.status.applyTransition(manager, {
@@ -583,7 +614,7 @@ export class FulfillmentService {
       [String(taskId)],
     );
     const [task] = (await manager.query(
-      `SELECT t.id::text AS id, t.order_id::text AS "orderId", t.status,
+      `SELECT t.id::text AS id, t.order_id::text AS "orderId", t.parcel_id::text AS "parcelId", t.status,
               t.required_qty AS "requiredQty", t.picked_qty AS "pickedQty",
               i.sku, i.barcode, o.status AS "orderStatus"
          FROM checkout.fulfillment_task t

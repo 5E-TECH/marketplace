@@ -1,181 +1,196 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import {
-  ProductStatus,
-  ShopStatus,
-  StorefrontProductsQueryDto,
-} from '@app/common';
-import { StorefrontService } from './storefront.service';
+import { CatalogOfferSnapshot, StorefrontProductsQueryDto } from '@app/common';
+import { RELATED_LIMIT, StorefrontService } from './storefront.service';
 
-describe('StorefrontService', () => {
+/** BE-34: asosiy sayt katalogi — tasdiqlangan narx, ichki maydonlarsiz (TC3), narx oralig‘i (TC4). */
+describe('StorefrontService (BE-34)', () => {
+  const offer = (
+    productId: string,
+    overrides: Partial<CatalogOfferSnapshot> = {},
+  ): CatalogOfferSnapshot => ({
+    productId,
+    name: `Mahsulot ${productId}`,
+    subtitle: null,
+    description: 'Tavsif',
+    images: [`https://cdn/${productId}.webp`],
+    videoUrl: 'https://cdn/v.mp4',
+    categoryId: '7',
+    categoryName: 'Quloqchinlar',
+    attributes: [{ name: 'Rang', value: 'Qora' }],
+    weightGrams: 300,
+    isBad: false,
+    cpaAvailable: true,
+    withdrawn: false,
+    approvedPrice: 100_000 * Number(productId),
+    maxSalePrice: 150_000 * Number(productId),
+    affiliateFee: 40_000,
+    centerDeliveryFee: 25_000,
+    addressDeliveryFee: 35_000,
+    stock: 5,
+    creatives: [],
+    createdAt: '2026-11-20T10:00:00.000Z',
+    ...overrides,
+  });
   const query = (values: Partial<StorefrontProductsQueryDto> = {}) =>
     Object.assign(new StorefrontProductsQueryDto(), values);
-  let productRepo: { createQueryBuilder: jest.Mock };
-  let shopRepo: { findOne: jest.Mock; find: jest.Mock };
-  let service: StorefrontService;
-  let qb: Record<string, jest.Mock>;
 
-  beforeEach(() => {
-    qb = {};
-    for (const method of [
-      'innerJoinAndSelect',
-      'leftJoinAndSelect',
-      'where',
-      'andWhere',
-      'setParameter',
-      'orderBy',
-      'addOrderBy',
-      'skip',
-      'take',
-    ]) {
-      qb[method] = jest.fn().mockReturnValue(qb);
-    }
-    qb.getManyAndCount = jest.fn().mockResolvedValue([[{ id: '1' }], 1]);
-    qb.getOne = jest.fn();
-    productRepo = { createQueryBuilder: jest.fn().mockReturnValue(qb) };
-    shopRepo = { findOne: jest.fn(), find: jest.fn() };
-    service = new StorefrontService(productRepo as any, shopRepo as any);
-  });
-
-  it('ro‘yxatda faqat active product va active shopni oladi', async () => {
-    await service.listProducts(query());
-
-    expect(qb.innerJoinAndSelect).toHaveBeenCalledWith(
-      'product.shop',
-      'shop',
-      'shop.is_deleted = FALSE AND shop.status = :shopStatus',
-      { shopStatus: ShopStatus.ACTIVE },
-    );
-    expect(qb.andWhere).toHaveBeenCalledWith(
-      'product.status = :productStatus',
-      { productStatus: ProductStatus.ACTIVE },
-    );
-    expect(qb.andWhere).toHaveBeenCalledWith('product.is_blocked = FALSE');
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
-      'product.category',
-      'category',
-    );
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
-      'product.variants',
-      'variant',
-      'variant.is_deleted = FALSE AND variant.is_active = TRUE',
-    );
-  });
-
-  it('C6.6 TC3: faqat active va featured do‘konlarni bosh sahifaga qaytaradi', async () => {
-    shopRepo.find.mockResolvedValue([{ id: '9', isFeatured: true }]);
-
-    await expect(service.getFeaturedShops()).resolves.toEqual([
-      { id: '9', isFeatured: true },
-    ]);
-    expect(shopRepo.find).toHaveBeenCalledWith({
-      where: {
-        isFeatured: true,
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-      order: { rating: 'DESC', id: 'DESC' },
-      take: 20,
-    });
-  });
-
-  it('kategoriya, narx, qidiruv, sort va paginationni qo‘llaydi', async () => {
-    await expect(
-      service.listProducts(
-        query({
-          categoryId: '7',
-          minPrice: 100,
-          maxPrice: 500,
-          search: 'phone',
-          sort: 'price:asc',
-          page: 2,
-          limit: 10,
-        }),
+  function setup(rows: CatalogOfferSnapshot[]) {
+    const offers = {
+      list: jest.fn(async () => rows),
+      get: jest.fn(
+        async (id: string) => rows.find((row) => row.productId === id) ?? null,
       ),
-    ).resolves.toMatchObject({ total: 1, page: 2, limit: 10, totalPages: 1 });
+    };
+    const variants = {
+      findOne: jest.fn(async ({ where }: { where: { productId: string } }) =>
+        rows.some((row) => row.productId === where.productId)
+          ? {
+              id: `v${where.productId}`,
+              productId: where.productId,
+              product: { shopId: '3' },
+            }
+          : null,
+      ),
+    };
+    return {
+      service: new StorefrontService(offers as never, variants as never),
+      offers,
+      variants,
+    };
+  }
 
-    expect(qb.andWhere).toHaveBeenCalledWith(
-      'product.category_id = :categoryId',
-      { categoryId: '7' },
+  it('TC3: javobda faqat ochiq maydonlar — bazaviy narx, sotuvchi haqi, eng katta narx, qoldiq soni yo‘q', async () => {
+    const { service } = setup([offer('1')]);
+    const page = await service.listProducts(query());
+    expect(Object.keys(page.items[0]).sort()).toEqual(
+      [
+        'attributes',
+        'category',
+        'deliveryToAddress',
+        'deliveryToCenter',
+        'description',
+        'id',
+        'images',
+        'inStock',
+        'isBad',
+        'name',
+        'price',
+        'subtitle',
+        'videoUrl',
+      ].sort(),
     );
-    expect(qb.andWhere).toHaveBeenCalledWith('product.price >= :minPrice', {
-      minPrice: 100,
+    expect(page.items[0]).toMatchObject({
+      id: '1',
+      price: 100_000, // SAYT-2: tasdiqlangan narx
+      category: { id: '7', name: 'Quloqchinlar' },
+      inStock: true,
     });
-    expect(qb.andWhere).toHaveBeenCalledWith('product.price <= :maxPrice', {
-      maxPrice: 500,
-    });
-    expect(qb.orderBy).toHaveBeenCalledWith('product.price', 'ASC');
-    expect(qb.skip).toHaveBeenCalledWith(10);
+    const details = await service.getProduct('1');
+    expect(JSON.stringify(details)).not.toMatch(
+      /"(affiliateFee|maxSalePrice|approvedPrice|basePrice|stock|weightGrams|tin|bank\w*|mfo)"/i,
+    );
   });
 
-  it('default sort uchun entity property nomidan foydalanadi', async () => {
-    await service.listProducts(query());
-
-    expect(qb.orderBy).toHaveBeenCalledWith('product.createdAt', 'DESC');
-  });
-
-  it('noto‘g‘ri narx oralig‘ini rad etadi', async () => {
+  it('TC4: narx oralig‘i — faqat shu oraliqdagi mahsulotlar; min > max — 400', async () => {
+    const { service } = setup(['1', '2', '3', '4'].map((id) => offer(id)));
+    const page = await service.listProducts(
+      query({ minPrice: 200_000, maxPrice: 300_000 }),
+    );
+    expect(page.items.map((item) => item.id)).toEqual(['2', '3']);
+    expect(page.total).toBe(2);
     await expect(
-      service.listProducts(query({ minPrice: 500, maxPrice: 100 })),
+      service.listProducts(query({ minPrice: 5, maxPrice: 1 })),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('draft yoki suspended shop mahsulot detailini 404 qiladi', async () => {
-    qb.getOne.mockResolvedValue(null);
-    await expect(service.getProduct('12')).rejects.toBeInstanceOf(
+  it('saytda faqat sotuvdagi, sotuvchilarga ochiq va narxi tasdiqlangan mahsulot', async () => {
+    const { service } = setup([
+      offer('1'),
+      offer('2', { withdrawn: true }),
+      offer('3', { cpaAvailable: false }),
+      offer('4', { approvedPrice: null }),
+    ]);
+    expect(
+      (await service.listProducts(query())).items.map((item) => item.id),
+    ).toEqual(['1']);
+    for (const id of ['2', '3', '4'])
+      await expect(service.getProduct(id)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    await expect(service.getProduct('99')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
-  it('suspended shop sahifasini 404 qiladi', async () => {
-    shopRepo.findOne.mockResolvedValue(null);
-    await expect(service.getShop('yopiq-shop', query())).rejects.toBeInstanceOf(
+  it('«faqat mavjud» — qoldig‘i 0 chiqmaydi, noma’lum (ombor javob bermadi) ko‘rsatiladi', async () => {
+    const { service } = setup([
+      offer('1', { stock: 0 }),
+      offer('2', { stock: null }),
+      offer('3'),
+    ]);
+    const all = await service.listProducts(query());
+    expect(all.items.map((item) => [item.id, item.inStock])).toEqual([
+      ['1', false],
+      ['2', null],
+      ['3', true],
+    ]);
+    const available = await service.listProducts(query({ inStock: true }));
+    expect(available.items.map((item) => item.id)).toEqual(['2', '3']);
+  });
+
+  it('saralash va sahifalash', async () => {
+    const { service } = setup(['1', '2', '3'].map((id) => offer(id)));
+    const cheap = await service.listProducts(
+      query({ sort: 'price:asc', page: 1, limit: 2 }),
+    );
+    expect(cheap.items.map((item) => item.id)).toEqual(['1', '2']);
+    expect(cheap).toMatchObject({ total: 3, totalPages: 2 });
+    const second = await service.listProducts(
+      query({ sort: 'price:asc', page: 2, limit: 2 }),
+    );
+    expect(second.items.map((item) => item.id)).toEqual(['3']);
+    const oldest = await service.listProducts(query({ sort: 'createdAt:asc' }));
+    expect(oldest.items.map((item) => item.id)).toEqual(['3', '2', '1']);
+  });
+
+  it('«Shu bo‘limdan» — shu kategoriyadagi boshqa sotuvdagi mahsulotlar, o‘zi emas, chegara bilan', async () => {
+    const rows = Array.from({ length: RELATED_LIMIT + 3 }, (_, index) =>
+      offer(String(index + 1)),
+    );
+    rows.push(offer('50', { withdrawn: true }));
+    const { service, offers } = setup(rows);
+    const details = await service.getProduct('1');
+    expect(offers.list).toHaveBeenCalledWith({ categoryId: '7' });
+    expect(details.related).toHaveLength(RELATED_LIMIT);
+    expect(details.related.map((item) => item.id)).not.toContain('1');
+    expect(details.related.map((item) => item.id)).not.toContain('50');
+  });
+
+  it('savatga: tasdiqlangan narx va yagona faol variant; sotuvda bo‘lmasa 404', async () => {
+    const { service, variants } = setup([
+      offer('1'),
+      offer('2', { approvedPrice: null }),
+    ]);
+    await expect(service.cartVariant('1')).resolves.toEqual({
+      productId: '1',
+      variantId: 'v1',
+      shopId: '3',
+      unitPrice: 100_000,
+      productName: 'Mahsulot 1',
+    });
+    expect(variants.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { productId: '1', isActive: true, isDeleted: false },
+      }),
+    );
+    await service.cartVariant('1', '9');
+    expect(variants.findOne).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { productId: '1', isActive: true, isDeleted: false, id: '9' },
+      }),
+    );
+    await expect(service.cartVariant('2')).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(shopRepo.findOne).toHaveBeenCalledWith({
-      where: {
-        slug: 'yopiq-shop',
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-    });
-  });
-
-  it('active shop sahifasiga faqat uning active mahsulotlarini qo‘shadi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '9', slug: 'active-shop' });
-    const result = await service.getShop('active-shop', query());
-
-    expect(qb.andWhere).toHaveBeenCalledWith('product.shop_id = :shopId', {
-      shopId: '9',
-    });
-    expect(result).toMatchObject({
-      shop: { id: '9' },
-      products: { total: 1 },
-    });
-  });
-  it('shop ID bo‘yicha faqat shu active shop mahsulotlarini qaytaradi', async () => {
-    shopRepo.findOne.mockResolvedValue({ id: '9', status: ShopStatus.ACTIVE });
-
-    await expect(service.getShopProducts('9', query())).resolves.toMatchObject({
-      items: [{ id: '1' }],
-      total: 1,
-    });
-    expect(shopRepo.findOne).toHaveBeenCalledWith({
-      where: {
-        id: '9',
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-    });
-    expect(qb.andWhere).toHaveBeenCalledWith('product.shop_id = :shopId', {
-      shopId: '9',
-    });
-  });
-
-  it('mavjud bo‘lmagan yoki faol bo‘lmagan shop ID uchun 404 qaytaradi', async () => {
-    shopRepo.findOne.mockResolvedValue(null);
-
-    await expect(
-      service.getShopProducts('404', query()),
-    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

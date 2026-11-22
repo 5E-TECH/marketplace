@@ -4,173 +4,166 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, SelectQueryBuilder, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
-  ProductStatus,
-  ShopStatus,
+  CartCatalogVariantDto,
+  CatalogOfferSnapshot,
+  StorefrontProductDetailsDto,
+  StorefrontProductDto,
   StorefrontProductsPageDto,
   StorefrontProductsQueryDto,
 } from '@app/common';
-import { Product } from './entities/product.entity';
-import { Shop } from './entities/shop.entity';
+import { CatalogOfferService } from './catalog-offer.service';
+import { ProductVariant } from './entities/product-variant.entity';
 
+/** «Shu bo‘limdan» javonidagi mahsulotlar soni [taklif]. */
+export const RELATED_LIMIT = 8;
+
+/**
+ * Saytda sotiladi: sotuvdan olinmagan, sotuvchilarga ochiq offer (faol, bloklanmagan, CPA, video bilan — BE-07, BE-27)
+ * va tasdiqlangan narxi bor (BE-09). Sayt narxi — tasdiqlangan narx (TZ SAYT-2).
+ */
+export function isOnSite(
+  offer: CatalogOfferSnapshot | null | undefined,
+): offer is CatalogOfferSnapshot & { approvedPrice: number } {
+  return (
+    !!offer &&
+    !offer.withdrawn &&
+    offer.cpaAvailable &&
+    offer.approvedPrice !== null
+  );
+}
+
+/** Ochiq DTO: faqat ruxsat etilgan maydonlar (bazaviy narx, sotuvchi haqi, optovik ma’lumoti, qoldiq soni yo‘q). */
+export function toStorefrontProduct(
+  offer: CatalogOfferSnapshot & { approvedPrice: number },
+): StorefrontProductDto {
+  return {
+    id: offer.productId,
+    name: offer.name,
+    subtitle: offer.subtitle,
+    description: offer.description,
+    images: offer.images,
+    videoUrl: offer.videoUrl,
+    category: offer.categoryId
+      ? { id: offer.categoryId, name: offer.categoryName ?? '' }
+      : null,
+    attributes: offer.attributes.map(({ name, value }) => ({ name, value })),
+    isBad: offer.isBad,
+    price: offer.approvedPrice,
+    deliveryToCenter: offer.centerDeliveryFee,
+    deliveryToAddress: offer.addressDeliveryFee,
+    inStock: offer.stock === null ? null : offer.stock > 0,
+  };
+}
+
+/**
+ * BE-34: asosiy sayt katalogi. Offerlar katalog offer ro‘yxatidan (`CatalogOfferService.list`, bitta so‘rovda 500 tagacha)
+ * olinadi va narx, qoldiq, saralash va sahifalash shu yerda — MVP hajmida (yuzlab mahsulot) yetadi [taklif].
+ */
 @Injectable()
 export class StorefrontService {
   constructor(
-    @InjectRepository(Product)
-    private readonly products: Repository<Product>,
-    @InjectRepository(Shop)
-    private readonly shops: Repository<Shop>,
+    private readonly offers: CatalogOfferService,
+    @InjectRepository(ProductVariant)
+    private readonly variants: Repository<ProductVariant>,
   ) {}
 
+  /**
+   * Savatga qo‘shish (`cart.variant.get`, checkout chaqiradi): faqat saytda sotuvdagi mahsulot, narx — tasdiqlangan
+   * narx (SAYT-2; eski variant narxi ichki narx edi — BE-18 savatni shu sabab yopgan). Variant ko‘rsatilmasa — CPA
+   * mahsulotining yagona faol varianti (BE-07).
+   */
+  async cartVariant(
+    productId: string,
+    variantId?: string,
+  ): Promise<CartCatalogVariantDto> {
+    const offer = await this.offers.get(productId);
+    if (!isOnSite(offer))
+      throw new NotFoundException('Sotuvdagi mahsulot topilmadi');
+    const variant = await this.variants.findOne({
+      where: {
+        productId: offer.productId,
+        isActive: true,
+        isDeleted: false,
+        ...(variantId ? { id: String(variantId) } : {}),
+      },
+      relations: { product: true },
+      order: { id: 'ASC' },
+    });
+    if (!variant) throw new NotFoundException('Sotuvdagi variant topilmadi');
+    return {
+      productId: offer.productId,
+      variantId: String(variant.id),
+      shopId: String(variant.product.shopId),
+      unitPrice: offer.approvedPrice,
+      // savatga suratga olinadi va buyurtma orqali Elchi’ga boradi (bo‘sh nomni Elchi rad etadi)
+      productName: offer.name,
+    };
+  }
+
   async listProducts(
-    query: StorefrontProductsQueryDto,
-  ): Promise<StorefrontProductsPageDto> {
-    return this.paginate(this.activeProductsQuery(), query);
-  }
-
-  getFeaturedShops(): Promise<Shop[]> {
-    return this.shops.find({
-      where: {
-        isFeatured: true,
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-      order: { rating: 'DESC', id: 'DESC' },
-      take: 20,
-    });
-  }
-
-  async getProduct(id: string): Promise<Product> {
-    const product = await this.activeProductsQuery()
-      .andWhere('product.id = :id', { id })
-      .getOne();
-
-    if (!product) throw new NotFoundException('Mahsulot topilmadi');
-    return product;
-  }
-
-  async getShop(slug: string, query: StorefrontProductsQueryDto) {
-    const shop = await this.shops.findOne({
-      where: {
-        slug,
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-    });
-    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
-
-    const products = await this.paginate(
-      this.activeProductsQuery().andWhere('product.shop_id = :shopId', {
-        shopId: shop.id,
-      }),
-      query,
-    );
-    return { shop, products };
-  }
-
-  async getShopProducts(
-    shopId: string,
-    query: StorefrontProductsQueryDto,
-  ): Promise<StorefrontProductsPageDto> {
-    const shop = await this.shops.findOne({
-      where: {
-        id: shopId,
-        status: ShopStatus.ACTIVE,
-        isDeleted: false,
-      },
-    });
-    if (!shop) throw new NotFoundException('Do‘kon topilmadi');
-
-    return this.paginate(
-      this.activeProductsQuery().andWhere('product.shop_id = :shopId', {
-        shopId,
-      }),
-      query,
-    );
-  }
-
-  private activeProductsQuery(): SelectQueryBuilder<Product> {
-    return this.products
-      .createQueryBuilder('product')
-      .innerJoinAndSelect(
-        'product.shop',
-        'shop',
-        'shop.is_deleted = FALSE AND shop.status = :shopStatus',
-        { shopStatus: ShopStatus.ACTIVE },
-      )
-      .leftJoinAndSelect('product.category', 'category')
-      .leftJoinAndSelect(
-        'product.variants',
-        'variant',
-        'variant.is_deleted = FALSE AND variant.is_active = TRUE',
-      )
-      .where('product.is_deleted = FALSE')
-      .andWhere('product.is_blocked = FALSE')
-      .andWhere('product.status = :productStatus', {
-        productStatus: ProductStatus.ACTIVE,
-      });
-  }
-
-  private async paginate(
-    qb: SelectQueryBuilder<Product>,
-    query: StorefrontProductsQueryDto,
+    query: Partial<StorefrontProductsQueryDto>,
   ): Promise<StorefrontProductsPageDto> {
     if (
       query.minPrice !== undefined &&
       query.maxPrice !== undefined &&
       query.minPrice > query.maxPrice
-    ) {
+    )
       throw new BadRequestException(
         'minPrice maxPrice dan katta bo‘la olmaydi',
       );
-    }
-
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
-    if (query.categoryId) {
-      qb.andWhere('product.category_id = :categoryId', {
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
+    const items = (
+      await this.offers.list({
+        search: query.search,
         categoryId: query.categoryId,
-      });
-    }
-    if (query.minPrice !== undefined) {
-      qb.andWhere('product.price >= :minPrice', { minPrice: query.minPrice });
-    }
-    if (query.maxPrice !== undefined) {
-      qb.andWhere('product.price <= :maxPrice', { maxPrice: query.maxPrice });
-    }
-    if (query.search?.trim()) {
-      qb.andWhere(
-        new Brackets((search) => {
-          search
-            .where('product.name ILIKE :search')
-            .orWhere('product.description ILIKE :search');
-        }),
-      ).setParameter('search', `%${query.search.trim()}%`);
-    }
-
-    const [field, direction] = (query.sort ?? 'createdAt:desc').split(':') as [
-      'createdAt' | 'price' | 'name',
-      'asc' | 'desc',
-    ];
-    const columns = {
-      createdAt: 'product.createdAt',
-      price: 'product.price',
-      name: 'product.name',
-    } as const;
-    const [items, total] = await qb
-      .orderBy(columns[field], direction.toUpperCase() as 'ASC' | 'DESC')
-      .addOrderBy('product.id', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
-
+      })
+    )
+      .filter(isOnSite)
+      .filter(
+        (offer) =>
+          (query.minPrice === undefined ||
+            offer.approvedPrice >= query.minPrice) &&
+          (query.maxPrice === undefined ||
+            offer.approvedPrice <= query.maxPrice) &&
+          // «faqat mavjud»: qoldig‘i 0 lar chiqmaydi; noma’lum (ombor javob bermadi) — ko‘rsatiladi
+          (!query.inStock || offer.stock === null || offer.stock > 0),
+      )
+      .map(toStorefrontProduct);
+    const [field, direction] = String(query.sort ?? 'createdAt:desc').split(
+      ':',
+    );
+    const sign = direction === 'asc' ? 1 : -1;
+    // offer ro‘yxati yangi → eski tartibda keladi (createdAt:desc)
+    if (field === 'price')
+      items.sort(
+        (a, b) => sign * (a.price - b.price) || Number(b.id) - Number(a.id),
+      );
+    else if (field === 'name')
+      items.sort((a, b) => sign * a.name.localeCompare(b.name, 'uz'));
+    else if (direction === 'asc') items.reverse();
+    const total = items.length;
     return {
-      items,
+      items: items.slice((page - 1) * limit, page * limit),
       total,
       page,
       limit,
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     };
+  }
+
+  async getProduct(id: string): Promise<StorefrontProductDetailsDto> {
+    const offer = await this.offers.get(id);
+    if (!isOnSite(offer)) throw new NotFoundException('Mahsulot topilmadi');
+    const related = offer.categoryId
+      ? (await this.offers.list({ categoryId: offer.categoryId }))
+          .filter(isOnSite)
+          .filter((other) => other.productId !== offer.productId)
+          .slice(0, RELATED_LIMIT)
+          .map(toStorefrontProduct)
+      : [];
+    return { ...toStorefrontProduct(offer), related };
   }
 }

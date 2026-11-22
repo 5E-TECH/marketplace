@@ -616,6 +616,59 @@ describeWithPostgres(
       ).resolves.toMatchObject({ status: 'PICKED' });
     });
 
+    it('BE-34: ikki tovarli posilka — har tovar o‘z kodi bilan alohida sanaladi; to‘liq yig‘ilgani qayta — 409', async () => {
+      await orders.onLeadConfirmed(confirmed('7301', '2026-12-16T05:00:00Z'));
+      const order = await orderOf('7301');
+      // saytdan ko‘p tovarli buyurtma kabi: posilkaga ikkinchi tovar (bitta dona)
+      await checkoutDs.query(
+        `INSERT INTO checkout.sales_order_item
+           (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price, line_total,
+            sku, barcode, wholesaler_id)
+         SELECT p.id, 43, 'Termos 1 l', 902, 1, 120000, 120000, 'T-1', '4780012345999', 16
+           FROM checkout.parcel p WHERE p.sales_order_id = $1`,
+        [order.id],
+      );
+      await checkoutDs.query(
+        `UPDATE checkout.fulfillment_task SET required_qty = required_qty + 1 WHERE id = $1`,
+        [order.taskId],
+      );
+      // yig‘ish ro‘yxatida posilkaning hamma tovari (birinchisi va jami emas)
+      const list = await fulfillment.pickList('2026-12-16');
+      expect(
+        list.items.find((item) => item.taskId === order.taskId)?.lines,
+      ).toEqual([
+        expect.objectContaining({
+          barcode: '4780012345678',
+          quantity: 1,
+          pickedQty: 0,
+        }),
+        expect.objectContaining({
+          productName: 'Termos 1 l',
+          barcode: '4780012345999',
+          quantity: 1,
+          pickedQty: 0,
+        }),
+      ]);
+      await expect(
+        fulfillment.scan(order.taskId, '4780012345678', WAREHOUSE),
+      ).resolves.toMatchObject({
+        status: 'TO_PICK',
+        pickedQty: 1,
+        quantity: 2,
+      });
+      await expect(
+        fulfillment.scan(order.taskId, '4780012345678', WAREHOUSE),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({
+          message: expect.stringContaining('hamma dona yig‘ilgan'),
+        }),
+      });
+      await expect(
+        fulfillment.scan(order.taskId, '4780012345999', WAREHOUSE),
+      ).resolves.toMatchObject({ status: 'PICKED', pickedQty: 2 });
+    });
+
     it('BE-17: qaytayotgan posilka saralash ro‘yxatida — Elchi raqami va tovarlar bilan', async () => {
       await orders.onLeadConfirmed(confirmed('7201', '2026-12-16T05:00:00Z'));
       const order = await orderOf('7201');

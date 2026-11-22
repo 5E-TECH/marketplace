@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
-import { StorefrontProductDto } from './storefront.dto';
+import { ProductDto } from './product.dto';
 
 export class FavoritesQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -26,7 +26,8 @@ export class FavoriteDto {
   @ApiProperty({ example: 'guest-session-uuid', nullable: true }) sessionId:
     string | null;
   @ApiProperty({ example: '85' }) productId: string;
-  @ApiProperty({ type: StorefrontProductDto }) product: StorefrontProductDto;
+  // eski sevimlilar (gateway yo‘li BE-18 da yopilgan) — eski mahsulot shakli
+  @ApiProperty({ type: ProductDto }) product: ProductDto;
   @ApiProperty({ example: '2026-08-25T10:00:00.000Z' }) createdAt: Date;
 }
 

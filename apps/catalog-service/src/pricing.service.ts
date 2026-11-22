@@ -376,6 +376,60 @@ export class PricingService {
     };
   }
 
+  /**
+   * BE-34: ko‘p tovarli posilka yetkazishi [taklif]. Elchi tarifi — jami og‘irlik bo‘yicha (ELC-6). Mijozga ko‘rinadigan
+   * summa — bitta tovar qoidasi (`quoteFor`) butun posilkaga: bir dona birlik tarifi eng katta «bepul emas» tovardan;
+   * hammasi «bepul» bo‘lsa — 0. Bitta tovarda natija `quoteFor` bilan bir xil.
+   */
+  async combinedDelivery(
+    entries: Array<{ product: Product; quantity: number }>,
+    whereDeliver: string,
+  ): Promise<{
+    mode: DeliveryDisplayMode;
+    shown: number;
+    elchiTariff: number;
+  }> {
+    const ctx = await this.context();
+    // har qator bitta tovar qoidalari bilan tekshiriladi (miqdor, og‘irlik, bazaviy narx)
+    for (const { product, quantity } of entries)
+      this.quoteFor(product, ctx, quantity, whereDeliver);
+    const kind =
+      whereDeliver === DeliveryKind.ADDRESS
+        ? DeliveryKind.ADDRESS
+        : DeliveryKind.CENTER;
+    const weight = entries.reduce(
+      (sum, { product, quantity }) => sum + product.weightGrams! * quantity,
+      0,
+    );
+    const tariff = elchiTariffFor(ctx.tariff, weight, kind);
+    const paid = entries
+      .map(({ product }) => {
+        const params = this.paramsFor(product, ctx);
+        const unit = deliveryView(params, ctx.tariff, product.weightGrams!);
+        return {
+          mode: params.deliveryMode,
+          visible:
+            kind === DeliveryKind.ADDRESS
+              ? unit.visibleAddress
+              : unit.visibleCenter,
+          unitTariff:
+            kind === DeliveryKind.ADDRESS
+              ? unit.tariffAddress
+              : unit.tariffCenter,
+        };
+      })
+      .filter((line) => line.mode !== DeliveryDisplayMode.FREE)
+      .sort((a, b) => b.unitTariff - a.unitTariff);
+    if (!paid.length)
+      return { mode: DeliveryDisplayMode.FREE, shown: 0, elchiTariff: tariff };
+    const ref = paid[0];
+    return {
+      mode: ref.mode,
+      shown: Math.min(tariff, ref.visible + (tariff - ref.unitTariff)),
+      elchiTariff: tariff,
+    };
+  }
+
   private quoteFor(
     product: Product,
     ctx: PricingContext,

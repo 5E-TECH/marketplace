@@ -59,6 +59,12 @@ export class LeadOutboxRelayService {
           }
           event.status = OutboxStatus.PROCESSED;
           event.processedAt = new Date();
+          // BE-34: SMS tasdiq havolasi (kod) yuborilgach bazada qolmaydi — bazada faqat xeshi
+          if (event.eventType === LEAD_EVENTS.SITE_CONFIRM_SMS)
+            event.payload = {
+              ...(event.payload as Record<string, unknown>),
+              text: null,
+            };
           await repo.save(event);
           sent++;
         }
@@ -76,6 +82,8 @@ export class LeadOutboxRelayService {
     if (eventType === LEAD_EVENTS.CALLBACK_REMINDER) return this.notification;
     // BE-35: sotuvchiga chora xabari; sotuvchi haqini ushlash, qo‘yib yuborish va bekor qilish — moliyaga.
     if (eventType === LEAD_EVENTS.FRAUD_MEASURE) return this.notification;
+    // BE-34: saytdan buyurtma — mijozga SMS tasdiq havolasi
+    if (eventType === LEAD_EVENTS.SITE_CONFIRM_SMS) return this.notification;
     if (
       eventType === LEAD_EVENTS.FRAUD_FEE_HOLD ||
       eventType === LEAD_EVENTS.FRAUD_FEE_RELEASE ||

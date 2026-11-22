@@ -19,6 +19,9 @@ import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { catalogDisplayLookup } from './catalog-display.util';
 
+/** BE-34: savat qatori chegarasi — liddan buyurtma (BE-18) bilan bir xil. */
+const MAX_LINE_QUANTITY = 1000;
+
 @Injectable()
 export class CartService {
   private readonly logger = new Logger(CartService.name);
@@ -54,6 +57,11 @@ export class CartService {
       const existing = await repository.findOne({
         where: { cartId: cart.id, variantId: dto.variantId },
       });
+      // BE-18 chegarasi: bitta tovar qatori 1 000 donagacha (undan ko‘pi buyurtmada rad etiladi)
+      if ((existing?.quantity ?? 0) + dto.quantity > MAX_LINE_QUANTITY)
+        throw new BadRequestException(
+          `Bitta tovardan ${MAX_LINE_QUANTITY} donagacha`,
+        );
       if (existing) {
         existing.quantity += dto.quantity;
         existing.unitPriceSnapshot = variant.unitPrice;
@@ -200,15 +208,20 @@ export class CartService {
     const where = owner.customerId
       ? { customerId: owner.customerId, status: 'active' }
       : { sessionId: owner.sessionId, status: 'active' };
-    return manager
-      .getRepository(Cart)
-      .findOne({ where, relations: { items: true } });
+    return manager.getRepository(Cart).findOne({
+      where,
+      relations: { items: true },
+      // BE-34: qatorlar savatga qo‘shilgan tartibda (birinchi tovar — lidning asosiy tovari)
+      order: { items: { id: 'ASC' } },
+    });
   }
 
   private findById(manager: EntityManager, id: string) {
-    return manager
-      .getRepository(Cart)
-      .findOne({ where: { id }, relations: { items: true } });
+    return manager.getRepository(Cart).findOne({
+      where: { id },
+      relations: { items: true },
+      order: { items: { id: 'ASC' } },
+    });
   }
 
   /**

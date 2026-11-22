@@ -38,6 +38,21 @@ export class CatalogOfferController {
     );
   }
 
+  /** BE-34: saytdan ko‘p tovarli buyurtma — har tovar nusxasi va butun posilka yetkazishi. */
+  @MessagePattern({ cmd: LEAD_ORDER_RPC.CATALOG_SNAPSHOT_MANY })
+  orderSnapshotMany(
+    @Payload()
+    data: {
+      items: Array<{ productId: string; quantity: number }>;
+      whereDeliver: string;
+    },
+  ) {
+    return this.offers.orderSnapshotMany(
+      data?.items ?? [],
+      String(data?.whereDeliver ?? ''),
+    );
+  }
+
   @MessagePattern({ cmd: LEAD_CATALOG_RPC.OFFER_LIST })
   list(@Payload() query: CatalogOfferListQuery) {
     return this.offers.list(query ?? {});

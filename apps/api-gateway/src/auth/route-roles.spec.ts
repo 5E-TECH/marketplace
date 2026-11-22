@@ -295,7 +295,7 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
       expect([key, keys.includes(key)]).toEqual([key, false]);
     expect(
       keys.filter((key) =>
-        / \/(sellers?|shops|products|orders|returns|files|echo|storefront|inventory)(\/|$)/.test(
+        / \/(sellers?|shops|products|orders|returns|files|echo|inventory)(\/|$)/.test(
           key,
         ),
       ),
@@ -337,8 +337,27 @@ describe('BE-05: gateway yo‘llari va rollar', () => {
     ];
     for (const key of closed)
       expect([key, keys.has(key)]).toEqual([key, false]);
-    expect([...keys].filter((key) => / \/storefront(\/|$)/.test(key))).toEqual(
-      [],
+    // BE-34: storefront API asosiy sayt uchun yangi modelda qayta ochildi — faqat shu ochiq yo‘llar
+    expect(
+      routes
+        .filter((route) => / \/storefront(\/|$)/.test(route.key))
+        .map((route) => [route.key, route.isPublic])
+        .sort(),
+    ).toEqual(
+      [
+        'DELETE /storefront/cart',
+        'DELETE /storefront/cart/items/:id',
+        'GET /storefront/banners',
+        'GET /storefront/cart',
+        'GET /storefront/products',
+        'GET /storefront/products/:id',
+        'PATCH /storefront/cart/items/:id',
+        'POST /storefront/cart/items',
+        'POST /storefront/orders',
+        'POST /storefront/orders/confirm',
+      ]
+        .map((key) => [key, true])
+        .sort(),
     );
   });
 

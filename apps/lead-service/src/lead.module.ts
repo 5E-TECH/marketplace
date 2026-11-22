@@ -29,6 +29,7 @@ import { LeadQueueScheduler } from './lead-queue.scheduler';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
 import { LeadIntakeService } from './lead-intake.service';
+import { SiteOrderService } from './site-order.service';
 import { LeadOfferController } from './lead-offer.controller';
 import { CapiService } from './capi.service';
 import { LeadOrderService } from './lead-order.service';
@@ -142,6 +143,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     StreamService,
     LandingService,
     LeadIntakeService,
+    SiteOrderService,
     LeadQueueService,
     LeadCardService,
     LeadQueueScheduler,

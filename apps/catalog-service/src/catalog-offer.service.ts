@@ -9,6 +9,7 @@ import {
   CatalogOfferListQuery,
   CatalogOfferSnapshot,
   CatalogOrderSnapshot,
+  CatalogOrderSnapshotMany,
   isLeadBigintId,
   ProductStatus,
   RmqClient,
@@ -189,6 +190,52 @@ export class CatalogOfferService {
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
+    return this.snapshotOf(product, quantity, whereDeliver);
+  }
+
+  /**
+   * BE-34: ko‘p tovarli buyurtma (saytdan) — har tovar narx nusxasi so‘rov tartibida (topilmagani — null) va butun
+   * posilka yetkazishi jami og‘irlik bo‘yicha (`PricingService.combinedDelivery`).
+   */
+  async orderSnapshotMany(
+    items: Array<{ productId: string; quantity: number }>,
+    whereDeliver: string,
+  ): Promise<CatalogOrderSnapshotMany> {
+    const list = Array.isArray(items) ? items : [];
+    const ids = list
+      .map((item) => String(item?.productId ?? ''))
+      .filter((id) => /^\d+$/.test(id));
+    const products = ids.length
+      ? await this.base().where('product.id IN (:...ids)', { ids }).getMany()
+      : [];
+    const byId = new Map(products.map((p) => [String(p.id), p]));
+    const snapshots: Array<CatalogOrderSnapshot | null> = [];
+    for (const item of list) {
+      const product = byId.get(String(item?.productId ?? ''));
+      snapshots.push(
+        product
+          ? await this.snapshotOf(product, Number(item.quantity), whereDeliver)
+          : null,
+      );
+    }
+    const delivery =
+      list.length && snapshots.every(Boolean)
+        ? await this.pricing.combinedDelivery(
+            list.map((item) => ({
+              product: byId.get(String(item.productId))!,
+              quantity: Number(item.quantity),
+            })),
+            whereDeliver,
+          )
+        : null;
+    return { items: snapshots, delivery };
+  }
+
+  private async snapshotOf(
+    product: Product,
+    quantity: number,
+    whereDeliver: string,
+  ): Promise<CatalogOrderSnapshot> {
     const variant = await this.variants.findOne({
       where: {
         productId: String(product.id),

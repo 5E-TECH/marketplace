@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import {
   CreateProductVariantDto,
-  ProductStatus,
-  ShopStatus,
   UpdateProductVariantDto,
   CatalogInventoryProduct,
 } from '@app/common';
@@ -335,34 +333,6 @@ export class ProductVariantService {
         .slice(0, ADMIN_VARIANT_SEARCH_LIMIT)
         .map((row) => String(row.id)),
       truncated: rows.length > ADMIN_VARIANT_SEARCH_LIMIT,
-    };
-  }
-
-  async getCartVariant(productId: string, variantId: string) {
-    const variant = await this.productVariants
-      .createQueryBuilder('variant')
-      .innerJoinAndSelect('variant.product', 'product')
-      .innerJoinAndSelect('product.shop', 'shop')
-      .where('variant.id = :variantId', { variantId })
-      .andWhere('variant.product_id = :productId', { productId })
-      .andWhere('variant.is_deleted = FALSE')
-      .andWhere('variant.is_active = TRUE')
-      .andWhere('product.is_deleted = FALSE')
-      .andWhere('product.status = :productStatus', {
-        productStatus: ProductStatus.ACTIVE,
-      })
-      .andWhere('shop.is_deleted = FALSE')
-      .andWhere('shop.status = :shopStatus', { shopStatus: ShopStatus.ACTIVE })
-      .getOne();
-    if (!variant) throw new NotFoundException('Sotuvdagi variant topilmadi');
-    return {
-      productId: variant.productId,
-      variantId: variant.id,
-      shopId: variant.product.shopId,
-      unitPrice: variant.price ?? variant.product.price,
-      // Mahsulot allaqachon JOIN qilingan — nom qo'shimcha so'rovsiz keladi.
-      // U savatga suratga olinadi va buyurtma orqali Elchi'ga boradi.
-      productName: variant.product.name,
     };
   }
 

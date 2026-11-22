@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   CatalogOrderSnapshot,
+  CatalogOrderSnapshotMany,
   CheckoutDeliveryDestination,
   FulfillmentTaskStatus,
   pickDateFor,
@@ -13,6 +14,7 @@ import {
   LEAD_EVENTS,
   LEAD_ORDER_RPC,
   LeadConfirmedEvent,
+  LeadConfirmedVia,
   LeadOrderStatus,
   LeadSource,
   OrderCreateFailedEvent,
@@ -29,6 +31,11 @@ import {
 } from './lead-order-status.service';
 
 const ID = /^[1-9]\d{0,18}$/;
+/**
+ * BE-34: saytdan bitta buyurtmadagi tovar qatorlari chegarasi — savat qatorlari soni bilan bir xil (lead-service
+ * `SITE_ORDER_MAX_LINES`) [taklif].
+ */
+export const MAX_ORDER_LINES = 50;
 const PHONE = /^\+998\d{9}$/;
 const SOATO = /^\d{2,20}$/;
 /**
@@ -154,17 +161,38 @@ export class LeadOrderService {
 
   private async process(row: RequestRow): Promise<void> {
     const event = row.payload;
-    let snapshot: CatalogOrderSnapshot | null;
+    const lines = orderLines(event);
+    let snapshots: Array<CatalogOrderSnapshot | null>;
+    let delivery: CatalogOrderSnapshot['delivery'] | null;
     try {
-      snapshot = await sendRpc<CatalogOrderSnapshot | null>(
-        this.catalog,
-        { cmd: LEAD_ORDER_RPC.CATALOG_SNAPSHOT },
-        {
-          productId: event.productId,
-          quantity: event.quantity,
-          whereDeliver: event.whereDeliver,
-        },
-      );
+      if (lines.length === 1) {
+        const snapshot = await sendRpc<CatalogOrderSnapshot | null>(
+          this.catalog,
+          { cmd: LEAD_ORDER_RPC.CATALOG_SNAPSHOT },
+          {
+            productId: lines[0].productId,
+            quantity: lines[0].quantity,
+            whereDeliver: event.whereDeliver,
+          },
+        );
+        snapshots = [snapshot];
+        delivery = snapshot?.delivery ?? null;
+      } else {
+        // BE-34: saytdan ko‘p tovarli lid — yetkazish butun posilka og‘irligi bo‘yicha
+        const many = await sendRpc<CatalogOrderSnapshotMany>(
+          this.catalog,
+          { cmd: LEAD_ORDER_RPC.CATALOG_SNAPSHOT_MANY },
+          {
+            items: lines.map(({ productId, quantity }) => ({
+              productId,
+              quantity,
+            })),
+            whereDeliver: event.whereDeliver,
+          },
+        );
+        snapshots = lines.map((_, index) => many?.items?.[index] ?? null);
+        delivery = many?.delivery ?? null;
+      }
     } catch (error) {
       if (isPermanent(error, [400, 404]))
         return this.fail(
@@ -174,30 +202,49 @@ export class LeadOrderService {
         );
       return this.retryLater(row, `katalog: ${messageOf(error)}`);
     }
-    const unavailable = offerProblem(snapshot);
-    if (unavailable)
+    for (const [index, snapshot] of snapshots.entries()) {
+      const unavailable = offerProblem(snapshot);
+      if (unavailable)
+        return this.fail(
+          row,
+          OrderCreateFailedReason.OFFER_UNAVAILABLE,
+          lines.length > 1
+            ? `mahsulot ${lines[index].productId}: ${unavailable}`
+            : unavailable,
+        );
+      const priceChanged = priceProblem(snapshot!, lines[index].salePrice);
+      if (priceChanged)
+        return this.fail(
+          row,
+          OrderCreateFailedReason.PRICE_CHANGED,
+          lines.length > 1
+            ? `mahsulot ${lines[index].productId}: ${priceChanged}`
+            : priceChanged,
+        );
+    }
+    if (!delivery)
       return this.fail(
         row,
         OrderCreateFailedReason.OFFER_UNAVAILABLE,
-        unavailable,
+        'Posilka yetkazishi hisoblanmadi',
       );
-    const priceChanged = priceProblem(snapshot!, event.salePrice);
-    if (priceChanged)
-      return this.fail(
-        row,
-        OrderCreateFailedReason.PRICE_CHANGED,
-        priceChanged,
-      );
-    const offer = snapshot!;
+    const parts = lines.map((line, index) => ({
+      line,
+      offer: snapshots[index]!,
+    }));
 
     try {
-      // TC8: `ttlMs` yo‘q — band muddatsiz, sweeper bo‘shatmaydi
+      // TC8: `ttlMs` yo‘q — band muddatsiz, sweeper bo‘shatmaydi. BE-34: hamma qator bitta so‘rovda — bittasi band
+      // bo‘lmasa hech biri band qilinmaydi (TC10)
       await sendRpc(
         this.inventory,
         { cmd: 'inventory.reserve' },
         {
           orderRef: row.orderId,
-          items: [{ variantId: offer.variantId, quantity: event.quantity }],
+          items: parts.map(({ line, offer }) => ({
+            variantId: offer.variantId,
+            quantity: line.quantity,
+          })),
           idempotencyKey: `lead-order:${row.id}`,
         },
       );
@@ -216,24 +263,42 @@ export class LeadOrderService {
         );
       return this.retryLater(row, `ombor: ${messageOf(error)}`);
     }
-    await this.create(row, offer);
+    await this.create(row, parts, delivery);
   }
 
-  /** Buyurtma, posilka qatori, tovar qatori (narx nusxasi), jurnal va `order.status.changed` — bitta tranzaksiyada. */
-  private async create(row: RequestRow, offer: CatalogOrderSnapshot) {
+  /**
+   * Buyurtma, posilka qatori, tovar qatorlari (narx nusxasi), jurnal va `order.status.changed` — bitta tranzaksiyada.
+   * BE-34: saytdan ko‘p tovarli lid — bitta buyurtma, bitta posilka, har tovar o‘z qatori va optovigi bilan.
+   */
+  private async create(
+    row: RequestRow,
+    parts: Array<{ line: OrderLine; offer: CatalogOrderSnapshot }>,
+    delivery: CatalogOrderSnapshot['delivery'],
+  ) {
     const event = row.payload;
-    const quantity = event.quantity;
-    const salePrice = event.salePrice;
-    // TC11: tasdiqlangan narx va ustama alohida (sotuv ≥ tasdiqlangan — `priceProblem` tekshirgan)
-    const approvedPrice = offer.approvedPrice!;
-    const markup = salePrice - approvedPrice;
-    const platformService = offer.platformService;
-    const goods = salePrice * quantity;
-    const deliveryShown = offer.delivery.shown;
+    const goods = parts.reduce(
+      (sum, { line }) => sum + line.salePrice * line.quantity,
+      0,
+    );
+    const deliveryShown = delivery.shown;
     const cod = orderCodAmount({
-      items: [{ unitPrice: salePrice, quantity }],
+      items: parts.map(({ line }) => ({
+        unitPrice: line.salePrice,
+        quantity: line.quantity,
+      })),
       deliveryFee: deliveryShown,
     });
+    const embedded = parts.reduce(
+      (sum, { line, offer }) => sum + offer.hiddenDelivery * line.quantity,
+      0,
+    );
+    const weight = parts.reduce(
+      (sum, { line, offer }) => sum + offer.weightGrams * line.quantity,
+      0,
+    );
+    const quantity = parts.reduce((sum, { line }) => sum + line.quantity, 0);
+    // posilka va buyurtma optovigi — birinchi qator; har qatorning o‘z optovigi `sales_order_item.wholesaler_id` da
+    const wholesalerId = parts[0].offer.wholesalerId;
     await this.dataSource.transaction(async (manager) => {
       const [request] = (await manager.query(
         `SELECT status FROM checkout.lead_order_request WHERE id = $1 FOR UPDATE`,
@@ -245,9 +310,9 @@ export class LeadOrderService {
            (id, customer_id, buyer_name, status, payment_method, total_amount, delivery_fee,
             delivery_address, where_deliver, source, lead_id, stream_id, affiliate_id, wholesaler_id,
             customer_phone, region_soato, district_soato, delivery_mode, delivery_shown, delivery_cost,
-            delivery_embedded, weight_grams, cod_amount, confirmed_by, address_confirmed_by)
+            delivery_embedded, weight_grams, cod_amount, confirmed_by, address_confirmed_by, confirmed_via)
          VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18, $19, $20, $21, $22, $23, $24)`,
+                 $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
         [
           row.orderId,
           event.customerName.trim(),
@@ -262,53 +327,59 @@ export class LeadOrderService {
           event.leadId,
           event.streamId,
           event.affiliateId,
-          offer.wholesalerId,
+          wholesalerId,
           event.customerPhone,
           event.regionSoato,
           event.districtSoato,
-          offer.delivery.mode,
+          delivery.mode,
           deliveryShown,
-          offer.delivery.elchiTariff,
-          offer.hiddenDelivery * quantity,
-          offer.weightGrams * quantity,
+          delivery.elchiTariff,
+          embedded,
+          weight,
           cod,
-          event.confirmedBy,
+          event.confirmedBy ?? null,
           event.addressConfirmedBy,
+          event.confirmedVia ?? LeadConfirmedVia.OPERATOR,
         ],
       );
       const [seller] = (await manager.query(
         `INSERT INTO checkout.parcel
            (sales_order_id, shop_id, subtotal, cod_amount, delivery_fee, status, elchi_state)
          VALUES ($1, $2, $3, $4, $5, 'PENDING', 'PENDING') RETURNING id::text AS id`,
-        [row.orderId, offer.wholesalerId, goods, cod, deliveryShown],
+        [row.orderId, wholesalerId, goods, cod, deliveryShown],
       )) as Array<{ id: string }>;
-      await manager.query(
-        `INSERT INTO checkout.sales_order_item
-           (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
-            line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
-            affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
-        [
-          seller.id,
-          offer.productId,
-          offer.productName,
-          offer.variantId,
-          quantity,
-          salePrice,
-          goods,
-          offer.sku,
-          offer.weightGrams,
-          offer.basePrice,
-          offer.recommendedPrice,
-          approvedPrice,
-          markup,
-          offer.affiliateFee,
-          offer.callCenterFee,
-          offer.hiddenDelivery,
-          platformService,
-          offer.barcode?.trim() || null,
-        ],
-      );
+      for (const { line, offer } of parts) {
+        // TC11: tasdiqlangan narx va ustama alohida (sotuv ≥ tasdiqlangan — `priceProblem` tekshirgan)
+        const approvedPrice = offer.approvedPrice!;
+        await manager.query(
+          `INSERT INTO checkout.sales_order_item
+             (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
+              line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
+              affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode, wholesaler_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+          [
+            seller.id,
+            offer.productId,
+            offer.productName,
+            offer.variantId,
+            line.quantity,
+            line.salePrice,
+            line.salePrice * line.quantity,
+            offer.sku,
+            offer.weightGrams,
+            offer.basePrice,
+            offer.recommendedPrice,
+            approvedPrice,
+            line.salePrice - approvedPrice,
+            offer.affiliateFee,
+            offer.callCenterFee,
+            offer.hiddenDelivery,
+            offer.platformService,
+            offer.barcode?.trim() || null,
+            offer.wholesalerId,
+          ],
+        );
+      }
       // BE-19: yig‘ish vazifasi; kun — operator tasdiqlagan vaqtdan (14:00 chegarasi, OMB-4)
       await manager.query(
         `INSERT INTO checkout.fulfillment_task
@@ -508,12 +579,74 @@ export function invalidReason(event: LeadConfirmedEvent): string | null {
   if (!address || address.length > 1000) return 'manzil noto‘g‘ri';
   if (!Object.values(CheckoutDeliveryDestination).includes(event.whereDeliver))
     return 'yetkazish turi noto‘g‘ri';
+  // BE-34: SMS havola bilan mijoz tasdiqlaydi — operator yo‘q; faqat asosiy sayt lidi
+  const via = event.confirmedVia ?? LeadConfirmedVia.OPERATOR;
+  if (!Object.values(LeadConfirmedVia).includes(via))
+    return `tasdiqlash usuli noto‘g‘ri: ${String(via)}`;
+  if (via === LeadConfirmedVia.SMS && event.source !== LeadSource.SITE)
+    return 'SMS bilan faqat saytdan buyurtma tasdiqlanadi';
   if (
-    !ID.test(String(event.confirmedBy ?? '')) ||
+    (via === LeadConfirmedVia.SMS
+      ? !optionalId(event.confirmedBy)
+      : !ID.test(String(event.confirmedBy ?? ''))) ||
     !optionalId(event.addressConfirmedBy)
   )
     return 'tasdiqlagan operator ID si noto‘g‘ri';
+  if (event.items !== undefined) {
+    if (event.source !== LeadSource.SITE)
+      return 'bir nechta tovar faqat saytdan buyurtmada';
+    if (!Array.isArray(event.items) || !event.items.length)
+      return 'tovar qatorlari bo‘sh';
+    if (event.items.length > MAX_ORDER_LINES)
+      return `tovar qatorlari ko‘p: ${event.items.length}`;
+    const seen = new Set<string>();
+    for (const item of event.items) {
+      if (!ID.test(String(item?.productId ?? '')))
+        return 'qatorda mahsulot ID si noto‘g‘ri';
+      if (seen.has(String(item.productId)))
+        return `mahsulot takrorlangan: ${String(item.productId)}`;
+      seen.add(String(item.productId));
+      if (
+        !Number.isSafeInteger(item.quantity) ||
+        item.quantity < 1 ||
+        item.quantity > 1000
+      )
+        return `qatorda miqdor noto‘g‘ri: ${String(item.quantity)}`;
+      if (!Number.isSafeInteger(item.salePrice) || item.salePrice <= 0)
+        return `qatorda narx noto‘g‘ri: ${String(item.salePrice)}`;
+    }
+    const [first] = event.items;
+    if (
+      String(first.productId) !== String(event.productId) ||
+      first.quantity !== event.quantity ||
+      first.salePrice !== event.salePrice
+    )
+      return 'birinchi qator lid mahsulotiga mos emas';
+  }
   return null;
+}
+
+/** Buyurtma qatorlari: saytdan ko‘p tovarli lid (BE-34) — `items`, aks holda bitta tovar. */
+export interface OrderLine {
+  productId: string;
+  quantity: number;
+  salePrice: number;
+}
+
+export function orderLines(event: LeadConfirmedEvent): OrderLine[] {
+  return event.items?.length
+    ? event.items.map(({ productId, quantity, salePrice }) => ({
+        productId: String(productId),
+        quantity,
+        salePrice,
+      }))
+    : [
+        {
+          productId: String(event.productId),
+          quantity: event.quantity,
+          salePrice: event.salePrice,
+        },
+      ];
 }
 
 /**
