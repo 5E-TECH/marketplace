@@ -16,6 +16,8 @@ import { SellerFinanceService } from './seller-finance.service';
 import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
 import { SettlementController } from './ledger/settlement.controller';
+import { FinanceSettingsController } from './ledger/finance-settings.controller';
+import { FinanceSettingsService } from './ledger/finance-settings.service';
 import { SettlementService } from './ledger/settlement.service';
 import { LedgerController } from './ledger/ledger.controller';
 import { LedgerService } from './ledger/ledger.service';
@@ -48,6 +50,7 @@ const entities = FINANCE_DB.entities;
     LedgerController,
     WithdrawalController,
     SettlementController,
+    FinanceSettingsController,
   ],
   providers: [
     FinanceService,
@@ -57,6 +60,7 @@ const entities = FINANCE_DB.entities;
     BalanceCheckService,
     WithdrawalService,
     SettlementService,
+    FinanceSettingsService,
   ],
 })
 export class FinanceModule {}

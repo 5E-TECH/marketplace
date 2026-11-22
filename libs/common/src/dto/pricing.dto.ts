@@ -10,6 +10,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { MAX_MONEY } from '../database/money.transformer';
 import { DeliveryDisplayMode, PriceStatus } from '../pricing/price-calculator';
@@ -78,6 +79,17 @@ export class MarketCheckDto {
  * bo‘sh qoldirib bo‘lmaydi.
  */
 export class PricePolicyDto {
+  @ApiPropertyOptional({
+    example: 'Superadmin so‘rovi (Shodiyor, 2026-11-22): Elchi tarifi oshdi',
+    description: 'BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  comment?: string;
+
   @ApiPropertyOptional({
     example: 29688,
     nullable: true,
@@ -183,6 +195,17 @@ export class PricePolicyDto {
 
 /** `POST /admin/pricing/elchi-tariffs` — yangi Elchi tarifi (NRX-7), kuchga kirish vaqti bilan. */
 export class ElchiTariffDto {
+  @ApiPropertyOptional({
+    example: 'Superadmin so‘rovi (Shodiyor, 2026-11-22): Elchi tarifi oshdi',
+    description: 'BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  comment?: string;
+
   @ApiProperty({ example: 40000 })
   @apply(...money())
   centerBase: number;
@@ -232,4 +255,5 @@ export class ProductPricePolicyDto extends PickType(PricePolicyDto, [
   'deliveryMode',
   'visibleCenter',
   'visibleAddress',
+  'comment',
 ] as const) {}
