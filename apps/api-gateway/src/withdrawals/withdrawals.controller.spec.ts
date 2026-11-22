@@ -58,4 +58,28 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
       expect(roles(m)).toEqual([Role.FINANCE, Role.SUPERADMIN]);
     expect(roles('list')).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
   });
+
+  it('BE-24 TC4: «To‘landi» dan keyin notification ga finance.withdrawal.paid (sotuvchiga SMS)', async () => {
+    const dto = {
+      id: '5',
+      affiliateId: '42',
+      amount: 6000000,
+      taxAmount: 60000,
+      netAmount: 5940000,
+    };
+    const finance = { send: jest.fn(() => of(dto)) };
+    const notification = { emit: jest.fn(() => of(undefined)) };
+    const c = new AdminWithdrawalsController(
+      finance as never,
+      notification as never,
+    );
+    await expect(c.paid('5', '7')).resolves.toEqual(dto);
+    expect(notification.emit).toHaveBeenCalledWith('finance.withdrawal.paid', {
+      withdrawalId: '5',
+      affiliateId: '42',
+      amount: 6000000,
+      tax: 60000,
+      net: 5940000,
+    });
+  });
 });
