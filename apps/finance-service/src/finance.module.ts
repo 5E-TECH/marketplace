@@ -55,7 +55,7 @@ const entities = FINANCE_DB.entities;
       },
     }),
     TypeOrmModule.forFeature(entities),
-    // BE-21: kunlik sverka farqi — moliya va nazoratchiga xabar
+    // BE-21: kunlik sverka farqi — moliya va nazoratchiga xabar; BE-33: bank faylidagi optovik rekvizitlari — katalogdan
     ClientsModule.registerAsync([
       {
         name: RmqClient.NOTIFICATION,
@@ -65,6 +65,12 @@ const entities = FINANCE_DB.entities;
             [config.get<string>('RABBITMQ_URL')!],
             RmqQueue.NOTIFICATION,
           ),
+      },
+      {
+        name: RmqClient.CATALOG,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
       },
     ]),
   ],

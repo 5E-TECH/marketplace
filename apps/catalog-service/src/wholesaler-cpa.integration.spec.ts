@@ -190,6 +190,19 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       .findOneByOrFail({ id: created.id });
     expect(plain).not.toHaveProperty('tin');
     expect(plain).not.toHaveProperty('bankAccount');
+    // BE-33: bank fayli uchun ichki RPC — rekvizitlar bilan; noma’lum id — ro‘yxatda yo‘q
+    await expect(
+      wholesalers.paymentDetails([created.id, '999999', 'x']),
+    ).resolves.toEqual([
+      {
+        id: created.id,
+        name: WHOLESALER.name,
+        tin: '305123456',
+        bankName: WHOLESALER.bankName,
+        bankAccount: '20208000900123456001',
+        bankMfo: '01158',
+      },
+    ]);
     expect(plain).not.toHaveProperty('contractNumber');
     const withProduct = await ds
       .getRepository(Product)

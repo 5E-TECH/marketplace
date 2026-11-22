@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { WholesalerSettlementStatus } from '@app/common';
 import { CreateFinanceTables1724673600000 } from '../migrations/1724673600000-create-finance-tables';
@@ -11,6 +12,7 @@ import { CreateWholesalerSettlement1795737600000 } from '../migrations/179573760
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
+import { CreateTextSetting1796774400000 } from '../migrations/1796774400000-create-text-setting';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -34,6 +36,22 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   let ds: DataSource;
   let ledger: LedgerService;
   let svc: SettlementService;
+  // BE-33: oluvchi rekvizitlari katalogdan; `noDetails` dagilar — rekvizitsiz
+  const noDetails = new Set<string>();
+  const catalog = {
+    send: jest.fn((_pattern: unknown, data: { ids: string[] }) =>
+      of(
+        data.ids.map((id) => ({
+          id,
+          name: `Optovik ${id} MCHJ`,
+          tin: noDetails.has(id) ? null : '301234567',
+          bankName: 'Ipoteka bank',
+          bankAccount: noDetails.has(id) ? null : '20208000900123456789',
+          bankMfo: '00450',
+        })),
+      ),
+    ),
+  };
   let check: BalanceCheckService;
   let seq = 0;
   const MONDAY = '2027-01-11T04:00:00.000Z';
@@ -116,6 +134,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         CreateFeeHold1795824000000,
         AddRemittanceResolution1796860800000,
         CreateSettlementResponse1796947200000,
+        CreateTextSetting1796774400000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -126,7 +145,18 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       .spyOn(SettlementService.prototype as never, 'nowMs' as never)
       .mockReturnValue(Date.parse('2027-03-01T00:00:00Z') as never);
     ledger = new LedgerService(ds);
-    svc = new SettlementService(ds, ledger);
+    svc = new SettlementService(ds, ledger, catalog as never);
+    // BE-33 (QA): to‘lovchi rekvizitlari — bank fayli shularsiz chiqmaydi (EQ-05)
+    await svc.updateSettings({
+      dto: {
+        payerName: 'Elchi Marketplace MChJ',
+        payerTin: '305000000',
+        payerAccount: '20208000900100000001',
+        payerMfo: '01158',
+        paymentPurposeCode: '00668',
+      },
+      changedBy: '1',
+    });
     check = new BalanceCheckService(ds);
   }, 300_000);
 
@@ -206,6 +236,38 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     expect(csv.startsWith('﻿Hujjat raqami;Sana;')).toBe(true);
     expect(csv.split('\r\n').filter(Boolean)).toHaveLength(3); // sarlavha + 2 optovik
     expect(csv).toContain(';280000;');
+    // BE-33 (QA): to‘lovchi (platforma) va maqsad kodi — sozlamadan
+    expect(csv).toMatch(/;20208000900100000001;01158;Optovik/);
+    expect(csv).toMatch(/;280000;00668;|;\d+;00668;/);
+    // BE-33 (QA): oluvchi — katalogdagi nom, STIR, hisob raqami, MFO
+    expect(csv).toMatch(
+      /;Optovik \S+ MCHJ;301234567;20208000900123456789;00450;/,
+    );
+    expect(csv).not.toContain('Optovik #');
+  });
+
+  it('BE-33: optovik rekvizitlari to‘liq bo‘lmasa — 409, akt muzlatilmaydi (keyin to‘ldirilsa — fayl chiqadi)', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    const [{ wholesalerId }] = (await ds.query(
+      `SELECT wholesaler_id AS "wholesalerId" FROM finance.wholesaler_settlement`,
+    )) as Array<{ wholesalerId: string }>;
+    noDetails.add(String(wholesalerId));
+    try {
+      await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
+        'rekvizitlari to‘liq emas',
+      );
+      const statuses = (await ds.query(
+        `SELECT status FROM finance.wholesaler_settlement`,
+      )) as Array<{ status: string }>;
+      expect(statuses.every((r) => r.status === 'READY')).toBe(true);
+    } finally {
+      noDetails.clear();
+    }
+    await expect(
+      svc.bankFile({ periodEnd: '2027-01-10' }),
+    ).resolves.toMatchObject({ contentType: 'text/csv; charset=utf-8' });
   });
 
   it('xatoli buyurtma (ochiq event_failure) aktga kirmaydi; hodisa keyin muvaffaqiyatli ishlansa — kiradi', async () => {
@@ -428,7 +490,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         .slice(1);
     const first = await lines('2027-01-10');
     expect(first).toHaveLength(1);
-    expect(first[0]).toContain('Optovik #501;');
+    expect(first[0]).toContain('Optovik 501 MCHJ;');
     // Fayl bankka ketdi; 502 ning puli keldi va moliya qo‘lda run bosdi
     await ledger.onRemittance({
       schemaVersion: 2,
@@ -460,7 +522,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     });
     const second = await lines('2027-01-17');
     expect(second).toHaveLength(1);
-    expect(second[0]).toContain('Optovik #502;');
+    expect(second[0]).toContain('Optovik 502 MCHJ;');
     expect(second[0]).toContain(';140000;');
   });
 
@@ -514,5 +576,46 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     await expect(
       svc.list({ query: { wholesalerId: 'W' } }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('BE-33 (QA): to‘lovchi rekvizitlari bo‘lmasa bank fayli chiqmaydi (409); sozlamalar tarixda, qaytarish muddati ham', async () => {
+    await window(10);
+    await deliver('501', '2026-12-28T10:00:00.000Z');
+    await svc.run({ asOf: MONDAY });
+    const saved = (await ds.query(
+      `SELECT key, value, effective_from FROM finance.text_setting`,
+    )) as Array<{ key: string; value: string; effective_from: Date }>;
+    await ds.query('DELETE FROM finance.text_setting');
+    try {
+      await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
+        'To‘lovchi (platforma) rekvizitlari sozlanmagan',
+      );
+      const statuses = (await ds.query(
+        `SELECT status FROM finance.wholesaler_settlement`,
+      )) as Array<{ status: string }>;
+      expect(statuses.every((r) => r.status === 'READY')).toBe(true);
+    } finally {
+      for (const row of saved)
+        await ds.query(
+          `INSERT INTO finance.text_setting (key, value, effective_from, changed_by) VALUES ($1, $2, $3, '1')`,
+          [row.key, row.value, row.effective_from],
+        );
+    }
+    await expect(
+      svc.updateSettings({ dto: { payerMfo: '1158' }, changedBy: '1' }),
+    ).rejects.toThrow('payer_mfo');
+    const updated = await svc.updateSettings({
+      dto: { payerMfo: '00450', returnWindowDays: 14 },
+      changedBy: '7',
+    });
+    expect(updated).toMatchObject({
+      payerMfo: '00450',
+      payerAccount: '20208000900100000001',
+    });
+    const history = (await ds.query(
+      `SELECT value, changed_by AS "by" FROM finance.text_setting WHERE key = 'payer_mfo' ORDER BY effective_from`,
+    )) as Array<{ value: string; by: string }>;
+    expect(history.map((h) => h.value)).toEqual(['01158', '00450']);
+    expect(history[1].by).toBe('7');
   });
 });

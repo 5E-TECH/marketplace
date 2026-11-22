@@ -9,6 +9,7 @@ import {
   Optional,
   Param,
   Post,
+  Put,
   Query,
   Res,
 } from '@nestjs/common';
@@ -27,12 +28,15 @@ import {
   BankFileQueryDto,
   CurrentUser,
   FINANCE_SETTLEMENT_RPC,
+  JwtUser,
   RmqClient,
   Role,
   Roles,
   RunSettlementDto,
   sendRpc,
   SettlementRunResultDto,
+  SettlementSettingsDto,
+  UpdateSettlementSettingsDto,
   WholesalerSettlementDto,
   WholesalerSettlementPageDto,
   WholesalerSettlementQueryDto,
@@ -110,6 +114,41 @@ export class AdminSettlementsController {
       this.finance,
       { cmd: FINANCE_SETTLEMENT_RPC.RUN },
       { asOf: dto.asOf },
+    );
+  }
+
+  /** BE-33 (QA): qaytarish muddati (EQ-10) va to‘lovchi rekvizitlari (EQ-05) — bank fayli shulardan. */
+  @Get('settings')
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
+  @ApiOperation({
+    summary:
+      'Hisob-kitob sozlamalari: qaytarish muddati, to‘lovchi rekvizitlari',
+  })
+  @ApiOkResponse({ type: SettlementSettingsDto })
+  settings(): Promise<SettlementSettingsDto> {
+    return sendRpc(
+      this.finance,
+      { cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET },
+      {},
+    );
+  }
+
+  @Put('settings')
+  @Roles(Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Hisob-kitob sozlamalarini o‘zgartirish (superadmin) [taklif]',
+    description:
+      'Berilgan maydonlar tarixga yoziladi (kim, qachon); berilmagani o‘zgarmaydi. Bank fayli to‘lovchi hisob raqami, MFO va to‘lov maqsadi kodisiz chiqmaydi (409).',
+  })
+  @ApiOkResponse({ type: SettlementSettingsDto })
+  updateSettings(
+    @Body() dto: UpdateSettlementSettingsDto,
+    @CurrentUser() user: JwtUser,
+  ): Promise<SettlementSettingsDto> {
+    return sendRpc(
+      this.finance,
+      { cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_UPDATE },
+      { dto, changedBy: user.sub },
     );
   }
 

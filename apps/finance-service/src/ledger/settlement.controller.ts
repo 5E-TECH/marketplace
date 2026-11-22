@@ -5,6 +5,7 @@ import {
   RpcHttpExceptionFilter,
   WHOLESALER_CABINET_RPC,
   WholesalerSettlementQueryDto,
+  UpdateSettlementSettingsDto,
 } from '@app/common';
 import { SettlementService } from './settlement.service';
 import { WholesalerBalanceService } from './wholesaler-balance.service';
@@ -22,6 +23,22 @@ export class SettlementController {
   @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.BALANCE })
   balance(@Payload() input: { wholesalerId: string }) {
     return this.balances.balance(input);
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET })
+  settings() {
+    return this.settlements.settings();
+  }
+
+  @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_UPDATE })
+  updateSettings(
+    @Payload()
+    input: {
+      dto: UpdateSettlementSettingsDto;
+      changedBy: string;
+    },
+  ) {
+    return this.settlements.updateSettings(input);
   }
 
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.RUN })
