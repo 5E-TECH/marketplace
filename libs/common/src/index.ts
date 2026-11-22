@@ -113,6 +113,9 @@ export * from './dto/lead-report.dto';
 export * from './database/migrate-cli';
 // BE-07: optovik (admin kiritadi)
 export * from './dto/wholesaler.dto';
+export * from './dto/warehouse-inbound.dto';
 // BE-09: narx kalkulyatori (sof hisob)
 export * from './pricing';
 export * from './dto/pricing.dto';
+// PDF: Unicode shrift (kirill, ʻ/ʼ) — hamma PDF generatorlar
+export * from './pdf/pdf-fonts';

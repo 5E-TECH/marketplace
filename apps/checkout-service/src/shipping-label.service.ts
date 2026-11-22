@@ -1,3 +1,4 @@
+import { PDF_FONT, registerPdfFonts } from '@app/common';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
@@ -86,12 +87,14 @@ export class ShippingLabelService {
   async generateHandoverAct(
     act: HandoverActPdfData,
   ): Promise<ShippingLabelDocument> {
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 40,
-      compress: false,
-      info: { Title: `Elchi topshirish akti #${act.id}` },
-    });
+    const doc = registerPdfFonts(
+      new PDFDocument({
+        size: 'A4',
+        margin: 40,
+        compress: false,
+        info: { Title: `Elchi topshirish akti #${act.id}` },
+      }),
+    );
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -99,20 +102,20 @@ export class ShippingLabelService {
       doc.on('error', reject);
     });
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(14)
       .text(`Elchi Pochtaga topshirish akti No ${act.id}`);
     doc
-      .font('Helvetica')
+      .font(PDF_FONT.regular)
       .fontSize(10)
       .text(`Sana: ${act.createdAt}`)
       .text(`Posilkalar soni: ${act.items.length}`)
       .moveDown();
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(9)
       .text('No   Buyurtma   Elchi posilka   QR');
-    doc.font('Helvetica').fontSize(9);
+    doc.font(PDF_FONT.regular).fontSize(9);
     act.items.forEach((item, index) => {
       doc.text(
         `${index + 1}.   ${item.orderNumber}   ${item.shipmentId}   ${item.qrCodeToken}`,
@@ -147,15 +150,17 @@ export class ShippingLabelService {
         }),
       ),
     );
-    const doc = new PDFDocument({
-      size: [width, height],
-      margin,
-      compress: false,
-      info: {
-        Title: `Elchi shipment labels (${labels.length})`,
-        Subject: 'Marketplace seller order labels',
-      },
-    });
+    const doc = registerPdfFonts(
+      new PDFDocument({
+        size: [width, height],
+        margin,
+        compress: false,
+        info: {
+          Title: `Elchi shipment labels (${labels.length})`,
+          Subject: 'Marketplace seller order labels',
+        },
+      }),
+    );
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const completed = new Promise<Buffer>((resolve, reject) => {
@@ -194,14 +199,14 @@ export class ShippingLabelService {
       .stroke();
 
     // Chap panel: brend, skanerlanadigan QR va identifikatorlar.
-    doc.font('Helvetica-Bold').fontSize(13).text('ELCHI', margin, 7, {
+    doc.font(PDF_FONT.bold).fontSize(13).text('ELCHI', margin, 7, {
       width: leftWidth,
       align: 'center',
       lineBreak: false,
     });
     doc.image(qr, margin + 9, 24, { width: 62, height: 62 });
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(6.5)
       .text(`Shipment: ${data.shipmentId}`, margin, 90, {
         width: leftWidth,
@@ -217,13 +222,16 @@ export class ShippingLabelService {
         ellipsis: true,
         lineBreak: false,
       });
-    doc.font('Helvetica').fontSize(4.5).text(data.qrCodeToken, margin, 113, {
-      width: leftWidth,
-      height: 20,
-      align: 'center',
-      ellipsis: true,
-    });
-    doc.font('Helvetica-Bold').fontSize(5).text("JO'NATUVCHI", margin, 137, {
+    doc
+      .font(PDF_FONT.regular)
+      .fontSize(4.5)
+      .text(data.qrCodeToken, margin, 113, {
+        width: leftWidth,
+        height: 20,
+        align: 'center',
+        ellipsis: true,
+      });
+    doc.font(PDF_FONT.bold).fontSize(5).text("JO'NATUVCHI", margin, 137, {
       width: leftWidth,
       align: 'center',
       lineBreak: false,
@@ -236,7 +244,7 @@ export class ShippingLabelService {
     });
 
     // O‘ng panel: qabul qiluvchi va manzil.
-    doc.font('Helvetica-Bold').fontSize(6).text('QABUL QILUVCHI', rightX, 7, {
+    doc.font(PDF_FONT.bold).fontSize(6).text('QABUL QILUVCHI', rightX, 7, {
       lineBreak: false,
     });
     doc.fontSize(10).text(data.buyerName || 'Mijoz', rightX, 16, {
@@ -246,7 +254,7 @@ export class ShippingLabelService {
       lineBreak: false,
     });
     doc
-      .font('Helvetica')
+      .font(PDF_FONT.regular)
       .fontSize(8)
       .text(data.buyerPhone || '-', rightX, 31, {
         width: rightWidth,
@@ -258,7 +266,7 @@ export class ShippingLabelService {
       .filter(Boolean)
       .join(', ');
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(7)
       .text(area || '-', rightX, 42, {
         width: rightWidth,
@@ -267,7 +275,7 @@ export class ShippingLabelService {
         lineBreak: false,
       });
     doc
-      .font('Helvetica')
+      .font(PDF_FONT.regular)
       .fontSize(6)
       .text(data.deliveryAddress || '-', rightX, 51, {
         width: rightWidth,
@@ -279,14 +287,14 @@ export class ShippingLabelService {
       .moveTo(rightX, 66)
       .lineTo(width - margin, 66)
       .stroke();
-    doc.font('Helvetica-Bold').fontSize(6).text('MAHSULOTLAR', rightX, 70, {
+    doc.font(PDF_FONT.bold).fontSize(6).text('MAHSULOTLAR', rightX, 70, {
       lineBreak: false,
     });
     const visibleItems = data.items.slice(0, LABEL_MAX_ITEMS);
     let itemY = 80;
     for (const item of visibleItems) {
       doc
-        .font('Helvetica')
+        .font(PDF_FONT.regular)
         .fontSize(6.5)
         .text(`${item.quantity} x ${item.productName}`, rightX, itemY, {
           width: rightWidth,
@@ -312,7 +320,7 @@ export class ShippingLabelService {
       .lineTo(width - margin, 131)
       .stroke();
     doc
-      .font('Helvetica-Bold')
+      .font(PDF_FONT.bold)
       .fontSize(7)
       .text('OLINADIGAN SUMMA (COD)', rightX, 135, {
         width: rightWidth,

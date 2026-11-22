@@ -44,9 +44,13 @@ export class AdminInventoryController {
       reason: string;
       actorId: string;
       idempotencyKey: string;
+      lotId?: string;
+      goodStock?: boolean;
     },
   ) {
     return this.operations.adjust({
+      lotId: data.lotId,
+      goodStock: data.goodStock === true,
       variantId: data.variantId,
       warehouseId: await this.operations.hqWarehouseId(),
       quantityDelta: data.delta,
