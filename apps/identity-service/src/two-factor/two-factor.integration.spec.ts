@@ -270,4 +270,36 @@ describeWithPostgres('BE-26 xodim 2FA (PostgreSQL)', () => {
       3,
     );
   });
+
+  it('3-urinishdan keyin blok; muddati o‘tgach hisob boshidan, to‘g‘ri kod blok va hisobni nolga tushiradi', async () => {
+    const phone = '+998900002608';
+    await staff(phone, Role.SUPERADMIN);
+    const c1 = (await login(phone)) as TwoFactorChallenge;
+    const { secret } = await twoFactor.setup(c1.challengeToken);
+    await twoFactor.enable(c1.challengeToken, totpAt(secret, totpStep() - 1));
+    const c2 = (await login(phone)) as TwoFactorChallenge;
+    for (const code of ['000001', '000002', '000003'])
+      expect(await statusOf(twoFactor.verify(c2.challengeToken, code))).toBe(
+        401,
+      );
+    expect(await statusOf(twoFactor.verify(c2.challengeToken, '000004'))).toBe(
+      423,
+    );
+    // blok muddati o‘tdi
+    await ds.query(
+      `UPDATE identity.users SET totp_blocked_until = now() - interval '1 second' WHERE phone = $1`,
+      [phone],
+    );
+    expect(await statusOf(twoFactor.verify(c2.challengeToken, '000005'))).toBe(
+      401,
+    );
+    await expect(
+      twoFactor.verify(c2.challengeToken, totpAt(secret, totpStep())),
+    ).resolves.toHaveProperty('accessToken');
+    const [row] = (await ds.query(
+      `SELECT totp_failed_count AS count, totp_blocked_until AS until FROM identity.users WHERE phone = $1`,
+      [phone],
+    )) as Array<{ count: number; until: Date | null }>;
+    expect(row).toEqual({ count: 0, until: null });
+  });
 });

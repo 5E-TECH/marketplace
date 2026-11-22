@@ -112,22 +112,22 @@ export class TwoFactorService {
       const used = rowsOf(
         await this.dataSource.query(
           `UPDATE identity.users
-              SET totp_recovery = totp_recovery - $2::text, totp_failed_count = 0, updated_at = now()
+              SET totp_recovery = totp_recovery - $2::text, totp_failed_count = 0, totp_blocked_until = NULL,
+                  updated_at = now()
             WHERE id = $1 AND totp_recovery ? $2::text
             RETURNING id`,
           [user.id, this.recoveryHash(recoveryCode)],
         ),
       );
-      if (!used.length) {
-        await this.blockIfExhausted(user.id);
+      if (!used.length)
         throw new UnauthorizedException('Tiklash kodi noto‘g‘ri');
-      }
       return this.session(user.id);
     }
     const step = await this.checkCode(user, String(code ?? ''));
     // shu kodni bir vaqtda ikki so‘rov ishlata olmasin: oraliq faqat oldingisidan katta bo‘lsa yoziladi
     const claimed = (await this.dataSource.query(
-      `UPDATE identity.users SET totp_last_step = $2, totp_failed_count = 0, updated_at = now()
+      `UPDATE identity.users
+          SET totp_last_step = $2, totp_failed_count = 0, totp_blocked_until = NULL, updated_at = now()
         WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)
         RETURNING id`,
       [user.id, step],
@@ -203,21 +203,30 @@ export class TwoFactorService {
     if (
       step === null ||
       (user.lastStep !== null && step <= Number(user.lastStep))
-    ) {
-      await this.blockIfExhausted(user.id);
+    )
       throw new UnauthorizedException('2FA kodi noto‘g‘ri');
-    }
     return step;
   }
 
-  /** Urinishni band qiladi: blokda bo‘lsa — 423. */
+  /**
+   * Urinishni band qiladi — bitta SQL, qator qulfi bilan: 3-urinish band qilinganda 15 daqiqalik blok ham shu yerda
+   * qo‘yiladi (avval xato kod tekshirilgandan keyin qo‘yilardi — parallel so‘rovlar orasida 3 tadan ko‘p urinish
+   * o‘tib ketardi). To‘g‘ri kod blokni va hisobni nolga tushiradi; muddati o‘tgan blokdan keyin hisob boshidan.
+   * Blokda — 423. SET dagi ifodalar qatorning eski qiymatini ko‘radi.
+   */
   private async reserveAttempt(userId: string): Promise<void> {
     const rows = rowsOf(
       await this.dataSource.query(
-        `UPDATE identity.users SET totp_failed_count = totp_failed_count + 1, updated_at = now()
+        `UPDATE identity.users
+            SET totp_failed_count =
+                  CASE WHEN totp_blocked_until IS NOT NULL THEN 1 ELSE totp_failed_count + 1 END,
+                totp_blocked_until =
+                  CASE WHEN (CASE WHEN totp_blocked_until IS NOT NULL THEN 1 ELSE totp_failed_count + 1 END) >= $2
+                       THEN now() + make_interval(secs => $3) END,
+                updated_at = now()
           WHERE id = $1 AND (totp_blocked_until IS NULL OR totp_blocked_until < now())
           RETURNING id`,
-        [userId],
+        [userId, MAX_FAILED, BLOCK_SECONDS],
       ),
     );
     if (!rows.length)
@@ -226,16 +235,6 @@ export class TwoFactorService {
         ErrorCode.RATE_LIMITED,
         HttpStatus.LOCKED,
       );
-  }
-
-  /** Xato: band qilingan urinishlar chegaraga yetgan bo‘lsa — 15 daqiqa blok. */
-  private async blockIfExhausted(userId: string): Promise<void> {
-    await this.dataSource.query(
-      `UPDATE identity.users
-          SET totp_blocked_until = now() + make_interval(secs => $3), totp_failed_count = 0, updated_at = now()
-        WHERE id = $1 AND totp_failed_count >= $2`,
-      [userId, MAX_FAILED, BLOCK_SECONDS],
-    );
   }
 
   /** Tiklash kodlari — server kaliti bilan HMAC (bazani o‘qigan odam tiklay olmasin). */
