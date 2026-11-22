@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { randomBytes } from 'crypto';
+import { AddressInfo, createServer, Socket } from 'net';
 import { SharedRateLimiter } from './shared-rate-limiter';
 
 const quiet = { log: jest.fn(), warn: jest.fn() } as unknown as Logger;
@@ -82,6 +83,82 @@ describe('BE-36: SharedRateLimiter — xotira (Redis berilmagan yoki uzilgan)', 
       await limiter.close();
     }
     await limiter.close(); // takror yopish xavfsiz
+  });
+});
+
+/**
+ * Soxta Redis: ulanish bosqichiga (CLIENT, INFO) javob beradi, keyin skriptga hech qachon javob bermaydi — ulanish
+ * ochiq, Redis «osilib» qolgan (to‘xtatilgan jarayon, paket yo‘qolishi).
+ */
+async function hungRedis() {
+  const sockets = new Set<Socket>();
+  const server = createServer((sock) => {
+    sockets.add(sock);
+    sock.on('close', () => sockets.delete(sock));
+    sock.on('error', () => undefined);
+    let buf = '';
+    sock.on('data', (chunk) => {
+      buf += chunk.toString();
+      for (;;) {
+        const lines = buf.split('\r\n');
+        const n = Number(lines[0]?.slice(1));
+        if (!buf.startsWith('*') || lines.length < 2 + 2 * n) break;
+        const cmd = lines[2].toLowerCase();
+        buf = lines.slice(1 + 2 * n).join('\r\n');
+        if (cmd === 'info') {
+          const body = '# Server\r\nredis_version:7.4.0\r\nloading:0\r\n';
+          sock.write('$' + Buffer.byteLength(body) + '\r\n' + body + '\r\n');
+        } else if (cmd === 'client' || cmd === 'auth') sock.write('+OK\r\n');
+      }
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  return {
+    url: 'redis://127.0.0.1:' + (server.address() as AddressInfo).port,
+    close: async () => {
+      for (const sock of sockets) sock.destroy();
+      await new Promise((r) => server.close(r));
+    },
+  };
+}
+
+describe('BE-36: SharedRateLimiter — Redis javob bermay qolsa', () => {
+  it('bitta so‘rov ko‘pi buyruq chegarasini kutadi, keyingilari darhol xotirada; holat `memory`, soket qayta ulanadi', async () => {
+    const hung = await hungRedis();
+    const limiter = new SharedRateLimiter({
+      url: hung.url,
+      prefix: 'test:',
+      name: 'test-hung',
+      logger: quiet,
+    });
+    try {
+      for (let i = 0; i < 100 && limiter.store !== 'redis'; i++)
+        await new Promise((r) => setTimeout(r, 20));
+      expect(limiter.store).toBe('redis');
+      let reconnects = 0;
+      (
+        limiter as unknown as {
+          redis: { on(event: string, fn: () => void): void };
+        }
+      ).redis.on('reconnecting', () => reconnects++);
+      const t0 = Date.now();
+      expect(await limiter.hit('h', 60_000, 5)).toMatchObject({
+        totalHits: 1,
+        isBlocked: false,
+      });
+      expect(Date.now() - t0).toBeLessThan(600);
+      expect(limiter.store).toBe('memory');
+      const t1 = Date.now();
+      for (let i = 0; i < 20; i++) await limiter.hit('h', 60_000, 5);
+      expect(Date.now() - t1).toBeLessThan(200);
+      expect((await limiter.hit('h', 60_000, 5)).isBlocked).toBe(true);
+      // ulanish ochiq bo‘lsa ham soket vaqti (1 s) o‘tgach yopiladi va klient qayta ulanadi — «ready» da qolib ketmaydi
+      await new Promise((r) => setTimeout(r, 1_300));
+      expect(reconnects).toBeGreaterThanOrEqual(1);
+    } finally {
+      await limiter.close();
+      await hung.close();
+    }
   });
 });
 

@@ -6,6 +6,8 @@ export const OPS_RPC = {
   ELCHI_ERRORS: 'integration.ops.errors',
   /** lead-service: operator navbatida kutayotgan yangi lidlar va eng eskisining kutish vaqti. */
   LEAD_QUEUE: 'lead.ops.queue',
+  /** lead-service: lid API kaliti chegarasi qayerda sanalmoqda (BE-36). */
+  LEAD_RATE_LIMIT: 'lead.ops.rate-limit',
 } as const;
 
 export interface LeadQueueStats {
@@ -46,4 +48,12 @@ export class OpsHealthDto {
       'BE-36: so‘rov chegarasi; Redis berilgan, lekin `memory` — nusxalar limitni bo‘lishmayapti',
   })
   rateLimit: RateLimitHealth;
+
+  @ApiProperty({
+    example: { redisConfigured: true, store: 'redis' },
+    nullable: true,
+    description:
+      'BE-36: lead-service dagi lid API kaliti chegarasi; null — servis javob bermadi',
+  })
+  leadRateLimit: RateLimitHealth | null;
 }

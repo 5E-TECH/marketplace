@@ -63,13 +63,21 @@ Xotira saqlagichidan farqi: u sirpanuvchi oyna, Redis esa qat’iy oyna. Oyna ch
 baravargacha so‘rov o‘tishi mumkin (masalan, oyna oxirida 300 va yangisi boshida 300). Kerak bo‘lsa limitni shunga qarab
 tanlang.
 
-**Redis uzilsa** API to‘xtamaydi:
+**Redis uzilsa yoki javob bermay qolsa** API to‘xtamaydi:
 - so‘rov xotiradagi hisob bilan o‘tadi — limit yo‘qolmaydi, faqat nusxalar orasida bo‘linmaydi;
-- buyruq kutish chegarasi 250 ms [taklif];
+- buyruq kutish chegarasi 250 ms [taklif]; xatodan keyin 1 s [taklif] Redis’ga murojaat qilinmaydi, shuning uchun
+  so‘rovlar kutib qolmaydi;
+- ulanish ochiq, lekin Redis javob bermasa (to‘xtatilgan jarayon, paket yo‘qolishi), soket 1 s [taklif] dan keyin
+  yopiladi va klient qayta ulanadi;
 - jurnalda ogohlantirish daqiqasiga ko‘pi bilan bir marta;
-- Redis qaytsa klient o‘zi qayta ulanadi;
-- monitor (`health-monitor.mjs`, `MONITOR_OPS_TOKEN` bilan) `GET /health/ops` → `rateLimit` dan
-  `rate_limit_redis_firing` ogohlantirishini beradi, tiklansa `…_resolved`.
+- Redis qaytsa klient o‘zi qayta ulanadi.
+
+**Kuzatuv.** Monitor (`health-monitor.mjs`, `MONITOR_OPS_TOKEN` bilan) `GET /health/ops` dan ikki maydonni o‘qiydi:
+- `rateLimit` — so‘rov tushgan gateway nusxasi;
+- `leadRateLimit` — lead-service.
+
+Biri ketma-ket `MONITOR_FAILURE_THRESHOLD` marta Redis’siz bo‘lsa — `rate_limit_redis_firing`, tiklansa
+`…_resolved`. Gateway bir necha nusxada bo‘lsa, har tekshiruvda ulardan bittasi ko‘riladi.
 
 **Yoqish (prod, Dilshod).**
 1. `.env.production` ga quyidagilar qo‘shiladi:

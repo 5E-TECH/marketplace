@@ -93,13 +93,17 @@ test('BE-26: health/ops o‘qilmasa (masalan, noto‘g‘ri token — 404) — c
   ]);
 });
 
-// BE-36: REDIS_URL berilgan, lekin gateway Redis'ga ulanmagan — ogohlantirish; Redis tiklansa yopiladi.
-// Redis berilmagan (bitta nusxa) — ogohlantirish yo'q.
-test('BE-36: rate limit Redis’siz qolsa ogohlantirish, tiklansa yopiladi', async (t) => {
+// BE-36: REDIS_URL berilgan, lekin Redis'ga ulanmagan — ketma-ket chegaradan keyin ogohlantirish; tiklansa yopiladi.
+// Redis berilmagan (bitta nusxa) — ogohlantirish yo'q; bitta uzilish (qayta ulanish) — ham yo'q.
+test('BE-36: rate limit Redis’siz qolsa ketma-ket chegaradan keyin ogohlantirish, tiklansa yopiladi', async (t) => {
   process.env.MONITOR_API_URL = 'http://monitor3.test/api/v1/health/readiness';
   process.env.ALERT_WEBHOOK_URL = 'http://alerts3.test';
   process.env.MONITOR_OPS_TOKEN = 'monitor-token-0123456789';
+  process.env.MONITOR_FAILURE_THRESHOLD = '2';
+  const redis = { redisConfigured: true, store: 'redis' };
+  const memory = { redisConfigured: true, store: 'memory' };
   let rateLimit = { redisConfigured: false, store: 'memory' };
+  let leadRateLimit = { redisConfigured: false, store: 'memory' };
   const sent = [];
   t.mock.method(globalThis, 'fetch', async (url, options = {}) => {
     if (url === process.env.ALERT_WEBHOOK_URL) {
@@ -115,6 +119,7 @@ test('BE-36: rate limit Redis’siz qolsa ogohlantirish, tiklansa yopiladi', asy
             elchiApiErrors5m: 0,
             leadQueue: { waiting: 0, oldestMinutes: null },
             rateLimit,
+            leadRateLimit,
           },
         }),
       };
@@ -124,14 +129,26 @@ test('BE-36: rate limit Redis’siz qolsa ogohlantirish, tiklansa yopiladi', asy
     `../health-monitor.mjs?redis=${Date.now()}`
   );
   await checkOps();
+  await checkOps();
   assert.deepEqual(sent, []);
-  rateLimit = { redisConfigured: true, store: 'memory' };
+  // bitta uzilish (masalan Redis qayta ishga tushdi) — ogohlantirish yo'q
+  rateLimit = memory;
+  await checkOps();
+  rateLimit = redis;
+  leadRateLimit = redis;
+  await checkOps();
+  assert.deepEqual(sent, []);
+  // ketma-ket 2 marta: gateway va lead-service
+  rateLimit = memory;
+  leadRateLimit = memory;
+  await checkOps();
   await checkOps();
   await checkOps(); // takror — yangi ogohlantirish yo'q
   assert.deepEqual(sent, [
-    'rate_limit_redis_firing: Rate limit Redis’ga ulanmagan — har gateway nusxasi o‘z xotirasida sanaydi',
+    'rate_limit_redis_firing: Rate limit Redis’ga ulanmagan (gateway, lead-service) — har nusxa o‘z xotirasida sanaydi',
   ]);
-  rateLimit = { redisConfigured: true, store: 'redis' };
+  rateLimit = redis;
+  leadRateLimit = null;
   await checkOps();
   assert.deepEqual(sent.slice(1), [
     'rate_limit_redis_resolved: Rate limit yana Redis’da (umumiy)',

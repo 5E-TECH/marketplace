@@ -6,7 +6,13 @@ describe('BE-26: GET /health/ops (monitor)', () => {
   const make = (
     env: Record<string, string>,
     integration = { send: jest.fn(() => of({ count: 12 })) },
-    lead = { send: jest.fn(() => of({ waiting: 4, oldestMinutes: 11 })) },
+    lead = {
+      send: jest.fn((pattern: { cmd: string }) =>
+        pattern.cmd === 'lead.ops.rate-limit'
+          ? of({ redisConfigured: true, store: 'redis' })
+          : of({ waiting: 4, oldestMinutes: 11 }),
+      ),
+    },
     rateLimit = { redisConfigured: false, store: 'memory' },
   ) =>
     new OpsHealthController(
@@ -37,6 +43,7 @@ describe('BE-26: GET /health/ops (monitor)', () => {
       elchiApiErrors5m: 12,
       leadQueue: { waiting: 4, oldestMinutes: 11 },
       rateLimit: { redisConfigured: false, store: 'memory' },
+      leadRateLimit: { redisConfigured: true, store: 'redis' },
     });
     expect(integration.send).toHaveBeenCalledWith(
       { cmd: 'integration.ops.errors' },
@@ -48,6 +55,13 @@ describe('BE-26: GET /health/ops (monitor)', () => {
         { send: jest.fn(() => throwError(() => new Error('rmq'))) },
       ).ops(token),
     ).resolves.toMatchObject({ elchiApiErrors5m: null });
+    await expect(
+      make({ MONITOR_TOKEN: token }, undefined, {
+        send: jest.fn((_pattern: { cmd: string }) =>
+          throwError(() => new Error('rmq')),
+        ),
+      }).ops(token),
+    ).resolves.toMatchObject({ leadQueue: null, leadRateLimit: null });
   });
 
   it('BE-36: so‘rov chegarasi holati — Redis berilgan, lekin uzilgan', async () => {

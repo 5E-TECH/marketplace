@@ -10,17 +10,18 @@ import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { Throttle, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { getStorageToken, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { randomBytes } from 'crypto';
 import { request } from 'http';
 import { AddressInfo } from 'net';
 import { configureTrustProxy } from '../trust-proxy';
+import { gatewayThrottlerModule } from './gateway-throttler.module';
 import { RateLimitModule } from './rate-limit.module';
 import { SharedThrottlerStorage } from './shared-throttler.storage';
 
 /**
- * BE-36 TC1: «2 nusxada IP limiti umumiy». Ikki alohida Nest ilovasi (ikki gateway nusxasi, app.module dagi kabi
- * ThrottlerModule + SharedThrottlerStorage, trust proxy) bitta Redis bilan. Haqiqiy HTTP, IP — `X-Forwarded-For`
+ * BE-36 TC1: «2 nusxada IP limiti umumiy». Ikki alohida Nest ilovasi (ikki gateway nusxasi, app.module dagi
+ * `gatewayThrottlerModule()` + RateLimitModule, trust proxy) bitta Redis bilan. Haqiqiy HTTP, IP — `X-Forwarded-For`
  * (loopback ishonchli proksi, trust-proxy.ts). Redis — TEST_REDIS_URL (CI da servis).
  */
 @Controller('t')
@@ -44,7 +45,12 @@ interface Instance {
 }
 
 async function gateway(redisUrl: string | undefined): Promise<Instance> {
-  const env: Record<string, string | undefined> = { REDIS_URL: redisUrl };
+  // RATE_LIMIT_MAX=5 — umumiy chegara (prod sukuti 300) testda kichik
+  const env: Record<string, unknown> = {
+    REDIS_URL: redisUrl,
+    RATE_LIMIT_MAX: 5,
+    RATE_LIMIT_WINDOW_MS: 60_000,
+  };
   @Global()
   @Module({
     providers: [
@@ -58,18 +64,7 @@ async function gateway(redisUrl: string | undefined): Promise<Instance> {
   class TestConfigModule {}
 
   const moduleRef = await Test.createTestingModule({
-    imports: [
-      TestConfigModule,
-      RateLimitModule,
-      ThrottlerModule.forRootAsync({
-        imports: [RateLimitModule],
-        inject: [SharedThrottlerStorage],
-        useFactory: (storage: SharedThrottlerStorage) => ({
-          throttlers: [{ name: 'default', ttl: 60_000, limit: 5 }],
-          storage,
-        }),
-      }),
-    ],
+    imports: [TestConfigModule, RateLimitModule, gatewayThrottlerModule()],
     controllers: [LimitedController],
     providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
   }).compile();
@@ -80,6 +75,13 @@ async function gateway(redisUrl: string | undefined): Promise<Instance> {
   app.enableShutdownHooks();
   await app.listen(0, '127.0.0.1');
   const storage = app.get(SharedThrottlerStorage);
+  // Guard ishlatadigan saqlagich — aynan shu nusxa (health/ops ham shuni o‘qiydi)
+  try {
+    expect(app.get(getStorageToken())).toBe(storage);
+  } catch (error) {
+    await app.close(); // ochiq qolib jest chiqishini to‘smasin
+    throw error;
+  }
   const { port } = app.getHttpServer().address() as AddressInfo;
   return { app, port, storage };
 }

@@ -16,6 +16,7 @@ import {
   OPS_RPC,
   OpsHealthDto,
   Public,
+  RateLimitHealth,
   RmqClient,
   sendRpc,
 } from '@app/common';
@@ -46,7 +47,7 @@ export class OpsHealthController {
     @Headers('x-monitor-token') token: string | undefined,
   ): Promise<OpsHealthDto> {
     if (!this.authorized(token)) throw new NotFoundException();
-    const [elchi, queue] = await Promise.all([
+    const [elchi, queue, leadRateLimit] = await Promise.all([
       sendRpc<{ count: number }>(
         this.integration,
         { cmd: OPS_RPC.ELCHI_ERRORS },
@@ -55,11 +56,17 @@ export class OpsHealthController {
       sendRpc<LeadQueueStats>(this.lead, { cmd: OPS_RPC.LEAD_QUEUE }, {}).catch(
         (error: Error) => this.failed('lead', error),
       ),
+      sendRpc<RateLimitHealth>(
+        this.lead,
+        { cmd: OPS_RPC.LEAD_RATE_LIMIT },
+        {},
+      ).catch((error: Error) => this.failed('lead rate limit', error)),
     ]);
     return {
       elchiApiErrors5m: elchi ? elchi.count : null,
       leadQueue: queue ?? null,
       rateLimit: this.throttlerStorage.health(),
+      leadRateLimit: leadRateLimit ?? null,
     };
   }
 

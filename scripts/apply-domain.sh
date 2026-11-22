@@ -73,7 +73,14 @@ set_key "$B" TLS_EMAIL "$TLS_EMAIL"
 set_key "$B" CORS_ORIGINS "https://$ADMIN_HOST,https://$DOMAIN_NAME"
 set_key "$B" MINIO_PUBLIC_URL "https://$API_HOST/media"
 set_key "$B" TUNNEL_TOKEN "$TUNNEL_TOKEN"
-set_key "$B" COMPOSE_PROFILES "tunnel"
+# BE-36: boshqa profillar (masalan `redis`) saqlanadi — `tunnel` ro'yxatga qo'shiladi, ustidan yozilmaydi.
+profiles=$(sed -n 's/^COMPOSE_PROFILES=//p' "$B" | tail -n 1 | tr -d ' ')
+case ",$profiles," in
+  *,tunnel,*) ;;
+  ,,) profiles=tunnel ;;
+  *) profiles="$profiles,tunnel" ;;
+esac
+set_key "$B" COMPOSE_PROFILES "$profiles"
 chmod 600 "$B"
 echo "   DOMAIN, APP_DOMAIN, API_ORIGIN, TLS_EMAIL, CORS_ORIGINS, MINIO_PUBLIC_URL, TUNNEL_TOKEN, COMPOSE_PROFILES"
 

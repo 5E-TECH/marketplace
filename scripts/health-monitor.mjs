@@ -41,6 +41,8 @@ const leadQueueMaxAge = positiveInt(
 const openConditions = new Map();
 /** `health/ops` ketma-ket o'qilmagan marta (noto'g'ri token — 404, gateway yo'q): chegaradan keyin ogohlantirish. */
 let opsFailures = 0;
+/** BE-36: rate limit Redis'siz ketma-ket necha marta ko'rildi. */
+let rateLimitBreaches = 0;
 
 let failures = 0;
 let alertOpen = false;
@@ -230,15 +232,22 @@ export async function checkOps() {
       `Navbatda lid ${queue.oldestMinutes} daqiqadan beri qo‘ng‘iroqsiz (kutyapti: ${queue.waiting}; chegara ${leadQueueMaxAge} daq)`,
       'Lid navbati me’yorda',
     );
-  // BE-36: REDIS_URL berilgan, lekin gateway Redis'ga ulanmagan — limit nusxalar orasida bo'linmaydi.
-  const rateLimit = data?.rateLimit;
-  if (rateLimit && typeof rateLimit.redisConfigured === 'boolean')
-    await condition(
-      'rate_limit_redis',
-      rateLimit.redisConfigured && rateLimit.store !== 'redis',
-      'Rate limit Redis’ga ulanmagan — har gateway nusxasi o‘z xotirasida sanaydi',
-      'Rate limit yana Redis’da (umumiy)',
-    );
+  // BE-36: REDIS_URL berilgan, lekin Redis'ga ulanmagan — limit nusxalar orasida bo'linmaydi. Gateway (so'rov tushgan
+  // nusxa) va lead-service (lid API kaliti). Qayta ulanishdagi bir necha soniya ogohlantirmasin — ketma-ket
+  // `threshold` marta buzilsa (MONITOR_FAILURE_THRESHOLD, API uzilishi kabi).
+  const offRedis = [
+    ['gateway', data?.rateLimit],
+    ['lead-service', data?.leadRateLimit],
+  ]
+    .filter(([, h]) => h?.redisConfigured === true && h.store !== 'redis')
+    .map(([name]) => name);
+  rateLimitBreaches = offRedis.length ? rateLimitBreaches + 1 : 0;
+  await condition(
+    'rate_limit_redis',
+    rateLimitBreaches >= threshold,
+    `Rate limit Redis’ga ulanmagan (${offRedis.join(', ')}) — har nusxa o‘z xotirasida sanaydi`,
+    'Rate limit yana Redis’da (umumiy)',
+  );
 }
 
 export async function tick() {

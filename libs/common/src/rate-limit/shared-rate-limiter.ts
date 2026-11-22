@@ -42,6 +42,13 @@ export interface SharedRateLimiterOptions {
 
 /** [taklif] 250 ms — lokal tarmoqda Redis javobi millisekundlarda; undan uzoq kutish so‘rovni sekinlashtiradi. */
 const DEFAULT_COMMAND_TIMEOUT_MS = 250;
+/**
+ * [taklif] 1 s — Redis ulanish ochiq, lekin javob bermasa (to‘xtatilgan jarayon, paket yo‘qolishi) soket shuncha vaqtdan
+ * keyin yopiladi va klient qayta ulanadi; usiz holat `ready` bo‘lib qolib, har so‘rov buyruq chegarasini kutardi.
+ */
+const SOCKET_TIMEOUT_MS = 1_000;
+/** [taklif] Redis buyrug‘i xato bersa, shuncha vaqt Redis’ga murojaat qilinmaydi — har so‘rov kutib qolmasin. */
+const PAUSE_AFTER_ERROR_MS = 1_000;
 /** Ogohlantirish logi tez-tez takrorlanmasin (Redis uzilganda har so‘rovda yozilmaydi). */
 const WARN_EVERY_MS = 60_000;
 /** Xotiradagi eskirgan kalitlarni tozalash oralig‘i. */
@@ -94,6 +101,8 @@ export class SharedRateLimiter {
   private readonly memory = new Map<string, MemoryEntry>();
   private sweepAt = 0;
   private lastWarnAt = 0;
+  /** Xatodan keyin Redis’ga murojaat qilinmaydigan vaqt (epoch ms). */
+  private pausedUntil = 0;
   private closing?: Promise<void>;
 
   constructor(private readonly options: SharedRateLimiterOptions) {
@@ -106,9 +115,9 @@ export class SharedRateLimiter {
     return this.redis !== null;
   }
 
-  /** Hozir qayerda sanalmoqda: Redis tayyor bo‘lsa — `redis`, aks holda shu nusxa xotirasi. */
+  /** Hozir qayerda sanalmoqda: Redis tayyor va javob berayotgan bo‘lsa — `redis`, aks holda shu nusxa xotirasi. */
   get store(): RateLimitStore {
-    return this.redis?.status === 'ready' ? 'redis' : 'memory';
+    return this.redisUsable(Date.now()) ? 'redis' : 'memory';
   }
 
   /** Bitta so‘rovni hisobga oladi. Hech qachon xato tashlamaydi: Redis ishlamasa — xotiradagi hisob. */
@@ -120,17 +129,18 @@ export class SharedRateLimiter {
     now = Date.now(),
   ): Promise<RateWindowHit> {
     if (this.redis) {
-      if (this.redis.status === 'ready') {
+      if (this.redisUsable(Date.now())) {
         try {
           return await this.hitRedis(key, ttlMs, limit, blockMs);
         } catch (error) {
+          this.pausedUntil = Date.now() + PAUSE_AFTER_ERROR_MS;
           this.warn(
             `Redis xatosi, xotiradagi hisob ishlatildi: ${message(error)}`,
           );
         }
       } else {
         this.warn(
-          `Redis tayyor emas (${this.redis.status}), xotiradagi hisob ishlatildi`,
+          `Redis ishlatilmayapti (${this.redis.status}), xotiradagi hisob ishlatildi`,
         );
       }
     }
@@ -145,6 +155,10 @@ export class SharedRateLimiter {
 
   async onApplicationShutdown(): Promise<void> {
     await this.close();
+  }
+
+  private redisUsable(now: number): boolean {
+    return this.redis?.status === 'ready' && now >= this.pausedUntil;
   }
 
   private async shutdown(): Promise<void> {
@@ -185,6 +199,7 @@ export class SharedRateLimiter {
       maxRetriesPerRequest: 0,
       commandTimeout:
         this.options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
+      socketTimeout: SOCKET_TIMEOUT_MS,
       // Qayta ulanish to‘xtamaydi: 0,2 s dan 5 s gacha oshib boradi.
       retryStrategy: (times) => Math.min(times * 200, 5_000),
       // Yopishda yopilmagan soketni kutish (sukut 2 s) — jarayon chiqishini cho‘zmasin.
@@ -195,6 +210,7 @@ export class SharedRateLimiter {
     redis.on('ready', () => {
       this.logger.log('Redis ulandi — limit hamma nusxada umumiy');
       this.lastWarnAt = 0;
+      this.pausedUntil = 0;
     });
     return redis;
   }
