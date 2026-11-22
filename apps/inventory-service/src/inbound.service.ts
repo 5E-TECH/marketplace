@@ -447,12 +447,20 @@ export class InboundService {
         `SELECT id::text FROM inventory.stock_lot
           WHERE quantity > 0 AND notified_at IS NULL AND sellable_until < ${TODAY_SQL}`,
       )) as Array<{ id: string }>;
-      if (rows.length) await this.notifyBlocked(rows.map((row) => row.id));
+      // BE-47: kunlik ishda (partiya endi muddatdan chiqdi) — «qoldiq tugadi» ham tekshiriladi
+      if (rows.length)
+        await this.notifyBlocked(
+          rows.map((row) => row.id),
+          true,
+        );
     });
   }
 
-  /** Xabar ketgach `notified_at`; yuborilmasa — keyingi kun qayta. */
-  async notifyBlocked(lotIds: string[]): Promise<void> {
+  /**
+   * Xabar ketgach `notified_at`; yuborilmasa — keyingi kun qayta. `checkStock` — kunlik ish: partiya muddatdan chiqib
+   * sotuvga yaroqli qoldiq kamaydi (qabuldayoq muddati o‘tgan partiya qoldiqni kamaytirmaydi — tekshirilmaydi).
+   */
+  async notifyBlocked(lotIds: string[], checkStock = false): Promise<void> {
     if (!this.notifications || !lotIds.length) return;
     // avval band qilinadi (qabul va kunlik tekshiruv bir vaqtda ikki xabar yubormasin); yuborilmasa — bo‘shatiladi
     const claimed = this.rows<{ id: string }>(
@@ -463,21 +471,6 @@ export class InboundService {
       ),
     ).map((row) => row.id);
     if (!claimed.length) return;
-    // BE-47: muddatdan chiqqan partiya sotuvga yaroqli qoldiqni kamaytiradi — 0 bo‘lsa «Offer qoldig‘i tugadi»
-    const variants = (await this.dataSource.query(
-      `SELECT DISTINCT variant_id::text AS "variantId", warehouse_id::text AS "warehouseId"
-         FROM inventory.stock_lot WHERE id = ANY($1::bigint[])`,
-      [claimed],
-    )) as Array<{ variantId: string; warehouseId: string }>;
-    for (const warehouseId of new Set(variants.map((v) => v.warehouseId)))
-      await recordOfferOutOfStock(
-        this.dataSource.manager,
-        variants
-          .filter((v) => v.warehouseId === warehouseId)
-          .map((v) => v.variantId),
-        warehouseId,
-        blockedByVariant,
-      );
     const lots = (await this.dataSource.query(
       `SELECT l.id::text AS "lotId", i.sku, i.product_name AS "productName", l.batch,
               to_char(l.expiry_date, 'YYYY-MM-DD') AS "expiryDate",
@@ -505,7 +498,27 @@ export class InboundService {
         `UPDATE inventory.stock_lot SET notified_at = NULL WHERE id = ANY($1::bigint[])`,
         [claimed],
       );
+      return; // ertaga qayta — «qoldiq tugadi» ham o‘shanda (ikki marta yozilmasin)
     }
+    if (checkStock) await this.recordStockOut(claimed);
+  }
+
+  /** BE-47: muddatdan chiqqan partiya sotuvga yaroqli qoldiqni kamaytiradi — 0 bo‘lsa «Offer qoldig‘i tugadi». */
+  private async recordStockOut(lotIds: string[]): Promise<void> {
+    const variants = (await this.dataSource.query(
+      `SELECT DISTINCT variant_id::text AS "variantId", warehouse_id::text AS "warehouseId"
+         FROM inventory.stock_lot WHERE id = ANY($1::bigint[])`,
+      [lotIds],
+    )) as Array<{ variantId: string; warehouseId: string }>;
+    for (const warehouseId of new Set(variants.map((v) => v.warehouseId)))
+      await recordOfferOutOfStock(
+        this.dataSource.manager,
+        variants
+          .filter((v) => v.warehouseId === warehouseId)
+          .map((v) => v.variantId),
+        warehouseId,
+        blockedByVariant,
+      );
   }
 
   /** TypeORM UPDATE … RETURNING uchun [qatorlar, soni] qaytaradi. */

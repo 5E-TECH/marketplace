@@ -207,7 +207,8 @@ export async function recordOfferOutOfStock(
   const repo = manager.getRepository(OutboxEvent);
   await repo.save(
     repo.create({
-      aggregateType: 'product_variant',
+      // katalogdagi `inventory.stock_depleted` (product_variant) navbatini to‘smasin — alohida kalit
+      aggregateType: 'offer_stock_notice',
       aggregateId: empty[0],
       eventType: STOCK_DEPLETED_EVENT,
       payload: payload as unknown as Record<string, unknown>,
