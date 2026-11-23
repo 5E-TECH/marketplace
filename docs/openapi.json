@@ -10528,7 +10528,7 @@
             "bearer": []
           }
         ],
-        "summary": "Panel (OPT-3): mahsulotlar bo‘yicha omborda, bandda, yo‘lda, sotilgan, qaytgan, brak; pul holati",
+        "summary": "Panel (OPT-3): mahsulotlar bo‘yicha omborda, bandda, yo‘lda (postavka), mijozga yo‘lda, sotilgan (moliyadan), qaytgan, brak; pul holati",
         "tags": [
           "wholesaler"
         ]
@@ -22002,10 +22002,15 @@
             "example": 50,
             "description": "Yo‘lda — e’lon qilingan, hali qabul qilinmagan postavka"
           },
+          "outForDelivery": {
+            "type": "number",
+            "example": 6,
+            "description": "Mijozga yo‘lda — Elchi’ga topshirilgan, taqdiri hali aniq emas (yetkazilmagan yoki qaytib kelmoqda): topshirilgan − sotilgan − qaytgan (sotiladigan va brak) [taklif]"
+          },
           "sold": {
             "type": "number",
             "example": 34,
-            "description": "Sotilgan (Elchi’ga topshirilgan)"
+            "description": "Sotilgan — yetkazilgan va teskari yozilmagan dona, moliya hisobidan: pul (ushlab turilgan, to‘lanadigan, to‘langan) shu sotuvlardan"
           },
           "returned": {
             "type": "number",
@@ -22027,6 +22032,7 @@
           "reserved",
           "available",
           "inTransit",
+          "outForDelivery",
           "sold",
           "returned",
           "defective"

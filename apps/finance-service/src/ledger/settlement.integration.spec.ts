@@ -350,6 +350,40 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     await expectBalanced();
   });
 
+  it('BE-30 (QA 2026-11-23): panel «sotilgan» — yetkazilgan va teskari yozilmagan dona (HOLD ham), pul bilan bir hisob; boshqa optovik alohida', async () => {
+    const balances = new WholesalerBalanceService(ds);
+    const held = await deliver('501', '2027-01-04T10:00:00.000Z', false); // Elchi puli kelmagan — HOLD
+    await deliver('501', '2027-01-05T10:00:00.000Z'); // AVAILABLE
+    await deliver('502', '2027-01-05T11:00:00.000Z');
+    await expect(balances.soldUnits({ wholesalerId: '501' })).resolves.toEqual([
+      { productId: '88', quantity: 2 },
+    ]);
+    await expect(
+      balances.balance({ wholesalerId: '501' }),
+    ).resolves.toMatchObject({ held: 140000, payable: 140000 });
+    // qaytgan (teskari yozilgan) buyurtma sotilgan emas — pul ham ayriladi
+    await ledger.onOrderReturned({
+      eventId: `ret-${held}`,
+      orderId: held,
+      returnRequestId: `RR-${held}`,
+      items: [{ productId: '88', quantity: 1 }],
+      occurredAt: '2027-01-06T10:00:00.000Z',
+    });
+    await expect(balances.soldUnits({ wholesalerId: '501' })).resolves.toEqual([
+      { productId: '88', quantity: 1 },
+    ]);
+    await expect(
+      balances.balance({ wholesalerId: '501' }),
+    ).resolves.toMatchObject({ held: 0, payable: 140000 });
+    await expect(balances.soldUnits({ wholesalerId: '502' })).resolves.toEqual([
+      { productId: '88', quantity: 1 },
+    ]);
+    await expect(balances.soldUnits({ wholesalerId: '999' })).resolves.toEqual(
+      [],
+    );
+    await expectBalanced();
+  });
+
   it('bank faylida summa muzlaydi: aktdan keyin qaytgan tovar chiqadi; keyin qaytsa — qarz, keyingi aktdan ushlanadi', async () => {
     await window(10);
     const a = await deliver('501', '2026-12-28T10:00:00.000Z');

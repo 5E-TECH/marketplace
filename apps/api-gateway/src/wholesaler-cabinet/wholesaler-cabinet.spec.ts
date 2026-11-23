@@ -281,3 +281,50 @@ describe('BE-30 ro‘yxatni yakunlash (POST /wholesaler/profile)', () => {
     expect(selfRegisterCalls(taken.catalog)).toEqual([]);
   });
 });
+
+describe('BE-30 panel (QA 2026-11-23): «sotilgan» moliyadan', () => {
+  it('moliyadagi sotilgan dona ombor hisobiga beriladi; optovik ID JWT dan', async () => {
+    const variants = [
+      { productId: '48', productName: 'Kofe', variantId: '848', sku: 'K-1' },
+    ];
+    const sold = [{ productId: '48', quantity: 1 }];
+    const money = { held: 140000, payable: 0, paid: 0 };
+    const stock = { items: [{ variantId: '848', sold: 1 }], totals: {} };
+    const catalog = {
+      send: jest.fn((pattern: { cmd: string }) =>
+        of(
+          pattern.cmd === 'catalog.wholesaler.me'
+            ? { id: '15', status: ShopStatus.ACTIVE }
+            : variants,
+        ),
+      ),
+    };
+    const finance = {
+      send: jest.fn((pattern: { cmd: string }) =>
+        of(pattern.cmd === 'finance.wholesaler.sold-units' ? sold : money),
+      ),
+    };
+    const inventory = { send: jest.fn(() => of(stock)) };
+    const controller = new WholesalerCabinetController(
+      catalog as never,
+      {} as never,
+      inventory as never,
+      finance as never,
+      {} as never,
+      links(),
+    );
+    await expect(controller.dashboard(user)).resolves.toEqual({
+      stock: stock.items,
+      stockTotals: stock.totals,
+      money,
+    });
+    expect(finance.send).toHaveBeenCalledWith(
+      { cmd: 'finance.wholesaler.sold-units' },
+      { wholesalerId: '15' },
+    );
+    expect(inventory.send).toHaveBeenCalledWith(
+      { cmd: 'inventory.wholesaler.summary' },
+      { wholesalerId: '15', variants, sold },
+    );
+  });
+});

@@ -509,7 +509,7 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       }),
     ).rejects.toThrow('chiqim qilinmagan');
   });
-  it('BE-30 TC2: optovik paneli — omborda va bandda ombor jadvalining o‘zi; yo‘lda, sotilgan, qaytgan, brak; boshqa optovik postavkasi kirmaydi', async () => {
+  it('BE-30 TC2: optovik paneli — omborda va bandda ombor jadvalining o‘zi; yo‘lda, mijozga yo‘lda, sotilgan (moliyadan), qaytgan, brak; boshqa optovik postavkasi kirmaydi', async () => {
     const received = await inbound.declare({
       wholesalerId: WHOLESALER,
       expectedAt: inDays(0),
@@ -536,33 +536,46 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       actorId: '501',
     });
     expect(pending.status).toBe(InboundShipmentStatus.DECLARED);
-    // sotilgan: 3 dona band → chiqim; 2 dona hali bandda
+    // 7201: 3 dona Elchi’ga topshirildi va hammasi qaytdi (2 sotiladigan, 1 brak) — sotilmagan
     await inventory.reserveAvailable({
       orderRef: '7201',
       items: [{ variantId: '848', quantity: 3 }],
       idempotencyKey: 'r-7201',
     });
     await inventory.commit({ orderRef: '7201', idempotencyKey: 'c-7201' });
-    await inventory.reserveAvailable({
-      orderRef: '7202',
-      items: [{ variantId: '848', quantity: 2 }],
-      idempotencyKey: 'r-7202',
-    });
-    // qaytgan: 1 sotiladigan, 1 brak
     await returns.grade({
       orderRef: '7201',
       items: [{ variantId: '848', sellable: 2, defective: 1 }],
       actorId: '61',
     });
+    // 7202: 2 dona topshirildi — moliyada 1 tasi yetkazilgan (sotilgan), 1 tasi hali mijozga yo‘lda
+    await inventory.reserveAvailable({
+      orderRef: '7202',
+      items: [{ variantId: '848', quantity: 2 }],
+      idempotencyKey: 'r-7202',
+    });
+    await inventory.commit({ orderRef: '7202', idempotencyKey: 'c-7202' });
+    // 7203: 1 dona hali bandda
+    await inventory.reserveAvailable({
+      orderRef: '7203',
+      items: [{ variantId: '848', quantity: 1 }],
+      idempotencyKey: 'r-7203',
+    });
+    const variants = [
+      {
+        productId: '48',
+        productName: 'Mahsulot 48',
+        variantId: '848',
+        sku: 'SKU-48',
+      },
+    ];
     const summary = await new WholesalerStockService(ds).summary({
       wholesalerId: WHOLESALER,
-      variants: [
-        {
-          productId: '48',
-          productName: 'Mahsulot 48',
-          variantId: '848',
-          sku: 'SKU-48',
-        },
+      variants,
+      // moliya (finance.wholesaler.sold-units): boshqa mahsulot qatori panelga kirmaydi
+      sold: [
+        { productId: '48', quantity: 1 },
+        { productId: '49', quantity: 5 },
       ],
     });
     const stock = await stockOf('848');
@@ -576,12 +589,45 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
         reserved: stock.quantityReserved,
         available: stock.quantityOnHand - stock.quantityReserved,
         inTransit: 7,
-        sold: 3,
+        outForDelivery: 1, // topshirilgan 5 − sotilgan 1 − qaytgan 2 − qaytgan brak 1
+        sold: 1, // Elchi’ga topshirish (COMMIT 5) emas — moliyadagi sotuv
         returned: 2,
         defective: 2, // qabulda 1 + qaytganda 1
       },
     ]);
-    expect(summary.items[0]).toMatchObject({ reserved: 2 });
+    expect(summary.items[0]).toMatchObject({ reserved: 1 });
+    expect(summary.totals).toMatchObject({ outForDelivery: 1, sold: 1 });
+    // bir mahsulotda ikkinchi (harakatsiz) variant ro‘yxatda birinchi tursa ham — sotilgan topshirgan variantga
+    const twoVariants = await new WholesalerStockService(ds).summary({
+      wholesalerId: WHOLESALER,
+      variants: [
+        {
+          productId: '48',
+          productName: 'Mahsulot 48',
+          variantId: '847',
+          sku: 'SKU-48-OLD',
+        },
+        ...variants,
+      ],
+      sold: [{ productId: '48', quantity: 1 }],
+    });
+    expect(
+      twoVariants.items.map((i) => [i.variantId, i.sold, i.outForDelivery]),
+    ).toEqual([
+      ['847', 0, 0],
+      ['848', 1, 1],
+    ]);
+    expect(twoVariants.totals).toMatchObject({ outForDelivery: 1, sold: 1 });
+    // moliyada sotuv yo‘q — topshirilgan, qaytmagan ikkala dona mijozga yo‘lda; noto‘g‘ri son e’tiborsiz
+    await expect(
+      new WholesalerStockService(ds).summary({
+        wholesalerId: WHOLESALER,
+        variants,
+        sold: [{ productId: '48', quantity: -3 }],
+      }),
+    ).resolves.toMatchObject({
+      items: [{ sold: 0, outForDelivery: 2 }],
+    });
     await expect(inventory.available(['848'])).resolves.toEqual({
       '848': summary.items[0].available,
     });
