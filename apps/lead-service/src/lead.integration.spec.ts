@@ -55,9 +55,15 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
+import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
+import { LeadStatsService } from './lead-stats.service';
+import {
+  OperatorWorkplaceService,
+  tashkentToday,
+} from './operator-workplace.service';
 import { clampToCallWindow, nextDayAt, retryAt } from './lead-schedule';
 import { AddLeadQueue1795046400000 } from './migrations/1795046400000-add-lead-queue';
 import { OfferService } from './offer.service';
@@ -123,6 +129,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         AddCapiFields1795651200000,
         AddFraudCenter1795824000000,
         SiteOrder1798070400000,
+        OperatorStateSince1798416000000,
       ],
       synchronize: false,
       logging: false,
@@ -1709,6 +1716,206 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       );
       // relay tugashini kutamiz (keyingi testga qulf qoldirmasin)
       await relay.relay();
+    });
+
+    describe('BE-25 (FE-08): operator ish joyi', () => {
+      const offer = {
+        productId: '501',
+        name: 'Simsiz quloqchinlar',
+        categoryName: 'Elektronika',
+        images: ['https://cdn.test/501.jpg'],
+        description: 'Kundalik foydalanish uchun',
+        stock: 120,
+        weightGrams: 300,
+        centerDeliveryFee: 30000,
+        addressDeliveryFee: 50000,
+        isBad: true,
+      };
+      const workplace = (
+        catalogGet: () => Promise<unknown> = async () => offer,
+      ) =>
+        new OperatorWorkplaceService(
+          db,
+          {
+            get: jest.fn(catalogGet),
+            list: jest.fn(async () => [
+              { productId: '501', name: 'Simsiz quloqchinlar' },
+            ]),
+          } as never,
+          new ConfigService({ LEAD_LANDING_BASE_URL: 'https://elchi.test/' }),
+        );
+
+      it('GET state: tanlanmagan — OFFLINE, since null; holat o‘zgarganda since yangilanadi, takror bosishda — yo‘q', async () => {
+        expect(await queue().getState('61')).toEqual({
+          state: OperatorWorkState.OFFLINE,
+          activeBookings: 0,
+          maxBookings: 5,
+          since: null,
+        });
+        const first = await queue().setState('61', OperatorWorkState.ONLINE);
+        expect(first.since).not.toBeNull();
+        await db.query(
+          `UPDATE lead.operator_state SET state_since = now() - interval '6 minutes' WHERE operator_id = 61`,
+        );
+        const again = await queue().setState('61', OperatorWorkState.ONLINE);
+        expect(Date.now() - Date.parse(again.since!)).toBeGreaterThan(
+          5 * 60_000,
+        );
+        expect(await queue().getState('61')).toMatchObject({
+          state: OperatorWorkState.ONLINE,
+          since: again.since,
+        });
+        const onBreak = await queue().setState('61', OperatorWorkState.BREAK);
+        expect(Date.now() - Date.parse(onBreak.since!)).toBeLessThan(60_000);
+      });
+
+      it('mahsulot paneli: katalog nusxasi, offer matnlari, sahifa havolasi, BAD ogohlantirishi; boshqa operator — 404', async () => {
+        const [l] = await seed(1);
+        await db.getRepository(OfferContent).save({
+          productId: '501',
+          highlights: ['Bluetooth orqali ulanadi'],
+          boxContents: ['quloqchinlar (juft)', 'g‘ilof', 'kabel'],
+        });
+        await online('62');
+        expect(await queue().takeNext('62')).toBe(l.id);
+        expect(await workplace().product('62', l.id)).toEqual({
+          id: '501',
+          name: 'Simsiz quloqchinlar',
+          category: 'Elektronika',
+          imageUrl: 'https://cdn.test/501.jpg',
+          description: 'Kundalik foydalanish uchun',
+          highlights: ['Bluetooth orqali ulanadi'],
+          available: 120,
+          weightKg: 0.3,
+          contents: 'quloqchinlar (juft), g‘ilof, kabel',
+          salePrice: Number(l.salePrice),
+          deliveryFee: { CENTER: 30000, ADDRESS: 50000 },
+          pageUrl: `https://elchi.test/${stream.code}`,
+          warning: 'Dori vositasi emas',
+        });
+        await expect(workplace().product('63', l.id)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        // katalog javob bermasa — narx 0 deb ko‘rsatilmaydi
+        const down = await workplace(async () => {
+          throw new Error('timeout');
+        }).product('62', l.id);
+        expect(down).toMatchObject({
+          deliveryFee: null,
+          available: null,
+          warning: null,
+        });
+        // o‘z, lekin endi bron emas (rad etilgan) lid — 404 (lid kartasi kabi)
+        await db.query(
+          `UPDATE lead.lead SET status = 'REJECTED', reject_reason = 'NOT_NEEDED' WHERE id = $1`,
+          [l.id],
+        );
+        await expect(workplace().product('62', l.id)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      });
+
+      it('bugungi urinishlarim: yangisi birinchi, total — hammasi, rad sababi faqat REJECTED da, keyingi qo‘ng‘iroq; boshqa operator va kun — yo‘q', async () => {
+        const [a, b] = await seed(2);
+        await online('64', '65');
+        const first = await queue().takeNext('64');
+        await queue().submitResult('64', first, {
+          outcome: LeadOutcome.REJECTED,
+          rejectReason: 'NOT_NEEDED' as never,
+        });
+        const second = await queue().takeNext('64');
+        await queue().submitResult('64', second, {
+          outcome: LeadOutcome.NO_ANSWER,
+        });
+        expect([first, second].sort()).toEqual([a.id, b.id].sort());
+        const page = await workplace().attempts('64');
+        expect(page.total).toBe(2);
+        expect(page.items.map((i) => [i.leadId, i.outcome])).toEqual([
+          [second, LeadOutcome.NO_ANSWER],
+          [first, LeadOutcome.REJECTED],
+        ]);
+        expect(page.items[1]).toMatchObject({
+          rejectReason: 'NOT_NEEDED',
+          nextAttemptAt: null,
+          productName: 'Simsiz quloqchinlar',
+          durationSeconds: null,
+        });
+        expect(page.items[0].rejectReason).toBeNull();
+        expect(page.items[0].nextAttemptAt).toBe(
+          (await reload(second)).nextAttemptAt!.toISOString(),
+        );
+        // GET /operator/stats bilan bir xil to‘plam
+        const today = tashkentToday(new Date());
+        const stats = await new LeadStatsService(db, {} as never).operatorStats(
+          {
+            operatorId: '64',
+            query: { from: today, to: today },
+          },
+        );
+        expect(stats.attempts).toBe(page.total);
+        expect(
+          (await workplace().attempts('64', { limit: 1 })).items,
+        ).toHaveLength(1);
+        expect(await workplace().attempts('65')).toEqual({
+          items: [],
+          total: 0,
+        });
+        expect(
+          await workplace().attempts('64', {
+            from: '2026-01-01',
+            to: '2026-01-01',
+          }),
+        ).toEqual({ items: [], total: 0 });
+        await expect(
+          workplace().attempts('64', { from: '2026-02-02', to: '2026-02-01' }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        // stats bilan bir xil sana tekshiruvi: mavjud bo‘lmagan sana — 400
+        await expect(
+          workplace().attempts('64', { from: '2026-02-30' }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('urinishlar Toshkent kuni bo‘yicha: 19:30 UTC — ertasi kun (00:30); total stats bilan bir xil', async () => {
+        const [l] = await seed(1);
+        await db.query(
+          `INSERT INTO lead.lead_attempt (lead_id, operator_id, outcome, created_at)
+           VALUES ($1, 67, 'NO_ANSWER', '2026-12-01T19:30:00Z')`,
+          [l.id],
+        );
+        const dec1 = await workplace().attempts('67', { from: '2026-12-01' });
+        const dec2 = await workplace().attempts('67', { from: '2026-12-02' });
+        expect([dec1.total, dec2.total]).toEqual([0, 1]);
+        expect(dec2.items[0].at).toBe('2026-12-01T19:30:00.000Z');
+        const stats = await new LeadStatsService(db, {} as never).operatorStats(
+          {
+            operatorId: '67',
+            query: { from: '2026-12-02', to: '2026-12-02' },
+          },
+        );
+        expect(stats.attempts).toBe(dec2.total);
+      });
+
+      it('bronlar ro‘yxatida oxirgi urinish (natija, izoh, vaqt); navbat xulosasi operatorga — boshqa operatorlarsiz', async () => {
+        const [l] = await seed(1);
+        await online('66');
+        await queue().takeNext('66');
+        await queue().submitResult('66', l.id, {
+          outcome: LeadOutcome.CALL_LATER,
+          callbackAt: new Date(Date.now() + 3 * 3600_000).toISOString(),
+          comment: 'Turmush o‘rtog‘i bilan maslahatlashadi',
+        });
+        const [item] = await cards().listMine('66');
+        expect(item).toMatchObject({
+          id: l.id,
+          lastOutcome: LeadOutcome.CALL_LATER,
+          lastComment: 'Turmush o‘rtog‘i bilan maslahatlashadi',
+        });
+        expect(item.lastAttemptAt).not.toBeNull();
+        const full = await queue().summary();
+        const forOperator = await queue().summary({ operatorView: true });
+        expect(full.operators.length).toBeGreaterThan(0);
+        expect(forOperator).toEqual({ ...full, operators: [] });
+      });
     });
   });
 

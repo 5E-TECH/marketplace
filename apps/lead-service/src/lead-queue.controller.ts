@@ -3,6 +3,7 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CheckoutDeliveryDestination,
   LEAD_EVENTS,
+  OperatorAttemptsQueryDto,
   OperatorWorkState,
   OrderCreateFailedEvent,
   RpcHttpExceptionFilter,
@@ -12,6 +13,7 @@ import {
 import { LeadAddressService } from './lead-address.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadQueueService } from './lead-queue.service';
+import { OperatorWorkplaceService } from './operator-workplace.service';
 
 /** Operator ish joyi RPC lari (BE-13; manzil — BE-38). Operator ID gateway'da tokendan. */
 @Controller()
@@ -21,6 +23,7 @@ export class LeadQueueController {
     private readonly queue: LeadQueueService,
     private readonly cards: LeadCardService,
     private readonly address: LeadAddressService,
+    private readonly workplace: OperatorWorkplaceService,
   ) {}
 
   @MessagePattern({ cmd: 'lead.queue.next' })
@@ -107,9 +110,34 @@ export class LeadQueueController {
     return this.queue.setState(input.operatorId, input.state);
   }
 
+  /** BE-25 (FE-08): joriy holat (sahifa yangilanganda). */
+  @MessagePattern({ cmd: 'lead.operator.state.get' })
+  getState(@Payload() input: { operatorId: string }) {
+    return this.queue.getState(input.operatorId);
+  }
+
+  /** BE-25 (FE-08): «Mahsulot ma’lumoti» paneli. */
+  @MessagePattern({ cmd: 'lead.card.product' })
+  product(@Payload() input: { operatorId: string; leadId: string }) {
+    return this.workplace.product(input.operatorId, input.leadId);
+  }
+
+  /** BE-25 (FE-08): «Bugungi urinishlarim». */
+  @MessagePattern({ cmd: 'lead.operator.attempts' })
+  attempts(
+    @Payload()
+    input: {
+      operatorId: string;
+      query?: OperatorAttemptsQueryDto;
+    },
+  ) {
+    return this.workplace.attempts(input.operatorId, input.query ?? {});
+  }
+
+  /** `operatorView` — operator ish joyi: navbat hajmi, boshqa operatorlar ro‘yxatisiz (BE-25, FE-08). */
   @MessagePattern({ cmd: 'lead.queue.summary' })
-  summary() {
-    return this.queue.summary();
+  summary(@Payload() input?: { operatorView?: boolean }) {
+    return this.queue.summary({ operatorView: input?.operatorView === true });
   }
 
   /** checkout → lead-service: tovar band qilinmadi (BE-18 → BE-13 TC8). */

@@ -63,6 +63,8 @@ const stockResultExample = (
   schema: { example: { operation, stockId: '31', onHand, reserved: 4 } },
 });
 
+import { ADMIN_STOCK_MOVEMENTS_EXAMPLE } from './admin-m1.examples';
+
 @ApiTags('admin-inventory')
 @ApiBearerAuth()
 // TZ 3: qoldiqni ko‘rish — omborchi va admin (BE-05)
@@ -272,7 +274,10 @@ export class AdminInventoryController {
 
   @Get('movements')
   @ApiOperation({ summary: 'Butun platformadagi qoldiq harakati jurnali' })
-  @ApiOkResponse({ type: AdminStockMovementsPageDto })
+  @ApiOkResponse({
+    type: AdminStockMovementsPageDto,
+    example: ADMIN_STOCK_MOVEMENTS_EXAMPLE,
+  })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   movements(@Query() query: AdminStockMovementsQueryDto) {

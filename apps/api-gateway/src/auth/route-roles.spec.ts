@@ -119,9 +119,14 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     /^[A-Z]+ \/wholesaler\//.test(key),
   ),
   // Lidni bron qilish va natija kiritish; buyurtmani topshirilgunga qadar bekor qilish (BE-18, BUY-3).
+  // BE-25 (FE-08): joriy holat, mahsulot paneli, bugungi urinishlar, navbat hajmi (boshqa operatorlarsiz).
   [Role.OPERATOR_LEAD]: [
+    'GET /operator/attempts',
     'GET /operator/leads',
     'GET /operator/leads/:id',
+    'GET /operator/leads/:id/product',
+    'GET /operator/queue-summary',
+    'GET /operator/state',
     'GET /operator/stats',
     'PATCH /operator/leads/:id/address',
     'POST /operator/leads/:id/quote',
@@ -144,9 +149,12 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /admin/orders/:id/cancel',
     'POST /admin/orders/:id/returns',
     'POST /operator/orders/:id/cancel',
+    'GET /operator/attempts',
     'GET /operator/leads',
     'GET /operator/leads/:id',
+    'GET /operator/leads/:id/product',
     'GET /operator/queue-summary',
+    'GET /operator/state',
     'GET /operator/stats',
     'GET /supervisor/red-list',
     'GET /supervisor/transfers',

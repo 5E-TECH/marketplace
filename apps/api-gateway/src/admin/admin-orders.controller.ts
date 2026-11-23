@@ -40,6 +40,10 @@ import {
   ShippingLabelsBatchDto,
 } from '@app/common';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
+import {
+  ADMIN_ORDER_EXAMPLE,
+  ADMIN_ORDERS_PAGE_EXAMPLE,
+} from './admin-m1.examples';
 
 /**
  * C1.30 — Admin buyurtma nazorati (faqat o'qish). Butun platformadagi buyurtmalar
@@ -62,7 +66,11 @@ export class AdminOrdersController {
     summary:
       'Barcha buyurtmalar (status/to‘lov/do‘kon/sana filtr + sahifalash)',
   })
-  @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
+  @ApiOkResponse({
+    description:
+      '{ items, total, page, limit, totalPages }; ro‘yxatda telefon niqoblangan',
+    schema: { example: ADMIN_ORDERS_PAGE_EXAMPLE },
+  })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminOrdersQueryDto) {
@@ -79,6 +87,12 @@ export class AdminOrdersController {
   @ApiOperation({
     summary: 'Buyurtma to‘liq (sub-order + item + shipment + to‘lov)',
   })
+  @ApiOkResponse({
+    description:
+      'Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`',
+    schema: { example: ADMIN_ORDER_EXAMPLE },
+  })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   get(@Param('id') id: string) {
     return sendRpc(

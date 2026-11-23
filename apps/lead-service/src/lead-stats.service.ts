@@ -55,7 +55,7 @@ interface Period {
   end: Date;
 }
 
-function validDay(value: unknown, field: string): string {
+export function validDay(value: unknown, field: string): string {
   const s = String(value ?? '');
   const d = new Date(`${s}T00:00:00Z`);
   if (

@@ -1575,7 +1575,23 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "O‘qilgan qilingan xabarnomalar soni",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "integer",
+                      "example": 3
+                    }
+                  },
+                  "example": {
+                    "updated": 3
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1604,7 +1620,17 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Xabarnoma topilmadi (boshqa foydalanuvchiniki ham)"
           }
         },
         "security": [
@@ -1738,7 +1764,38 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items, total, page, limit, totalPages }"
+            "description": "{ items, total, page, limit, totalPages }; items — foydalanuvchi kartasi (AdminUserDto shakli)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "items": [
+                      {
+                        "id": "42",
+                        "role": "OPERATOR_LEAD",
+                        "name": "Dilnoza",
+                        "firstName": null,
+                        "lastName": null,
+                        "phone": "+998901112233",
+                        "email": null,
+                        "avatarUrl": null,
+                        "isActive": true,
+                        "isBlocked": false,
+                        "authVersion": 1,
+                        "totpEnabledAt": null,
+                        "isDeleted": false,
+                        "createdAt": "2026-11-20T08:00:00.000Z",
+                        "updatedAt": "2026-11-20T08:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "",
@@ -1786,6 +1843,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDto"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -1795,6 +1862,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Foydalanuvchi topilmadi"
           }
         },
         "security": [
@@ -1833,7 +1903,24 @@
         },
         "responses": {
           "200": {
-            "description": "Yangilangan foydalanuvchi"
+            "description": "Yangilangan foydalanuvchi (qisqa ko‘rinish)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "42",
+                    "name": "Dilnoza",
+                    "phone": "+998901112233",
+                    "email": null,
+                    "role": "OPERATOR_LEAD",
+                    "isActive": true,
+                    "isBlocked": false,
+                    "createdAt": "2026-11-20T08:00:00.000Z",
+                    "updatedAt": "2026-11-23T09:00:00.000Z"
+                  }
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -1917,6 +2004,16 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "Bloklangan foydalanuvchi; sotuvchi bo‘lsa sahifalari to‘xtaydi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDto"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -1926,6 +2023,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "O‘zini bloklash yoki foydalanuvchi topilmadi"
           }
         },
         "security": [
@@ -1953,6 +2053,16 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDto"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -1962,6 +2072,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Foydalanuvchi topilmadi"
           }
         },
         "security": [
@@ -1989,6 +2102,25 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reset": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  },
+                  "example": {
+                    "reset": true
+                  }
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -2128,7 +2260,36 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items, total, page, limit, totalPages }"
+            "description": "{ items, total, page, limit, totalPages }; ro‘yxatda telefon niqoblangan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "items": [
+                      {
+                        "id": "1042",
+                        "buyerName": "Aziza",
+                        "status": "CONFIRMED",
+                        "paymentMethod": "COD",
+                        "totalAmount": 292000,
+                        "deliveryFee": 30000,
+                        "sellersCount": 1,
+                        "shipmentsCount": 1,
+                        "createdAt": "2026-12-01T09:14:00.000Z",
+                        "source": "LANDING",
+                        "leadId": "7001",
+                        "affiliateId": "77",
+                        "phoneMasked": "+998 90 *** ** 67"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "",
@@ -2176,6 +2337,93 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "1042",
+                    "buyerName": "Aziza",
+                    "customerId": null,
+                    "status": "CONFIRMED",
+                    "paymentMethod": "COD",
+                    "totalAmount": 292000,
+                    "deliveryFee": 30000,
+                    "deliveryAddress": "Yunusobod tumani, 4-mavze, 12-uy",
+                    "createdAt": "2026-12-01T09:14:00.000Z",
+                    "updatedAt": "2026-12-01T09:20:00.000Z",
+                    "sellerOrders": [
+                      {
+                        "id": "2051",
+                        "shopId": "12",
+                        "subtotal": 262000,
+                        "deliveryFee": 30000,
+                        "codAmount": 292000,
+                        "status": "PENDING",
+                        "elchiShipmentId": "880113",
+                        "trackingUrl": null,
+                        "hasQrToken": true,
+                        "items": [
+                          {
+                            "productId": "501",
+                            "productName": "Simsiz quloqchinlar",
+                            "variantId": "9001",
+                            "quantity": 1,
+                            "unitPrice": 262000,
+                            "lineTotal": 262000,
+                            "priceSnapshot": {
+                              "sku": "SQ-501",
+                              "weightGrams": 300,
+                              "basePrice": 150000,
+                              "recommendedPrice": 251000,
+                              "approvedPrice": 251000,
+                              "markup": 11000,
+                              "affiliateFee": 40000,
+                              "callCenterFee": 10000,
+                              "hiddenDelivery": 0,
+                              "platformService": 51000
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "lead": {
+                      "source": "LANDING",
+                      "leadId": "7001",
+                      "streamId": "301",
+                      "affiliateId": "77",
+                      "wholesalerId": "12",
+                      "customerPhone": "+998901234567",
+                      "regionSoato": "1726",
+                      "districtSoato": "1726266",
+                      "whereDeliver": "ADDRESS",
+                      "deliveryMode": "SEPARATE",
+                      "deliveryShown": 30000,
+                      "deliveryCost": 30000,
+                      "deliveryEmbedded": 0,
+                      "weightGrams": 300,
+                      "codAmount": 292000,
+                      "confirmedBy": "41",
+                      "addressConfirmedBy": "41",
+                      "statusHistory": [
+                        {
+                          "fromStatus": null,
+                          "toStatus": "CONFIRMED",
+                          "accepted": true,
+                          "actorType": "SYSTEM",
+                          "actorId": null,
+                          "actorRole": null,
+                          "reason": null,
+                          "createdAt": "2026-12-01T09:14:00.000Z"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -2185,6 +2433,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Buyurtma topilmadi"
           }
         },
         "security": [
@@ -2797,7 +3048,7 @@
     },
     "/api/v1/webhooks/elchi": {
       "post": {
-        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, `market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari (`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi (`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech narsa o‘zgarmaydi.",
+        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, `market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari (`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi (`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar ham 201 oladi, holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 201 oladi, hech narsa o‘zgarmaydi.",
         "operationId": "ElchiWebhookController_receive",
         "parameters": [
           {
@@ -2821,7 +3072,53 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Qabul qilindi (201). `result`: APPLIED — holat o‘zgardi, NOOP — o‘zgarish yo‘q, REJECTED — orqaga yoki ruxsatsiz o‘tish (holat o‘zgarmaydi, jurnalda), IGNORED — e’tiborsiz holat; lid buyurtmasida `status` — buyurtmaning hozirgi holati (`LeadOrderStatus`). `duplicate: true` — shu `event_id` avval qayta ishlangan. `ignored` — sinov ping’i (`webhook.test`), hech narsa o‘zgarmaydi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "received"
+                  ],
+                  "properties": {
+                    "received": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "result": {
+                      "type": "string",
+                      "enum": [
+                        "APPLIED",
+                        "NOOP",
+                        "REJECTED",
+                        "IGNORED"
+                      ],
+                      "example": "APPLIED"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "DELIVERED"
+                    },
+                    "duplicate": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "ignored": {
+                      "type": "string",
+                      "example": "webhook.test"
+                    }
+                  },
+                  "example": {
+                    "received": true,
+                    "result": "APPLIED",
+                    "status": "DELIVERED"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Imzo yo‘q yoki noto‘g‘ri, yoki hodisa vaqti ruxsat etilgan oynadan tashqarida"
           }
         },
         "summary": "Elchi shipment status webhook receiver",
@@ -3512,7 +3809,80 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "{ items, total, page, limit, totalPages }; optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "items": [
+                      {
+                        "id": "501",
+                        "shopId": "12",
+                        "shop": {
+                          "id": "12",
+                          "ownerUserId": "5003",
+                          "name": "Optovik MCHJ",
+                          "slug": "optovik-mchj",
+                          "description": null,
+                          "logoUrl": null,
+                          "bannerUrl": null,
+                          "status": "ACTIVE",
+                          "phone": "+998712000000",
+                          "regionId": null,
+                          "districtId": null,
+                          "address": null,
+                          "rating": 0,
+                          "ordersCount": 0,
+                          "isFeatured": false,
+                          "elchiMarketId": null,
+                          "createdAt": "2026-11-20T08:00:00.000Z",
+                          "updatedAt": "2026-11-20T08:00:00.000Z",
+                          "isDeleted": false
+                        },
+                        "ownerUserId": "5003",
+                        "categoryId": "3",
+                        "name": "Simsiz quloqchinlar",
+                        "slug": "simsiz-quloqchinlar",
+                        "description": "Kundalik foydalanish uchun simsiz quloqchinlar",
+                        "price": 262000,
+                        "oldPrice": null,
+                        "imageUrl": null,
+                        "images": [],
+                        "attributes": {
+                          "Aloqa": "Bluetooth"
+                        },
+                        "hasVariants": false,
+                        "status": "ACTIVE",
+                        "moderationNote": null,
+                        "basePrice": 150000,
+                        "affiliateFee": 40000,
+                        "weightGrams": 300,
+                        "lengthMm": 150,
+                        "widthMm": 100,
+                        "heightMm": 50,
+                        "cpaEnabled": true,
+                        "approvedPrice": 251000,
+                        "priceStatus": "APPROVED",
+                        "marketTotal": null,
+                        "isBad": false,
+                        "isBlocked": false,
+                        "blockReason": null,
+                        "mxikCode": null,
+                        "packageCode": null,
+                        "rating": 0,
+                        "createdAt": "2026-11-20T08:10:00.000Z",
+                        "updatedAt": "2026-11-21T10:00:00.000Z",
+                        "isDeleted": false
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3702,7 +4072,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3710,6 +4087,7 @@
             "bearer": []
           }
         ],
+        "summary": "Mahsulotni to‘xtatish (sotuvdan olinadi)",
         "tags": [
           "admin-products"
         ]
@@ -3740,7 +4118,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3769,7 +4154,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3777,6 +4169,7 @@
             "bearer": []
           }
         ],
+        "summary": "To‘xtatilgan yoki yashirilgan mahsulotni qaytarish",
         "tags": [
           "admin-products"
         ]
@@ -4957,7 +5350,7 @@
         ]
       },
       "delete": {
-        "operationId": "AdminAuditController_remove[0]",
+        "operationId": "AdminAuditController_removeAll",
         "parameters": [],
         "responses": {
           "401": {
@@ -4989,7 +5382,7 @@
             "bearer": []
           }
         ],
-        "summary": "Audit yozuvini o‘chirish — taqiqlangan (405)",
+        "summary": "Audit jurnalini tozalash — taqiqlangan (405)",
         "tags": [
           "admin-audit"
         ]
@@ -4997,8 +5390,18 @@
     },
     "/api/v1/admin/audit/{id}": {
       "delete": {
-        "operationId": "AdminAuditController_remove[1]",
-        "parameters": [],
+        "operationId": "AdminAuditController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Audit yozuvi ID si",
+            "schema": {
+              "example": "1501"
+            }
+          }
+        ],
         "responses": {
           "401": {
             "description": "",
@@ -7202,6 +7605,37 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminStockMovementsPageDto"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "9101",
+                      "variantId": "9001",
+                      "productId": "501",
+                      "productName": "Simsiz quloqchinlar",
+                      "variantName": null,
+                      "sku": "SQ-501",
+                      "catalogMissing": false,
+                      "shopId": "12",
+                      "warehouseId": "1",
+                      "warehouseName": "HQ ombor",
+                      "warehouseActive": true,
+                      "type": "INBOUND",
+                      "quantity": 120,
+                      "onHandAfter": 120,
+                      "reservedAfter": 0,
+                      "referenceType": "INBOUND_SHIPMENT",
+                      "referenceId": "31",
+                      "reason": "Postavka № 31",
+                      "actorId": "8",
+                      "createdAt": "2026-11-22T10:00:00.000Z"
+                    }
+                  ],
+                  "total": 1,
+                  "page": 1,
+                  "limit": 20,
+                  "totalPages": 1,
+                  "warnings": []
                 }
               }
             }
@@ -11422,6 +11856,110 @@
         ]
       }
     },
+    "/api/v1/operator/leads/{id}/product": {
+      "get": {
+        "description": "Tavsif, afzalliklar, qutida nima bor, qoldiq, og‘irlik, ikki yetkazish narxi, sotuvchi sahifasi va BAD ogohlantirishi (BE-25, FE-08). Faqat shu operatordagi lid.",
+        "operationId": "OperatorLeadsController_getProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLeadProductDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lid topilmadi yoki bu operatorda emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot ma’lumoti (lid kartasi paneli)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/attempts": {
+      "get": {
+        "description": "Yangisi birinchi; `total` — davrdagi jami (GET /operator/stats `attempts` bilan bir xil). BE-25, FE-08.",
+        "operationId": "OperatorLeadsController_attempts",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent sanasi; sukut — bugun",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent sanasi; sukut — from",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAttemptsPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sana yoki limit noto‘g‘ri"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mening urinishlarim (sukut — bugun, oxirgi 10 tasi)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
     "/api/v1/operator/leads/{id}/result": {
       "post": {
         "description": "CONFIRMED faqat manzil tasdiqlangan lidga, aks holda 400 va lead.confirmed ketmaydi. REJECTED da sabab majburiy (OPR-3, BE-13).",
@@ -11576,6 +12114,32 @@
       }
     },
     "/api/v1/operator/state": {
+      "get": {
+        "description": "Sahifa yangilanganda ekran «Oflayn» dan boshlanmasin; `since` — holat boshlangan vaqt (BE-25, FE-08).",
+        "operationId": "OperatorLeadsController_getState",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorStateDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Joriy holat va bronlar soni",
+        "tags": [
+          "operator"
+        ]
+      },
       "put": {
         "operationId": "OperatorLeadsController_setState",
         "parameters": [],
@@ -11614,7 +12178,7 @@
     },
     "/api/v1/operator/queue-summary": {
       "get": {
-        "description": "Navbat hajmi va operatorlar holati (BE-13).",
+        "description": "Navbat hajmi va operatorlar holati (BE-13). Operator ish joyi (BE-25, FE-08) — faqat navbat hajmi, `operators` bo‘sh.",
         "operationId": "OperatorLeadsController_queueSummary",
         "parameters": [],
         "responses": {
@@ -11634,7 +12198,7 @@
             "bearer": []
           }
         ],
-        "summary": "Navbat xulosasi (nazoratchi)",
+        "summary": "Navbat xulosasi",
         "tags": [
           "operator"
         ]
@@ -14486,6 +15050,109 @@
           "orders",
           "gmv",
           "revenue"
+        ]
+      },
+      "AdminUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "42"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "AFFILIATE",
+              "WHOLESALER",
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "AFFILIATE"
+          },
+          "name": {
+            "type": "string",
+            "example": "Akmal"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+998901112233"
+          },
+          "email": {
+            "type": "string",
+            "example": "akmal@example.com",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "isDeleted": {
+            "type": "boolean",
+            "example": false
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-07-25T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-07-25T10:00:00.000Z"
+          },
+          "firstName": {
+            "type": "string",
+            "example": "Akmal",
+            "nullable": true
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Karimov",
+            "nullable": true
+          },
+          "isBlocked": {
+            "type": "boolean",
+            "example": false,
+            "description": "Bloklangan — hamma token 401"
+          },
+          "authVersion": {
+            "type": "number",
+            "example": 3,
+            "description": "Token versiyasi: blok yoki rol o‘zgarsa oshadi (eski tokenlar bekor)"
+          },
+          "totpEnabledAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "format": "date-time",
+            "description": "2FA ulangan vaqt (BE-26); ulanmagan — null"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "name",
+          "phone",
+          "email",
+          "avatarUrl",
+          "isActive",
+          "isDeleted",
+          "createdAt",
+          "updatedAt",
+          "firstName",
+          "lastName",
+          "isBlocked",
+          "authVersion",
+          "totpEnabledAt"
         ]
       },
       "UpdateUserRoleDto": {
@@ -23162,6 +23829,35 @@
             "type": "boolean",
             "example": false,
             "description": "Qo‘ng‘iroqqa 5 daqiqadan kam qoldi (8-qoida)"
+          },
+          "lastOutcome": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "NO_ANSWER",
+              "BUSY",
+              "PHONE_OFF",
+              "CALL_LATER",
+              "THINKING",
+              "REJECTED",
+              "INVALID",
+              "DUPLICATE"
+            ],
+            "nullable": true,
+            "example": "THINKING",
+            "description": "Oxirgi urinish natijasi; urinish yo‘q — null"
+          },
+          "lastComment": {
+            "type": "string",
+            "nullable": true,
+            "example": "Turmush o‘rtog‘i bilan maslahatlashadi",
+            "description": "Oxirgi urinish izohi"
+          },
+          "lastAttemptAt": {
+            "type": "string",
+            "nullable": true,
+            "example": "2026-12-01T10:20:00.000Z",
+            "description": "Oxirgi urinish vaqti"
           }
         },
         "required": [
@@ -23171,7 +23867,202 @@
           "productName",
           "bookedUntil",
           "callbackAt",
-          "reminderDue"
+          "reminderDue",
+          "lastOutcome",
+          "lastComment",
+          "lastAttemptAt"
+        ]
+      },
+      "OperatorLeadProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "501"
+          },
+          "name": {
+            "type": "string",
+            "example": "Simsiz quloqchinlar"
+          },
+          "category": {
+            "type": "string",
+            "example": "Elektronika",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "example": "Kundalik foydalanish uchun simsiz quloqchinlar",
+            "nullable": true
+          },
+          "highlights": {
+            "example": [
+              "Telefonga Bluetooth orqali ulanadi"
+            ],
+            "description": "Offer matnlaridagi afzalliklar (admin kiritadi, BE-11)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "available": {
+            "type": "number",
+            "example": 120,
+            "nullable": true,
+            "description": "Omborda sotuvga bor (band qilinmagan) dona; null — ombor javob bermadi"
+          },
+          "weightKg": {
+            "type": "number",
+            "example": 0.3,
+            "nullable": true
+          },
+          "contents": {
+            "type": "string",
+            "example": "quloqchinlar (juft), g‘ilof, kabel",
+            "nullable": true,
+            "description": "Qutida nima bor (offer matnlari)"
+          },
+          "salePrice": {
+            "type": "number",
+            "example": 262000,
+            "description": "Lid sahifasidagi narx, so‘m"
+          },
+          "deliveryFee": {
+            "type": "object",
+            "example": {
+              "CENTER": 30000,
+              "ADDRESS": 50000
+            },
+            "nullable": true,
+            "description": "1 dona uchun ikki yetkazish turi narxi, so‘m; katalog javob bermasa null"
+          },
+          "pageUrl": {
+            "type": "string",
+            "example": "https://elchi.uz/p3v9tx",
+            "nullable": true,
+            "description": "Mijoz ko‘rgan sotuvchi sahifasi; API va sayt lidida null"
+          },
+          "warning": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Operator aytishi shart bo‘lgan ogohlantirish: BAD — «Dori vositasi emas» (8-bo‘lim); bo‘lmasa null"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category",
+          "imageUrl",
+          "description",
+          "highlights",
+          "available",
+          "weightKg",
+          "contents",
+          "salePrice",
+          "deliveryFee",
+          "pageUrl",
+          "warning"
+        ]
+      },
+      "OperatorAttemptItemDto": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "example": "2026-12-01T09:33:00.000Z"
+          },
+          "leadId": {
+            "type": "string",
+            "example": "7001"
+          },
+          "customerName": {
+            "type": "string",
+            "example": "Dildora"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Oshxona tarozisi"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "NO_ANSWER",
+              "BUSY",
+              "PHONE_OFF",
+              "CALL_LATER",
+              "THINKING",
+              "REJECTED",
+              "INVALID",
+              "DUPLICATE"
+            ],
+            "example": "REJECTED"
+          },
+          "comment": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "rejectReason": {
+            "type": "string",
+            "enum": [
+              "TOO_EXPENSIVE",
+              "NOT_NEEDED",
+              "BOUGHT_ELSEWHERE",
+              "OTHER"
+            ],
+            "nullable": true,
+            "example": "NOT_NEEDED",
+            "description": "Faqat REJECTED urinishida"
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Keyingi qo‘ng‘iroq vaqti («Keyinroq qiling · ertaga 14:00», «Javob bermadi · 14:31»)"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Suhbat davomiyligi — telefoniya bilan (BE-15); hozir null"
+          }
+        },
+        "required": [
+          "at",
+          "leadId",
+          "customerName",
+          "productName",
+          "outcome",
+          "comment",
+          "rejectReason",
+          "nextAttemptAt",
+          "durationSeconds"
+        ]
+      },
+      "OperatorAttemptsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorAttemptItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 38,
+            "description": "Davrdagi jami urinishlar — GET /operator/stats `attempts` bilan bir xil"
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       },
       "SubmitLeadResultDto": {
@@ -23313,23 +24204,6 @@
           "whereDeliver"
         ]
       },
-      "UpdateOperatorStateDto": {
-        "type": "object",
-        "properties": {
-          "state": {
-            "type": "string",
-            "enum": [
-              "ONLINE",
-              "BREAK",
-              "OFFLINE"
-            ],
-            "example": "ONLINE"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
       "OperatorStateDto": {
         "type": "object",
         "properties": {
@@ -23350,12 +24224,36 @@
             "type": "number",
             "example": 5,
             "description": "6-qoida"
+          },
+          "since": {
+            "type": "string",
+            "example": "2026-12-01T09:31:00.000Z",
+            "nullable": true,
+            "description": "Shu holat boshlangan vaqt (FE-08: «Tanaffusdasiz · 6 daqiqa»); holat hali tanlanmagan — null"
           }
         },
         "required": [
           "state",
           "activeBookings",
-          "maxBookings"
+          "maxBookings",
+          "since"
+        ]
+      },
+      "UpdateOperatorStateDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "BREAK",
+              "OFFLINE"
+            ],
+            "example": "ONLINE"
+          }
+        },
+        "required": [
+          "state"
         ]
       },
       "OperatorQueueOperatorDto": {

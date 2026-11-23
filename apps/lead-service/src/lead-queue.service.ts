@@ -85,12 +85,34 @@ export class LeadQueueService {
     const row =
       (await repo.findOne({ where: { operatorId } })) ??
       repo.create({ operatorId });
+    // holat o‘zgarmasa «qachondan beri» saqlanadi (takror bosish vaqtni nolga tushirmasin)
+    if (row.state !== state || !row.stateSince) row.stateSince = new Date();
     row.state = state;
     await repo.save(row);
+    return this.stateView(row);
+  }
+
+  /** BE-25 (FE-08): joriy holat — sahifa yangilanganda ekran «Oflayn» dan boshlanmasin. */
+  async getState(operatorId: string): Promise<OperatorStateDto> {
+    const row = await this.db
+      .getRepository(OperatorState)
+      .findOne({ where: { operatorId } });
+    return this.stateView(
+      row ?? { operatorId, state: OperatorWorkState.OFFLINE, stateSince: null },
+    );
+  }
+
+  private async stateView(
+    row: Pick<OperatorState, 'operatorId' | 'state' | 'stateSince'>,
+  ): Promise<OperatorStateDto> {
     return {
-      state,
-      activeBookings: await this.activeNewBookings(this.db.manager, operatorId),
+      state: row.state,
+      activeBookings: await this.activeNewBookings(
+        this.db.manager,
+        row.operatorId,
+      ),
       maxBookings: QUEUE_RULES.maxNewBookings,
+      since: row.stateSince?.toISOString() ?? null,
     };
   }
 
@@ -285,7 +307,9 @@ export class LeadQueueService {
   }
 
   /** Nazoratchi: navbat hajmi va operatorlar holati (BE-13). Ism — identity bilan (BE-05 dan keyin). */
-  async summary(): Promise<OperatorQueueSummaryDto> {
+  async summary(
+    options: { operatorView?: boolean } = {},
+  ): Promise<OperatorQueueSummaryDto> {
     const now = new Date();
     const leads = this.db.getRepository(Lead);
     const base = {
@@ -303,9 +327,12 @@ export class LeadQueueService {
         },
       }),
       leads.count({ where: { ...base, status: LeadStatus.BOOKED } }),
-      this.db
-        .getRepository(OperatorState)
-        .find({ order: { operatorId: 'ASC' } }),
+      // operator ish joyida boshqa operatorlar holati ko‘rsatilmaydi (FE-08 taklifi)
+      options.operatorView
+        ? Promise.resolve([] as OperatorState[])
+        : this.db
+            .getRepository(OperatorState)
+            .find({ order: { operatorId: 'ASC' } }),
     ]);
     const operators = await Promise.all(
       states.map(async (s) => ({
