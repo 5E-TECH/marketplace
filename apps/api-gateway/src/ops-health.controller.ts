@@ -16,14 +16,17 @@ import {
   OPS_RPC,
   OpsHealthDto,
   Public,
+  RateLimitHealth,
   RmqClient,
   sendRpc,
 } from '@app/common';
+import { SharedThrottlerStorage } from './rate-limit/shared-throttler.storage';
 
 /**
  * BE-26 (T8 «Kuzatuv»): `scripts/health-monitor.mjs` uchun ko‘rsatkichlar — Elchi API xatolari (5 daqiqa) va operator
  * navbati. Ochiq API emas: `MONITOR_TOKEN` sarlavhada (`x-monitor-token`) mos kelmasa yoki token sozlanmagan bo‘lsa —
- * 404 (yo‘l borligi ham bilinmasin). Shartnomaga (OpenAPI) kirmaydi.
+ * 404 (yo‘l borligi ham bilinmasin). Shartnomaga (OpenAPI) kirmaydi. BE-36: so‘rov chegarasi qayerda sanalmoqda
+ * (`rateLimit`) — Redis berilgan, lekin uzilgan bo‘lsa monitor ogohlantiradi.
  */
 @ApiExcludeController()
 @Controller('health')
@@ -34,6 +37,7 @@ export class OpsHealthController {
     private readonly config: ConfigService,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
+    private readonly throttlerStorage: SharedThrottlerStorage,
   ) {}
 
   @Public()
@@ -43,7 +47,7 @@ export class OpsHealthController {
     @Headers('x-monitor-token') token: string | undefined,
   ): Promise<OpsHealthDto> {
     if (!this.authorized(token)) throw new NotFoundException();
-    const [elchi, queue] = await Promise.all([
+    const [elchi, queue, leadRateLimit] = await Promise.all([
       sendRpc<{ count: number }>(
         this.integration,
         { cmd: OPS_RPC.ELCHI_ERRORS },
@@ -52,10 +56,17 @@ export class OpsHealthController {
       sendRpc<LeadQueueStats>(this.lead, { cmd: OPS_RPC.LEAD_QUEUE }, {}).catch(
         (error: Error) => this.failed('lead', error),
       ),
+      sendRpc<RateLimitHealth>(
+        this.lead,
+        { cmd: OPS_RPC.LEAD_RATE_LIMIT },
+        {},
+      ).catch((error: Error) => this.failed('lead rate limit', error)),
     ]);
     return {
       elchiApiErrors5m: elchi ? elchi.count : null,
       leadQueue: queue ?? null,
+      rateLimit: this.throttlerStorage.health(),
+      leadRateLimit: leadRateLimit ?? null,
     };
   }
 

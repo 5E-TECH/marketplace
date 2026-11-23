@@ -129,3 +129,5 @@ export * from './pricing';
 export * from './dto/pricing.dto';
 // PDF: Unicode shrift (kirill, ʻ/ʼ) — hamma PDF generatorlar
 export * from './pdf/pdf-fonts';
+// BE-36: bir nechta nusxa uchun umumiy so‘rov chegarasi (Redis)
+export * from './rate-limit';

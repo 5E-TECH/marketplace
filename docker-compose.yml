@@ -5,6 +5,7 @@
 #   Postgres  → localhost:5432
 #   RabbitMQ  → localhost:5672  (UI: localhost:15672, guest/guest)
 #   MinIO     → localhost:9000  (Console: localhost:9001)
+#   Redis     → localhost:6379  (BE-36: umumiy rate limit; .env da REDIS_URL=redis://localhost:6379)
 #   Adminer   → localhost:8080  (Postgres'ni ko'rish)
 # ============================================================================
 services:
@@ -58,6 +59,20 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
       interval: 15s
       timeout: 10s
+      retries: 5
+
+  # BE-36: bir nechta gateway nusxasi uchun umumiy rate limit. Ixtiyoriy — REDIS_URL berilmasa ishlatilmaydi.
+  redis:
+    image: redis:7.4-alpine
+    container_name: mkt_redis
+    restart: unless-stopped
+    command: redis-server --save '' --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 5
 
   adminer:

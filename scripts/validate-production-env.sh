@@ -66,6 +66,59 @@ if grep -Eq '^DB_USERNAME_[A-Z_]+=.+' "$env_file"; then
   done
 fi
 
+# BE-36: umumiy rate limit (Redis) — ixtiyoriy. REDIS_URL berilsa parol bilan bo'lsin (Redis tarmoqda parolsiz
+# qolmasin). Compose'dagi `redis` servisi `COMPOSE_PROFILES` dagi `redis` bilan yoqiladi va REDIS_PASSWORD oladi —
+# URL dagi parol shu bilan bir xil bo'lishi kerak. Redis bo'lmasa API to'xtamaydi, shuning uchun profil
+# yoqilmagani — faqat ogohlantirish. docs/BE-36-KOP-NUSXA.md
+redis_url=$(sed -n 's/^REDIS_URL=//p' "$env_file" | tail -n 1)
+redis_url=${redis_url:-${REDIS_URL:-}}
+redis_password=$(sed -n 's/^REDIS_PASSWORD=//p' "$env_file" | tail -n 1)
+redis_password=${redis_password:-${REDIS_PASSWORD:-}}
+compose_profiles=$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file" | tail -n 1)
+compose_profiles=${compose_profiles:-${COMPOSE_PROFILES:-}}
+case ",$(printf '%s' "$compose_profiles" | tr -d ' ')," in
+  *,redis,*) redis_profile=1 ;;
+  *) redis_profile=0 ;;
+esac
+if [ "$redis_profile" = 1 ]; then
+  case "$redis_password" in
+    '' | *[!A-Za-z0-9_-]*)
+      printf 'COMPOSE_PROFILES da redis bor: REDIS_PASSWORD kerak (faqat harf, raqam, _ va -; masalan openssl rand -hex 24)
+' >&2
+      exit 1
+      ;;
+  esac
+fi
+if [ -n "$redis_url" ]; then
+  case "$redis_url" in
+    redis://*:?*@?* | rediss://*:?*@?*) ;;
+    *)
+      printf 'REDIS_URL parol bilan bo‘lishi kerak: redis://:<parol>@redis:6379 (docs/BE-36-KOP-NUSXA.md)
+' >&2
+      exit 1
+      ;;
+  esac
+  redis_host=${redis_url#*@}
+  redis_host=${redis_host%%[:/]*}
+  if [ "$redis_host" = redis ]; then
+    if [ "$redis_profile" != 1 ]; then
+      printf 'OGOHLANTIRISH: REDIS_URL compose `redis` servisiga qaraydi, lekin COMPOSE_PROFILES da redis yo‘q —
+' >&2
+      printf '  limit har gateway nusxasi xotirasida sanaladi (docs/BE-36-KOP-NUSXA.md).
+' >&2
+    else
+      case "$redis_url" in
+        *":$redis_password@"*) ;;
+        *)
+          printf 'REDIS_URL dagi parol REDIS_PASSWORD bilan bir xil emas
+' >&2
+          exit 1
+          ;;
+      esac
+    fi
+  fi
+fi
+
 domain=$(sed -n 's/^DOMAIN=//p' "$env_file" | tail -n 1)
 if [ -z "${domain:-}" ] || [ "${domain#:}" != "$domain" ]; then
   printf 'OGOHLANTIRISH: DOMAIN yo‘q yoki HTTP rejimi — API sertifikatsiz, IP orqali ochiladi.\n' >&2
