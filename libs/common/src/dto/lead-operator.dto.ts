@@ -364,6 +364,31 @@ export class OperatorLeadListItemDto {
     description: 'Qo‘ng‘iroqqa 5 daqiqadan kam qoldi (8-qoida)',
   })
   reminderDue: boolean;
+
+  /** BE-25 (FE-08): «15:00 Bobur — O‘ylab ko‘radi «Turmush o‘rtog‘i bilan maslahatlashadi»». */
+  @ApiProperty({
+    enum: LeadOutcome,
+    nullable: true,
+    example: LeadOutcome.THINKING,
+    description: 'Oxirgi urinish natijasi; urinish yo‘q — null',
+  })
+  lastOutcome: LeadOutcome | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: 'Turmush o‘rtog‘i bilan maslahatlashadi',
+    description: 'Oxirgi urinish izohi',
+  })
+  lastComment: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: '2026-12-01T10:20:00.000Z',
+    description: 'Oxirgi urinish vaqti',
+  })
+  lastAttemptAt: string | null;
 }
 
 /** POST /operator/leads/:id/result (OPR-3). */
@@ -466,6 +491,15 @@ export class OperatorStateDto {
 
   @ApiProperty({ example: 2 }) activeBookings: number;
   @ApiProperty({ example: 5, description: '6-qoida' }) maxBookings: number;
+
+  @ApiProperty({
+    example: '2026-12-01T09:31:00.000Z',
+    nullable: true,
+    type: String,
+    description:
+      'Shu holat boshlangan vaqt (FE-08: «Tanaffusdasiz · 6 daqiqa»); holat hali tanlanmagan — null',
+  })
+  since: string | null;
 }
 
 export class OperatorQueueOperatorDto {
@@ -604,4 +638,153 @@ export class AdminLeadsPageDto {
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({ example: 3 }) totalPages: number;
+}
+
+/** BE-25 (FE-08 «Mahsulot ma’lumoti» paneli): GET /operator/leads/:id/product. */
+export class OperatorLeadProductDto {
+  @ApiProperty({ example: '501' }) id: string;
+  @ApiProperty({ example: 'Simsiz quloqchinlar' }) name: string;
+  @ApiProperty({ example: 'Elektronika', nullable: true, type: String })
+  category: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  imageUrl: string | null;
+
+  @ApiProperty({
+    example: 'Kundalik foydalanish uchun simsiz quloqchinlar',
+    nullable: true,
+    type: String,
+  })
+  description: string | null;
+
+  @ApiProperty({
+    type: [String],
+    example: ['Telefonga Bluetooth orqali ulanadi'],
+    description: 'Offer matnlaridagi afzalliklar (admin kiritadi, BE-11)',
+  })
+  highlights: string[];
+
+  @ApiProperty({
+    example: 120,
+    nullable: true,
+    type: Number,
+    description:
+      'Omborda sotuvga bor (band qilinmagan) dona; null — ombor javob bermadi',
+  })
+  available: number | null;
+
+  @ApiProperty({ example: 0.3, nullable: true, type: Number })
+  weightKg: number | null;
+
+  @ApiProperty({
+    example: 'quloqchinlar (juft), g‘ilof, kabel',
+    nullable: true,
+    type: String,
+    description: 'Qutida nima bor (offer matnlari)',
+  })
+  contents: string | null;
+
+  @ApiProperty({ example: 262000, description: 'Lid sahifasidagi narx, so‘m' })
+  salePrice: number;
+
+  @ApiProperty({
+    example: { CENTER: 30000, ADDRESS: 50000 },
+    nullable: true,
+    description:
+      '1 dona uchun ikki yetkazish turi narxi, so‘m; katalog javob bermasa null',
+  })
+  deliveryFee: Record<CheckoutDeliveryDestination, number> | null;
+
+  @ApiProperty({
+    example: 'https://elchi.uz/p3v9tx',
+    nullable: true,
+    type: String,
+    description: 'Mijoz ko‘rgan sotuvchi sahifasi; API va sayt lidida null',
+  })
+  pageUrl: string | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'Operator aytishi shart bo‘lgan ogohlantirish: BAD — «Dori vositasi emas» (8-bo‘lim); bo‘lmasa null',
+  })
+  warning: string | null;
+}
+
+/** BE-25 (FE-08): GET /operator/attempts — bugungi urinishlarim. */
+export class OperatorAttemptsQueryDto {
+  @ApiPropertyOptional({
+    example: '2026-12-01',
+    description: 'Toshkent sanasi; sukut — bugun',
+  })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-12-01',
+    description: 'Toshkent sanasi; sukut — from',
+  })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({ example: 10, minimum: 1, maximum: 100, default: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class OperatorAttemptItemDto {
+  @ApiProperty({ example: '2026-12-01T09:33:00.000Z' }) at: string;
+  @ApiProperty({ example: '7001' }) leadId: string;
+  @ApiProperty({ example: 'Dildora' }) customerName: string;
+  @ApiProperty({ example: 'Oshxona tarozisi' }) productName: string;
+  @ApiProperty({ enum: LeadOutcome, example: LeadOutcome.REJECTED })
+  outcome: LeadOutcome;
+
+  @ApiProperty({ example: null, nullable: true, type: String })
+  comment: string | null;
+
+  @ApiProperty({
+    enum: LeadRejectReason,
+    nullable: true,
+    example: LeadRejectReason.NOT_NEEDED,
+    description: 'Faqat REJECTED urinishida',
+  })
+  rejectReason: LeadRejectReason | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'Keyingi qo‘ng‘iroq vaqti («Keyinroq qiling · ertaga 14:00», «Javob bermadi · 14:31»)',
+  })
+  nextAttemptAt: string | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description: 'Suhbat davomiyligi — telefoniya bilan (BE-15); hozir null',
+  })
+  durationSeconds: number | null;
+}
+
+export class OperatorAttemptsPageDto {
+  @ApiProperty({ type: [OperatorAttemptItemDto] })
+  items: OperatorAttemptItemDto[];
+
+  @ApiProperty({
+    example: 38,
+    description:
+      'Davrdagi jami urinishlar — GET /operator/stats `attempts` bilan bir xil',
+  })
+  total: number;
 }

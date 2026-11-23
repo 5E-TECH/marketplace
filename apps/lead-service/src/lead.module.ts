@@ -18,6 +18,7 @@ import {
 } from '@app/common';
 import { LEAD_ENTITIES } from './entities';
 import { API_KEY_RATE_LIMITER, ApiKeyService } from './api-key.service';
+import { OperatorWorkplaceService } from './operator-workplace.service';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { LandingService } from './landing.service';
 import { LeadAddressController } from './lead-address.controller';
@@ -149,6 +150,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     SiteOrderService,
     LeadQueueService,
     LeadCardService,
+    OperatorWorkplaceService,
     LeadQueueScheduler,
     LeadOutboxRelayService,
     LeadAdminService,

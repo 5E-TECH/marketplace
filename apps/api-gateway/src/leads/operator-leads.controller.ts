@@ -28,7 +28,10 @@ import {
   LeadPriceQuoteDto,
   LeadResultAcceptedDto,
   LeadStatsPeriodQueryDto,
+  OperatorAttemptsPageDto,
+  OperatorAttemptsQueryDto,
   OperatorLeadListItemDto,
+  OperatorLeadProductDto,
   OperatorQueueSummaryDto,
   OperatorStateDto,
   OperatorStatsDto,
@@ -98,6 +101,44 @@ export class OperatorLeadsController {
     @Param('id', ParseLeadIdPipe) leadId: string,
   ): Promise<LeadCardDto> {
     return sendRpc(this.lead, { cmd: 'lead.card.get' }, { operatorId, leadId });
+  }
+
+  @Get('leads/:id/product')
+  @ApiOperation({
+    summary: 'Mahsulot ma’lumoti (lid kartasi paneli)',
+    description:
+      'Tavsif, afzalliklar, qutida nima bor, qoldiq, og‘irlik, ikki yetkazish narxi, sotuvchi sahifasi va BAD ogohlantirishi (BE-25, FE-08). Faqat shu operatordagi lid.',
+  })
+  @ApiOkResponse({ type: OperatorLeadProductDto })
+  @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
+  getProduct(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+  ): Promise<OperatorLeadProductDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.card.product' },
+      { operatorId, leadId },
+    );
+  }
+
+  @Get('attempts')
+  @ApiOperation({
+    summary: 'Mening urinishlarim (sukut — bugun, oxirgi 10 tasi)',
+    description:
+      'Yangisi birinchi; `total` — davrdagi jami (GET /operator/stats `attempts` bilan bir xil). BE-25, FE-08.',
+  })
+  @ApiOkResponse({ type: OperatorAttemptsPageDto })
+  @ApiBadRequestResponse({ description: 'Sana yoki limit noto‘g‘ri' })
+  attempts(
+    @CurrentUser('sub') operatorId: string,
+    @Query() query: OperatorAttemptsQueryDto,
+  ): Promise<OperatorAttemptsPageDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.operator.attempts' },
+      { operatorId, query },
+    );
   }
 
   @Post('leads/:id/result')
@@ -175,6 +216,21 @@ export class OperatorLeadsController {
     );
   }
 
+  @Get('state')
+  @ApiOperation({
+    summary: 'Joriy holat va bronlar soni',
+    description:
+      'Sahifa yangilanganda ekran «Oflayn» dan boshlanmasin; `since` — holat boshlangan vaqt (BE-25, FE-08).',
+  })
+  @ApiOkResponse({ type: OperatorStateDto })
+  getState(@CurrentUser('sub') operatorId: string): Promise<OperatorStateDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.operator.state.get' },
+      { operatorId },
+    );
+  }
+
   @Put('state')
   @ApiOperation({ summary: 'Operator holati: ishda, tanaffus, chiqdi' })
   @ApiOkResponse({ type: OperatorStateDto })
@@ -190,14 +246,21 @@ export class OperatorLeadsController {
   }
 
   @Get('queue-summary')
-  @Roles(Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN)
+  @Roles(Role.OPERATOR_LEAD, Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN)
   @ApiOperation({
-    summary: 'Navbat xulosasi (nazoratchi)',
-    description: 'Navbat hajmi va operatorlar holati (BE-13).',
+    summary: 'Navbat xulosasi',
+    description:
+      'Navbat hajmi va operatorlar holati (BE-13). Operator ish joyi (BE-25, FE-08) — faqat navbat hajmi, `operators` bo‘sh.',
   })
   @ApiOkResponse({ type: OperatorQueueSummaryDto })
-  queueSummary(): Promise<OperatorQueueSummaryDto> {
-    return sendRpc(this.lead, { cmd: 'lead.queue.summary' }, {});
+  queueSummary(
+    @CurrentUser('role') role: Role,
+  ): Promise<OperatorQueueSummaryDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: 'lead.queue.summary' },
+      { operatorView: role === Role.OPERATOR_LEAD },
+    );
   }
 
   @Get('stats')

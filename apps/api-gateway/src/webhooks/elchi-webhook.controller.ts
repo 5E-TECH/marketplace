@@ -9,7 +9,14 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import {
   ElchiWebhookDto,
@@ -68,6 +75,24 @@ export class ElchiWebhookController {
   // Faqat HUJJAT uchun: tana `@Body()` bilan bog‘lanmaydi (izohga qarang),
   // shuning uchun bu dekorator validatsiya qilmaydi — kontraktni saqlaydi.
   @ApiBody({ type: ElchiWebhookDto })
+  @ApiCreatedResponse({
+    description:
+      'Qabul qilindi. `duplicate: true` — shu `event_id` avval qayta ishlangan; `ignored` — e’tiborsiz qoldiriladigan Elchi holati (hech narsa o‘zgarmaydi)',
+    schema: {
+      type: 'object',
+      required: ['received'],
+      properties: {
+        received: { type: 'boolean', example: true },
+        duplicate: { type: 'boolean', example: false },
+        ignored: { type: 'string', example: 'webhook.test' },
+      },
+      example: { received: true, duplicate: false },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description:
+      'Imzo yo‘q yoki noto‘g‘ri, yoki hodisa vaqti ruxsat etilgan oynadan tashqarida',
+  })
   async receive(
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-elchi-signature') signature: string | undefined,

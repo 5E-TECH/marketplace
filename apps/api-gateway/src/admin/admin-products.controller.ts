@@ -32,6 +32,8 @@ import {
   sendRpc,
 } from '@app/common';
 
+import { ADMIN_PRODUCTS_PAGE_EXAMPLE } from './admin-m1.examples';
+
 @ApiTags('admin-products')
 @ApiBearerAuth()
 @Roles(Role.ADMIN, Role.SUPERADMIN)
@@ -127,6 +129,11 @@ export class AdminProductsController {
   @ApiOperation({
     summary: 'Admin uchun barcha mahsulotlar va moderatsiya filtrlari',
   })
+  @ApiOkResponse({
+    description:
+      '{ items, total, page, limit, totalPages }; optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi',
+    schema: { example: ADMIN_PRODUCTS_PAGE_EXAMPLE },
+  })
   list(@Query() query: AdminProductsQueryDto) {
     return sendRpc(
       this.catalog,
@@ -146,6 +153,8 @@ export class AdminProductsController {
   }
 
   @Post(':id/suspend')
+  @ApiOperation({ summary: 'Mahsulotni to‘xtatish (sotuvdan olinadi)' })
+  @ApiCreatedResponse({ type: ProductDto })
   async suspend(
     @Param('id') id: string,
     @CurrentUser() admin: JwtUser,
@@ -164,6 +173,7 @@ export class AdminProductsController {
   @ApiOperation({
     summary: 'Mahsulotni sabab bilan storefront va searchdan yashirish',
   })
+  @ApiCreatedResponse({ type: ProductDto })
   async hide(
     @Param('id') id: string,
     @Body() dto: HideProductDto,
@@ -180,6 +190,10 @@ export class AdminProductsController {
   }
 
   @Post(':id/reactivate')
+  @ApiOperation({
+    summary: 'To‘xtatilgan yoki yashirilgan mahsulotni qaytarish',
+  })
+  @ApiCreatedResponse({ type: ProductDto })
   async reactivate(
     @Param('id') id: string,
     @CurrentUser() admin: JwtUser,

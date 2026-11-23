@@ -157,6 +157,33 @@ export class AuthUserDto {
   updatedAt: Date;
 }
 
+/**
+ * BE-25 TC3: admin foydalanuvchi kartasi — identity `adminGetUser`/`setBlocked`/`updateRole` qaytaradigan shakl
+ * (parol xeshisiz foydalanuvchi qatori).
+ */
+export class AdminUserDto extends AuthUserDto {
+  @ApiProperty({ example: 'Akmal', nullable: true, type: String })
+  firstName: string | null;
+  @ApiProperty({ example: 'Karimov', nullable: true, type: String })
+  lastName: string | null;
+  @ApiProperty({ example: false, description: 'Bloklangan — hamma token 401' })
+  isBlocked: boolean;
+  @ApiProperty({
+    example: 3,
+    description:
+      'Token versiyasi: blok yoki rol o‘zgarsa oshadi (eski tokenlar bekor)',
+  })
+  authVersion: number;
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    description: '2FA ulangan vaqt (BE-26); ulanmagan — null',
+  })
+  totpEnabledAt: Date | null;
+}
+
 export class AuthTokensDto {
   @ApiProperty({ type: AuthUserDto })
   user: AuthUserDto;

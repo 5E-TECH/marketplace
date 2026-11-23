@@ -3,6 +3,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import {
   ApiBearerAuth,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -10,6 +11,7 @@ import {
 import {
   CurrentUser,
   JwtUser,
+  NotificationDto,
   NotificationsPageDto,
   NotificationsQueryDto,
   RmqClient,
@@ -38,6 +40,14 @@ export class NotificationsController {
 
   @Patch('read-all')
   @ApiOperation({ summary: 'Barcha xabarnomalarni o‘qilgan qilish' })
+  @ApiOkResponse({
+    description: 'O‘qilgan qilingan xabarnomalar soni',
+    schema: {
+      type: 'object',
+      properties: { updated: { type: 'integer', example: 3 } },
+      example: { updated: 3 },
+    },
+  })
   markAllRead(@CurrentUser() user: JwtUser) {
     return sendRpc(
       this.notifications,
@@ -48,6 +58,10 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Bitta xabarnomani o‘qilgan qilish' })
+  @ApiOkResponse({ type: NotificationDto })
+  @ApiNotFoundResponse({
+    description: 'Xabarnoma topilmadi (boshqa foydalanuvchiniki ham)',
+  })
   markRead(
     @CurrentUser() user: JwtUser,
     // BE-47: noto‘g‘ri id — 400 (bazaga yetib 500 bermasin)
