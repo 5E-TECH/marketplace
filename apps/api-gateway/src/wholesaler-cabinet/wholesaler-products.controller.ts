@@ -110,7 +110,7 @@ export class WholesalerProductsController {
   })
   @ApiOkResponse({
     description:
-      '`calculation` — narx hisobi, `evaluation` — so‘ralgan (`price`) yoki tasdiqlangan narx bo‘yicha baho; ichki siyosat va Elchi tarifi berilmaydi',
+      '`calculation` — narx hisobi, `evaluation` — narx bahosi: so‘ralgan `price`, bo‘lmasa tasdiqlangan narx, u ham bo‘lmasa tavsiya narx bo‘yicha; ichki siyosat va Elchi tarifi berilmaydi',
     schema: { example: WHOLESALER_PRICING_EXAMPLE },
   })
   @ApiForbiddenResponse({ description: 'Boshqa optovikning mahsuloti' })

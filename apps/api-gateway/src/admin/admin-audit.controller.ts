@@ -45,7 +45,7 @@ export class AdminAuditController {
   })
   @ApiOkResponse({
     description:
-      'Yangisi tepada; `actorName` — tizim amali yoki o‘chirilgan foydalanuvchi uchun null',
+      'Yangisi tepada; `actorName` — amalni qilgan foydalanuvchi ismi (jamoadan o‘chirilgani ham), tizim amalida null',
     schema: { example: ADMIN_AUDIT_PAGE_EXAMPLE },
   })
   @ApiBadRequestResponse({

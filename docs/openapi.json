@@ -540,7 +540,7 @@
         },
         "responses": {
           "200": {
-            "description": "Yangi tokenlar HttpOnly cookie’da; access token body’da faqat `AUTH_TOKENS_IN_BODY=true` bo‘lsa (aks holda `{}`)",
+            "description": "Yangi tokenlar HttpOnly cookie’da; access token body’da ham (sukut), `AUTH_TOKENS_IN_BODY=false` bo‘lsa — `{}`",
             "headers": {
               "Set-Cookie": {
                 "description": "HttpOnly accessToken va refreshToken cookie",
@@ -724,7 +724,7 @@
                 "schema": {
                   "example": [
                     {
-                      "id": "311",
+                      "id": "9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60",
                       "createdAt": "2026-12-01T08:00:00.000Z",
                       "expiresAt": "2026-12-08T08:00:00.000Z",
                       "current": false,
@@ -762,7 +762,7 @@
               "application/json": {
                 "schema": {
                   "example": {
-                    "id": "311",
+                    "id": "9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60",
                     "revoked": true
                   }
                 }
@@ -770,7 +770,7 @@
             }
           },
           "400": {
-            "description": "Sessiya topilmadi yoki allaqachon bekor qilingan",
+            "description": "ID UUID emas, sessiya topilmadi yoki allaqachon bekor qilingan",
             "content": {
               "application/json": {
                 "schema": {
@@ -5396,7 +5396,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Yangisi tepada; `actorName` — tizim amali yoki o‘chirilgan foydalanuvchi uchun null",
+            "description": "Yangisi tepada; `actorName` — amalni qilgan foydalanuvchi ismi (jamoadan o‘chirilgani ham), tizim amalida null",
             "content": {
               "application/json": {
                 "schema": {
@@ -11320,8 +11320,10 @@
                     "description": "Kundalik foydalanish uchun simsiz quloqchinlar",
                     "price": 150000,
                     "oldPrice": null,
-                    "imageUrl": null,
-                    "images": [],
+                    "imageUrl": "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg",
+                    "images": [
+                      "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg"
+                    ],
                     "attributes": {
                       "Aloqa": "Bluetooth"
                     },
@@ -11409,8 +11411,10 @@
                         "description": "Kundalik foydalanish uchun simsiz quloqchinlar",
                         "price": 150000,
                         "oldPrice": null,
-                        "imageUrl": null,
-                        "images": [],
+                        "imageUrl": "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg",
+                        "images": [
+                          "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg"
+                        ],
                         "attributes": {
                           "Aloqa": "Bluetooth"
                         },
@@ -11488,8 +11492,10 @@
                     "description": "Kundalik foydalanish uchun simsiz quloqchinlar",
                     "price": 150000,
                     "oldPrice": null,
-                    "imageUrl": null,
-                    "images": [],
+                    "imageUrl": "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg",
+                    "images": [
+                      "https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg"
+                    ],
                     "attributes": {
                       "Aloqa": "Bluetooth"
                     },
@@ -11563,7 +11569,7 @@
         ],
         "responses": {
           "200": {
-            "description": "`calculation` — narx hisobi, `evaluation` — so‘ralgan (`price`) yoki tasdiqlangan narx bo‘yicha baho; ichki siyosat va Elchi tarifi berilmaydi",
+            "description": "`calculation` — narx hisobi, `evaluation` — narx bahosi: so‘ralgan `price`, bo‘lmasa tasdiqlangan narx, u ham bo‘lmasa tavsiya narx bo‘yicha; ichki siyosat va Elchi tarifi berilmaydi",
             "content": {
               "application/json": {
                 "schema": {

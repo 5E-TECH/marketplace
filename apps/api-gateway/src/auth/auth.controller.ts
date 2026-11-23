@@ -11,6 +11,7 @@ import {
   Ip,
   Optional,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -527,7 +528,7 @@ export class AuthController {
   })
   @ApiOkResponse({
     description:
-      'Yangi tokenlar HttpOnly cookie’da; access token body’da faqat `AUTH_TOKENS_IN_BODY=true` bo‘lsa (aks holda `{}`)',
+      'Yangi tokenlar HttpOnly cookie’da; access token body’da ham (sukut), `AUTH_TOKENS_IN_BODY=false` bo‘lsa — `{}`',
     type: LoginSuccessResponseDto,
     headers: {
       'Set-Cookie': {
@@ -624,7 +625,7 @@ export class AuthController {
     schema: {
       example: [
         {
-          id: '311',
+          id: '9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60',
           createdAt: '2026-12-01T08:00:00.000Z',
           expiresAt: '2026-12-08T08:00:00.000Z',
           current: false,
@@ -642,12 +643,21 @@ export class AuthController {
   }
   @Delete('sessions/:id')
   @ApiOperation({ summary: 'Sessiyani bekor qilish' })
-  @ApiOkResponse({ schema: { example: { id: '311', revoked: true } } })
+  @ApiOkResponse({
+    schema: {
+      example: { id: '9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60', revoked: true },
+    },
+  })
   @ApiBadRequestResponse({
-    description: 'Sessiya topilmadi yoki allaqachon bekor qilingan',
+    description:
+      'ID UUID emas, sessiya topilmadi yoki allaqachon bekor qilingan',
     type: AuthErrorResponseDto,
   })
-  revoke(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+  revoke(
+    @CurrentUser() user: JwtUser,
+    // sessiya ID si — UUID (auth_session.id); boshqa qiymat bazada 22P02 (500) berardi
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
     return sendRpc(
       this.identity,
       { cmd: 'auth.sessions.revoke' },

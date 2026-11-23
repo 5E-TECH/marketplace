@@ -13,6 +13,12 @@ const { shop: _shop, ...ADMIN_PRODUCT_ROW } =
 export const WHOLESALER_PRODUCT_EXAMPLE = {
   ...ADMIN_PRODUCT_ROW,
   status: ProductStatus.PENDING_REVIEW,
+  // rasm majburiy (`createForShop`): `imageUrl` — birinchi rasm, `images` — galereya
+  imageUrl:
+    'https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg',
+  images: [
+    'https://api.elchimarket.uz/media/marketplace-media/products/1764000000000-uuid.jpg',
+  ],
   price: ADMIN_PRODUCT_ROW.basePrice,
   affiliateFee: null,
   approvedPrice: null,
