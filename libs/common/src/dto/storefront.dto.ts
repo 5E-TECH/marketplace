@@ -137,14 +137,14 @@ export class StorefrontProductsQueryDto {
   })
   @IsOptional()
   @Matches(/^(createdAt|price|name):(asc|desc)$/)
-  sort = 'createdAt:desc';
+  sort: string = 'createdAt:desc';
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
   @IsOptional()
@@ -152,7 +152,7 @@ export class StorefrontProductsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 export class StorefrontProductsPageDto {
@@ -307,7 +307,7 @@ export class StorefrontCartItemDto {
   @Min(1)
   // BE-18: bitta tovar qatori 1 000 donagacha
   @Max(1000)
-  quantity = 1;
+  quantity: number = 1;
 }
 
 export class UpdateStorefrontCartItemDto {

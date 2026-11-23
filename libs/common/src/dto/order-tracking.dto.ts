@@ -16,7 +16,7 @@ export class BuyerOrdersQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ type: Number, example: 20, default: 20 })
   @IsOptional()
@@ -24,7 +24,7 @@ export class BuyerOrdersQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 export class BuyerOrderRefundDto {

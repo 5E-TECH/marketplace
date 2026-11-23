@@ -484,6 +484,57 @@ describeWithPostgres(
         `SELECT COUNT(*)::int AS total FROM checkout.handover_act`,
       )) as Array<{ total: number }>;
       expect(total).toBe(1);
+
+      // BE-25 (FE-17 «Oldingi aktlar»): ro‘yxat — karta bilan bir xil shakl, yangisi tepada, sahifalab.
+      // ID va vaqt tartibi ataylab har xil: `older` — ID kattaroq, vaqti eng eski; `newest` — ID ham, vaqt ham eng
+      // katta. [newest, act, older] ni faqat `created_at DESC` beradi (ID bo‘yicha har qanday tartib boshqacha).
+      const [older] = (await checkoutDs.query(
+        `INSERT INTO checkout.handover_act (parcel_count, created_by, created_at)
+         VALUES (1, 9, now() - interval '1 day') RETURNING id::text AS id`,
+      )) as Array<{ id: string }>;
+      const [newest] = (await checkoutDs.query(
+        `INSERT INTO checkout.handover_act (parcel_count, created_by, created_at)
+         VALUES (1, 9, now() + interval '1 hour') RETURNING id::text AS id`,
+      )) as Array<{ id: string }>;
+      try {
+        const page = await fulfillment.acts({ page: 1, limit: 20 });
+        expect(page).toMatchObject({ total: 3, page: 1, limit: 20 });
+        expect(page.items.map((item) => item.id)).toEqual([
+          newest.id,
+          act.id,
+          older.id,
+        ]);
+        expect(page.items[1]).toEqual(act);
+        expect(page.items[2]).toMatchObject({
+          parcelCount: 1,
+          createdBy: '9',
+          items: [],
+        });
+        await expect(fulfillment.acts({ page: 2, limit: 1 })).resolves.toEqual({
+          items: [act],
+          total: 3,
+          page: 2,
+          limit: 1,
+        });
+        await expect(fulfillment.acts({ page: 3, limit: 1 })).resolves.toEqual({
+          items: [await fulfillment.act(older.id)],
+          total: 3,
+          page: 3,
+          limit: 1,
+        });
+        // RPC to‘g‘ridan chaqirilsa ham chegara: limit ≤ 100, sahifa ≥ 1
+        await expect(
+          fulfillment.acts({ page: -3, limit: 5_000 }),
+        ).resolves.toMatchObject({ page: 1, limit: 100, total: 3 });
+        await expect(fulfillment.acts({ page: 9, limit: 20 })).resolves.toEqual(
+          { items: [], total: 3, page: 9, limit: 20 },
+        );
+      } finally {
+        await checkoutDs.query(
+          `DELETE FROM checkout.handover_act WHERE id = ANY($1::bigint[])`,
+          [[older.id, newest.id]],
+        );
+      }
     });
 
     it('bekor qilingan buyurtma ro‘yxatdan chiqadi; Elchi posilkasi yaratilmasa — sabab ro‘yxatda va yorliqda', async () => {
