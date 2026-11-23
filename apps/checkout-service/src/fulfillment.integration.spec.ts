@@ -564,6 +564,17 @@ describeWithPostgres(
         parcels: [{ orderId: first.id }],
         truncated: true,
       });
+      // moliya farq chiqqanlarini qayta o‘qiydi — faqat shu buyurtmalar; noto‘g‘ri ID tashlanadi
+      await expect(
+        check.parcels({ orderIds: [second.id, 'x', '99999999999999999999'] }),
+      ).resolves.toMatchObject({
+        parcels: [{ orderId: second.id }],
+        truncated: false,
+      });
+      await expect(check.parcels({ orderIds: ['x'] })).resolves.toEqual({
+        parcels: [],
+        truncated: false,
+      });
       // yopilgan (pul o‘tkazilgan) buyurtma: 14 kundan eski — chiqadi, yangi — qoladi
       try {
         await checkoutDs.query(
@@ -580,6 +591,15 @@ describeWithPostgres(
         expect((await check.parcels()).parcels[1]).toMatchObject({
           orderId: second.id,
           status: LeadOrderStatus.REMITTED,
+        });
+        // rad etilgan — Elchi bozorga qaytargunicha ochiq: 14 kundan eski bo‘lsa ham tekshiriladi
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'REFUSED', updated_at = now() - interval '40 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect((await check.parcels()).parcels[1]).toMatchObject({
+          orderId: second.id,
+          status: LeadOrderStatus.REFUSED,
         });
       } finally {
         await checkoutDs.query(

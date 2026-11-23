@@ -10,12 +10,16 @@ import {
 } from '@app/common';
 import { leadOrderNumber } from './lead-order-status.service';
 
-/** Hali yopilmagan (Elchi’da harakatda yoki pul kutilayotgan) holatlar — har kuni tekshiriladi. */
+/**
+ * Hali yopilmagan (Elchi’da harakatda, pul yoki qaytgan posilka kutilayotgan) holatlar — har kuni tekshiriladi.
+ * Rad etilgan posilka Elchi bozorga qaytargunicha Elchi’da (BE-21 `returned` → RETURNING).
+ */
 export const ELCHI_CHECK_OPEN_STATUSES: LeadOrderStatus[] = [
   LeadOrderStatus.HANDED_TO_ELCHI,
   LeadOrderStatus.IN_TRANSIT,
   LeadOrderStatus.DELIVERED,
   LeadOrderStatus.RETURN_REQUESTED,
+  LeadOrderStatus.REFUSED,
   LeadOrderStatus.RETURNING,
 ];
 
@@ -23,21 +27,39 @@ export const ELCHI_CHECK_OPEN_STATUSES: LeadOrderStatus[] = [
 export const ELCHI_CHECK_RECENT_DAYS = 14;
 /** Bir tekshiruvdagi posilkalar chegarasi [taklif] — oshsa `truncated`, qolganlari keyingi kunlarda. */
 export const ELCHI_CHECK_MAX_PARCELS = 5_000;
+const MAX_BIGINT = BigInt('9223372036854775807');
 
 /**
  * BE-46 (TC3, ega 2026-11-24 «Avtomatik so‘rov»): moliyaning kunlik Elchi tekshiruvi uchun posilkalar — Elchi’ga
  * topshirilgan lid buyurtmalari: ochiq holatdagilar hammasi, yopilganlari oxirgi 14 kun ichida o‘zgargan bo‘lsa.
  * Eng eski topshirilgani birinchi (chegara oshsa yangilari keyingi kunga qoladi, eskisi doim tekshiriladi).
+ * `orderIds` — faqat shu buyurtmalar (moliya farq chiqqanlarini Elchi javobidan keyin qayta o‘qiydi: tekshiruv
+ * davomida kelgan xabar soxta farq bermasin); oyna sharti bu holda qo‘llanmaydi.
  */
 @Injectable()
 export class ElchiCheckParcelsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async parcels(input?: { limit?: number }): Promise<ElchiCheckParcelsResult> {
+  async parcels(input?: {
+    limit?: number;
+    orderIds?: unknown;
+  }): Promise<ElchiCheckParcelsResult> {
     const limit = Math.min(
       ELCHI_CHECK_MAX_PARCELS,
       Math.max(1, Math.trunc(Number(input?.limit) || ELCHI_CHECK_MAX_PARCELS)),
     );
+    const orderIds = Array.isArray(input?.orderIds)
+      ? [
+          ...new Set(
+            input.orderIds
+              .map((id) => String(id ?? ''))
+              .filter(
+                (id) => /^[1-9]\d{0,18}$/.test(id) && BigInt(id) <= MAX_BIGINT,
+              ),
+          ),
+        ].slice(0, ELCHI_CHECK_MAX_PARCELS)
+      : null;
+    if (orderIds && !orderIds.length) return { parcels: [], truncated: false };
     const rows = (await this.dataSource.query(
       `SELECT o.id::text AS "orderId", p.elchi_shipment_id::text AS "shipmentId", o.status,
               COALESCE(p.cod_amount, o.cod_amount, 0)::text AS "codAmount"
@@ -46,10 +68,12 @@ export class ElchiCheckParcelsService {
         WHERE o.source IS NOT NULL
           AND p.elchi_shipment_id IS NOT NULL
           AND p.handed_over_at IS NOT NULL
-          AND (o.status = ANY($1::text[]) OR o.updated_at >= now() - make_interval(days => $2))
+          AND ($4::bigint[] IS NOT NULL
+               OR o.status = ANY($1::text[]) OR o.updated_at >= now() - make_interval(days => $2))
+          AND ($4::bigint[] IS NULL OR o.id = ANY($4::bigint[]))
         ORDER BY p.handed_over_at, o.id
         LIMIT $3`,
-      [ELCHI_CHECK_OPEN_STATUSES, ELCHI_CHECK_RECENT_DAYS, limit + 1],
+      [ELCHI_CHECK_OPEN_STATUSES, ELCHI_CHECK_RECENT_DAYS, limit + 1, orderIds],
     )) as Array<{
       orderId: string;
       shipmentId: string;
@@ -75,7 +99,7 @@ export class ElchiCheckController {
   constructor(private readonly service: ElchiCheckParcelsService) {}
 
   @MessagePattern({ cmd: ELCHI_CHECK_RPC.PARCELS })
-  parcels(@Payload() input: { limit?: number }) {
+  parcels(@Payload() input: { limit?: number; orderIds?: string[] }) {
     return this.service.parcels(input ?? {});
   }
 }

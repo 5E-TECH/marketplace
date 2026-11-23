@@ -23216,7 +23216,9 @@
                 "NO_REMITTANCE",
                 "COLLECTED",
                 "FEE",
-                "MARKET_PAID"
+                "MARKET_PAID",
+                "EXTRA_COST",
+                "REFUSAL_FEE"
               ]
             }
           },
@@ -23268,6 +23270,12 @@
             "nullable": true,
             "description": "Elchi: bizga o‘tkazgani"
           },
+          "elchiExtraCost": {
+            "type": "number",
+            "example": 0,
+            "nullable": true,
+            "description": "Elchi: kuryer qo‘shimcha xarajati (o‘tkazmadan ushlanadi; rad etilganda — rad to‘lovi)"
+          },
           "recordedCollected": {
             "type": "number",
             "example": null,
@@ -23283,6 +23291,12 @@
             "type": "number",
             "example": null,
             "nullable": true
+          },
+          "recordedRefusalFee": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Moliyada yozilgan rad to‘lovi (Elchi webhooki)"
           },
           "error": {
             "type": "string",
@@ -23319,9 +23333,11 @@
           "elchiCollected",
           "elchiFee",
           "elchiMarketPaid",
+          "elchiExtraCost",
           "recordedCollected",
           "recordedFee",
           "recordedMarketPaid",
+          "recordedRefusalFee",
           "error",
           "resolution",
           "checkedAt"

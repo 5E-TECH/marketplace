@@ -688,4 +688,39 @@ describe('ElchiIntegrationService.createShipment (shopId → elchi_market_id)', 
     await service.syncGeoCache();
     expect(elchi.getRegions).toHaveBeenCalledTimes(2);
   });
+
+  it('BE-46: ko‘p posilka holati — noto‘g‘ri va takror ID tashlanadi, 100 dan ko‘p — 400, Elchi xatosi matni bilan FAILED', async () => {
+    const { service, elchi } = makeService();
+    elchi.getShipmentsStatus = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [], notFound: ['5'], failed: [] })
+      .mockRejectedValueOnce(
+        new Error('Elchi API POST /partner/shipments/status → 503: down'),
+      );
+    await expect(
+      service.shipmentsStatus({ shipmentIds: ['5', '5', 'x', '', '0'] }),
+    ).resolves.toEqual({ items: [], notFound: ['5'], failed: [] });
+    expect(elchi.getShipmentsStatus).toHaveBeenLastCalledWith(['5']);
+    await expect(
+      service.shipmentsStatus({ shipmentIds: ['7', '8'] }),
+    ).resolves.toEqual({
+      items: [],
+      notFound: [],
+      failed: [
+        {
+          shipmentId: '7',
+          error: 'Elchi API POST /partner/shipments/status → 503: down',
+        },
+        {
+          shipmentId: '8',
+          error: 'Elchi API POST /partner/shipments/status → 503: down',
+        },
+      ],
+    });
+    await expect(
+      service.shipmentsStatus({
+        shipmentIds: Array.from({ length: 101 }, (_, i) => String(i + 1)),
+      }),
+    ).rejects.toThrow('100 tadan ko‘p');
+  });
 });

@@ -5,6 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - `elchi_check_run` — bitta tekshiruv: kun (Toshkent), kim/nima ishga tushirgani, sonlar, butunlay yiqilgan bo‘lsa
  *   xato, xabar yuborilgan vaqt.
  * - `elchi_check_item` — faqat farqli (DIFF) va o‘qib bo‘lmagan (FAILED) posilkalar; mos posilkalar faqat sanaladi.
+ *   Avval farqi bo‘lgan posilka mos chiqsa — MATCHED belgisi (farq yo‘qoldi; keyin xuddi shu farq qaytsa, u yangi).
  *   `signature` — farqning o‘zi (sabablar, holatlar, summalar): keyingi tekshiruvda xuddi shu farq bo‘lsa, oldingi izoh
  *   ko‘chiriladi (`resolution_carried`) — o‘zgarmagan farqni moliya har kuni qayta yopmaydi.
  * Pul harakati yo‘q — tekshiruv faqat ko‘rsatadi.
@@ -50,9 +51,11 @@ export class CreateElchiCheck1797638400000 implements MigrationInterface {
         "elchi_collected" BIGINT,
         "elchi_fee" BIGINT,
         "elchi_market_paid" BIGINT,
+        "elchi_extra_cost" BIGINT,
         "recorded_collected" BIGINT,
         "recorded_fee" BIGINT,
         "recorded_market_paid" BIGINT,
+        "recorded_refusal_fee" BIGINT,
         "error" VARCHAR(500),
         "signature" VARCHAR(1000) NOT NULL,
         "resolution_comment" VARCHAR(1000),
@@ -60,7 +63,7 @@ export class CreateElchiCheck1797638400000 implements MigrationInterface {
         "resolved_at" TIMESTAMPTZ,
         "resolution_carried" BOOLEAN NOT NULL DEFAULT false,
         "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
-        CONSTRAINT "chk_finance_elchi_check_item_state" CHECK ("state" IN ('DIFF', 'FAILED')),
+        CONSTRAINT "chk_finance_elchi_check_item_state" CHECK ("state" IN ('DIFF', 'FAILED', 'MATCHED')),
         CONSTRAINT "chk_finance_elchi_check_item_resolution" CHECK (
           ("resolved_at" IS NULL) = ("resolved_by" IS NULL)
           AND ("resolved_at" IS NULL) = ("resolution_comment" IS NULL)

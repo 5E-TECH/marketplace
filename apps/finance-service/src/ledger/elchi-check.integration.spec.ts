@@ -13,6 +13,7 @@ import {
   ElchiCheckParcel,
   ElchiCheckReason as R,
   ElchiShipmentStatus,
+  LEADER_LOCK_CLASS,
   LeadOrderStatus as S,
 } from '@app/common';
 import { CreateFinanceTables1724673600000 } from '../migrations/1724673600000-create-finance-tables';
@@ -61,6 +62,7 @@ const shipment = (
   elchiFee: 40_000,
   marketPaidAmount: 0,
   codAmount: COD,
+  extraCost: 0,
   ...money,
 });
 
@@ -79,6 +81,7 @@ describePostgres(
     let notFound: Set<string>;
     let elchiFailed: Set<string>;
     let checkoutDown = false;
+    let refetched: ElchiCheckParcel[] | null = null;
     let flag = 'on';
     const checkoutSend = jest.fn();
     const integrationSend = jest.fn();
@@ -148,10 +151,19 @@ describePostgres(
         logging: false,
       }).initialize();
       ledger = new LedgerService(ds);
-      checkoutSend.mockImplementation(() =>
-        checkoutDown
-          ? throwError(() => new Error('checkout javob bermadi'))
-          : of({ parcels, truncated: false }),
+      checkoutSend.mockImplementation(
+        (_pattern: unknown, data: { orderIds?: string[] }) => {
+          if (checkoutDown)
+            return throwError(() => new Error('checkout javob bermadi'));
+          // qayta o‘qish (farq chiqqanlari): `refetched` — tekshiruv davomida o‘zgargan holat
+          const list = data?.orderIds ? (refetched ?? parcels) : parcels;
+          return of({
+            parcels: data?.orderIds
+              ? list.filter((p) => data.orderIds!.includes(p.orderId))
+              : list,
+            truncated: false,
+          });
+        },
       );
       integrationSend.mockImplementation(
         (_pattern: unknown, data: { shipmentIds: string[] }) =>
@@ -449,23 +461,233 @@ describePostgres(
       });
     });
 
-    it('qo‘lda ishga tushirish: boshqa tekshiruv ishlayotgan bo‘lsa 409; kunlik ish bayroqsiz ishlamaydi', async () => {
+    it('farq yo‘qolib qaytsa — yangi farq: eski izoh ko‘chmaydi, xabar yuboriladi; FAILED kuni yopishni to‘smaydi', async () => {
+      parcels = [parcel('960', S.DELIVERED), parcel('961', S.IN_TRANSIT)];
+      const drift = shipment('960', 'sold', { collectedFromCustomer: 280_000 });
+      elchi = new Map([
+        ['7960', drift],
+        ['7961', shipment('961', 'cancelled')],
+      ]);
+      notFound = new Set();
+      elchiFailed = new Set();
+      // 1: 960 — yig‘ilgan summa farqi, 961 — holat farqi; 960 izoh bilan yopiladi
+      const a = await service.run('CRON', null);
+      expect(a).toMatchObject({ diffCount: 2 });
+      const a960 = await itemOf(a.id, '960');
+      expect(a960.reasons).toEqual([R.COLLECTED]);
+      await service.resolve({
+        id: a960.id,
+        comment: 'Elchi bilan kelishildi',
+        userId: '6',
+      });
+      // 2: 960 tuzaldi — farq yo‘qoldi (MATCHED belgisi, ro‘yxatda ko‘rinmaydi); 961 — Elchi o‘qiy olmadi
+      elchi.set(
+        '7960',
+        shipment('960', 'sold', { collectedFromCustomer: COD }),
+      );
+      elchiFailed = new Set(['7961']);
+      elchi.delete('7961');
+      const b = await service.run('CRON', null);
+      expect(b).toMatchObject({ diffCount: 0, failed: 1, matched: 1 });
+      expect(await itemOf(b.id, '960')).toBeUndefined();
+      // FAILED keyingi qator 1-tekshiruvdagi 961 farqini yopishni to‘smaydi
+      await expect(
+        service.resolve({
+          id: (await itemOf(a.id, '961')).id,
+          comment: 'Elchi bekorni tasdiqladi',
+          userId: '6',
+        }),
+      ).resolves.toMatchObject({ state: ElchiCheckItemState.RESOLVED });
+      // 3: 960 da aynan o‘sha farq qaytdi — yangi: izoh ko‘chmaydi, xabar
+      elchi.set('7960', drift);
+      elchiFailed = new Set();
+      elchi.set('7961', shipment('961', 'cancelled'));
+      emit.mockClear();
+      const c = await service.run('CRON', null);
+      expect(await itemOf(c.id, '960')).toMatchObject({
+        state: ElchiCheckItemState.DIFF,
+        resolution: null,
+      });
+      // 961: oxirgi ma’lum natija — yopilgan o‘sha farq (FAILED kun hisobga olinmaydi) — izoh ko‘chadi
+      expect(await itemOf(c.id, '961')).toMatchObject({
+        state: ElchiCheckItemState.RESOLVED,
+        resolution: { comment: 'Elchi bekorni tasdiqladi', carried: true },
+      });
+      expect(emit).toHaveBeenCalledWith(
+        ELCHI_CHECK_MISMATCH_EVENT,
+        expect.objectContaining({
+          newDiffCount: 1,
+          orders: [
+            { orderId: '960', orderNumber: 'L-960', reasons: [R.COLLECTED] },
+          ],
+        }),
+      );
+    });
+
+    it('tekshiruv davomida kelgan Elchi xabari soxta farq bermaydi (farqlilar qayta o‘qiladi)', async () => {
+      parcels = [parcel('970', S.IN_TRANSIT)];
+      elchi = new Map([
+        ['7970', shipment('970', 'sold', { collectedFromCustomer: COD })],
+      ]);
+      // ro‘yxat olingandan keyin «sotildi» xabari keldi — bizda endi DELIVERED
+      refetched = [parcel('970', S.DELIVERED)];
+      try {
+        const run = await service.run('CRON', null);
+        expect(run).toMatchObject({ checked: 1, matched: 1, diffCount: 0 });
+        expect(checkoutSend).toHaveBeenLastCalledWith(
+          { cmd: ELCHI_CHECK_RPC.PARCELS },
+          { orderIds: ['970'] },
+        );
+      } finally {
+        refetched = null;
+      }
+    });
+
+    it('rad etilgan posilka: Elchi xarajati moliyadagi rad to‘lovi bilan solishtiriladi', async () => {
+      await ledger.onOrderStatusChanged(
+        orderEvent({
+          status: S.REFUSED,
+          eventId: 'r-980',
+          orderId: '980',
+          orderNumber: 'L-980',
+          leadId: '9980',
+          occurredAt: '2027-01-12T10:00:00.000Z',
+        }),
+      );
+      await ledger.onRemittance({
+        schemaVersion: 2,
+        eventId: 'rem-980',
+        orderId: '980',
+        shipmentId: '7980',
+        elchiStatus: 'closed' as 'paid',
+        collectedFromCustomer: 0,
+        elchiFee: 0,
+        marketPaidAmount: 0,
+        refusalFee: 20_000,
+        occurredAt: '2027-01-13T06:05:00.000Z',
+      });
+      parcels = [parcel('980', S.REFUSED), parcel('981', S.REFUSED)];
+      elchi = new Map([
+        ['7980', shipment('980', 'cancelled', { extraCost: 20_000 })],
+        ['7981', shipment('981', 'cancelled', { extraCost: 20_000 })],
+      ]);
+      const run = await service.run('CRON', null);
+      expect(run).toMatchObject({ matched: 1, diffCount: 1 });
+      expect(await itemOf(run.id, '981')).toMatchObject({
+        reasons: [R.REFUSAL_FEE],
+        elchiExtraCost: 20_000,
+        recordedRefusalFee: null,
+      });
+    });
+
+    it('Elchi uzilishi: ketma-ket 3 bo‘lak o‘qilmasa qolgani so‘ralmaydi', async () => {
+      parcels = Array.from({ length: 450 }, (_, i) =>
+        parcel(String(3000 + i), S.IN_TRANSIT),
+      );
+      integrationSend.mockClear();
+      integrationSend.mockImplementation(() =>
+        throwError(() => new Error('Elchi API 503')),
+      );
+      try {
+        const run = await service.run('CRON', null);
+        expect(integrationSend).toHaveBeenCalledTimes(3);
+        expect(run).toMatchObject({ checked: 450, failed: 450 });
+        expect((await itemOf(run.id, '3449')).error).toBe(
+          'Elchi javob bermadi — tekshiruv to‘xtatildi',
+        );
+        expect((await itemOf(run.id, '3000')).error).toBe('Elchi API 503');
+      } finally {
+        integrationSend.mockImplementation(
+          (_pattern: unknown, data: { shipmentIds: string[] }) =>
+            of({
+              items: data.shipmentIds
+                .filter((id) => elchi.has(id))
+                .map((id) => elchi.get(id)),
+              notFound: data.shipmentIds.filter((id) => notFound.has(id)),
+              failed: [],
+            }),
+        );
+      }
+    });
+
+    it('uzilgan tekshiruv yopiladi; ro‘yxat sukut bo‘yicha oxirgi muvaffaqiyatli tekshiruvdan', async () => {
+      parcels = [parcel('990', S.DELIVERED)];
+      elchi = new Map([['7990', shipment('990', 'paid', PAID)]]);
+      const ok = await service.run('CRON', null);
+      expect(ok).toMatchObject({ diffCount: 1 });
+      const [orphan] = (await ds.query(
+        `INSERT INTO finance.elchi_check_run (check_date, trigger) VALUES (current_date, 'CRON') RETURNING id::text`,
+      )) as Array<{ id: string }>;
+      // ishlayotgan (yoki uzilgan) tekshiruv oldingi farqlarni yashirmaydi
+      await expect(service.items({ query: {} })).resolves.toMatchObject({
+        run: { id: ok.id },
+        total: 1,
+      });
+      checkoutDown = true;
+      try {
+        const failed = await service.run('CRON', null);
+        expect(failed.error).toContain('checkout javob bermadi');
+      } finally {
+        checkoutDown = false;
+      }
+      const [closed] = (await ds.query(
+        `SELECT finished_at IS NOT NULL AS done, error FROM finance.elchi_check_run WHERE id = $1`,
+        [orphan.id],
+      )) as Array<{ done: boolean; error: string }>;
+      expect(closed).toEqual({
+        done: true,
+        error: 'Tekshiruv uzildi (servis to‘xtagan)',
+      });
+      // yiqilgan tekshiruv ham yashirmaydi
+      await expect(service.items({ query: {} })).resolves.toMatchObject({
+        run: { id: ok.id },
+      });
+      await expect(service.get({})).resolves.toMatchObject({
+        error: expect.stringContaining('checkout javob bermadi'),
+      });
+    });
+
+    it('qo‘lda ishga tushirish: qulf band — darhol 409; bo‘sh — fonda ishlaydi; kunlik ish bayroqsiz ishlamaydi', async () => {
       await expect(service.start({ userId: 'x' })).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      const [busy] = (await ds.query(
-        `INSERT INTO finance.elchi_check_run (check_date, trigger) VALUES (current_date, 'CRON') RETURNING id::text`,
-      )) as Array<{ id: string }>;
+      await expect(
+        service.items({ query: { runId: '9999999999999999999' } }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      const holder = new Client({ connectionString: url });
+      await holder.connect();
       try {
+        await holder.query('SELECT pg_advisory_lock($1, hashtext($2))', [
+          LEADER_LOCK_CLASS,
+          'finance-elchi-check',
+        ]);
         await expect(service.start({ userId: '6' })).rejects.toBeInstanceOf(
           ConflictException,
         );
       } finally {
-        await ds.query(
-          `UPDATE finance.elchi_check_run SET finished_at = now() WHERE id = $1`,
-          [busy.id],
-        );
+        await holder.end();
       }
+      parcels = [parcel('995', S.IN_TRANSIT)];
+      elchi = new Map([['7995', shipment('995', 'on the road')]]);
+      const before = (await service.get({})).id;
+      await expect(service.start({ userId: '6' })).resolves.toEqual({
+        accepted: true,
+      });
+      let latest = await service.get({});
+      for (
+        let i = 0;
+        i < 50 && (latest.id === before || !latest.finishedAt);
+        i++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        latest = await service.get({});
+      }
+      expect(latest).toMatchObject({
+        trigger: 'MANUAL',
+        checked: 1,
+        matched: 1,
+      });
+
       flag = 'off';
       checkoutSend.mockClear();
       await service.daily();

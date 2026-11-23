@@ -85,6 +85,11 @@ export interface ElchiShipmentStatus {
   marketPaidAmount: number;
   /** To‘lanishi kerak summa (`cod_amount`). */
   codAmount: number | null;
+  /**
+   * Kuryer yozgan qo‘shimcha xarajat (`extra_cost`): Elchi uni bozorga o‘tkazmadan ushlaydi — hamkor ham hisobga olishi
+   * kerak (Elchi-Backend `getPartnerShipment` izohi). Rad etilgan posilkada — bizdagi rad to‘lovi (BE-21).
+   */
+  extraCost: number;
 }
 
 export interface ElchiShipmentsStatusResult {
@@ -113,6 +118,10 @@ export enum ElchiCheckReason {
   FEE = 'FEE',
   /** Elchi o‘tkazgan summa yozilgan o‘tkazmadagidan farq qiladi. */
   MARKET_PAID = 'MARKET_PAID',
+  /** Sotilgan posilkada Elchi qo‘shimcha xarajat yozgan — o‘tkazmadan ushlanadi, moliyada hisobga olinmagan. */
+  EXTRA_COST = 'EXTRA_COST',
+  /** Rad etilgan posilka: Elchi xarajati moliyadagi rad to‘lovidan farq qiladi yoki yozilmagan. */
+  REFUSAL_FEE = 'REFUSAL_FEE',
 }
 
 /** Ro‘yxatdagi qator holati. */
@@ -284,6 +293,15 @@ export class ElchiCheckItemDto {
   elchiMarketPaid: number | null;
 
   @ApiProperty({
+    example: 0,
+    nullable: true,
+    type: Number,
+    description:
+      'Elchi: kuryer qo‘shimcha xarajati (o‘tkazmadan ushlanadi; rad etilganda — rad to‘lovi)',
+  })
+  elchiExtraCost: number | null;
+
+  @ApiProperty({
     example: null,
     nullable: true,
     type: Number,
@@ -297,6 +315,14 @@ export class ElchiCheckItemDto {
 
   @ApiProperty({ example: null, nullable: true, type: Number })
   recordedMarketPaid: number | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Number,
+    description: 'Moliyada yozilgan rad to‘lovi (Elchi webhooki)',
+  })
+  recordedRefusalFee: number | null;
 
   @ApiProperty({
     example: null,

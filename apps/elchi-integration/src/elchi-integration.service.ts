@@ -553,7 +553,18 @@ export class ElchiIntegrationService {
       throw new BadRequestException(
         `Bir so‘rovda ${ELCHI_STATUS_BATCH_MAX} tadan ko‘p posilka bo‘lmaydi`,
       );
-    return this.elchi.getShipmentsStatus(ids);
+    try {
+      return await this.elchi.getShipmentsStatus(ids);
+    } catch (error) {
+      // xato matni moliyaga yetib borsin (RPC xatosi «Internal server error» bo‘lib qolardi) — hammasi FAILED
+      const message = String((error as Error)?.message ?? error).slice(0, 300);
+      this.logger.warn(`Elchi posilka holatlari olinmadi: ${message}`);
+      return {
+        items: [],
+        notFound: [],
+        failed: ids.map((shipmentId) => ({ shipmentId, error: message })),
+      };
+    }
   }
 
   async getTariff(input: {

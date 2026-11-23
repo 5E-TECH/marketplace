@@ -294,6 +294,7 @@ export class ElchiApiClient {
           elchiFee: this.money(item.elchi_fee) ?? null,
           marketPaidAmount: this.money(item.cod_collected) ?? 0,
           codAmount: this.money(item.cod_amount) ?? null,
+          extraCost: this.money(item.extra_cost) ?? 0,
         };
       }),
       notFound: Array.isArray(notFound) ? notFound.map((id) => String(id)) : [],

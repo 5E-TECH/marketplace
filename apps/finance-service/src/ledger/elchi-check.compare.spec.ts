@@ -29,6 +29,7 @@ const elchi = (
   elchiFee: 25_000,
   marketPaidAmount: 0,
   codAmount: 292_000,
+  extraCost: 0,
   ...money,
 });
 
@@ -50,14 +51,70 @@ describe('BE-46 TC3: Elchi tekshiruvi — posilka solishtiruvi', () => {
     ['returned_to_market', S.RETURNING],
     ['cancelled (sent)', S.RETURNED_GRADED],
     ['closed', S.CANCELLED],
+    ['returned_to_market', S.CANCELLED],
   ])('holat mos: Elchi %p, bizda %p — farq yo‘q', (status, ours) => {
     expect(compareElchiShipment(parcel(ours), elchi(status), null)).toEqual({
       reasons: [],
       elchiCollected: null,
       elchiFee: 25_000,
       elchiMarketPaid: 0,
+      elchiExtraCost: 0,
     });
   });
+
+  it.each([
+    ['sold', S.RETURNING],
+    ['sold', S.RETURNED_GRADED],
+    ['partly_paid', S.RETURNING],
+  ])(
+    'qaytarish (BE-44) Elchi’ga bormaydi: Elchi %p, bizda %p — mos',
+    (status, ours) => {
+      expect(
+        compareElchiShipment(
+          parcel(ours),
+          elchi(status, { ...PAID, marketPaidAmount: 0 }),
+          status === 'partly_paid' ? recorded({ marketPaidAmount: 0 }) : null,
+        ).reasons,
+      ).toEqual([]);
+    },
+  );
+
+  it('«bozorga qaytarildi» xabari yo‘qolgan: Elchi returned_to_market, bizda hali rad etildi → STATUS', () => {
+    expect(
+      compareElchiShipment(parcel(S.REFUSED), elchi('returned_to_market'), null)
+        .reasons,
+    ).toEqual([R.STATUS]);
+  });
+
+  it('kuryer qo‘shimcha xarajati: sotilgan posilkada extra_cost > 0 → EXTRA_COST (o‘tkazmadan ushlanadi)', () => {
+    expect(
+      compareElchiShipment(
+        parcel(S.REMITTED),
+        elchi('paid', { ...PAID, extraCost: 15_000 }),
+        recorded(),
+      ),
+    ).toMatchObject({ reasons: [R.EXTRA_COST], elchiExtraCost: 15_000 });
+  });
+
+  it.each([
+    [20_000, 20_000, []],
+    [0, null, []],
+    [20_000, null, [R.REFUSAL_FEE]],
+    [25_000, 20_000, [R.REFUSAL_FEE]],
+    [0, 20_000, [R.REFUSAL_FEE]],
+  ])(
+    'rad to‘lovi: Elchi xarajati %p, moliyada %p → %p',
+    (extraCost, recordedFee, reasons) => {
+      expect(
+        compareElchiShipment(
+          parcel(S.REFUSED),
+          elchi('cancelled', { extraCost }),
+          null,
+          recordedFee,
+        ).reasons,
+      ).toEqual(reasons);
+    },
+  );
 
   it('mos: Elchi «to‘landi», bizda REMITTED, o‘tkazma yozuvi bir xil', () => {
     expect(

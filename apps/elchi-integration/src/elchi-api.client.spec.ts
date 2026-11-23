@@ -333,7 +333,7 @@ describe('ElchiApiClient config (C2.20)', () => {
                 elchi_fee: 25000,
                 market_amount: 267000,
                 total_price: 292000,
-                extra_cost: 0,
+                extra_cost: '15000.00',
                 tracking: 'qr-1',
               },
               {
@@ -371,6 +371,7 @@ describe('ElchiApiClient config (C2.20)', () => {
           elchiFee: 25000,
           marketPaidAmount: 267000,
           codAmount: 267000,
+          extraCost: 15000,
         },
         {
           shipmentId: '1251134',
@@ -380,6 +381,7 @@ describe('ElchiApiClient config (C2.20)', () => {
           elchiFee: null,
           marketPaidAmount: 0,
           codAmount: 251000,
+          extraCost: 0,
         },
       ],
       notFound: ['1251135'],
