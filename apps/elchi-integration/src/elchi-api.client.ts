@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ElchiShipmentResult } from '@app/common';
+import {
+  ELCHI_STATUS_BATCH_MAX,
+  ElchiShipmentResult,
+  ElchiShipmentsStatusResult,
+} from '@app/common';
 
 export interface ElchiRegion {
   id: string;
@@ -52,6 +56,11 @@ export interface CreateElchiShipmentInput {
 
 /** Posilka yaratish kutishi: Elchi gateway ning 65 s chegarasidan uzunroq. */
 const SHIPMENT_CREATE_TIMEOUT_MS = 70_000;
+/**
+ * Ko‘p posilka holati: Elchi har posilkani alohida o‘qiydi (10 ta parallel, har biri 8 s gacha) va javobni gateway
+ * 65 s gacha kutadi (Elchi-Backend `PARTNER_SHIPMENT_TIMEOUT_MS`) — undan uzunroq kutiladi.
+ */
+const SHIPMENTS_STATUS_TIMEOUT_MS = 70_000;
 
 /** Elchi HTTP xatosi: `status` bo'yicha qayta urinish yoki rad qaror qilinadi. */
 export class ElchiApiError extends Error {
@@ -240,6 +249,60 @@ export class ElchiApiClient {
       shipment_id: String(id),
       ...(qrToken ? { qr_code_token: String(qrToken) } : {}),
       ...(toBePaid !== undefined ? { to_be_paid: toBePaid } : {}),
+    };
+  }
+
+  /**
+   * POST /partner/shipments/status — 100 tagacha posilka holati bitta so‘rovda (BE-46 kunlik tekshiruvi).
+   * Elchi javobi `{ items, not_found, failed }`; har element `GET /partner/shipments/:id` shaklida
+   * (Elchi-Backend `integration-service.service.ts` `getPartnerShipmentsBulk`/`getPartnerShipment`). Pul maydonlari
+   * webhook bilan bir manbadan: `collected_from_customer` (sotilmagan — null), `elchi_fee`, `cod_collected` (Elchi
+   * bizga o‘tkazgani = webhookdagi `market_paid_amount`).
+   */
+  async getShipmentsStatus(
+    shipmentIds: string[],
+  ): Promise<ElchiShipmentsStatusResult> {
+    if (!shipmentIds.length) return { items: [], notFound: [], failed: [] };
+    if (shipmentIds.length > ELCHI_STATUS_BATCH_MAX)
+      throw new Error(
+        `Elchi bir so‘rovda ${ELCHI_STATUS_BATCH_MAX} tadan ko‘p posilka qabul qilmaydi`,
+      );
+    const res = await this.request(
+      'POST',
+      '/partner/shipments/status',
+      { shipment_ids: shipmentIds },
+      SHIPMENTS_STATUS_TIMEOUT_MS,
+    );
+    const items = this.pluck(res, 'items');
+    if (!Array.isArray(items))
+      throw new Error('Elchi javobida items ro‘yxati yo‘q');
+    const notFound = this.pluck(res, 'not_found');
+    const failed = this.pluck(res, 'failed');
+    return {
+      items: (items as Array<Record<string, unknown>>).map((item) => {
+        const id = item?.shipment_id;
+        if (id === undefined || id === null || String(id).trim() === '')
+          throw new Error('Elchi javobida shipment_id yo‘q');
+        const ref = item.external_order_id;
+        return {
+          shipmentId: String(id),
+          externalOrderId:
+            ref === undefined || ref === null ? null : String(ref),
+          status: String(item.status ?? ''),
+          collectedFromCustomer:
+            this.money(item.collected_from_customer) ?? null,
+          elchiFee: this.money(item.elchi_fee) ?? null,
+          marketPaidAmount: this.money(item.cod_collected) ?? 0,
+          codAmount: this.money(item.cod_amount) ?? null,
+        };
+      }),
+      notFound: Array.isArray(notFound) ? notFound.map((id) => String(id)) : [],
+      failed: Array.isArray(failed)
+        ? (failed as Array<Record<string, unknown>>).map((row) => ({
+            shipmentId: String(row?.shipment_id ?? ''),
+            error: String(row?.error ?? 'xato'),
+          }))
+        : [],
     };
   }
 

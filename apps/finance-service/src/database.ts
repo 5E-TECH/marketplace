@@ -10,6 +10,7 @@ import { CreateFeeHold1795824000000 } from './migrations/1795824000000-create-fe
 import { AddRemittanceResolution1796860800000 } from './migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from './migrations/1796947200000-create-settlement-response';
 import { SettingComment1797552000000 } from './migrations/1797552000000-setting-comment';
+import { CreateElchiCheck1797638400000 } from './migrations/1797638400000-create-elchi-check';
 import { CreateCodDailyCheck1796601600000 } from './migrations/1796601600000-create-cod-daily-check';
 import { CreateTextSetting1796774400000 } from './migrations/1796774400000-create-text-setting';
 import { SellerLedger } from './entities/seller-ledger.entity';
@@ -43,6 +44,7 @@ export const FINANCE_DB: DatabaseDefinition = {
     AddRemittanceResolution1796860800000,
     CreateSettlementResponse1796947200000,
     SettingComment1797552000000,
+    CreateElchiCheck1797638400000,
     CreateCodDailyCheck1796601600000,
     CreateTextSetting1796774400000,
   ],

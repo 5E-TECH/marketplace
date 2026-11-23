@@ -311,4 +311,120 @@ describe('ElchiApiClient config (C2.20)', () => {
     });
     fetchMock.mockRestore();
   });
+
+  // BE-46 TC3: kunlik Elchi tekshiruvi — 100 tagacha posilka holati bitta so‘rovda (Elchi M4ViM9jz)
+  it('ko‘p posilka holati: POST /partner/shipments/status, pul maydonlari webhookdagi nomlar bilan', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      // Elchi-Backend `getPartnerShipmentsBulk` → successRes: { statusCode, message, data: { items, not_found, failed } }
+      text: async () =>
+        JSON.stringify({
+          statusCode: 200,
+          message: 'shipments',
+          data: {
+            items: [
+              {
+                shipment_id: '1251133',
+                external_order_id: 'mp-order:1042',
+                status: 'paid',
+                cod_amount: '267000.00',
+                cod_collected: 267000,
+                collected_from_customer: '292000.00',
+                elchi_fee: 25000,
+                market_amount: 267000,
+                total_price: 292000,
+                extra_cost: 0,
+                tracking: 'qr-1',
+              },
+              {
+                shipment_id: 1251134,
+                external_order_id: 'mp-order:1043',
+                status: 'on the road',
+                cod_amount: 251000,
+                cod_collected: 0,
+                collected_from_customer: null,
+                elchi_fee: null,
+                market_amount: null,
+              },
+            ],
+            not_found: ['1251135'],
+            failed: [{ shipment_id: '1251136', error: 'timeout' }],
+          },
+        }),
+    } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+
+    await expect(
+      client.getShipmentsStatus(['1251133', '1251134', '1251135', '1251136']),
+    ).resolves.toEqual({
+      items: [
+        {
+          shipmentId: '1251133',
+          externalOrderId: 'mp-order:1042',
+          status: 'paid',
+          collectedFromCustomer: 292000,
+          elchiFee: 25000,
+          marketPaidAmount: 267000,
+          codAmount: 267000,
+        },
+        {
+          shipmentId: '1251134',
+          externalOrderId: 'mp-order:1043',
+          status: 'on the road',
+          collectedFromCustomer: null,
+          elchiFee: null,
+          marketPaidAmount: 0,
+          codAmount: 251000,
+        },
+      ],
+      notFound: ['1251135'],
+      failed: [{ shipmentId: '1251136', error: 'timeout' }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.elchi.uz/partner/shipments/status',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-api-key': 'secret-key' }),
+        body: JSON.stringify({
+          shipment_ids: ['1251133', '1251134', '1251135', '1251136'],
+        }),
+      }),
+    );
+    // 100 tadan ko‘p — Elchi 400 berardi, so‘rov yuborilmaydi; bo‘sh — so‘rovsiz bo‘sh javob
+    fetchMock.mockClear();
+    await expect(
+      client.getShipmentsStatus(
+        Array.from({ length: 101 }, (_, i) => String(i + 1)),
+      ),
+    ).rejects.toThrow('100 tadan ko‘p');
+    await expect(client.getShipmentsStatus([])).resolves.toEqual({
+      items: [],
+      notFound: [],
+      failed: [],
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it('ko‘p posilka holati: javobda items yo‘q — xato (jim bo‘sh natija emas)', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ data: { not_found: [] } }),
+    } as Response);
+    const client = new ElchiApiClient(
+      config({
+        ELCHI_PARTNER_API_URL: 'https://api.elchi.uz',
+        ELCHI_PARTNER_API_KEY: 'secret-key',
+      }) as never,
+    );
+    await expect(client.getShipmentsStatus(['1'])).rejects.toThrow(
+      'items ro‘yxati yo‘q',
+    );
+    fetchMock.mockRestore();
+  });
 });

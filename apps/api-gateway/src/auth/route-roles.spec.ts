@@ -201,6 +201,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /admin/finance/ledger',
     'GET /admin/finance/reconciliation/days',
     'GET /admin/finance/reconciliation/items',
+    // BE-46 TC3: Elchi bilan avtomatik tekshiruv (ega 2026-11-24 «Avtomatik so‘rov»)
+    'GET /admin/finance/reconciliation/elchi-check',
+    'GET /admin/finance/reconciliation/elchi-check/items',
+    'POST /admin/finance/reconciliation/elchi-check/items/:id/resolve',
+    'POST /admin/finance/reconciliation/elchi-check/run',
     'GET /admin/finance/reports',
     'GET /admin/finance/reports/reconciliation',
     'GET /admin/finance/settlements',

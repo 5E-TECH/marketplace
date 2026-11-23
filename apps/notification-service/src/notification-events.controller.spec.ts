@@ -1,4 +1,5 @@
 import { of } from 'rxjs';
+import { ElchiCheckReason } from '@app/common';
 import { NotificationEventsController } from './notification-events.controller';
 import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
@@ -282,6 +283,44 @@ describe('NotificationEventsController', () => {
         type: 'cod_reconciliation_mismatch',
         title: 'Sverka farqi: 2026-12-01',
         body: '2026-12-01: Elchi o‘tkazmasi 2 ta buyurtmada mos emas, farq -21000 so‘m. Moliya → kunlik sverka.',
+      }),
+    );
+  });
+
+  it('BE-46: Elchi tekshiruvida yangi farq — moliya va nazoratchiga', async () => {
+    identitySend
+      .mockReturnValueOnce(
+        of([{ id: '6', phone: '+998900000006', email: null }]),
+      )
+      .mockReturnValueOnce(
+        of([{ id: '7', phone: '+998900000007', email: null }]),
+      );
+    await controller.elchiCheckMismatch({
+      date: '2026-12-03',
+      runId: '41',
+      newDiffCount: 2,
+      openDiffCount: 3,
+      orders: [
+        {
+          orderId: '1042',
+          orderNumber: 'L-1042',
+          reasons: [ElchiCheckReason.STATUS],
+        },
+        {
+          orderId: '1043',
+          orderNumber: 'L-1043',
+          reasons: [ElchiCheckReason.NOT_FOUND],
+        },
+      ],
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipient: expect.objectContaining({ userId: '7' }),
+        type: 'elchi_check_mismatch',
+        title: 'Elchi tekshiruvi: 2026-12-03 — 2 ta yangi farq',
+        body: '2026-12-03: Elchi bilan tekshiruvda 2 ta posilkada yangi farq (jami ochiq 3): L-1042, L-1043. Moliya → Elchi sverkasi.',
+        data: expect.objectContaining({ runId: '41' }),
       }),
     );
   });

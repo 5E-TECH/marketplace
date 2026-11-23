@@ -72,6 +72,7 @@ export * from './dto/ops.dto';
 export * from './dto/wholesaler-settlement.dto';
 export * from './dto/settlement-response.dto';
 export * from './dto/finance-reconciliation.dto';
+export * from './dto/elchi-check.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
