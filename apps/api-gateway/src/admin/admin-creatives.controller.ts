@@ -166,6 +166,10 @@ export class AdminCreativesController {
   @ApiOperation({
     summary: 'Kreativni o‘chirish (offerdan chiqadi, fayl ham o‘chiriladi)',
   })
+  @ApiOkResponse({
+    description: 'O‘chirilgan kreativ ID si',
+    schema: { example: { id: '31' } },
+  })
   @ApiNotFoundResponse({ description: 'Kreativ topilmadi' })
   async remove(
     @Param('id', ParseLeadIdPipe) productId: string,

@@ -182,6 +182,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /admin/inventory/stock',
     'POST /admin/inventory/adjust',
     'POST /admin/inventory/inbound',
+    'GET /warehouse/handover-acts',
     'GET /warehouse/handover-acts/:id',
     'GET /warehouse/handover-acts/:id/pdf',
     'GET /warehouse/orders/:id/label',

@@ -52,6 +52,11 @@ export class FulfillmentController {
     return this.fulfillment.act(data?.id);
   }
 
+  @MessagePattern({ cmd: WAREHOUSE_RPC.ACTS })
+  acts(@Payload() data: { page?: number; limit?: number }) {
+    return this.fulfillment.acts(data);
+  }
+
   @MessagePattern({ cmd: WAREHOUSE_RPC.ACT_PDF })
   actPdf(@Payload() data: { id: string }) {
     return this.fulfillment.actPdf(data?.id);

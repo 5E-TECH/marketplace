@@ -1,12 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -73,6 +77,8 @@ export const WAREHOUSE_RPC = {
   LABEL: 'checkout.warehouse.label',
   HANDOVER: 'checkout.warehouse.handover',
   ACT_GET: 'checkout.warehouse.act-get',
+  /** BE-25 (FE-17 «Oldingi aktlar»): topshirish aktlari ro‘yxati, yangisi tepada. */
+  ACTS: 'checkout.warehouse.acts',
   ACT_PDF: 'checkout.warehouse.act-pdf',
   /** BE-17: qaytayotgan posilkalar (RETURNING) va bitta buyurtma ma’lumoti — saralash uchun. */
   RETURNS: 'checkout.warehouse.returns',
@@ -171,6 +177,32 @@ export interface PickListPage {
   items: PickListItem[];
   counts: Record<'toPick' | 'picked' | 'packed' | 'overdue', number>;
   truncated: boolean;
+}
+
+/** BE-25 (FE-17): oldingi topshirish aktlari — sahifalab. */
+export class WarehouseActsQueryDto {
+  @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  page: number = 1;
+
+  @ApiPropertyOptional({ example: 20, default: 20, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 20;
+}
+
+export interface HandoverActsPage {
+  items: HandoverActView[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface HandoverActView {

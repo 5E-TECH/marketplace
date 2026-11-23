@@ -27,6 +27,7 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
+import { ADMIN_AUDIT_PAGE_EXAMPLE } from './admin-m1.examples';
 
 /** C6.3 — admin audit jurnalini ko'rish. */
 @ApiTags('admin-audit')
@@ -42,7 +43,11 @@ export class AdminAuditController {
   @ApiOperation({
     summary: 'Audit jurnali (actor/action/sana filtr + sahifalash)',
   })
-  @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
+  @ApiOkResponse({
+    description:
+      'Yangisi tepada; `actorName` — tizim amali yoki o‘chirilgan foydalanuvchi uchun null',
+    schema: { example: ADMIN_AUDIT_PAGE_EXAMPLE },
+  })
   @ApiBadRequestResponse({
     description: 'Filtr yoki sahifalash qiymati noto‘g‘ri',
   })

@@ -206,3 +206,86 @@ export const ADMIN_STOCK_MOVEMENTS_EXAMPLE = {
   totalPages: 1,
   warnings: [],
 };
+
+/**
+ * BE-25 (QA 2026-11-23, 2-tur): audit jurnali — identity `audit.controller.ts` `list` (ActivityLogService.list +
+ * `actorName`). Yozuv — `activity_log` qatori (BaseEntity maydonlari bilan).
+ */
+export const ADMIN_AUDIT_PAGE_EXAMPLE = {
+  items: [
+    {
+      id: '1501',
+      actorId: '8',
+      actorName: 'Nodira K.',
+      action: 'product.reactivate',
+      entityType: 'Product',
+      entityId: '501',
+      meta: { ip: '203.0.113.7' },
+      createdAt: '2026-12-01T09:30:00.000Z',
+      updatedAt: '2026-12-01T09:30:00.000Z',
+      isDeleted: false,
+    },
+  ],
+  total: 1,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+};
+
+/** Elchi monitoringi: checkout `admin-integration-query.service.ts` `shipments` (posilka + buyurtma ustunlari). */
+export const ADMIN_INTEGRATION_SHIPMENTS_PAGE_EXAMPLE = {
+  items: [
+    {
+      id: '2051',
+      salesOrderId: '1042',
+      shopId: '12',
+      elchiMarketId: '301',
+      shipmentId: '880113',
+      trackingUrl: null,
+      status: 'PENDING',
+      subtotal: 262000,
+      deliveryFee: 30000,
+      codAmount: 292000,
+      orderStatus: 'HANDED_TO_ELCHI',
+      paymentMethod: 'COD',
+      buyerName: 'Aziza',
+      deliveryAddress: 'Yunusobod tumani, 4-mavze, 12-uy',
+      whereDeliver: 'ADDRESS',
+      createdAt: '2026-12-01T09:14:00.000Z',
+      updatedAt: '2026-12-01T11:02:00.000Z',
+    },
+  ],
+  total: 1,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+};
+
+/** Elchi webhook tarixi: checkout `admin-integration-query.service.ts` `webhooks` (`payload` — kelgan xabar). */
+export const ADMIN_INTEGRATION_WEBHOOKS_PAGE_EXAMPLE = {
+  items: [
+    {
+      eventId: 'evt_123',
+      shipmentId: '880113',
+      sellerOrderId: '2051',
+      status: 'sold',
+      occurredAt: '2026-12-03T08:00:00.000Z',
+      processedAt: '2026-12-03T08:00:01.000Z',
+      result: 'APPLIED',
+      detail: null,
+      orderId: '1042',
+      payload: {
+        eventId: 'evt_123',
+        type: 'shipment.status_changed',
+        shipmentId: '880113',
+        externalOrderId: 'mp-order:1042',
+        status: 'sold',
+        occurredAt: '2026-12-03T08:00:00.000Z',
+      },
+    },
+  ],
+  total: 1,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+};

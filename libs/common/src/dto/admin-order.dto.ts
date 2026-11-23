@@ -69,7 +69,7 @@ export class AdminOrdersQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
@@ -77,7 +77,7 @@ export class AdminOrdersQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 export class AdminOrderActionDto {

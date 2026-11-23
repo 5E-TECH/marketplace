@@ -484,6 +484,41 @@ describeWithPostgres(
         `SELECT COUNT(*)::int AS total FROM checkout.handover_act`,
       )) as Array<{ total: number }>;
       expect(total).toBe(1);
+
+      // BE-25 (FE-17 «Oldingi aktlar»): ro‘yxat — karta bilan bir xil shakl, yangisi tepada, sahifalab
+      const [older] = (await checkoutDs.query(
+        `INSERT INTO checkout.handover_act (parcel_count, created_by, created_at)
+         VALUES (1, 9, now() - interval '1 day') RETURNING id::text AS id`,
+      )) as Array<{ id: string }>;
+      try {
+        const page = await fulfillment.acts({ page: 1, limit: 20 });
+        expect(page).toMatchObject({ total: 2, page: 1, limit: 20 });
+        expect(page.items.map((item) => item.id)).toEqual([act.id, older.id]);
+        expect(page.items[0]).toEqual(act);
+        expect(page.items[1]).toMatchObject({
+          parcelCount: 1,
+          createdBy: '9',
+          items: [],
+        });
+        await expect(fulfillment.acts({ page: 2, limit: 1 })).resolves.toEqual({
+          items: [await fulfillment.act(older.id)],
+          total: 2,
+          page: 2,
+          limit: 1,
+        });
+        // RPC to‘g‘ridan chaqirilsa ham chegara: limit ≤ 100, sahifa ≥ 1
+        await expect(
+          fulfillment.acts({ page: -3, limit: 5_000 }),
+        ).resolves.toMatchObject({ page: 1, limit: 100, total: 2 });
+        await expect(fulfillment.acts({ page: 9, limit: 20 })).resolves.toEqual(
+          { items: [], total: 2, page: 9, limit: 20 },
+        );
+      } finally {
+        await checkoutDs.query(
+          `DELETE FROM checkout.handover_act WHERE id = $1`,
+          [older.id],
+        );
+      }
     });
 
     it('bekor qilingan buyurtma ro‘yxatdan chiqadi; Elchi posilkasi yaratilmasa — sabab ro‘yxatda va yorliqda', async () => {

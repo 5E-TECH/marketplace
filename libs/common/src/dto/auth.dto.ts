@@ -184,6 +184,12 @@ export class AdminUserDto extends AuthUserDto {
   totpEnabledAt: Date | null;
 }
 
+/**
+ * BE-25 (QA 2026-11-23, 2-tur): `GET /auth/me` va `PATCH /auth/profile` — identity `sanitize(user)` (parol xeshisiz
+ * foydalanuvchi qatori; maydonlar admin kartasi bilan bir xil).
+ */
+export class CurrentUserDto extends AdminUserDto {}
+
 export class AuthTokensDto {
   @ApiProperty({ type: AuthUserDto })
   user: AuthUserDto;
