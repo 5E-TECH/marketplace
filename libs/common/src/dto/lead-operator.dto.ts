@@ -511,7 +511,11 @@ export class OperatorQueueOperatorDto {
   @ApiProperty({ example: 2 }) activeBookings: number;
 }
 
-/** Nazoratchi uchun minimal navbat ko‘rinishi (BE-13). */
+/**
+ * Navbat ko‘rinishi (BE-13). Sonlar umumiy: operator ish joyida (BE-25) ham — boshqa operatorga yozilgan, 15 daqiqalik
+ * muhlati o‘tmagan qayta qo‘ng‘iroqlar ham kiradi, shuning uchun «Keyingi lid» baribir 404 `LEAD_QUEUE_EMPTY` berishi
+ * mumkin.
+ */
 export class OperatorQueueSummaryDto {
   @ApiProperty({ example: 37 }) newLeads: number;
   @ApiProperty({ example: 5 }) dueCallbacks: number;

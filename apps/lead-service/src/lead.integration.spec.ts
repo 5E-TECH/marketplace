@@ -1805,6 +1805,14 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
           available: null,
           warning: null,
         });
+        // o‘z, lekin endi bron emas (rad etilgan) lid — 404 (lid kartasi kabi)
+        await db.query(
+          `UPDATE lead.lead SET status = 'REJECTED', reject_reason = 'NOT_NEEDED' WHERE id = $1`,
+          [l.id],
+        );
+        await expect(workplace().product('62', l.id)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
       });
 
       it('bugungi urinishlarim: yangisi birinchi, total — hammasi, rad sababi faqat REJECTED da, keyingi qo‘ng‘iroq; boshqa operator va kun — yo‘q', async () => {
@@ -1861,6 +1869,30 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         await expect(
           workplace().attempts('64', { from: '2026-02-02', to: '2026-02-01' }),
         ).rejects.toBeInstanceOf(BadRequestException);
+        // stats bilan bir xil sana tekshiruvi: mavjud bo‘lmagan sana — 400
+        await expect(
+          workplace().attempts('64', { from: '2026-02-30' }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('urinishlar Toshkent kuni bo‘yicha: 19:30 UTC — ertasi kun (00:30); total stats bilan bir xil', async () => {
+        const [l] = await seed(1);
+        await db.query(
+          `INSERT INTO lead.lead_attempt (lead_id, operator_id, outcome, created_at)
+           VALUES ($1, 67, 'NO_ANSWER', '2026-12-01T19:30:00Z')`,
+          [l.id],
+        );
+        const dec1 = await workplace().attempts('67', { from: '2026-12-01' });
+        const dec2 = await workplace().attempts('67', { from: '2026-12-02' });
+        expect([dec1.total, dec2.total]).toEqual([0, 1]);
+        expect(dec2.items[0].at).toBe('2026-12-01T19:30:00.000Z');
+        const stats = await new LeadStatsService(db, {} as never).operatorStats(
+          {
+            operatorId: '67',
+            query: { from: '2026-12-02', to: '2026-12-02' },
+          },
+        );
+        expect(stats.attempts).toBe(dec2.total);
       });
 
       it('bronlar ro‘yxatida oxirgi urinish (natija, izoh, vaqt); navbat xulosasi operatorga — boshqa operatorlarsiz', async () => {

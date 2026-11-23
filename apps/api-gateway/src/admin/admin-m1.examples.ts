@@ -46,7 +46,7 @@ export const ADMIN_ORDER_EXAMPLE = {
       subtotal: 262000,
       deliveryFee: 30000,
       codAmount: 292000,
-      status: 'SHIPMENT_CREATED',
+      status: 'PENDING',
       elchiShipmentId: '880113',
       trackingUrl: null,
       hasQrToken: true,

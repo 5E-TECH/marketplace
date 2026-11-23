@@ -18,13 +18,17 @@ import {
 } from '@app/common';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { Lead, OfferContent, Stream } from './entities';
-import { tashkentDayStart, tashkentParts } from './lead-schedule';
+import {
+  clampToCallWindow,
+  tashkentDayStart,
+  tashkentParts,
+} from './lead-schedule';
+import { validDay } from './lead-stats.service';
 
 /** Mahsulot 8-bo‘limi: BAD — «Dori vositasi emas» yozuvi (product.dto `isBad` izohi, BE-07). */
 export const BAD_WARNING = 'Dori vositasi emas';
 const ATTEMPTS_DEFAULT_LIMIT = 10;
 const ATTEMPTS_MAX_LIMIT = 100;
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * BE-25 (FE-08 «operator ish joyi» taklifi, `docs/api-taklif/fe-08-operator.md`): mahsulot paneli va bugungi
@@ -75,10 +79,9 @@ export class OperatorWorkplaceService {
     query: OperatorAttemptsQueryDto = {},
     now = new Date(),
   ): Promise<OperatorAttemptsPageDto> {
-    const from = query.from ?? tashkentToday(now);
-    const to = query.to ?? from;
-    if (!DAY.test(from) || !DAY.test(to))
-      throw new BadRequestException('from/to — YYYY-MM-DD');
+    // sana tekshiruvi GET /operator/stats bilan bir xil (2026-02-30 kabi sana — 400, total ular bilan teng bo‘lsin)
+    const from = validDay(query.from ?? tashkentToday(now), 'from');
+    const to = validDay(query.to ?? from, 'to');
     if (from > to) throw new BadRequestException('from to dan katta');
     const limit = Math.min(
       ATTEMPTS_MAX_LIMIT,
@@ -117,8 +120,7 @@ export class OperatorWorkplaceService {
         productName: names.get(r.productId) ?? '',
         outcome: r.outcome,
         comment: r.comment,
-        rejectReason:
-          r.outcome === LeadOutcome.REJECTED ? r.rejectReason : null,
+        rejectReason: rejectReasonOf(r),
         nextAttemptAt: nextAttemptOf(r),
         durationSeconds: null,
       })),
@@ -150,16 +152,33 @@ interface AttemptRow {
 }
 
 /**
- * Keyingi qo‘ng‘iroq: urinishning o‘z vaqti («Keyinroq» — mijoz aytgan) yoki, shu lidning oxirgi urinishi bo‘lsa va
- * lid hali qayta qo‘ng‘iroqda, lidning navbatdagi urinish vaqti («Javob bermadi · 14:31»). Eski urinishga — null.
+ * Keyingi qo‘ng‘iroq. Shu lidning oxirgi urinishi va lid hali qayta qo‘ng‘iroqda bo‘lsa — lidning haqiqiy navbatdagi
+ * vaqti (09:00–21:00 ga surilgan; «Javob bermadi · 14:31», «Keyinroq · ertaga 09:00»). Eski urinishda — o‘sha paytda
+ * mijoz aytgan vaqt, qo‘ng‘iroq oynasiga surilgan holda. Boshqa holatda — null.
  */
 export function nextAttemptOf(
   r: Pick<AttemptRow, 'callbackAt' | 'latest' | 'status' | 'nextAttemptAt'>,
 ): string | null {
-  if (r.callbackAt) return new Date(r.callbackAt).toISOString();
   if (r.latest && r.status === LeadStatus.CALLBACK && r.nextAttemptAt)
     return new Date(r.nextAttemptAt).toISOString();
+  if (r.callbackAt)
+    return clampToCallWindow(new Date(r.callbackAt)).toISOString();
   return null;
+}
+
+/**
+ * Rad sababi lidda saqlanadi (urinishda emas): faqat shu urinish lidning oxirgisi va lid hali rad etilgan bo‘lsa
+ * ko‘rsatiladi — lid qayta ochilgan yoki keyin boshqa sabab bilan rad etilgan bo‘lsa eski urinishga noto‘g‘ri sabab
+ * chiqmasin.
+ */
+export function rejectReasonOf(
+  r: Pick<AttemptRow, 'outcome' | 'latest' | 'status' | 'rejectReason'>,
+): LeadRejectReason | null {
+  return r.outcome === LeadOutcome.REJECTED &&
+    r.latest &&
+    r.status === LeadStatus.REJECTED
+    ? r.rejectReason
+    : null;
 }
 
 export function productView(

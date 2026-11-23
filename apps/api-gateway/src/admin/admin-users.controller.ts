@@ -54,7 +54,37 @@ export class AdminUsersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchilar (rol/blok/qidiruv + sahifalash)' })
-  @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
+  @ApiOkResponse({
+    description:
+      '{ items, total, page, limit, totalPages }; items — foydalanuvchi kartasi (AdminUserDto shakli)',
+    schema: {
+      example: {
+        items: [
+          {
+            id: '42',
+            role: 'OPERATOR_LEAD',
+            name: 'Dilnoza',
+            firstName: null,
+            lastName: null,
+            phone: '+998901112233',
+            email: null,
+            avatarUrl: null,
+            isActive: true,
+            isBlocked: false,
+            authVersion: 1,
+            totpEnabledAt: null,
+            isDeleted: false,
+            createdAt: '2026-11-20T08:00:00.000Z',
+            updatedAt: '2026-11-20T08:00:00.000Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+      },
+    },
+  })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminUsersQueryDto) {

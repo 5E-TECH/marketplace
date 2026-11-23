@@ -421,6 +421,25 @@ describe('Lid shartnomasi (BE-25)', () => {
         expect(send).toHaveBeenLastCalledWith({ cmd }, payload);
       }
     });
+
+    it('BE-25: operatorga navbat xulosasi boshqa operatorlarsiz — eski lead-service ro‘yxat qaytarsa ham', async () => {
+      const full = {
+        newLeads: 3,
+        dueCallbacks: 1,
+        booked: 2,
+        operators: [
+          { operatorId: '42', name: '#42', state: 'ONLINE', activeBookings: 2 },
+        ],
+      };
+      const op = new OperatorLeadsController({
+        send: jest.fn(() => of(full)),
+      } as never);
+      expect(await op.queueSummary(Role.OPERATOR_LEAD)).toEqual({
+        ...full,
+        operators: [],
+      });
+      expect(await op.queueSummary(Role.SUPERVISOR)).toEqual(full);
+    });
   });
 
   describe('BE-42: admin lidlari', () => {

@@ -158,8 +158,8 @@ export class AuthUserDto {
 }
 
 /**
- * BE-25 TC3: admin foydalanuvchi kartasi — identity `adminGetUser`/`setBlocked`/`updateRole` qaytaradigan shakl
- * (parol xeshisiz foydalanuvchi qatori).
+ * BE-25 TC3: admin foydalanuvchi kartasi — identity `adminGetUser`/`setBlocked` qaytaradigan shakl (parol xeshisiz
+ * foydalanuvchi qatori). Rol o‘zgartirish (`updateRole`) qisqa ko‘rinish qaytaradi — controllerdagi misol.
  */
 export class AdminUserDto extends AuthUserDto {
   @ApiProperty({ example: 'Akmal', nullable: true, type: String })

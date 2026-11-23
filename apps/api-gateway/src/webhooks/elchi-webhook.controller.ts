@@ -67,8 +67,8 @@ export class ElchiWebhookController {
       'bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, ' +
       '`market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari ' +
       '(`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi ' +
-      '(`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, ' +
-      'holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech ' +
+      '(`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar ham 201 oladi, ' +
+      'holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 201 oladi, hech ' +
       'narsa o‘zgarmaydi.',
   })
   @ApiHeader({ name: 'X-Elchi-Signature', required: true })
@@ -77,16 +77,22 @@ export class ElchiWebhookController {
   @ApiBody({ type: ElchiWebhookDto })
   @ApiCreatedResponse({
     description:
-      'Qabul qilindi. `duplicate: true` — shu `event_id` avval qayta ishlangan; `ignored` — e’tiborsiz qoldiriladigan Elchi holati (hech narsa o‘zgarmaydi)',
+      'Qabul qilindi (201). `result`: APPLIED — holat o‘zgardi, NOOP — o‘zgarish yo‘q, REJECTED — orqaga yoki ruxsatsiz o‘tish (holat o‘zgarmaydi, jurnalda), IGNORED — e’tiborsiz holat; lid buyurtmasida `status` — buyurtmaning hozirgi holati (`LeadOrderStatus`). `duplicate: true` — shu `event_id` avval qayta ishlangan. `ignored` — sinov ping’i (`webhook.test`), hech narsa o‘zgarmaydi',
     schema: {
       type: 'object',
       required: ['received'],
       properties: {
         received: { type: 'boolean', example: true },
-        duplicate: { type: 'boolean', example: false },
+        result: {
+          type: 'string',
+          enum: ['APPLIED', 'NOOP', 'REJECTED', 'IGNORED'],
+          example: 'APPLIED',
+        },
+        status: { type: 'string', example: 'DELIVERED' },
+        duplicate: { type: 'boolean', example: true },
         ignored: { type: 'string', example: 'webhook.test' },
       },
-      example: { received: true, duplicate: false },
+      example: { received: true, result: 'APPLIED', status: 'DELIVERED' },
     },
   })
   @ApiUnauthorizedResponse({

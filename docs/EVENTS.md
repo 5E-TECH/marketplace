@@ -68,7 +68,7 @@ marta: hodisa takror kelishi mumkin.
 
 | Relay | Qachon ishlaydi | Qaysi hodisa → qaysi navbat |
 |---|---|---|
-| checkout `CheckoutOutboxRelayService` (`apps/checkout-service/src/checkout-outbox-relay.service.ts`) | har 10 s, doim | `finance.*` → finance; `order.status.changed` → finance, lead, integration (ketma-ket); `order.create-failed` → lead; boshqa nom — `FAILED` |
+| checkout `CheckoutOutboxRelayService` (`apps/checkout-service/src/checkout-outbox-relay.service.ts`) | har 10 s, doim | `finance.*` → finance; `order.status.changed` → finance, lead, integration, notification (ketma-ket); `order.returned` → finance; `order.create-failed` → lead; boshqa nom — `FAILED` |
 | lead `LeadOutboxRelayService` (`apps/lead-service/src/lead-outbox-relay.service.ts`) | har 10 s, faqat `LEAD_OUTBOX_RELAY=on` | `lead.confirmed` → checkout; `lead.callback.reminder`, `fraud.measure.applied`, `lead.site.confirm-sms` → notification; `fraud.fee.*` → finance |
 | inventory `InventoryOutboxRelayService` (`apps/inventory-service/src/inventory-outbox-relay.service.ts`) | har 10 s, doim | `inventory.inbound.received`, `inventory.offer.out-of-stock` → notification; boshqalari → catalog |
 | elchi `ElchiOutboxRelayService` (`apps/elchi-integration/src/elchi-outbox-relay.service.ts`) | har 10 s, faqat `ELCHI_OUTBOX_RELAY=on` | `elchi.parcel.*` → checkout; boshqa nom — `FAILED` |
@@ -349,6 +349,8 @@ null), `affiliateId`, `streamId` (string \| null), `action` (chora), `reason`, `
 **Maydonlar** (umumiy interfeys yo‘q, obyekt shu faylda yoziladi): `eventId`, `leadId`, `operatorId`, `callbackAt`
 (ISO 8601).
 
+**Qabul qiluvchi: yo‘q.** notification-service da handler yo‘q — hodisa tashlanadi (bo‘shliqlar, 2-band).
+
 ### `order.returned`
 
 **Qachon:** yetkazilgandan keyin qaytarish tasdiqlandi — moliya yozuvlarini qaytaradi (BE-44 → BE-22). Bir qaytarish
@@ -500,7 +502,8 @@ muddati, ISO 8601).
 
 **Yuboruvchi:** identity-service, `AffiliateAuthService` (`apps/identity-service/src/affiliate-auth/affiliate-auth.service.ts`)
 va `AuthService` (`apps/identity-service/src/auth/auth.service.ts`) — kod bazaga yozilgach `notification_queue_v2` ga
-to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Blokdagi raqamga kod yuborilmaydi (javob baribir bir xil).
+to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Blokdagi raqamga kod yuborilmaydi: BE-06 `AffiliateAuthService.sendOtp` 423
+(`OTP_BLOCKED`) qaytaradi, eski `AuthService` yo‘li — raqam holati bilinmasin uchun oddiy javob.
 
 **Maydonlar** (`VerificationCodeRequestedEvent`, `apps/notification-service/src/otp-sms.controller.ts`): `phone`
 (`+998XXXXXXXXX`), `code` (6 raqam), `purpose` (`REGISTER`, `LOGIN`, `PASSWORD_RESET`, `PHONE_VERIFY`).
@@ -515,7 +518,8 @@ production’da xato logi (kod yuborilmaydi), boshqa muhitda kod logga yoziladi 
 orasida farq topdi.
 
 **Yuboruvchi:** finance-service, `CodDailyCheckService` (`apps/finance-service/src/ledger/cod-daily-check.service.ts`) —
-`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz; yuborish xatosi logga.
+`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Yuborilsa kunga `alerted_at` yoziladi; xato bo‘lsa
+logga va `alerted_at` bo‘shatiladi — shu kun qayta hisoblanganda xabar yana yuboriladi.
 
 **Maydonlar** — `CodReconciliationMismatchEvent` (`libs/common/src/dto/cod-daily-check.dto.ts`): `date`,
 `mismatchCount`, `diffTotal` (kelgan − kutilgan, so‘m), `orders[]` (`orderId`, `expected`, `received`, `diff`; birinchi
@@ -564,9 +568,9 @@ qator `FAILED` bo‘ladi va qo‘lda ko‘riladi. Qabul qiluvchi — inventory-s
    yuborilmaydi.
 2. `fraud.measure.applied` va `lead.callback.reminder` notification navbatiga ketadi, lekin handler yo‘q — sotuvchi
    va operatorga xabar bormaydi.
-3. Outboxsiz hodisalar yo‘qolishi mumkin (yuborish xatosi faqat logga): `price.decision.orange`,
-   `finance.withdrawal.paid`, `finance.wholesaler.paid`, `auth.verification-code.requested`,
-   `finance.cod.reconciliation.mismatch`, `elchi.status.conflict`. `inventory.lot.blocked` va `price.decision.orange`
+3. Outboxsiz hodisalar yo‘qolishi mumkin (yuborish xatosi logga): `price.decision.orange`,
+   `finance.withdrawal.paid`, `finance.wholesaler.paid`, `auth.verification-code.requested`, `elchi.status.conflict`;
+   `finance.cod.reconciliation.mismatch` — kun qayta hisoblanganda qayta yuboriladi. `inventory.lot.blocked` va `price.decision.orange`
    da `eventId` yo‘q.
 
 Eski marketplace hodisalari (`payment.paid`, `shop.approved`, `order.created`, `return.status-changed` va boshqalar)

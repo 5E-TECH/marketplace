@@ -1764,7 +1764,38 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items, total, page, limit, totalPages }"
+            "description": "{ items, total, page, limit, totalPages }; items — foydalanuvchi kartasi (AdminUserDto shakli)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "items": [
+                      {
+                        "id": "42",
+                        "role": "OPERATOR_LEAD",
+                        "name": "Dilnoza",
+                        "firstName": null,
+                        "lastName": null,
+                        "phone": "+998901112233",
+                        "email": null,
+                        "avatarUrl": null,
+                        "isActive": true,
+                        "isBlocked": false,
+                        "authVersion": 1,
+                        "totpEnabledAt": null,
+                        "isDeleted": false,
+                        "createdAt": "2026-11-20T08:00:00.000Z",
+                        "updatedAt": "2026-11-20T08:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "",
@@ -2329,7 +2360,7 @@
                         "subtotal": 262000,
                         "deliveryFee": 30000,
                         "codAmount": 292000,
-                        "status": "SHIPMENT_CREATED",
+                        "status": "PENDING",
                         "elchiShipmentId": "880113",
                         "trackingUrl": null,
                         "hasQrToken": true,
@@ -3017,7 +3048,7 @@
     },
     "/api/v1/webhooks/elchi": {
       "post": {
-        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, `market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari (`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi (`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech narsa o‘zgarmaydi.",
+        "description": "Tana Elchi shaklida (snake_case: `event_id`, `external_order_id`, `shipment_id`, `occurred_at`, Elchi status lug‘ati) ham, quyidagi normal shaklda ham qabul qilinadi — `normalizeElchiWebhook` ikkalasini bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, `market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari (`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi (`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar ham 201 oladi, holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 201 oladi, hech narsa o‘zgarmaydi.",
         "operationId": "ElchiWebhookController_receive",
         "parameters": [
           {
@@ -3041,7 +3072,7 @@
         },
         "responses": {
           "201": {
-            "description": "Qabul qilindi. `duplicate: true` — shu `event_id` avval qayta ishlangan; `ignored` — e’tiborsiz qoldiriladigan Elchi holati (hech narsa o‘zgarmaydi)",
+            "description": "Qabul qilindi (201). `result`: APPLIED — holat o‘zgardi, NOOP — o‘zgarish yo‘q, REJECTED — orqaga yoki ruxsatsiz o‘tish (holat o‘zgarmaydi, jurnalda), IGNORED — e’tiborsiz holat; lid buyurtmasida `status` — buyurtmaning hozirgi holati (`LeadOrderStatus`). `duplicate: true` — shu `event_id` avval qayta ishlangan. `ignored` — sinov ping’i (`webhook.test`), hech narsa o‘zgarmaydi",
             "content": {
               "application/json": {
                 "schema": {
@@ -3054,9 +3085,23 @@
                       "type": "boolean",
                       "example": true
                     },
+                    "result": {
+                      "type": "string",
+                      "enum": [
+                        "APPLIED",
+                        "NOOP",
+                        "REJECTED",
+                        "IGNORED"
+                      ],
+                      "example": "APPLIED"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "DELIVERED"
+                    },
                     "duplicate": {
                       "type": "boolean",
-                      "example": false
+                      "example": true
                     },
                     "ignored": {
                       "type": "string",
@@ -3065,7 +3110,8 @@
                   },
                   "example": {
                     "received": true,
-                    "duplicate": false
+                    "result": "APPLIED",
+                    "status": "DELIVERED"
                   }
                 }
               }

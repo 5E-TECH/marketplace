@@ -253,14 +253,18 @@ export class OperatorLeadsController {
       'Navbat hajmi va operatorlar holati (BE-13). Operator ish joyi (BE-25, FE-08) — faqat navbat hajmi, `operators` bo‘sh.',
   })
   @ApiOkResponse({ type: OperatorQueueSummaryDto })
-  queueSummary(
+  async queueSummary(
     @CurrentUser('role') role: Role,
   ): Promise<OperatorQueueSummaryDto> {
-    return sendRpc(
+    const operatorView = role === Role.OPERATOR_LEAD;
+    const summary = await sendRpc<OperatorQueueSummaryDto>(
       this.lead,
       { cmd: 'lead.queue.summary' },
-      { operatorView: role === Role.OPERATOR_LEAD },
+      { operatorView },
     );
+    // gateway ham yashiradi: eski lead-service (deploy yoki rollback paytida) bayroqni bilmasa ham operatorga boshqa
+    // operatorlar holati chiqmasin
+    return operatorView ? { ...summary, operators: [] } : summary;
   }
 
   @Get('stats')
