@@ -31,7 +31,7 @@ export class AdminShopsQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
@@ -39,7 +39,7 @@ export class AdminShopsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 /** `POST /admin/shops/:id/reject` — ixtiyoriy sabab. */
@@ -106,7 +106,7 @@ export class AdminProductsQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
@@ -114,5 +114,5 @@ export class AdminProductsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }

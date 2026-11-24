@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientProxy } from '@nestjs/microservices';
@@ -6,7 +11,9 @@ import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 import {
   CheckoutDeliveryDestination,
+  ELCHI_STATUS_BATCH_MAX,
   ElchiShipmentResult,
+  ElchiShipmentsStatusResult,
   RmqClient,
   runAsLeader,
 } from '@app/common';
@@ -526,6 +533,38 @@ export class ElchiIntegrationService {
   /** Mavjud posilka tokenini Elchi'dan qayta olish (C1.45 tiklash yo'li). */
   async getShipment(shipmentId: string): Promise<ElchiShipmentResult> {
     return this.elchi.getShipment(String(shipmentId));
+  }
+
+  /**
+   * BE-46: 100 tagacha posilka holati (moliyaning kunlik tekshiruvi). Bo‘sh, takror va noto‘g‘ri ID lar tashlanadi;
+   * chegaradan ko‘p — 400 (moliya o‘zi bo‘lib yuboradi).
+   */
+  async shipmentsStatus(input: {
+    shipmentIds?: unknown;
+  }): Promise<ElchiShipmentsStatusResult> {
+    const ids = [
+      ...new Set(
+        (Array.isArray(input?.shipmentIds) ? input.shipmentIds : [])
+          .map((id) => String(id ?? '').trim())
+          .filter((id) => /^[1-9]\d{0,18}$/.test(id)),
+      ),
+    ];
+    if (ids.length > ELCHI_STATUS_BATCH_MAX)
+      throw new BadRequestException(
+        `Bir so‘rovda ${ELCHI_STATUS_BATCH_MAX} tadan ko‘p posilka bo‘lmaydi`,
+      );
+    try {
+      return await this.elchi.getShipmentsStatus(ids);
+    } catch (error) {
+      // xato matni moliyaga yetib borsin (RPC xatosi «Internal server error» bo‘lib qolardi) — hammasi FAILED
+      const message = String((error as Error)?.message ?? error).slice(0, 300);
+      this.logger.warn(`Elchi posilka holatlari olinmadi: ${message}`);
+      return {
+        items: [],
+        notFound: [],
+        failed: ids.map((shipmentId) => ({ shipmentId, error: message })),
+      };
+    }
   }
 
   async getTariff(input: {

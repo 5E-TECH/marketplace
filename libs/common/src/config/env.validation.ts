@@ -20,6 +20,12 @@ export const envValidationSchema = Joi.object({
   // darajasida @Throttle bilan qattiqroq limit qo'yiladi.
   RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(1000).default(60000),
   RATE_LIMIT_MAX: Joi.number().integer().min(1).default(300),
+  // BE-36: bir nechta nusxa (gateway, lead-service) uchun umumiy so'rov chegarasi. Berilmasa — har nusxa o'z
+  // xotirasida sanaydi (ishga tushishda bitta nusxa). Redis uzilsa ham so'rovlar to'xtamaydi.
+  REDIS_URL: Joi.string()
+    .uri({ scheme: ['redis', 'rediss'] })
+    .empty('')
+    .optional(),
 
   // Migratsiya konteyner ko'tarilishida avtomat ishlasinmi. Productionda
   // nazoratli rollout uchun `false` qilib, alohida qadamda ishga tushiriladi.

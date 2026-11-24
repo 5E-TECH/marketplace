@@ -50,6 +50,20 @@ export const PRICING_VIEW_EXAMPLE = {
 };
 
 /**
+ * BE-25 (QA 2026-11-23, 2-tur): optovik narx hisobi — catalog `wholesaler-cabinet.service.ts` `pricingView`. Ichki
+ * siyosat (`params`), Elchi tarifi va bozor narxi berilmaydi; hisob — admin ko‘radigan bilan bir xil kalkulyator.
+ */
+export const WHOLESALER_PRICING_EXAMPLE = {
+  productId: PRICING_VIEW_EXAMPLE.productId,
+  basePrice: PRODUCT.basePrice,
+  affiliateFee: PRODUCT.affiliateFee,
+  calculation,
+  evaluation: PRICING_VIEW_EXAMPLE.evaluation,
+  approvedPrice,
+  priceStatus: PriceStatus.GREEN,
+};
+
+/**
  * `catalog.pricing.decide`: birinchi qaror. `decision` dan tashqari maydonlar qarordan OLDINGI mahsulot holatidan
  * hisoblanadi (`approvedPrice`, `priceStatus`, `maxSalePrice`, `approvalCurrent`); `evaluation` — yuborilgan narx.
  */

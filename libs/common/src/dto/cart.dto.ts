@@ -26,7 +26,7 @@ export class AddCartItemDto {
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsInt()
   @Min(1)
-  quantity = 1;
+  quantity: number = 1;
 }
 
 export class UpdateCartItemDto {

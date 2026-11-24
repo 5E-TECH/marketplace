@@ -12,11 +12,13 @@ import {
   RmqQueue,
   rmqOptions,
   ServiceHealthModule,
+  SharedRateLimiter,
   shouldRunMigrations,
   typeOrmOptions,
 } from '@app/common';
 import { LEAD_ENTITIES } from './entities';
-import { ApiKeyService } from './api-key.service';
+import { API_KEY_RATE_LIMITER, ApiKeyService } from './api-key.service';
+import { OperatorWorkplaceService } from './operator-workplace.service';
 import { CatalogOfferClient } from './catalog-offer.client';
 import { LandingService } from './landing.service';
 import { LeadAddressController } from './lead-address.controller';
@@ -148,11 +150,23 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     SiteOrderService,
     LeadQueueService,
     LeadCardService,
+    OperatorWorkplaceService,
     LeadQueueScheduler,
     LeadOutboxRelayService,
     LeadAdminService,
     PostbackService,
     ApiKeyService,
+    // BE-36: lid API kaliti chegarasi — REDIS_URL bilan hamma nusxada umumiy
+    {
+      provide: API_KEY_RATE_LIMITER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new SharedRateLimiter({
+          url: config.get<string>('REDIS_URL'),
+          prefix: 'mp:rl:apikey:',
+          name: 'lead-service',
+        }),
+    },
     LeadStatsService,
     PlatformStatsService,
     LeadOrderService,

@@ -1,8 +1,10 @@
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +14,7 @@ import {
   AffiliateApiKeyCreatedDto,
   AffiliateApiKeyDto,
   ErrorCode,
+  SharedRateLimiter,
 } from '@app/common';
 import { AffiliateApiKey } from './entities';
 
@@ -23,25 +26,32 @@ const KEY_BODY = 32;
 const SHOWN_PREFIX = 8;
 const MINUTE_MS = 60_000;
 
+/** BE-36: lid API kaliti chegarasi hisoblagichi (lead.module — `REDIS_URL` bilan umumiy). */
+export const API_KEY_RATE_LIMITER = Symbol('API_KEY_RATE_LIMITER');
+
 export const hashApiKey = (key: string) =>
   createHash('sha256').update(key).digest('hex');
 
 /**
  * Sotuvchining lid API kaliti (BE-43, SOT-6). Bazada faqat xesh; bekor qilingan kalit darhol ishlamaydi.
- * Daqiqasiga so‘rovlar chegarasi — `rate_limit_per_minute` (sukut 60, SOT-6). Hisob shu nusxa xotirasida:
- * ishga tushishda lead-service bitta nusxa; bir nechta bo‘lsa — Redis (BE-36).
+ * Daqiqasiga so‘rovlar chegarasi — `rate_limit_per_minute` (sukut 60, SOT-6). BE-36: `REDIS_URL` berilsa hisob
+ * Redis’da (lead-service bir nechta nusxada ham umumiy), berilmasa yoki Redis uzilsa — shu nusxa xotirasida.
  */
 @Injectable()
 export class ApiKeyService {
-  private readonly windows = new Map<
-    string,
-    { start: number; count: number }
-  >();
+  private readonly limiter: SharedRateLimiter;
 
   constructor(
     @InjectRepository(AffiliateApiKey)
     private readonly keys: Repository<AffiliateApiKey>,
-  ) {}
+    @Optional()
+    @Inject(API_KEY_RATE_LIMITER)
+    limiter?: SharedRateLimiter | null,
+  ) {
+    this.limiter =
+      limiter ??
+      new SharedRateLimiter({ prefix: 'mp:rl:apikey:', name: 'lead-service' });
+  }
 
   async create(affiliateId: string): Promise<AffiliateApiKeyCreatedDto> {
     const bytes = randomBytes(KEY_BODY);
@@ -93,21 +103,22 @@ export class ApiKeyService {
     });
     if (!row)
       throw new UnauthorizedException('Kalit noto‘g‘ri yoki bekor qilingan');
-    this.consume(row, now);
+    await this.consume(row, now);
     row.lastUsedAt = now;
     await this.keys.update(row.id, { lastUsedAt: now });
     return row;
   }
 
-  private consume(row: AffiliateApiKey, now: Date): void {
-    const t = now.getTime();
-    const w = this.windows.get(row.id);
-    if (!w || t - w.start >= MINUTE_MS) {
-      this.windows.set(row.id, { start: t, count: 1 });
-      return;
-    }
-    w.count += 1;
-    if (w.count > row.rateLimitPerMinute)
+  private async consume(row: AffiliateApiKey, now: Date): Promise<void> {
+    // Oyna birinchi so‘rovdan bir daqiqa; oshgan so‘rov rad etiladi, blok yo‘q (oyna tugagach yana ochiladi).
+    const hit = await this.limiter.hit(
+      row.id,
+      MINUTE_MS,
+      row.rateLimitPerMinute,
+      0,
+      now.getTime(),
+    );
+    if (hit.isBlocked)
       throw new HttpException(
         {
           message: `Daqiqasiga ${row.rateLimitPerMinute} tadan ortiq so‘rov`,

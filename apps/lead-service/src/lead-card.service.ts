@@ -9,6 +9,7 @@ import {
   LeadAddressDto,
   LeadAddressResolution,
   LeadCardDto,
+  LeadOutcome,
   LeadPriceDto,
   LeadStatus,
   OperatorLeadListItemDto,
@@ -89,6 +90,21 @@ export class LeadCardService {
           .catch(() => [] as CatalogOfferSnapshot[])
       : [];
     const names = new Map(offers.map((o) => [o.productId, o.name]));
+    // BE-25 (FE-08): har lidning oxirgi urinishi — «O‘ylab ko‘radi «…»» sababi ro‘yxatda
+    const lastAttempts = rows.length
+      ? ((await this.attempts.query(
+          `SELECT DISTINCT ON (lead_id) lead_id::text AS "leadId", outcome, comment, created_at AS "at"
+             FROM lead.lead_attempt WHERE lead_id = ANY($1::bigint[])
+            ORDER BY lead_id, created_at DESC, id DESC`,
+          [rows.map((r) => r.id)],
+        )) as Array<{
+          leadId: string;
+          outcome: LeadOutcome;
+          comment: string | null;
+          at: Date;
+        }>)
+      : [];
+    const last = new Map(lastAttempts.map((a) => [a.leadId, a]));
     const horizon = reminderHorizon(new Date());
     return rows.map((r) => {
       const callbackAt =
@@ -103,6 +119,11 @@ export class LeadCardService {
         bookedUntil: r.bookedUntil?.toISOString() ?? null,
         callbackAt: callbackAt?.toISOString() ?? null,
         reminderDue: !!callbackAt && callbackAt.getTime() <= horizon.getTime(),
+        lastOutcome: last.get(r.id)?.outcome ?? null,
+        lastComment: last.get(r.id)?.comment ?? null,
+        lastAttemptAt: last.has(r.id)
+          ? new Date(last.get(r.id)!.at).toISOString()
+          : null,
       };
     });
   }

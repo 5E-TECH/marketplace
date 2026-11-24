@@ -25,6 +25,7 @@ import {
 } from '@nestjs/swagger';
 import {
   CurrentUser,
+  HandoverActsPage,
   HandoverActView,
   JwtUser,
   PickListPage,
@@ -33,6 +34,7 @@ import {
   Roles,
   sendRpc,
   WAREHOUSE_RPC,
+  WarehouseActsQueryDto,
   WarehouseHandoverDto,
   WarehousePickListQueryDto,
   WarehouseScanDto,
@@ -41,6 +43,7 @@ import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
 import {
   HANDOVER_ACT_EXAMPLE,
+  HANDOVER_ACTS_PAGE_EXAMPLE,
   PACK_EXAMPLE,
   PICK_LIST_EXAMPLE,
   SCAN_EXAMPLE,
@@ -164,6 +167,21 @@ export class WarehouseController {
       this.checkout,
       { cmd: WAREHOUSE_RPC.HANDOVER },
       { qrTokens: dto.qrTokens, actor: { id: user.sub, role: user.role } },
+    );
+  }
+
+  @Get('handover-acts')
+  @ApiOperation({
+    summary: 'Oldingi topshirish aktlari (yangisi tepada)',
+    description:
+      'FE-17 «Oldingi aktlar» bloki. Har akt — `GET /warehouse/handover-acts/{id}` bilan bir xil shakl (posilkalar bilan).',
+  })
+  @ApiOkResponse({ schema: { example: HANDOVER_ACTS_PAGE_EXAMPLE } })
+  acts(@Query() query: WarehouseActsQueryDto): Promise<HandoverActsPage> {
+    return sendRpc(
+      this.checkout,
+      { cmd: WAREHOUSE_RPC.ACTS },
+      { page: query.page, limit: query.limit },
     );
   }
 

@@ -72,6 +72,7 @@ export * from './dto/ops.dto';
 export * from './dto/wholesaler-settlement.dto';
 export * from './dto/settlement-response.dto';
 export * from './dto/finance-reconciliation.dto';
+export * from './dto/elchi-check.dto';
 
 // So'rov konteksti / kuzatuv
 export * from './context/request-context';
@@ -129,3 +130,5 @@ export * from './pricing';
 export * from './dto/pricing.dto';
 // PDF: Unicode shrift (kirill, ʻ/ʼ) — hamma PDF generatorlar
 export * from './pdf/pdf-fonts';
+// BE-36: bir nechta nusxa uchun umumiy so‘rov chegarasi (Redis)
+export * from './rate-limit';

@@ -123,14 +123,14 @@ export class StockQueryDto {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
-  lowOnly = false;
+  lowOnly: boolean = false;
 
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({
     example: 20,
@@ -143,7 +143,7 @@ export class StockQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 export class StockItemDto {

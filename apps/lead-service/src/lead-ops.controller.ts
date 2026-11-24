@@ -1,7 +1,14 @@
-import { Controller, UseFilters } from '@nestjs/common';
+import { Controller, Inject, Optional, UseFilters } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 import { DataSource } from 'typeorm';
-import { LeadQueueStats, OPS_RPC, RpcHttpExceptionFilter } from '@app/common';
+import {
+  LeadQueueStats,
+  OPS_RPC,
+  RateLimitHealth,
+  RpcHttpExceptionFilter,
+  SharedRateLimiter,
+} from '@app/common';
+import { API_KEY_RATE_LIMITER } from './api-key.service';
 import { clampToCallWindow } from './lead-schedule';
 
 /**
@@ -13,7 +20,21 @@ import { clampToCallWindow } from './lead-schedule';
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class LeadOpsController {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    @Optional()
+    @Inject(API_KEY_RATE_LIMITER)
+    private readonly apiKeyLimiter?: SharedRateLimiter,
+  ) {}
+
+  /** BE-36: lid API kaliti chegarasi — Redis berilgan, lekin uzilgan bo‘lsa monitor ogohlantiradi. */
+  @MessagePattern({ cmd: OPS_RPC.LEAD_RATE_LIMIT })
+  rateLimit(): RateLimitHealth {
+    return {
+      redisConfigured: this.apiKeyLimiter?.redisConfigured ?? false,
+      store: this.apiKeyLimiter?.store ?? 'memory',
+    };
+  }
 
   @MessagePattern({ cmd: OPS_RPC.LEAD_QUEUE })
   async queue(): Promise<LeadQueueStats> {

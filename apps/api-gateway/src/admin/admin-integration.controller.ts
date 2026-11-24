@@ -32,6 +32,10 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
+import {
+  ADMIN_INTEGRATION_SHIPMENTS_PAGE_EXAMPLE,
+  ADMIN_INTEGRATION_WEBHOOKS_PAGE_EXAMPLE,
+} from './admin-m1.examples';
 
 /** C1.44 — Elchi hududlar keshini admin tomonidan boshqarish. */
 @ApiTags('admin-integration')
@@ -107,9 +111,8 @@ export class AdminIntegrationController {
   })
   @ApiOkResponse({
     description:
-      '{ items: [{ id, salesOrderId, shopId, shipmentId|null, status, ' +
-      'orderStatus, paymentMethod, codAmount, buyerName, createdAt, ' +
-      'updatedAt, ... }], total, page, limit, totalPages }',
+      'Posilka (`shipmentId` — Elchi raqami, yaratilmagan bo‘lsa null) va buyurtma holati; summa butun so‘m',
+    schema: { example: ADMIN_INTEGRATION_SHIPMENTS_PAGE_EXAMPLE },
   })
   shipments(@Query() query: AdminShipmentsQueryDto) {
     return sendRpc(
@@ -122,7 +125,9 @@ export class AdminIntegrationController {
   @Get('webhooks')
   @ApiOperation({ summary: 'Elchi webhook xabarlari tarixi' })
   @ApiOkResponse({
-    description: '{ items, total, page, limit, totalPages }',
+    description:
+      '`result`: APPLIED, NOOP, REJECTED, IGNORED (webhook javobidagi kabi); `payload` — Elchi yuborgan xabar',
+    schema: { example: ADMIN_INTEGRATION_WEBHOOKS_PAGE_EXAMPLE },
   })
   webhooks(@Query() query: AdminWebhooksQueryDto) {
     return sendRpc(

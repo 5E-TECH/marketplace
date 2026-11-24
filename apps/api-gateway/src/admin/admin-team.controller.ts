@@ -94,7 +94,10 @@ export class AdminTeamController {
   @Delete(':id')
   @Roles(Role.SUPERADMIN)
   @ApiOperation({ summary: 'Jamoa a’zosini o‘chirish' })
-  @ApiOkResponse({ description: '{ id, removed: true }' })
+  @ApiOkResponse({
+    description: 'A’zo o‘chirildi (sessiyalari bekor)',
+    schema: { example: { id: '17', removed: true } },
+  })
   @ApiConflictResponse({ description: 'Oxirgi SUPERADMIN himoyalangan' })
   remove(
     @CurrentUser() actor: JwtUser,

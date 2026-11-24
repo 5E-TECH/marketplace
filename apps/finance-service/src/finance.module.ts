@@ -37,6 +37,7 @@ import { CodDailyCheckService } from './ledger/cod-daily-check.service';
 
 const entities = FINANCE_DB.entities;
 
+import { ElchiCheckService } from './ledger/elchi-check.service';
 @Module({
   imports: [
     CommonConfigModule,
@@ -72,6 +73,22 @@ const entities = FINANCE_DB.entities;
         useFactory: (config: ConfigService) =>
           rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CATALOG),
       },
+      // BE-46 TC3: kunlik Elchi tekshiruvi — posilkalar checkout’dan, holat Elchi’dan (elchi-integration orqali)
+      {
+        name: RmqClient.CHECKOUT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.CHECKOUT),
+      },
+      {
+        name: RmqClient.INTEGRATION,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions(
+            [config.get<string>('RABBITMQ_URL')!],
+            RmqQueue.INTEGRATION,
+          ),
+      },
     ]),
   ],
   controllers: [
@@ -95,6 +112,7 @@ const entities = FINANCE_DB.entities;
     WholesalerBalanceService,
     PlatformMetricsService,
     RemittanceService,
+    ElchiCheckService,
     SettlementResponseService,
     FinanceSettingsService,
   ],

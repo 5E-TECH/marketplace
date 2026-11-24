@@ -26,6 +26,7 @@ import {
   CurrentUser,
   INBOUND_RPC,
   InboundShipmentDto,
+  InboundShipmentPageDto,
   InboundShipmentQueryDto,
   JwtUser,
   ProductStatus,
@@ -105,6 +106,7 @@ export class WholesalerShipmentsController {
 
   @Get()
   @ApiOperation({ summary: 'O‘z postavkalarim va holati' })
+  @ApiOkResponse({ type: InboundShipmentPageDto })
   async list(
     @Query() query: InboundShipmentQueryDto,
     @CurrentUser() user: JwtUser,
