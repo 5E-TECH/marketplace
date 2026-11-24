@@ -47,6 +47,7 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
+import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 /** lead.integration.spec.ts dagi bilan bir xil: lead sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
@@ -78,6 +79,8 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
   };
   const supervisor = () => new LeadSupervisorService(db, catalogFake as never);
   const fraud = () => new FraudService(db, identityFake as never);
+  /** Lid `created_at` baza soatida (mikrosoniya) — `now` (millisoniya) undan 1 ms orqada qolib, lid ko‘rinmay qolmasin. */
+  const soon = () => new Date(Date.now() + 1_000);
   const admin = () =>
     new LeadAdminService(
       db.getRepository(Lead),
@@ -146,6 +149,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
         AddFraudCenter1795824000000,
         SiteOrder1798070400000,
         OperatorStateSince1798416000000,
+        Telephony1798675200000,
       ],
       synchronize: false,
       logging: false,
@@ -577,8 +581,8 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       await addLead({ phoneE164: '+998901234567', affiliateId: '43' }); // boshqa sotuvchi — mijoz
       await addLead({ affiliateId: '666', phoneE164: '+998901234567' }); // identity xato — keyingi safar
       const f = fraud();
-      expect(await f.detectSelfOrders()).toBe(1);
-      expect(await f.detectSelfOrders()).toBe(0); // takror — yangi hodisa yo‘q
+      expect(await f.detectSelfOrders(soon())).toBe(1);
+      expect(await f.detectSelfOrders(soon())).toBe(0); // takror — yangi hodisa yo‘q
       const [incident] = (await f.list({ rule: FraudRule.SELF_ORDER })).items;
       expect(incident).toMatchObject({
         status: FraudIncidentStatus.OPEN,
@@ -655,7 +659,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
         phoneE164: '+998901234567',
         streamId: stream.id,
       });
-      expect(await f.detectSelfOrders()).toBe(1);
+      expect(await f.detectSelfOrders(soon())).toBe(1);
       const [second] = (await f.list({ state: 'OPEN' })).items;
       const blocked = await f.decide('7', second.id, {
         action: FraudActionType.BLOCK_AFFILIATE,
