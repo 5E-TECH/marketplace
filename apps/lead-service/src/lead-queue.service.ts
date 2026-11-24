@@ -35,6 +35,7 @@ import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { PostbackService } from './postback.service';
+import { CallService } from './telephony/call.service';
 import { UserNamesClient } from './user-names.client';
 import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
@@ -77,6 +78,8 @@ export class LeadQueueService {
     @Optional() private readonly relay?: LeadOutboxRelayService,
     // BE-25: navbat xulosasida operator ismi
     @Optional() private readonly userNames?: UserNamesClient,
+    // BE-15: telefoniya (ulanmagan bo‘lsa natija qo‘lda kiritiladi)
+    @Optional() private readonly calls?: CallService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -116,6 +119,7 @@ export class LeadQueueService {
       ),
       maxBookings: QUEUE_RULES.maxNewBookings,
       since: row.stateSince?.toISOString() ?? null,
+      callEnabled: (await this.calls?.enabledFor(row.operatorId)) ?? false,
     };
   }
 
@@ -203,15 +207,25 @@ export class LeadQueueService {
       if (dto.outcome === LeadOutcome.CONFIRMED)
         this.address.assertConfirmable(lead);
 
-      await manager.getRepository(LeadAttempt).save(
+      // BE-15: TEL-4 — «javob bermadi», «band», «o‘chiq» server holatidan; TEL-3 — qo‘ng‘iroq urinishga bog‘lanadi
+      const calls =
+        (await this.calls?.checkResult(
+          manager,
+          lead,
+          operatorId,
+          dto.outcome,
+        )) ?? [];
+      const attempt = await manager.getRepository(LeadAttempt).save(
         manager.getRepository(LeadAttempt).create({
           leadId,
           operatorId,
+          callId: calls[0]?.id ?? null,
           outcome: dto.outcome,
           comment: dto.comment ?? null,
           callbackAt: dto.callbackAt ? new Date(dto.callbackAt) : null,
         }),
       );
+      await this.calls?.link(manager, calls, attempt.id);
       const from = lead.status;
       lead.attempts += 1;
       lead.bookedUntil = null;
