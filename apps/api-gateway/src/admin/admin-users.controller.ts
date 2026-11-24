@@ -14,6 +14,8 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
@@ -21,6 +23,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
+  AdminUserDto,
   AdminUsersQueryDto,
   AffiliateStreamStatus,
   AuthErrorResponseDto,
@@ -51,7 +54,37 @@ export class AdminUsersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchilar (rol/blok/qidiruv + sahifalash)' })
-  @ApiOkResponse({ description: '{ items, total, page, limit, totalPages }' })
+  @ApiOkResponse({
+    description:
+      '{ items, total, page, limit, totalPages }; items — foydalanuvchi kartasi (AdminUserDto shakli)',
+    schema: {
+      example: {
+        items: [
+          {
+            id: '42',
+            role: 'OPERATOR_LEAD',
+            name: 'Dilnoza',
+            firstName: null,
+            lastName: null,
+            phone: '+998901112233',
+            email: null,
+            avatarUrl: null,
+            isActive: true,
+            isBlocked: false,
+            authVersion: 1,
+            totpEnabledAt: null,
+            isDeleted: false,
+            createdAt: '2026-11-20T08:00:00.000Z',
+            updatedAt: '2026-11-20T08:00:00.000Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+      },
+    },
+  })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   list(@Query() query: AdminUsersQueryDto) {
@@ -66,6 +99,8 @@ export class AdminUsersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchi profili' })
+  @ApiOkResponse({ type: AdminUserDto })
+  @ApiConflictResponse({ description: 'Foydalanuvchi topilmadi' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   get(@Param('id') id: string) {
     return sendRpc(
@@ -79,7 +114,22 @@ export class AdminUsersController {
   @Roles(Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchi rolini o‘zgartirish' })
-  @ApiOkResponse({ description: 'Yangilangan foydalanuvchi' })
+  @ApiOkResponse({
+    description: 'Yangilangan foydalanuvchi (qisqa ko‘rinish)',
+    schema: {
+      example: {
+        id: '42',
+        name: 'Dilnoza',
+        phone: '+998901112233',
+        email: null,
+        role: 'OPERATOR_LEAD',
+        isActive: true,
+        isBlocked: false,
+        createdAt: '2026-11-20T08:00:00.000Z',
+        updatedAt: '2026-11-23T09:00:00.000Z',
+      },
+    },
+  })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   updateRole(
     @CurrentUser() admin: JwtUser,
@@ -119,6 +169,14 @@ export class AdminUsersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchini bloklash (o‘zini → 409)' })
+  @ApiCreatedResponse({
+    type: AdminUserDto,
+    description:
+      'Bloklangan foydalanuvchi; sotuvchi bo‘lsa sahifalari to‘xtaydi',
+  })
+  @ApiConflictResponse({
+    description: 'O‘zini bloklash yoki foydalanuvchi topilmadi',
+  })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async block(
     @CurrentUser() admin: JwtUser,
@@ -141,6 +199,8 @@ export class AdminUsersController {
   @Roles(Role.ADMIN, Role.SUPERADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Foydalanuvchini blokdan chiqarish' })
+  @ApiCreatedResponse({ type: AdminUserDto })
+  @ApiConflictResponse({ description: 'Foydalanuvchi topilmadi' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async unblock(
     @CurrentUser() admin: JwtUser,
@@ -183,6 +243,13 @@ export class AdminUsersController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Xodim 2FA sini nolga tushirish (keyingi kirishda qayta ulaydi)',
+  })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: { reset: { type: 'boolean', example: true } },
+      example: { reset: true },
+    },
   })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   async resetTwoFactor(

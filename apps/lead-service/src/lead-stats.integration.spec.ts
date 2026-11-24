@@ -27,6 +27,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
+import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -168,6 +169,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         AddCapiFields1795651200000,
         AddFraudCenter1795824000000,
         SiteOrder1798070400000,
+        OperatorStateSince1798416000000,
       ],
       synchronize: false,
       logging: false,
@@ -820,6 +822,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
 
   describe('migratsiya', () => {
     it('mavjud tasdiqlangan lidlarga tasdiq vaqti va operatori oxirgi CONFIRMED urinishidan yoziladi; down/up', async () => {
+      await db.undoLastMigration(); // BE-25 (operator holati vaqti)
       await db.undoLastMigration(); // BE-34 (sayt buyurtmasi)
       await db.undoLastMigration(); // BE-35 (firibgarlik markazi)
       await db.undoLastMigration(); // BE-31 capi maydonlari

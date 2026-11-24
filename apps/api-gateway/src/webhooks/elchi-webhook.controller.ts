@@ -9,7 +9,14 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import {
   ElchiWebhookDto,
@@ -60,14 +67,38 @@ export class ElchiWebhookController {
       'bitta shaklga keltiradi. Pul maydonlari (`collected_from_customer`, ' +
       '`market_paid_amount`, `elchi_fee`, `extra_cost`) va pul holatlari ' +
       '(`paid`, `partly_paid`, `closed`) qabul qilinadi (BE-21). Lid buyurtmasi ' +
-      '(`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar 200 oladi, ' +
-      'holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 200 oladi, hech ' +
+      '(`mp-order:<id>`) holati faqat oldinga o‘zgaradi; orqaga xabar ham 201 oladi, ' +
+      'holat o‘zgarmaydi, jurnalda REJECTED. `webhook.test` ping’i 201 oladi, hech ' +
       'narsa o‘zgarmaydi.',
   })
   @ApiHeader({ name: 'X-Elchi-Signature', required: true })
   // Faqat HUJJAT uchun: tana `@Body()` bilan bog‘lanmaydi (izohga qarang),
   // shuning uchun bu dekorator validatsiya qilmaydi — kontraktni saqlaydi.
   @ApiBody({ type: ElchiWebhookDto })
+  @ApiCreatedResponse({
+    description:
+      'Qabul qilindi (201). `result`: APPLIED — holat o‘zgardi, NOOP — o‘zgarish yo‘q, REJECTED — orqaga yoki ruxsatsiz o‘tish (holat o‘zgarmaydi, jurnalda), IGNORED — e’tiborsiz holat; lid buyurtmasida `status` — buyurtmaning hozirgi holati (`LeadOrderStatus`). `duplicate: true` — shu `event_id` avval qayta ishlangan. `ignored` — sinov ping’i (`webhook.test`), hech narsa o‘zgarmaydi',
+    schema: {
+      type: 'object',
+      required: ['received'],
+      properties: {
+        received: { type: 'boolean', example: true },
+        result: {
+          type: 'string',
+          enum: ['APPLIED', 'NOOP', 'REJECTED', 'IGNORED'],
+          example: 'APPLIED',
+        },
+        status: { type: 'string', example: 'DELIVERED' },
+        duplicate: { type: 'boolean', example: true },
+        ignored: { type: 'string', example: 'webhook.test' },
+      },
+      example: { received: true, result: 'APPLIED', status: 'DELIVERED' },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description:
+      'Imzo yo‘q yoki noto‘g‘ri, yoki hodisa vaqti ruxsat etilgan oynadan tashqarida',
+  })
   async receive(
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-elchi-signature') signature: string | undefined,

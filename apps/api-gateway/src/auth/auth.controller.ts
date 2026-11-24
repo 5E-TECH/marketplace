@@ -11,6 +11,7 @@ import {
   Ip,
   Optional,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -42,6 +43,7 @@ import {
   TwoFactorSetupResultDto,
   TwoFactorVerifyDto,
   AuthErrorResponseDto,
+  CurrentUserDto,
   OtpPurpose,
   OtpSendResultDto,
   RegisterAffiliateDto,
@@ -521,6 +523,25 @@ export class AuthController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sessiyani yangilash (refresh token cookie’dan yoki body’dan)',
+  })
+  @ApiOkResponse({
+    description:
+      'Yangi tokenlar HttpOnly cookie’da; access token body’da ham (sukut), `AUTH_TOKENS_IN_BODY=false` bo‘lsa — `{}`',
+    type: LoginSuccessResponseDto,
+    headers: {
+      'Set-Cookie': {
+        description: 'HttpOnly accessToken va refreshToken cookie',
+        schema: { type: 'string' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description:
+      'Refresh token yaroqsiz yoki muddati o‘tgan (cookie’lar tozalanadi)',
+    type: AuthErrorResponseDto,
+  })
   async refresh(
     @Body() dto: RefreshTokenDto,
     @Req() req: Request,
@@ -550,6 +571,12 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Parolni tiklash kodi (SMS)' })
+  @ApiOkResponse({
+    description:
+      'Kod SMS da yuborildi (`expiresIn` — soniya). Raqam ro‘yxatda bo‘lmasa ham javob bir xil — raqamlar tekshirib chiqilmasin',
+    schema: { example: { sent: true, expiresIn: 300 } },
+  })
   forgot(@Body() dto: ForgotPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.forgot-password' }, dto);
   }
@@ -558,6 +585,11 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'SMS kodi bilan yangi parol o‘rnatish' })
+  @ApiOkResponse({
+    description: 'Parol yangilandi, eski sessiyalar bekor',
+    schema: { example: { reset: true } },
+  })
   reset(@Body() dto: ResetPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.reset-password' }, dto);
   }
@@ -566,6 +598,8 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('verify-phone')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Telefon raqamini SMS kodi bilan tasdiqlash' })
+  @ApiOkResponse({ schema: { example: { verified: true } } })
   verify(@Body() dto: VerifyPhoneDto) {
     return sendRpc(this.identity, { cmd: 'auth.verify-phone' }, dto);
   }
@@ -574,19 +608,55 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('resend-code')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Telefonni tasdiqlash kodini qayta yuborish' })
+  @ApiOkResponse({
+    description:
+      'Kod SMS da yuborildi (`expiresIn` — soniya). Raqam ro‘yxatda bo‘lmasa ham javob bir xil — raqamlar tekshirib chiqilmasin',
+    schema: { example: { sent: true, expiresIn: 300 } },
+  })
   resend(@Body() dto: ForgotPasswordDto) {
     return sendRpc(this.identity, { cmd: 'auth.resend-code' }, dto);
   }
-  @Get('sessions') sessions(@CurrentUser() user: JwtUser) {
+  @Get('sessions')
+  @ApiOperation({ summary: 'Mening sessiyalarim (yangisi tepada)' })
+  @ApiOkResponse({
+    description:
+      '`active` — bekor qilinmagan va muddati o‘tmagan; `current` hozircha har doim false',
+    schema: {
+      example: [
+        {
+          id: '9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60',
+          createdAt: '2026-12-01T08:00:00.000Z',
+          expiresAt: '2026-12-08T08:00:00.000Z',
+          current: false,
+          active: true,
+        },
+      ],
+    },
+  })
+  sessions(@CurrentUser() user: JwtUser) {
     return sendRpc(
       this.identity,
       { cmd: 'auth.sessions.list' },
       { userId: user.sub },
     );
   }
-  @Delete('sessions/:id') revoke(
+  @Delete('sessions/:id')
+  @ApiOperation({ summary: 'Sessiyani bekor qilish' })
+  @ApiOkResponse({
+    schema: {
+      example: { id: '9b1f0c2e-6d4a-4c8e-9f3b-2a7d5e1c4b60', revoked: true },
+    },
+  })
+  @ApiBadRequestResponse({
+    description:
+      'ID UUID emas, sessiya topilmadi yoki allaqachon bekor qilingan',
+    type: AuthErrorResponseDto,
+  })
+  revoke(
     @CurrentUser() user: JwtUser,
-    @Param('id') id: string,
+    // sessiya ID si — UUID (auth_session.id); boshqa qiymat bazada 22P02 (500) berardi
+    @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return sendRpc(
       this.identity,
@@ -598,6 +668,7 @@ export class AuthController {
   @ApiBearerAuth()
   @Get('me')
   @ApiOperation({ summary: 'Joriy foydalanuvchini olish' })
+  @ApiOkResponse({ type: CurrentUserDto })
   me(@CurrentUser() user: JwtUser) {
     return sendRpc(this.identity, { cmd: 'auth.me' }, { userId: user.sub });
   }
@@ -607,7 +678,10 @@ export class AuthController {
   @ApiOperation({
     summary: 'Joriy foydalanuvchi o‘z profili yoki parolini yangilashi',
   })
-  @ApiOkResponse({ description: 'Yangilangan profil (passwordHash qaytmaydi)' })
+  @ApiOkResponse({
+    description: 'Yangilangan profil (parol xeshi qaytmaydi)',
+    type: CurrentUserDto,
+  })
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
     // Telefon ham: yangi telefonga parol tiklash orqali hisob egallanardi (BE-05 tekshiruvi)
     if (

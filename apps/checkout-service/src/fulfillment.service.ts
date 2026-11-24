@@ -12,6 +12,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   ErrorCode,
   FulfillmentTaskStatus,
+  HandoverActsPage,
   HandoverActView,
   LeadOrderActor,
   LeadOrderActorType,
@@ -50,6 +51,17 @@ const GEO_TIMEOUT_MS = 3_000;
 const PICK_LIST_LIMIT = 1_000;
 /** Yorliqdagi jo‘natuvchi — bitta platforma marketi (BE-20 `ELCHI_PLATFORM_MARKET_ID`) [taklif]. */
 const SENDER_NAME = 'Elchi Market';
+
+/** Topshirish akti sarlavhasi: vaqt — Toshkent, «YYYY-MM-DD HH:MI». */
+const ACT_COLUMNS = `id::text AS id, parcel_count AS "parcelCount", created_by::text AS "createdBy",
+  to_char(created_at AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD HH24:MI') AS "createdAt"`;
+
+interface ActRow {
+  id: string;
+  parcelCount: number;
+  createdBy: string;
+  createdAt: string;
+}
 
 interface TaskRow {
   id: string;
@@ -542,38 +554,75 @@ export class FulfillmentService {
     if (!ID.test(String(id ?? '')))
       throw new NotFoundException('Akt topilmadi');
     const [act] = (await this.dataSource.query(
-      `SELECT id::text AS id, parcel_count AS "parcelCount", created_by::text AS "createdBy",
-              to_char(created_at AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD HH24:MI') AS "createdAt"
-         FROM checkout.handover_act WHERE id = $1`,
+      `SELECT ${ACT_COLUMNS} FROM checkout.handover_act WHERE id = $1`,
       [String(id)],
-    )) as Array<{
-      id: string;
-      parcelCount: number;
-      createdBy: string;
-      createdAt: string;
-    }>;
+    )) as ActRow[];
     if (!act) throw new NotFoundException('Akt topilmadi');
+    const [view] = await this.withItems([act]);
+    return view;
+  }
+
+  /**
+   * BE-25 (FE-17 «Oldingi aktlar»): topshirish aktlari, yangisi tepada; har akt — `act()` bilan bir xil shakl.
+   * Sahifa chegarasi DTO da ham (gateway), bu yerda ham — RPC to‘g‘ridan chaqirilsa.
+   */
+  async acts(input?: {
+    page?: number;
+    limit?: number;
+  }): Promise<HandoverActsPage> {
+    const page = Math.min(
+      100_000,
+      Math.max(1, Math.trunc(Number(input?.page) || 1)),
+    );
+    const limit = Math.min(
+      100,
+      Math.max(1, Math.trunc(Number(input?.limit) || 20)),
+    );
+    const [{ total }] = (await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total FROM checkout.handover_act`,
+    )) as Array<{ total: number }>;
+    const rows = (await this.dataSource.query(
+      `SELECT ${ACT_COLUMNS} FROM checkout.handover_act
+        ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2`,
+      [limit, (page - 1) * limit],
+    )) as ActRow[];
+    return {
+      items: await this.withItems(rows),
+      total: Number(total),
+      page,
+      limit,
+    };
+  }
+
+  private async withItems(acts: ActRow[]): Promise<HandoverActView[]> {
+    if (!acts.length) return [];
     const items = (await this.dataSource.query(
-      `SELECT parcel_id::text AS "parcelId", order_id::text AS "orderId",
+      `SELECT act_id::text AS "actId", parcel_id::text AS "parcelId", order_id::text AS "orderId",
               shipment_id::text AS "shipmentId", qr_code_token AS "qrCodeToken"
-         FROM checkout.handover_act_item WHERE act_id = $1 ORDER BY id`,
-      [String(id)],
+         FROM checkout.handover_act_item WHERE act_id = ANY($1::bigint[]) ORDER BY act_id, id`,
+      [acts.map((act) => act.id)],
     )) as Array<{
+      actId: string;
       parcelId: string;
       orderId: string;
       shipmentId: string;
       qrCodeToken: string;
     }>;
-    return {
+    return acts.map((act) => ({
       id: act.id,
       parcelCount: Number(act.parcelCount),
       createdBy: act.createdBy,
       createdAt: act.createdAt,
-      items: items.map((item) => ({
-        ...item,
-        orderNumber: leadOrderNumber(item.orderId),
-      })),
-    };
+      items: items
+        .filter((item) => item.actId === act.id)
+        .map((item) => ({
+          parcelId: item.parcelId,
+          orderId: item.orderId,
+          shipmentId: item.shipmentId,
+          qrCodeToken: item.qrCodeToken,
+          orderNumber: leadOrderNumber(item.orderId),
+        })),
+    }));
   }
 
   async actPdf(id: string): Promise<ShippingLabelDocument> {

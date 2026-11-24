@@ -34,6 +34,7 @@ import { AddLeadStats1795564800000 } from './migrations/1795564800000-add-lead-s
 import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-fields';
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
+import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 
 describe('BE-31: CAPI hodisasi (sof funksiyalar)', () => {
   const base = {
@@ -209,6 +210,7 @@ describeWithPostgres(
           AddCapiFields1795651200000,
           AddFraudCenter1795824000000,
           SiteOrder1798070400000,
+          OperatorStateSince1798416000000,
         ],
         synchronize: false,
         logging: false,

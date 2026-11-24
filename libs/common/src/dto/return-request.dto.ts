@@ -79,7 +79,7 @@ export class ReturnRequestsQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({ type: Number, example: 20, default: 20 })
   @IsOptional()
@@ -87,7 +87,7 @@ export class ReturnRequestsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  limit: number = 20;
 }
 
 export class AdminReturnRequestsQueryDto extends ReturnRequestsQueryDto {

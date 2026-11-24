@@ -1,7 +1,7 @@
 # Lid-sotuv hodisalari (RabbitMQ)
 
 BE-25, TC4. Lid-sotuv modelidagi RabbitMQ hodisalari: nomi, qachon yuboriladi, maydonlari, kim yuboradi va kim qabul
-qiladi. Hamma ma’lumot `dev` dagi koddan olingan (2026-11-22, `9e3f26b`). Yo‘llar repo ildizidan.
+qiladi. Hamma ma’lumot `dev` dagi koddan olingan (2026-11-23, `211f6c4`; PR 127–149 `dev` da). Yo‘llar repo ildizidan.
 
 Bu yerda faqat **hodisalar** bor: yuboruvchi `emit` qiladi, qabul qiluvchida `@EventPattern` turadi, javob kutilmaydi.
 So‘rov-javob chaqiriqlari (`send` → `@MessagePattern`, masalan `catalog.pricing.*`, `checkout.warehouse.*`) hodisa
@@ -13,7 +13,7 @@ emas va bu ro‘yxatga kirmaydi. Outbox orqali ketadigan ombor buyruqlari ham so
 |---|---|---|---|
 | `lead.confirmed` | `LEAD_EVENTS.CONFIRMED` | lead-service (outbox) | checkout-service |
 | `order.create-failed` | `LEAD_EVENTS.ORDER_CREATE_FAILED` | checkout-service (outbox) | lead-service |
-| `order.status.changed` | `ORDER_EVENTS.STATUS_CHANGED` | checkout-service (outbox) | finance-service, lead-service, elchi-integration |
+| `order.status.changed` | `ORDER_EVENTS.STATUS_CHANGED` | checkout-service (outbox) | finance-service, lead-service, elchi-integration, notification-service |
 | `elchi.parcel.created` | `ORDER_EVENTS.PARCEL_CREATED` | elchi-integration (outbox) | checkout-service |
 | `elchi.parcel.failed` | `ORDER_EVENTS.PARCEL_FAILED` | elchi-integration (outbox) | checkout-service |
 | `elchi.parcel.cancelled` | `ORDER_EVENTS.PARCEL_CANCELLED` | elchi-integration (outbox) | checkout-service |
@@ -23,10 +23,19 @@ emas va bu ro‘yxatga kirmaydi. Outbox orqali ketadigan ombor buyruqlari ham so
 | `fraud.fee.cancel` | `LEAD_EVENTS.FRAUD_FEE_CANCEL` | lead-service (outbox) | finance-service |
 | `fraud.measure.applied` | `LEAD_EVENTS.FRAUD_MEASURE` | lead-service (outbox) | notification navbati — handler yo‘q |
 | `lead.callback.reminder` | `LEAD_EVENTS.CALLBACK_REMINDER` | lead-service (outbox) | notification navbati — handler yo‘q |
-| `order.returned` | `ORDER_EVENTS.RETURNED` | yuboruvchi yo‘q | finance-service |
-| `finance.cod.settled` | — (satr) | 1-versiya: checkout (eski marketplace); 2-versiya: PR 128 | finance-service |
+| `order.returned` | `ORDER_EVENTS.RETURNED` | checkout-service (outbox, BE-44) | finance-service |
+| `finance.cod.settled` | — (satr) | 1-versiya: checkout (eski marketplace); 2-versiya: checkout `ElchiLeadWebhookService` (outbox, BE-21) | finance-service |
 | `inventory.lot.blocked` | `LOT_BLOCKED_EVENT` | inventory-service (to‘g‘ridan-to‘g‘ri) | notification-service |
 | `price.decision.orange` | — (satr) | catalog-service (to‘g‘ridan-to‘g‘ri) | notification-service |
+| `elchi.status.conflict` | `ELCHI_STATUS_CONFLICT_EVENT` | checkout-service (to‘g‘ridan-to‘g‘ri, BE-21) | notification-service |
+| `finance.cod.reconciliation.mismatch` | `COD_RECONCILIATION_MISMATCH_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-21) | notification-service |
+| `finance.elchi.check.mismatch` | `ELCHI_CHECK_MISMATCH_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-46) | notification-service |
+| `inventory.inbound.received` | `INBOUND_RECEIVED_EVENT` | inventory-service (outbox, BE-47) | notification-service |
+| `inventory.offer.out-of-stock` | `STOCK_DEPLETED_EVENT` | inventory-service (outbox, BE-47) | notification-service |
+| `finance.withdrawal.paid` | `WITHDRAWAL_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-24) | notification-service |
+| `finance.wholesaler.paid` | `SETTLEMENT_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-47) | notification-service |
+| `lead.site.confirm-sms` | `LEAD_EVENTS.SITE_CONFIRM_SMS` | lead-service (outbox, BE-34) | notification-service |
+| `auth.verification-code.requested` | — (satr) | identity-service (to‘g‘ridan-to‘g‘ri, BE-06) | notification-service |
 
 Konstantalar: `LEAD_EVENTS` — `libs/common/src/dto/lead-events.dto.ts`, `ORDER_EVENTS` —
 `libs/common/src/dto/order-events.dto.ts`, `LOT_BLOCKED_EVENT` — `libs/common/src/dto/warehouse-inbound.dto.ts`.
@@ -60,8 +69,9 @@ marta: hodisa takror kelishi mumkin.
 
 | Relay | Qachon ishlaydi | Qaysi hodisa → qaysi navbat |
 |---|---|---|
-| checkout `CheckoutOutboxRelayService` (`apps/checkout-service/src/checkout-outbox-relay.service.ts`) | har 10 s, doim | `finance.*` → finance; `order.status.changed` → finance, lead, integration (ketma-ket); `order.create-failed` → lead; boshqa nom — `FAILED` |
-| lead `LeadOutboxRelayService` (`apps/lead-service/src/lead-outbox-relay.service.ts`) | har 10 s, faqat `LEAD_OUTBOX_RELAY=on` | `lead.confirmed` → checkout; `lead.callback.reminder`, `fraud.measure.applied` → notification; `fraud.fee.*` → finance |
+| checkout `CheckoutOutboxRelayService` (`apps/checkout-service/src/checkout-outbox-relay.service.ts`) | har 10 s, doim | `finance.*` → finance; `order.status.changed` → finance, lead, integration, notification (ketma-ket); `order.returned` → finance; `order.create-failed` → lead; boshqa nom — `FAILED` |
+| lead `LeadOutboxRelayService` (`apps/lead-service/src/lead-outbox-relay.service.ts`) | har 10 s, faqat `LEAD_OUTBOX_RELAY=on` | `lead.confirmed` → checkout; `lead.callback.reminder`, `fraud.measure.applied`, `lead.site.confirm-sms` → notification; `fraud.fee.*` → finance |
+| inventory `InventoryOutboxRelayService` (`apps/inventory-service/src/inventory-outbox-relay.service.ts`) | har 10 s, doim | `inventory.inbound.received`, `inventory.offer.out-of-stock` → notification; boshqalari → catalog |
 | elchi `ElchiOutboxRelayService` (`apps/elchi-integration/src/elchi-outbox-relay.service.ts`) | har 10 s, faqat `ELCHI_OUTBOX_RELAY=on` | `elchi.parcel.*` → checkout; boshqa nom — `FAILED` |
 
 - checkout va elchi relaylari `OutboxService.relayPending` dan foydalanadi: bitta agregat hodisalari tartib bilan
@@ -159,7 +169,7 @@ hamma ma’lumot bor — ular checkout bazasiga murojaat qilmaydi.
 
 **Yuboruvchi:** checkout-service, `LeadOrderStatusService.emit`
 (`apps/checkout-service/src/lead-order-status.service.ts`). Outbox, agregat `sales_order`; checkout relay orqali
-`finance_queue_v2`, `lead_queue_v2`, `integration_queue_v2` ga. `dev` dagi yuborish joylari:
+`finance_queue_v2`, `lead_queue_v2`, `integration_queue_v2`, `notification_queue_v2` ga. `dev` dagi yuborish joylari:
 
 - buyurtma yaratilganda — `CONFIRMED` (`LeadOrderService.create`);
 - ombor: birinchi to‘g‘ri skaner — `PICKING`, qadoq — `PACKED`, topshirish akti — `HANDED_TO_ELCHI`
@@ -167,7 +177,8 @@ hamma ma’lumot bor — ular checkout bazasiga murojaat qilmaydi.
 - bekor qilish — `CANCELLED` (RPC `checkout.order.cancel`);
 - qaytganni saralash — `RETURNED_GRADED` (RPC `checkout.order.transition`, gateway `warehouse/returns/:orderId/grade`).
 
-Elchi holatlari (`IN_TRANSIT`, `DELIVERED`, `REMITTED`, `REFUSED`, `RETURNING`) PR 128 dan keyin keladi — pastda.
+Elchi holatlari (`IN_TRANSIT`, `DELIVERED`, `REMITTED`, `REFUSED`, `RETURNING`) — Elchi webhooki (BE-21), pastda.
+Qaytarish so‘rovi (`RETURN_REQUESTED` → `RETURNING` yoki `DELIVERED`) — BE-44.
 
 **Maydonlar** — `OrderStatusChangedEvent` (`libs/common/src/dto/order-events.dto.ts`):
 
@@ -220,6 +231,7 @@ Elchi holatlari (`IN_TRANSIT`, `DELIVERED`, `REMITTED`, `REFUSED`, `RETURNING`) 
 | finance-service | `LedgerController.orderStatusChanged` (`apps/finance-service/src/ledger/ledger.controller.ts`) → `LedgerService.onOrderStatusChanged` | Faqat `DELIVERED` va `REFUSED` da moliya jurnaliga yozadi; `processOnce`, consumer `finance.order-status` |
 | lead-service | `LeadStatsController.orderStatusChanged` (`apps/lead-service/src/lead-stats.controller.ts`) → `LeadOrderService.onOrderStatusChanged` | Lidda buyurtma holatini yangilaydi (statistika, postback, Meta CAPI); `processOnce`, consumer `lead.order-status` |
 | elchi-integration | `ElchiIntegrationController.onOrderStatusChanged` (`apps/elchi-integration/src/elchi-integration.controller.ts`) → `ParcelService.onOrderStatusChanged` | `CONFIRMED` — posilka so‘rovini navbatga qo‘yadi, `CANCELLED` — Elchi’da bekor qiladi; `processOnce`, consumer `elchi-parcel` |
+| notification-service | `OrderSmsController.onOrderStatus` (`apps/notification-service/src/order-sms.controller.ts`) | Mijozga SMS (tasdiqlandi; yo‘lga chiqdi — trek bilan; yetkazildi) va sotuvchi kabinetiga xabar (BE-24, BE-47); bir hodisaga bitta xabar (`dedupeKey`) |
 
 ### `elchi.parcel.created`
 
@@ -338,16 +350,15 @@ null), `affiliateId`, `streamId` (string \| null), `action` (chora), `reason`, `
 **Maydonlar** (umumiy interfeys yo‘q, obyekt shu faylda yoziladi): `eventId`, `leadId`, `operatorId`, `callbackAt`
 (ISO 8601).
 
-**Qabul qiluvchi: yo‘q.** notification-service da handler yo‘q — hodisa tashlanadi. Konstanta izohida «lead-service
-ichida» deyilgan, lekin relay uni notification navbatiga yuboradi.
+**Qabul qiluvchi: yo‘q.** notification-service da handler yo‘q — hodisa tashlanadi (bo‘shliqlar, 2-band).
 
 ### `order.returned`
 
-**Qachon** (izohdan): yetkazilgandan keyin qaytarish tasdiqlandi, moliya yozuvlarini qaytaradi (BE-44 → BE-22)
-[taklif].
+**Qachon:** yetkazilgandan keyin qaytarish tasdiqlandi — moliya yozuvlarini qaytaradi (BE-44 → BE-22). Bir qaytarish
+so‘roviga bir marta.
 
-**Yuboruvchi: yo‘q.** `dev` da bu hodisani yozadigan kod yo‘q. checkout outboxiga yozilsa ham relay uni yo‘naltirmaydi
-(`finance.` bilan boshlanmaydi) — qator `FAILED` bo‘ladi.
+**Yuboruvchi:** checkout-service, `LeadReturnService` (`apps/checkout-service/src/lead-return.service.ts`). Outbox,
+holat bilan bitta tranzaksiyada; checkout relay `finance_queue_v2` ga yuboradi.
 
 **Maydonlar** — `OrderReturnedEvent` (`libs/common/src/dto/order-events.dto.ts`): `eventId`, `orderId`,
 `returnRequestId`, `items[]` (`productId`, `quantity` — to‘liq qaytgan qatorlar), `occurredAt` (ISO 8601).
@@ -379,7 +390,7 @@ Ikki versiya bor, qabul qiluvchi ularni `schemaVersion` bo‘yicha ajratadi:
 | `refusalFee` | number \| null, ixtiyoriy | Rad etilgan posilka uchun Elchi ushlagan summa |
 | `occurredAt` | string | Vaqt, ISO 8601 |
 
-`dev` da 2-versiyani yuboruvchi yo‘q — u PR 128 da (pastda).
+2-versiyani yuboruvchi — checkout `ElchiLeadWebhookService` (BE-21, pastda).
 
 **Qabul qiluvchi:** finance-service, `FinanceController.codSettled` (`apps/finance-service/src/finance.controller.ts`):
 `schemaVersion === 2` — `LedgerService.onRemittance` (`processOnce`, consumer `finance.remittance`), aks holda eski
@@ -414,9 +425,134 @@ hodisa yo‘qolishi mumkin.
 **Qabul qiluvchi:** notification-service, `NotificationEventsController.priceOrange`
 (`apps/notification-service/src/notification-events.controller.ts`) — faol superadminlarga xabar.
 
-## PR 128 (BE-21) merge qilingach
+### `inventory.inbound.received`
 
-PR 128 (`feat/be-21-elchi-webhook`) hali `dev` da emas. Undagi hodisalar o‘sha branchdagi koddan tekshirildi:
+**Qachon:** omborchi postavkani qabul qildi (BE-17) — optovik kabinetiga xabar, brak bo‘lsa soni bilan (BE-47, TZ 6.12).
+
+**Yuboruvchi:** inventory-service, `recordInboundReceived` (`apps/inventory-service/src/inventory.helpers.ts`). Outbox,
+qabul bilan bitta tranzaksiyada, agregat `inbound_shipment`; `InventoryOutboxRelayService` `notification_queue_v2` ga.
+
+**Maydonlar** — `InboundReceivedEvent` (`libs/common/src/dto/warehouse-inbound.dto.ts`): `shipmentId`, `number`
+(postavka raqami), `wholesalerId`, `status` (`InboundShipmentStatus`), `declaredQty`, `receivedQty`, `defectiveQty`.
+`eventId` yo‘q — takror xabarni `dedupeKey` ushlaydi.
+
+**Qabul qiluvchi:** notification-service, `CabinetMessagesController.onInboundReceived`
+(`apps/notification-service/src/cabinet-messages.controller.ts`) — optovik kabinetiga xabar; bir postavkaga bitta
+(`dedupeKey` = `inbound:<shipmentId>:received`).
+
+### `inventory.offer.out-of-stock`
+
+**Qachon:** HQ dagi sotuvga yaroqli bo‘sh qoldiq 0 bo‘ldi — band qilish, tuzatish, hisobdan chiqarish yoki partiya
+muddati bloki (BE-47, TZ 6.12). (`inventory.stock_depleted` — boshqa hodisa, katalogga.)
+
+**Yuboruvchi:** inventory-service, `recordOfferOutOfStock` (`apps/inventory-service/src/inventory.helpers.ts`). Outbox,
+qoldiqni kamaytirgan amal bilan bitta tranzaksiyada, agregat `offer_stock_notice`; relay `notification_queue_v2` ga.
+
+**Maydonlar** — `StockDepletedEvent` (`libs/common/src/dto/warehouse-inbound.dto.ts`): `variantIds[]`, `at` (ISO 8601).
+
+**Qabul qiluvchi:** notification-service, `CabinetMessagesController.onStockDepleted` — adminlarga va shu offerda
+sahifasi bor sotuvchilarga (RPC `lead.offer.affiliates`); bir kunda bir variantga har qabul qiluvchiga bitta [taklif]
+(`dedupeKey` = `stock:<variantId>:<kun>:user:<userId>`).
+
+### `finance.withdrawal.paid`
+
+**Qachon:** moliya sotuvchining pul yechish so‘rovini «To‘landi» qildi (BE-23) — sotuvchiga «Pul o‘tkazildi» SMS i
+(BE-24, TC4).
+
+**Yuboruvchi:** api-gateway, `AdminWithdrawalsController` (`apps/api-gateway/src/withdrawals/admin-withdrawals.controller.ts`)
+— moliya RPC muvaffaqiyatli bo‘lgach `notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`. **Outboxsiz** [taklif]:
+yuborilmasa faqat log; «To‘landi» ni qayta bosish xabarni qayta yuboradi (holat idempotent).
+
+**Maydonlar** (`WithdrawalPaidEvent`, `apps/notification-service/src/order-sms.ts`): `withdrawalId`, `affiliateId`,
+`amount`, `tax`, `net` (so‘m). `eventId` yo‘q.
+
+**Qabul qiluvchi:** notification-service, `OrderSmsController.onWithdrawalPaid`
+(`apps/notification-service/src/order-sms.controller.ts`) — telefon identity dan (RPC), SMS; bir so‘rovga bitta
+(`dedupeKey`).
+
+### `finance.wholesaler.paid`
+
+**Qachon:** moliya optovik aktini «To‘landi» qildi (BE-33) — optovikka «Pul o‘tkazildi» (BE-47, TC3).
+
+**Yuboruvchi:** api-gateway, `AdminSettlementsController` (`apps/api-gateway/src/withdrawals/admin-settlements.controller.ts`)
+— `finance.withdrawal.paid` kabi, outboxsiz [taklif].
+
+**Maydonlar** — `SettlementPaidEvent` (`libs/common/src/dto/wholesaler-settlement.dto.ts`): `settlementId`, `number`
+(akt raqami), `wholesalerId`, `amount` (bankka o‘tkazilgan summa, so‘m), `periodStart`, `periodEnd`. `eventId` yo‘q.
+
+**Qabul qiluvchi:** notification-service, `CabinetMessagesController.onSettlementPaid` — optovik kabineti va SMS; bir
+aktga bitta (`dedupeKey` = `settlement:<settlementId>:PAID`).
+
+### `lead.site.confirm-sms`
+
+**Qachon:** saytdagi mehmon buyurtmasida mijoz «SMS bilan tasdiqlash» ni tanladi (BE-34) — tasdiq havolasi bilan SMS.
+
+**Yuboruvchi:** lead-service, `SiteOrderService` (`apps/lead-service/src/site-order.service.ts`). Outbox, lid bilan
+bitta tranzaksiyada, agregat `lead`; `LeadOutboxRelayService` (`LEAD_OUTBOX_RELAY=on`) `notification_queue_v2` ga.
+
+**Maydonlar** — `SiteConfirmSmsEvent` (`libs/common/src/dto/lead-events.dto.ts`): `eventId`, `leadId`, `phone`
+(`+998XXXXXXXXX`), `text` (tayyor matn: summa, tovarlar, tuman, havola — mijoz yozgan matnsiz), `expiresAt` (havola
+muddati, ISO 8601).
+
+**Qabul qiluvchi:** notification-service, `SiteOrderSmsController.send`
+(`apps/notification-service/src/site-order-sms.controller.ts`) — SMS adapteri orqali; bir hodisaga bitta.
+
+### `auth.verification-code.requested`
+
+**Qachon:** SMS kod so‘raldi — sotuvchi va optovik ro‘yxati, kirish (BE-06), eski parolni tiklash va telefon kodi.
+
+**Yuboruvchi:** identity-service, `AffiliateAuthService` (`apps/identity-service/src/affiliate-auth/affiliate-auth.service.ts`)
+va `AuthService` (`apps/identity-service/src/auth/auth.service.ts`) — kod bazaga yozilgach `notification_queue_v2` ga
+to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Blokdagi raqamga kod yuborilmaydi: BE-06 `AffiliateAuthService.sendOtp` 423
+(`OTP_BLOCKED`) qaytaradi, eski `AuthService` yo‘li — raqam holati bilinmasin uchun oddiy javob.
+
+**Maydonlar** (`VerificationCodeRequestedEvent`, `apps/notification-service/src/otp-sms.controller.ts`): `phone`
+(`+998XXXXXXXXX`), `code` (6 raqam), `purpose` (`REGISTER`, `LOGIN`, `PASSWORD_RESET`, `PHONE_VERIFY`).
+
+**Qabul qiluvchi:** notification-service, `OtpSmsController.onCode` — noto‘g‘ri telefon yoki kod tashlanadi; SMS adapteri
+orqali, provayder javob bermasa 15 s va 60 s dan keyin qayta urinadi (BE-24 TC5). Adapter sozlanmagan bo‘lsa:
+production’da xato logi (kod yuborilmaydi), boshqa muhitda kod logga yoziladi (test stub).
+
+### `finance.cod.reconciliation.mismatch`
+
+**Qachon:** kunlik COD sverkasi (finance, 09:00 Toshkent [taklif], BE-21) Elchi o‘tkazgan pul bilan kutilgan summa
+orasida farq topdi.
+
+**Yuboruvchi:** finance-service, `CodDailyCheckService` (`apps/finance-service/src/ledger/cod-daily-check.service.ts`) —
+`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Yuborilsa kunga `alerted_at` yoziladi; xato bo‘lsa
+logga va `alerted_at` bo‘shatiladi — shu kun qayta hisoblanganda xabar yana yuboriladi.
+
+**Maydonlar** — `CodReconciliationMismatchEvent` (`libs/common/src/dto/cod-daily-check.dto.ts`): `date`,
+`mismatchCount`, `diffTotal` (kelgan − kutilgan, so‘m), `orders[]` (`orderId`, `expected`, `received`, `diff`; birinchi
+bir nechtasi).
+
+**Qabul qiluvchi:** notification-service, `NotificationEventsController.codMismatch`
+(`apps/notification-service/src/notification-events.controller.ts`) — faol moliya xodimlari va nazoratchilarga.
+
+### `finance.elchi.check.mismatch`
+
+**Qachon:** kunlik avtomatik Elchi tekshiruvi (finance, 10:00 Toshkent [taklif], `ELCHI_STATUS_CHECK=on`; BE-46 TC3 —
+ega qarori 2026-11-24 «Avtomatik so‘rov») yangi farq topdi: Elchi partner API sidagi posilka holati yoki puli bizdagi
+bilan mos emas. «Yangi» — posilkaning oldingi tekshiruvdagi farqidan boshqacha (o‘zgarmagan farq qayta xabar
+qilinmaydi).
+
+**Yuboruvchi:** finance-service, `ElchiCheckService` (`apps/finance-service/src/ledger/elchi-check.service.ts`) —
+`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Yuborilsa tekshiruvga `alerted_at` yoziladi; xato
+bo‘lsa — faqat log.
+
+**Maydonlar** — `ElchiCheckMismatchEvent` (`libs/common/src/dto/elchi-check.dto.ts`): `date`, `runId`, `newDiffCount`,
+`openDiffCount`, `orders[]` (`orderId`, `orderNumber`, `reasons`; birinchi 20 tasi).
+
+**Qabul qiluvchi:** notification-service, `NotificationEventsController.elchiCheckMismatch` — faol moliya xodimlari va
+nazoratchilarga (shablon `elchi_check_mismatch`).
+
+**RPC (bu tekshiruv uchun):** finance → checkout `checkout.elchi-check.parcels` (Elchi’ga topshirilgan lid
+posilkalari); finance → elchi-integration `integration.shipments.status` (100 tagacha, Elchi
+`POST /partner/shipments/status`).
+
+## Elchi webhooki (BE-21, PR 128 — `dev` da)
+
+PR 128 2026-11-22 da `dev` ga tushdi. Undagi hodisalar:
 
 - **Elchi webhooki lid buyurtmasi holatini o‘zgartiradi.** `ElchiLeadWebhookService`
   (`apps/checkout-service/src/elchi-lead-webhook.service.ts`) `LeadOrderStatusService.applyTransition` orqali
@@ -448,17 +584,16 @@ Commitdan keyin buyruq darhol yuboriladi (`sendInventoryNow`, xato e’tiborsiz)
 qator `FAILED` bo‘ladi va qo‘lda ko‘riladi. Qabul qiluvchi — inventory-service `@MessagePattern`
 (`apps/inventory-service/src/inventory-operations.controller.ts`).
 
-## Kuzatilgan bo‘shliqlar (`dev`, 2026-11-22)
+## Kuzatilgan bo‘shliqlar (`dev`, 2026-11-23)
 
 1. `LEAD_OUTBOX_RELAY` va `ELCHI_OUTBOX_RELAY` sukutda o‘chiq. Yoqilmasa `lead.confirmed`, `fraud.*`, `elchi.parcel.*`
    yuborilmaydi.
 2. `fraud.measure.applied` va `lead.callback.reminder` notification navbatiga ketadi, lekin handler yo‘q — sotuvchi
    va operatorga xabar bormaydi.
-3. `ORDER_EVENTS.STATUS_CHANGED` izohida notification ham qabul qiluvchi deb yozilgan. Relay unga yubormaydi va
-   notification-service da handler yo‘q (relay izohi: BE-24).
-4. `order.returned` ning yuboruvchisi yo‘q. `finance.cod.settled` 2-versiya va Elchi holatlari PR 128 bilan keladi.
-5. `inventory.lot.blocked` va `price.decision.orange` outboxsiz va `eventId` siz; `price.decision.orange` yo‘qolishi
-   mumkin.
+3. Outboxsiz hodisalar yo‘qolishi mumkin (yuborish xatosi logga): `price.decision.orange`,
+   `finance.withdrawal.paid`, `finance.wholesaler.paid`, `auth.verification-code.requested`, `elchi.status.conflict`;
+   `finance.cod.reconciliation.mismatch` — kun qayta hisoblanganda qayta yuboriladi. `inventory.lot.blocked` va `price.decision.orange`
+   da `eventId` yo‘q.
 
 Eski marketplace hodisalari (`payment.paid`, `shop.approved`, `order.created`, `return.status-changed` va boshqalar)
 lid-sotuvga tegishli emas va bu ro‘yxatga kiritilmadi.

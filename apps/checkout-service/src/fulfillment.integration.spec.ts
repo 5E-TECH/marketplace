@@ -10,12 +10,14 @@ import {
   ErrorCode,
   LeadConfirmedEvent,
   LeadOrderActorType,
+  LeadOrderStatus,
   LeadSource,
   OutboxEvent,
   OutboxService,
 } from '@app/common';
 import { CHECKOUT_DB } from './database';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
+import { ElchiCheckParcelsService } from './elchi-check.controller';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 import { FulfillmentService } from './fulfillment.service';
 import { LeadOrderService } from './lead-order.service';
@@ -484,6 +486,127 @@ describeWithPostgres(
         `SELECT COUNT(*)::int AS total FROM checkout.handover_act`,
       )) as Array<{ total: number }>;
       expect(total).toBe(1);
+
+      // BE-25 (FE-17 «Oldingi aktlar»): ro‘yxat — karta bilan bir xil shakl, yangisi tepada, sahifalab.
+      // ID va vaqt tartibi ataylab har xil: `older` — ID kattaroq, vaqti eng eski; `newest` — ID ham, vaqt ham eng
+      // katta. [newest, act, older] ni faqat `created_at DESC` beradi (ID bo‘yicha har qanday tartib boshqacha).
+      const [older] = (await checkoutDs.query(
+        `INSERT INTO checkout.handover_act (parcel_count, created_by, created_at)
+         VALUES (1, 9, now() - interval '1 day') RETURNING id::text AS id`,
+      )) as Array<{ id: string }>;
+      const [newest] = (await checkoutDs.query(
+        `INSERT INTO checkout.handover_act (parcel_count, created_by, created_at)
+         VALUES (1, 9, now() + interval '1 hour') RETURNING id::text AS id`,
+      )) as Array<{ id: string }>;
+      try {
+        const page = await fulfillment.acts({ page: 1, limit: 20 });
+        expect(page).toMatchObject({ total: 3, page: 1, limit: 20 });
+        expect(page.items.map((item) => item.id)).toEqual([
+          newest.id,
+          act.id,
+          older.id,
+        ]);
+        expect(page.items[1]).toEqual(act);
+        expect(page.items[2]).toMatchObject({
+          parcelCount: 1,
+          createdBy: '9',
+          items: [],
+        });
+        await expect(fulfillment.acts({ page: 2, limit: 1 })).resolves.toEqual({
+          items: [act],
+          total: 3,
+          page: 2,
+          limit: 1,
+        });
+        await expect(fulfillment.acts({ page: 3, limit: 1 })).resolves.toEqual({
+          items: [await fulfillment.act(older.id)],
+          total: 3,
+          page: 3,
+          limit: 1,
+        });
+        // RPC to‘g‘ridan chaqirilsa ham chegara: limit ≤ 100, sahifa ≥ 1
+        await expect(
+          fulfillment.acts({ page: -3, limit: 5_000 }),
+        ).resolves.toMatchObject({ page: 1, limit: 100, total: 3 });
+        await expect(fulfillment.acts({ page: 9, limit: 20 })).resolves.toEqual(
+          { items: [], total: 3, page: 9, limit: 20 },
+        );
+      } finally {
+        await checkoutDs.query(
+          `DELETE FROM checkout.handover_act WHERE id = ANY($1::bigint[])`,
+          [[older.id, newest.id]],
+        );
+      }
+    });
+
+    it('BE-46 TC3: Elchi tekshiruvi posilkalari — topshirilganlar; yopilgani 14 kun ichida o‘zgargan bo‘lsa; chegara', async () => {
+      const check = new ElchiCheckParcelsService(checkoutDs);
+      const first = await orderOf('7001');
+      const second = await orderOf('7002');
+      const shipment = (orderId: string) => String(1_251_100 + Number(orderId));
+      // 7003 — Elchi posilkasi bor, lekin topshirilmagan: tekshiruvga kirmaydi
+      await expect(check.parcels()).resolves.toEqual({
+        parcels: [first, second].map((order) => ({
+          orderId: order.id,
+          orderNumber: `L-${order.id}`,
+          shipmentId: shipment(order.id),
+          status: LeadOrderStatus.HANDED_TO_ELCHI,
+          codAmount: expect.any(Number),
+        })),
+        truncated: false,
+      });
+      const [{ cod }] = (await checkoutDs.query(
+        `SELECT cod_amount::text AS cod FROM checkout.parcel WHERE sales_order_id = $1`,
+        [first.id],
+      )) as Array<{ cod: string }>;
+      expect((await check.parcels()).parcels[0].codAmount).toBe(Number(cod));
+      await expect(check.parcels({ limit: 1 })).resolves.toMatchObject({
+        parcels: [{ orderId: first.id }],
+        truncated: true,
+      });
+      // moliya farq chiqqanlarini qayta o‘qiydi — faqat shu buyurtmalar; noto‘g‘ri ID tashlanadi
+      await expect(
+        check.parcels({ orderIds: [second.id, 'x', '99999999999999999999'] }),
+      ).resolves.toMatchObject({
+        parcels: [{ orderId: second.id }],
+        truncated: false,
+      });
+      await expect(check.parcels({ orderIds: ['x'] })).resolves.toEqual({
+        parcels: [],
+        truncated: false,
+      });
+      // yopilgan (pul o‘tkazilgan) buyurtma: 14 kundan eski — chiqadi, yangi — qoladi
+      try {
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'REMITTED', updated_at = now() - interval '20 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect(
+          (await check.parcels()).parcels.map((parcel) => parcel.orderId),
+        ).toEqual([first.id]);
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET updated_at = now() - interval '2 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect((await check.parcels()).parcels[1]).toMatchObject({
+          orderId: second.id,
+          status: LeadOrderStatus.REMITTED,
+        });
+        // rad etilgan — Elchi bozorga qaytargunicha ochiq: 14 kundan eski bo‘lsa ham tekshiriladi
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'REFUSED', updated_at = now() - interval '40 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect((await check.parcels()).parcels[1]).toMatchObject({
+          orderId: second.id,
+          status: LeadOrderStatus.REFUSED,
+        });
+      } finally {
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'HANDED_TO_ELCHI', updated_at = now() WHERE id = $1`,
+          [second.id],
+        );
+      }
     });
 
     it('bekor qilingan buyurtma ro‘yxatdan chiqadi; Elchi posilkasi yaratilmasa — sabab ro‘yxatda va yorliqda', async () => {

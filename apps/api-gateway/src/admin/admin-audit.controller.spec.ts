@@ -61,5 +61,12 @@ describe('AdminAuditController (C6.3)', () => {
     expect(
       Reflect.getMetadata(ROLES_KEY, AdminAuditController.prototype.remove),
     ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+    // BE-25 TC1: jurnalni butunlay o‘chirish yo‘li ham alohida handler bilan 405
+    expect(() => controller.removeAll()).toThrow(
+      expect.objectContaining({ status: 405 }),
+    );
+    expect(
+      Reflect.getMetadata(ROLES_KEY, AdminAuditController.prototype.removeAll),
+    ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
   });
 });

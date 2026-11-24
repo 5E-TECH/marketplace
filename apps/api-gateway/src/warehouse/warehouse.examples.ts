@@ -1,5 +1,6 @@
 import {
   FulfillmentTaskStatus,
+  HandoverActsPage,
   HandoverActView,
   LeadOrderStatus,
   ParcelElchiState,
@@ -112,6 +113,14 @@ export const HANDOVER_ACT_EXAMPLE: HandoverActView = {
       orderNumber: 'L-1290',
     },
   ],
+};
+
+/** `checkout.warehouse.acts` (BE-25, FE-17 «Oldingi aktlar»): yangisi tepada, har akt — karta bilan bir xil shakl. */
+export const HANDOVER_ACTS_PAGE_EXAMPLE: HandoverActsPage = {
+  items: [HANDOVER_ACT_EXAMPLE],
+  total: 1,
+  page: 1,
+  limit: 20,
 };
 
 /** `checkout.warehouse.returns`: «Qaytmoqda» holatidagi lid posilkalari (eng eskisi birinchi, 200 tagacha). */

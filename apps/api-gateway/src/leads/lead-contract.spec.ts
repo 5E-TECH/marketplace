@@ -389,12 +389,56 @@ describe('Lid shartnomasi (BE-25)', () => {
           'lead.operator.state',
           { operatorId: '41', state: 'ONLINE' },
         ],
-        [() => op.queueSummary(), 'lead.queue.summary', {}],
+        [
+          () => op.queueSummary(Role.SUPERVISOR),
+          'lead.queue.summary',
+          { operatorView: false },
+        ],
+        // BE-25 (FE-08): operator ish joyi — navbat hajmi, boshqa operatorlarsiz
+        [
+          () => op.queueSummary(Role.OPERATOR_LEAD),
+          'lead.queue.summary',
+          { operatorView: true },
+        ],
+        [
+          () => op.getState('41'),
+          'lead.operator.state.get',
+          { operatorId: '41' },
+        ],
+        [
+          () => op.getProduct('41', '7001'),
+          'lead.card.product',
+          { operatorId: '41', leadId: '7001' },
+        ],
+        [
+          () => op.attempts('41', { from: '2026-12-01', limit: 10 }),
+          'lead.operator.attempts',
+          { operatorId: '41', query: { from: '2026-12-01', limit: 10 } },
+        ],
       ];
       for (const [call, cmd, payload] of calls) {
         await call();
         expect(send).toHaveBeenLastCalledWith({ cmd }, payload);
       }
+    });
+
+    it('BE-25: operatorga navbat xulosasi boshqa operatorlarsiz — eski lead-service ro‘yxat qaytarsa ham', async () => {
+      const full = {
+        newLeads: 3,
+        dueCallbacks: 1,
+        booked: 2,
+        operators: [
+          { operatorId: '42', name: '#42', state: 'ONLINE', activeBookings: 2 },
+        ],
+      };
+      const op = new OperatorLeadsController({
+        send: jest.fn(() => of(full)),
+      } as never);
+      expect(await op.queueSummary(Role.OPERATOR_LEAD)).toEqual({
+        ...full,
+        operators: [],
+      });
+      expect(await op.queueSummary(Role.SUPERVISOR)).toEqual(full);
     });
   });
 

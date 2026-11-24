@@ -15,7 +15,7 @@ export class UploadProductImageDto {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
-  isCover = false;
+  isCover: boolean = false;
 }
 
 export class UploadedFileDto {

@@ -13,4 +13,8 @@ export class OperatorState extends BaseEntity {
 
   @Column({ name: 'active_bookings', type: 'int', default: 0 })
   activeBookings: number;
+
+  /** BE-25 (FE-08): shu holat qachondan beri — holat o‘zgarganda yangilanadi. */
+  @Column({ name: 'state_since', type: 'timestamptz', nullable: true })
+  stateSince: Date | null;
 }
