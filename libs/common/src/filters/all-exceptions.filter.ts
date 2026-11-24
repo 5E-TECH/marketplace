@@ -10,6 +10,7 @@ import { ErrorCode, STATUS_TO_ERROR_CODE } from '../constants/error-codes';
 import { ErrorExtra, errorExtraOf } from '../exceptions/business.exception';
 import { RequestContext } from '../context/request-context';
 import { ApiErrorResponse } from '../interfaces/api-response.interface';
+import { redactUrl } from '../security/redact-url';
 
 /**
  * Barcha xatolarni bir xil qobiqqa keltiradi — API_CONTRACT.md §1.5:
@@ -88,7 +89,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
-        `[${requestId ?? '-'}] ${request?.method} ${request?.url} → ${status} ${errorCode}`,
+        `[${requestId ?? '-'}] ${request?.method} ${redactUrl(request?.url)} → ${status} ${errorCode}`,
       );
     }
 

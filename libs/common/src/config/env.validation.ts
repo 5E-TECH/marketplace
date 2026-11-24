@@ -117,7 +117,14 @@ export const envValidationSchema = Joi.object({
     .optional(),
   TELEPHONY_API_TOKEN: Joi.string().allow('').optional(),
   // provayder webhooki imzosi (X-Telephony-Signature, HMAC-SHA256)
-  TELEPHONY_WEBHOOK_SECRET: Joi.string().min(16).allow('').optional(),
+  // URL bor, kalit yo'q bo'lsa hamma hodisa 401 bo'lib, qo'ng'iroqlar tugamay qolardi
+  TELEPHONY_WEBHOOK_SECRET: Joi.string()
+    .min(16)
+    .when('TELEPHONY_API_URL', {
+      is: Joi.string().uri().required(),
+      then: Joi.required(),
+      otherwise: Joi.optional().allow(''),
+    }),
   // TEL-1: mijozga ko'rinadigan mahalliy raqam; berilmasa provayder o'zi tanlaydi
   TELEPHONY_CALLER_ID: Joi.string()
     .pattern(/^\+998\d{9}$/)
