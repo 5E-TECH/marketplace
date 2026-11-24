@@ -44,6 +44,10 @@ import { WarehouseReturnsService } from './warehouse-returns.service';
 import { FulfillmentService } from './fulfillment.service';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 
+import {
+  ElchiCheckController,
+  ElchiCheckParcelsService,
+} from './elchi-check.controller';
 @Module({
   imports: [
     CommonConfigModule,
@@ -128,6 +132,7 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     LeadOrderController,
     FulfillmentController,
     WarehouseReturnsController,
+    ElchiCheckController,
   ],
   providers: [
     WarehouseReturnsService,
@@ -151,6 +156,7 @@ import { ElchiParcelEventsService } from './elchi-parcel-events.service';
     LeadOrderStatusService,
     FulfillmentService,
     ElchiParcelEventsService,
+    ElchiCheckParcelsService,
   ],
 })
 export class CheckoutModule {}

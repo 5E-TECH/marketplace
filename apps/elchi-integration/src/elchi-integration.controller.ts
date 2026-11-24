@@ -1,6 +1,11 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
-import { ORDER_EVENTS, OrderStatusChangedEvent, OPS_RPC } from '@app/common';
+import {
+  ELCHI_CHECK_RPC,
+  ORDER_EVENTS,
+  OrderStatusChangedEvent,
+  OPS_RPC,
+} from '@app/common';
 import { ParcelService } from './parcel.service';
 import {
   ElchiIntegrationService,
@@ -53,6 +58,12 @@ export class ElchiIntegrationController {
   @MessagePattern({ cmd: 'integration.shipment.get' })
   getShipment(@Payload() input: { shipmentId: string }) {
     return this.service.getShipment(input.shipmentId);
+  }
+
+  /** BE-46: moliyaning kunlik Elchi tekshiruvi — 100 tagacha posilka holati. */
+  @MessagePattern({ cmd: ELCHI_CHECK_RPC.SHIPMENTS_STATUS })
+  shipmentsStatus(@Payload() input: { shipmentIds?: string[] }) {
+    return this.service.shipmentsStatus(input ?? {});
   }
 
   @MessagePattern({ cmd: 'integration.tariff.get' })

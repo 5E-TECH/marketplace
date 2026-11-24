@@ -10615,6 +10615,229 @@
         ]
       }
     },
+    "/api/v1/admin/finance/reconciliation/elchi-check": {
+      "get": {
+        "description": "Har kuni 10:00 (Toshkent) [taklif] tizim Elchi’ga topshirilgan posilkalarning holati va pulini Elchi partner API sidan oladi va o‘zidagi bilan solishtiradi. Mos posilkalar faqat sanaladi, farqlilari — `elchi-check/items`. `finishedAt` null — tekshiruv ishlamoqda.",
+        "operationId": "AdminReconciliationController_elchiCheck",
+        "parameters": [
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "Kun (Toshkent) — o‘sha kunning oxirgi tekshiruvi; bo‘sh — eng oxirgi tekshiruv",
+            "schema": {
+              "example": "2026-12-03",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElchiCheckRunDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bu kun (yoki umuman) tekshiruv bo‘lmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi bilan avtomatik tekshiruv: kunning oxirgi tekshiruvi (sonlar)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/reconciliation/elchi-check/items": {
+      "get": {
+        "description": "Sabablar: NOT_FOUND — Elchi posilkani topmadi; STATUS — holat zid (masalan, Elchi «to‘landi», bizda «yetkazildi» — xabar kelmagan); UNKNOWN_STATUS; ORDER_REF — Elchi posilkasi boshqa buyurtmaga bog‘langan; NO_REMITTANCE — Elchi pul o‘tkazganini aytadi, moliyada yozuv yo‘q; COLLECTED — mijozdan yig‘ilgan summa farq qiladi; FEE — Elchi haqi; MARKET_PAID — o‘tkazilgan summa.",
+        "operationId": "AdminReconciliationController_elchiCheckItems",
+        "parameters": [
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "Kun (Toshkent) — o‘sha kunning oxirgi tekshiruvi; bo‘sh — eng oxirgi tekshiruv",
+            "schema": {
+              "example": "2026-12-03",
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "required": false,
+            "in": "query",
+            "description": "Aniq tekshiruv (bo‘lsa `date` e’tiborsiz)",
+            "schema": {
+              "example": "41",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DIFF",
+                "RESOLVED",
+                "FAILED"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Buyurtma ID si, raqami yoki Elchi raqami",
+            "schema": {
+              "example": "L-1042",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElchiCheckItemPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi tekshiruvi farqlari: holat yoki pul farqi (DIFF), yopilgan (RESOLVED), Elchi’dan o‘qib bo‘lmagan (FAILED)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/reconciliation/elchi-check/run": {
+      "post": {
+        "description": "Tekshiruv fonda ishlaydi (posilkalar ko‘p bo‘lsa — daqiqalar); natija `GET elchi-check` da (`finishedAt` to‘lgach).",
+        "operationId": "AdminReconciliationController_elchiCheckRun",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "accepted": true
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Tekshiruv hozir ishlamoqda"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi tekshiruvini hozir ishga tushirish",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/reconciliation/elchi-check/items/{id}/resolve": {
+      "post": {
+        "description": "Pul harakati yo‘q. Keyingi tekshiruvda xuddi shu farq bo‘lsa — izoh ko‘chadi (yopiq qoladi); farq o‘zgarsa — yana ochiladi.",
+        "operationId": "AdminReconciliationController_elchiCheckResolve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRemittanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElchiCheckItemDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tekshiruv qatori topilmadi"
+          },
+          "409": {
+            "description": "Farq yo‘q, allaqachon yopilgan yoki posilka keyin qayta tekshirilgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Elchi tekshiruvi farqini izoh bilan yopish",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
     "/api/v1/admin/finance/act-responses/disputes": {
       "get": {
         "operationId": "AdminActResponsesController_disputes",
@@ -22823,6 +23046,346 @@
         },
         "required": [
           "comment"
+        ]
+      },
+      "ElchiCheckRunDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "41"
+          },
+          "date": {
+            "type": "string",
+            "example": "2026-12-03",
+            "description": "Tekshiruv kuni (Toshkent)"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "CRON",
+              "MANUAL"
+            ],
+            "example": "CRON"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-03T05:00:00.000Z"
+          },
+          "finishedAt": {
+            "type": "string",
+            "example": "2026-12-03T05:00:42.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Tugamagan (yoki yiqilgan) — null"
+          },
+          "checked": {
+            "type": "number",
+            "example": 312,
+            "description": "Tekshirilgan posilkalar"
+          },
+          "matched": {
+            "type": "number",
+            "example": 307,
+            "description": "Mos — ro‘yxatga chiqmaydi"
+          },
+          "diffCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Ochiq farqlar"
+          },
+          "resolvedCount": {
+            "type": "number",
+            "example": 1,
+            "description": "Izoh bilan yopilgan farqlar: moliya yopgani va oldingi tekshiruvda yopilgan xuddi shu farq (izoh ko‘chadi)"
+          },
+          "failed": {
+            "type": "number",
+            "example": 1,
+            "description": "Elchi’dan o‘qib bo‘lmagan (keyingi tekshiruvda qayta)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "example": false,
+            "description": "Posilkalar chegaradan ko‘p edi — bir qismi tekshirilmadi"
+          },
+          "error": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Tekshiruv butunlay bajarilmadi (masalan, Elchi yoki checkout javob bermadi)"
+          },
+          "alertedAt": {
+            "type": "string",
+            "example": "2026-12-03T05:00:43.000Z",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "date",
+          "trigger",
+          "startedAt",
+          "finishedAt",
+          "checked",
+          "matched",
+          "diffCount",
+          "resolvedCount",
+          "failed",
+          "truncated",
+          "error",
+          "alertedAt"
+        ]
+      },
+      "ElchiCheckResolutionDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "example": "Elchi bilan gaplashildi — webhook qayta yuboriladi"
+          },
+          "by": {
+            "type": "string",
+            "example": "6"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-03T07:15:00.000Z"
+          },
+          "carried": {
+            "type": "boolean",
+            "example": false,
+            "description": "true — oldingi tekshiruvdagi xuddi shu farqning izohi (o‘zgarmagan farq qayta ochilmaydi)"
+          }
+        },
+        "required": [
+          "comment",
+          "by",
+          "at",
+          "carried"
+        ]
+      },
+      "ElchiCheckItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "905"
+          },
+          "runId": {
+            "type": "string",
+            "example": "41"
+          },
+          "orderId": {
+            "type": "string",
+            "example": "1042"
+          },
+          "orderNumber": {
+            "type": "string",
+            "example": "L-1042"
+          },
+          "shipmentId": {
+            "type": "string",
+            "example": "880113"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DIFF",
+              "RESOLVED",
+              "FAILED"
+            ],
+            "example": "DIFF"
+          },
+          "reasons": {
+            "type": "array",
+            "example": [
+              "STATUS",
+              "NO_REMITTANCE"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "NOT_FOUND",
+                "ORDER_REF",
+                "STATUS",
+                "UNKNOWN_STATUS",
+                "NO_REMITTANCE",
+                "COLLECTED",
+                "FEE",
+                "MARKET_PAID",
+                "EXTRA_COST",
+                "REFUSAL_FEE"
+              ]
+            }
+          },
+          "orderStatus": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "PICKING",
+              "PACKED",
+              "HANDED_TO_ELCHI",
+              "IN_TRANSIT",
+              "DELIVERED",
+              "REMITTED",
+              "RETURN_REQUESTED",
+              "SETTLED",
+              "REFUSED",
+              "RETURNING",
+              "RETURNED_GRADED",
+              "CANCELLED"
+            ],
+            "example": "DELIVERED"
+          },
+          "elchiStatus": {
+            "type": "string",
+            "example": "paid",
+            "nullable": true,
+            "description": "Elchi holati; topilmagan — null"
+          },
+          "codAmount": {
+            "type": "number",
+            "example": 292000,
+            "description": "Buyurtma COD si (mijozdan olinadigan)"
+          },
+          "elchiCollected": {
+            "type": "number",
+            "example": 292000,
+            "nullable": true,
+            "description": "Elchi: mijozdan yig‘ilgan"
+          },
+          "elchiFee": {
+            "type": "number",
+            "example": 25000,
+            "nullable": true,
+            "description": "Elchi: haqi"
+          },
+          "elchiMarketPaid": {
+            "type": "number",
+            "example": 267000,
+            "nullable": true,
+            "description": "Elchi: bizga o‘tkazgani"
+          },
+          "elchiExtraCost": {
+            "type": "number",
+            "example": 0,
+            "nullable": true,
+            "description": "Elchi: kuryer qo‘shimcha xarajati (o‘tkazmadan ushlanadi; rad etilganda — rad to‘lovi)"
+          },
+          "recordedCollected": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Moliyada yozilgan o‘tkazma (Elchi webhooki): mijozdan yig‘ilgan; yozuv yo‘q — null"
+          },
+          "recordedFee": {
+            "type": "number",
+            "example": null,
+            "nullable": true
+          },
+          "recordedMarketPaid": {
+            "type": "number",
+            "example": null,
+            "nullable": true
+          },
+          "recordedRefusalFee": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "Moliyada yozilgan rad to‘lovi (Elchi webhooki)"
+          },
+          "error": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "FAILED da — xato matni"
+          },
+          "resolution": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ElchiCheckResolutionDto"
+              }
+            ]
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-03T05:00:40.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "orderId",
+          "orderNumber",
+          "shipmentId",
+          "state",
+          "reasons",
+          "orderStatus",
+          "elchiStatus",
+          "codAmount",
+          "elchiCollected",
+          "elchiFee",
+          "elchiMarketPaid",
+          "elchiExtraCost",
+          "recordedCollected",
+          "recordedFee",
+          "recordedMarketPaid",
+          "recordedRefusalFee",
+          "error",
+          "resolution",
+          "checkedAt"
+        ]
+      },
+      "ElchiCheckItemPageDto": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "nullable": true,
+            "description": "Qaysi tekshiruv ko‘rsatilmoqda",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ElchiCheckRunDto"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ElchiCheckItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 3
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "run",
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
         ]
       },
       "SettlementDisputeDto": {

@@ -10,12 +10,14 @@ import {
   ErrorCode,
   LeadConfirmedEvent,
   LeadOrderActorType,
+  LeadOrderStatus,
   LeadSource,
   OutboxEvent,
   OutboxService,
 } from '@app/common';
 import { CHECKOUT_DB } from './database';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
+import { ElchiCheckParcelsService } from './elchi-check.controller';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 import { FulfillmentService } from './fulfillment.service';
 import { LeadOrderService } from './lead-order.service';
@@ -533,6 +535,76 @@ describeWithPostgres(
         await checkoutDs.query(
           `DELETE FROM checkout.handover_act WHERE id = ANY($1::bigint[])`,
           [[older.id, newest.id]],
+        );
+      }
+    });
+
+    it('BE-46 TC3: Elchi tekshiruvi posilkalari — topshirilganlar; yopilgani 14 kun ichida o‘zgargan bo‘lsa; chegara', async () => {
+      const check = new ElchiCheckParcelsService(checkoutDs);
+      const first = await orderOf('7001');
+      const second = await orderOf('7002');
+      const shipment = (orderId: string) => String(1_251_100 + Number(orderId));
+      // 7003 — Elchi posilkasi bor, lekin topshirilmagan: tekshiruvga kirmaydi
+      await expect(check.parcels()).resolves.toEqual({
+        parcels: [first, second].map((order) => ({
+          orderId: order.id,
+          orderNumber: `L-${order.id}`,
+          shipmentId: shipment(order.id),
+          status: LeadOrderStatus.HANDED_TO_ELCHI,
+          codAmount: expect.any(Number),
+        })),
+        truncated: false,
+      });
+      const [{ cod }] = (await checkoutDs.query(
+        `SELECT cod_amount::text AS cod FROM checkout.parcel WHERE sales_order_id = $1`,
+        [first.id],
+      )) as Array<{ cod: string }>;
+      expect((await check.parcels()).parcels[0].codAmount).toBe(Number(cod));
+      await expect(check.parcels({ limit: 1 })).resolves.toMatchObject({
+        parcels: [{ orderId: first.id }],
+        truncated: true,
+      });
+      // moliya farq chiqqanlarini qayta o‘qiydi — faqat shu buyurtmalar; noto‘g‘ri ID tashlanadi
+      await expect(
+        check.parcels({ orderIds: [second.id, 'x', '99999999999999999999'] }),
+      ).resolves.toMatchObject({
+        parcels: [{ orderId: second.id }],
+        truncated: false,
+      });
+      await expect(check.parcels({ orderIds: ['x'] })).resolves.toEqual({
+        parcels: [],
+        truncated: false,
+      });
+      // yopilgan (pul o‘tkazilgan) buyurtma: 14 kundan eski — chiqadi, yangi — qoladi
+      try {
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'REMITTED', updated_at = now() - interval '20 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect(
+          (await check.parcels()).parcels.map((parcel) => parcel.orderId),
+        ).toEqual([first.id]);
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET updated_at = now() - interval '2 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect((await check.parcels()).parcels[1]).toMatchObject({
+          orderId: second.id,
+          status: LeadOrderStatus.REMITTED,
+        });
+        // rad etilgan — Elchi bozorga qaytargunicha ochiq: 14 kundan eski bo‘lsa ham tekshiriladi
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'REFUSED', updated_at = now() - interval '40 days' WHERE id = $1`,
+          [second.id],
+        );
+        expect((await check.parcels()).parcels[1]).toMatchObject({
+          orderId: second.id,
+          status: LeadOrderStatus.REFUSED,
+        });
+      } finally {
+        await checkoutDs.query(
+          `UPDATE checkout.sales_order SET status = 'HANDED_TO_ELCHI', updated_at = now() WHERE id = $1`,
+          [second.id],
         );
       }
     });

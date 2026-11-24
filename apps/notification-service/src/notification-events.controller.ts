@@ -2,6 +2,8 @@ import { Controller, Inject, Logger } from '@nestjs/common';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
+  ELCHI_CHECK_MISMATCH_EVENT,
+  ElchiCheckMismatchEvent,
   CodReconciliationMismatchEvent,
   ELCHI_STATUS_CONFLICT_EVENT,
   ElchiStatusConflictEvent,
@@ -95,6 +97,31 @@ export class NotificationEventsController {
         type: 'cod_reconciliation_mismatch',
         ...content,
         data: { date: event.date, orders: event.orders },
+      });
+  }
+
+  /** BE-46 TC3: kunlik avtomatik Elchi tekshiruvida yangi farq — moliya va nazoratchiga. */
+  @EventPattern(ELCHI_CHECK_MISMATCH_EVENT)
+  async elchiCheckMismatch(@Payload() event: ElchiCheckMismatchEvent) {
+    const recipients = await this.financeAndSupervisors();
+    if (!recipients.length) {
+      this.logger.warn(
+        `Elchi tekshiruvi farqi (${event.date}): faol moliya yoki nazoratchi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('elchi_check_mismatch', {
+      date: event.date,
+      newDiffCount: event.newDiffCount,
+      openDiffCount: event.openDiffCount,
+      orders: (event.orders ?? []).map((order) => order.orderNumber).join(', '),
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'elchi_check_mismatch',
+        ...content,
+        data: { date: event.date, runId: event.runId, orders: event.orders },
       });
   }
 

@@ -95,6 +95,19 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Elchi holati zid: buyurtma {orderId}',
     body: 'Buyurtma {orderId} ({orderStatus}) — Elchi «{elchiStatus}» yubordi. Holat o‘zgarmadi. Pul va holatni qo‘lda tekshiring.',
   },
+  elchi_check_mismatch: {
+    name: 'Elchi tekshiruvida farq',
+    description:
+      'BE-46 (TZ ELC-4; ega qarori 2026-11-24 «Avtomatik so‘rov»): kunlik avtomatik Elchi tekshiruvida yangi farq (holat yoki pul) — moliya va nazoratchiga',
+    variables: {
+      date: 'Sana',
+      newDiffCount: 'Yangi farqlar soni',
+      openDiffCount: 'Ochiq farqlar jami',
+      orders: 'Buyurtmalar (birinchi 20 tasi)',
+    },
+    title: 'Elchi tekshiruvi: {date} — {newDiffCount} ta yangi farq',
+    body: '{date}: Elchi bilan tekshiruvda {newDiffCount} ta posilkada yangi farq (jami ochiq {openDiffCount}): {orders}. Moliya → Elchi sverkasi.',
+  },
 
   lot_blocked: {
     name: 'Partiya sotuvdan chiqdi (muddat)',

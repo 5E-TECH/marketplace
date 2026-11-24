@@ -29,6 +29,7 @@ emas va bu ro‘yxatga kirmaydi. Outbox orqali ketadigan ombor buyruqlari ham so
 | `price.decision.orange` | — (satr) | catalog-service (to‘g‘ridan-to‘g‘ri) | notification-service |
 | `elchi.status.conflict` | `ELCHI_STATUS_CONFLICT_EVENT` | checkout-service (to‘g‘ridan-to‘g‘ri, BE-21) | notification-service |
 | `finance.cod.reconciliation.mismatch` | `COD_RECONCILIATION_MISMATCH_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-21) | notification-service |
+| `finance.elchi.check.mismatch` | `ELCHI_CHECK_MISMATCH_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-46) | notification-service |
 | `inventory.inbound.received` | `INBOUND_RECEIVED_EVENT` | inventory-service (outbox, BE-47) | notification-service |
 | `inventory.offer.out-of-stock` | `STOCK_DEPLETED_EVENT` | inventory-service (outbox, BE-47) | notification-service |
 | `finance.withdrawal.paid` | `WITHDRAWAL_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-24) | notification-service |
@@ -527,6 +528,27 @@ bir nechtasi).
 
 **Qabul qiluvchi:** notification-service, `NotificationEventsController.codMismatch`
 (`apps/notification-service/src/notification-events.controller.ts`) — faol moliya xodimlari va nazoratchilarga.
+
+### `finance.elchi.check.mismatch`
+
+**Qachon:** kunlik avtomatik Elchi tekshiruvi (finance, 10:00 Toshkent [taklif], `ELCHI_STATUS_CHECK=on`; BE-46 TC3 —
+ega qarori 2026-11-24 «Avtomatik so‘rov») yangi farq topdi: Elchi partner API sidagi posilka holati yoki puli bizdagi
+bilan mos emas. «Yangi» — posilkaning oldingi tekshiruvdagi farqidan boshqacha (o‘zgarmagan farq qayta xabar
+qilinmaydi).
+
+**Yuboruvchi:** finance-service, `ElchiCheckService` (`apps/finance-service/src/ledger/elchi-check.service.ts`) —
+`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Yuborilsa tekshiruvga `alerted_at` yoziladi; xato
+bo‘lsa — faqat log.
+
+**Maydonlar** — `ElchiCheckMismatchEvent` (`libs/common/src/dto/elchi-check.dto.ts`): `date`, `runId`, `newDiffCount`,
+`openDiffCount`, `orders[]` (`orderId`, `orderNumber`, `reasons`; birinchi 20 tasi).
+
+**Qabul qiluvchi:** notification-service, `NotificationEventsController.elchiCheckMismatch` — faol moliya xodimlari va
+nazoratchilarga (shablon `elchi_check_mismatch`).
+
+**RPC (bu tekshiruv uchun):** finance → checkout `checkout.elchi-check.parcels` (Elchi’ga topshirilgan lid
+posilkalari); finance → elchi-integration `integration.shipments.status` (100 tagacha, Elchi
+`POST /partner/shipments/status`).
 
 ## Elchi webhooki (BE-21, PR 128 — `dev` da)
 
