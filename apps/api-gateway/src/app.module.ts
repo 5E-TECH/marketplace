@@ -64,6 +64,12 @@ import { WholesalerProductsController } from './wholesaler-cabinet/wholesaler-pr
 import { WholesalerShipmentsController } from './wholesaler-cabinet/wholesaler-shipments.controller';
 import { AdminMetricsController } from './metrics/admin-metrics.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
+import { OperatorCallsController } from './leads/operator-calls.controller';
+import { AdminOperatorPhoneController } from './calls/admin-operator-phone.controller';
+import { CallRecordingsController } from './calls/call-recordings.controller';
+import { CallsController } from './calls/calls.controller';
+import { RecordingLinkService } from './calls/recording-link';
+import { TelephonyWebhookController } from './webhooks/telephony-webhook.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { WarehouseController } from './warehouse/warehouse.controller';
 import { WarehouseReturnsController } from './warehouse/warehouse-returns.controller';
@@ -211,6 +217,12 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     SignedFilesController,
     AdminMetricsController,
     OperatorLeadsController,
+    // BE-15: telefoniya
+    OperatorCallsController,
+    CallsController,
+    CallRecordingsController,
+    AdminOperatorPhoneController,
+    TelephonyWebhookController,
     OperatorOrdersController,
     WarehouseController,
     WarehouseReturnsController,
@@ -223,6 +235,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     AppService,
     ReadinessService,
     SignedLinkService, // BE-30: yopiq hujjatlarga imzolangan havola
+    RecordingLinkService, // BE-15: qo‘ng‘iroq yozuviga imzolangan havola
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },

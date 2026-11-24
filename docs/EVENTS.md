@@ -35,6 +35,7 @@ emas va bu ro‘yxatga kirmaydi. Outbox orqali ketadigan ombor buyruqlari ham so
 | `finance.withdrawal.paid` | `WITHDRAWAL_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-24) | notification-service |
 | `finance.wholesaler.paid` | `SETTLEMENT_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-47) | notification-service |
 | `lead.site.confirm-sms` | `LEAD_EVENTS.SITE_CONFIRM_SMS` | lead-service (outbox, BE-34) | notification-service |
+| `call.status`, `call.completed`, `recording.ready` | `CALL_EVENTS` | api-gateway (provayder webhooki, to‘g‘ridan-to‘g‘ri, BE-15) | lead-service |
 | `auth.verification-code.requested` | — (satr) | identity-service (to‘g‘ridan-to‘g‘ri, BE-06) | notification-service |
 
 Konstantalar: `LEAD_EVENTS` — `libs/common/src/dto/lead-events.dto.ts`, `ORDER_EVENTS` —
@@ -512,6 +513,27 @@ to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Blokdagi raqamga kod yuborilmaydi:
 **Qabul qiluvchi:** notification-service, `OtpSmsController.onCode` — noto‘g‘ri telefon yoki kod tashlanadi; SMS adapteri
 orqali, provayder javob bermasa 15 s va 60 s dan keyin qayta urinadi (BE-24 TC5). Adapter sozlanmagan bo‘lsa:
 production’da xato logi (kod yuborilmaydi), boshqa muhitda kod logga yoziladi (test stub).
+
+### `call.status`, `call.completed`, `recording.ready`
+
+**Qachon:** telefoniya provayderi (EQ-02) webhook yubordi: qo‘ng‘iroq bosqichi, tugashi yoki yozuv tayyorligi (BE-15; TZ T4, T6).
+
+**Yuboruvchi:** api-gateway, `TelephonyWebhookController` (`apps/api-gateway/src/webhooks/telephony-webhook.controller.ts`).
+Imzo tekshirilgach to‘g‘ridan-to‘g‘ri `lead_queue_v2` ga; yozilmasa provayderga 503.
+
+**Maydonlar** — `CallStatusEvent`, `CallCompletedEvent`, `RecordingReadyEvent` (`libs/common/src/dto/lead-telephony.dto.ts`):
+
+| Maydon | Turi | Ma’nosi |
+|---|---|---|
+| `eventId` | string | Provayder hodisasi; takror — bir marta (`lead.call_event`) |
+| `callRef` | UUID | Qo‘ng‘iroq kaliti (`lead.call.ref`) |
+| `at` | ISO 8601 | Provayderdagi vaqt |
+| `status` | `RINGING_OPERATOR`, `RINGING_CUSTOMER`, `CONNECTED` | faqat `call.status`; holat orqaga qaytmaydi |
+| `endReason`, `answeredAt`, `durationSeconds` | | faqat `call.completed`; suhbat bo‘lmasa ikkisi null |
+| `recordingRef` | string | faqat `recording.ready`; provayderdagi kalit |
+
+**Qabul qiluvchi:** lead-service, `CallController` → `CallService` (`apps/lead-service/src/telephony`). Noma’lum `callRef` —
+log va ack. Mijoz raqami hodisada yo‘q.
 
 ### `finance.cod.reconciliation.mismatch`
 

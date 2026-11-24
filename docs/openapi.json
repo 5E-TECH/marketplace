@@ -13052,6 +13052,602 @@
         ]
       }
     },
+    "/api/v1/operator/leads/{id}/call": {
+      "post": {
+        "description": "Lid shu operatorning bronida bo‘lishi kerak. Provayder 3 soniyada javob bermasa ham 201 — bosqich `GET /operator/calls/{id}` da (TEL-2).",
+        "operationId": "OperatorCallsController_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCallDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lid topilmadi yoki bu operatorda emas"
+          },
+          "409": {
+            "description": "OPERATOR_PHONE_MISSING — telefon biriktirilmagan; CALL_ACTIVE — operatorda yoki shu lidda tugamagan qo‘ng‘iroq bor; CALL_REQUEST_EXPIRED — so‘rov eskirdi"
+          },
+          "502": {
+            "description": "TELEPHONY_FAILED — provayder qo‘ng‘iroqni boshlamadi"
+          },
+          "503": {
+            "description": "TELEPHONY_NOT_CONFIGURED — telefoniya ulanmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘ng‘iroq: avval operator telefoni, keyin mijoz",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/calls": {
+      "get": {
+        "operationId": "OperatorCallsController_mine",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent kuni",
+            "schema": {
+              "example": "2027-01-14",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent kuni (shu kun ham)",
+            "schema": {
+              "example": "2027-01-14",
+              "type": "string"
+            }
+          },
+          {
+            "name": "operatorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "41",
+              "type": "string"
+            }
+          },
+          {
+            "name": "leadId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "7001",
+              "type": "string"
+            }
+          },
+          {
+            "name": "recording",
+            "required": false,
+            "in": "query",
+            "description": "MISSING — yozuvsiz qo‘ng‘iroqlar (xato)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NONE",
+                "LIVE",
+                "PENDING",
+                "READY",
+                "MISSING"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mening qo‘ng‘iroqlarim (yangisi birinchi)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/calls/{id}": {
+      "get": {
+        "description": "Faqat o‘z qo‘ng‘irog‘i. `suggestedOutcome` — javob bermadi, band, o‘chiq server holatidan (TEL-4).",
+        "operationId": "OperatorCallsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCallDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Qo‘ng‘iroq topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘ng‘iroq holati va taklif qilingan natija",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/calls/{id}/hangup": {
+      "post": {
+        "operationId": "OperatorCallsController_hangup",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCallDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Qo‘ng‘iroq topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘ng‘iroqni tugatish",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/calls": {
+      "get": {
+        "description": "Operator, lid, davr (Toshkent) va yozuv holati bo‘yicha. `missingRecordings` va `recording=MISSING` — yozuvsiz qo‘ng‘iroqlar, hisobotda xato (TEL-3).",
+        "operationId": "CallsController_list",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent kuni",
+            "schema": {
+              "example": "2027-01-14",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Toshkent kuni (shu kun ham)",
+            "schema": {
+              "example": "2027-01-14",
+              "type": "string"
+            }
+          },
+          {
+            "name": "operatorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "41",
+              "type": "string"
+            }
+          },
+          {
+            "name": "leadId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "7001",
+              "type": "string"
+            }
+          },
+          {
+            "name": "recording",
+            "required": false,
+            "in": "query",
+            "description": "MISSING — yozuvsiz qo‘ng‘iroqlar (xato)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NONE",
+                "LIVE",
+                "PENDING",
+                "READY",
+                "MISSING"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘ng‘iroqlar hisoboti (yangisi birinchi)",
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/v1/calls/{id}/recording-link": {
+      "post": {
+        "description": "Audit yozuvi bilan birga beriladi: yozilmasa havola ham berilmaydi. `mode: DOWNLOAD` — faqat admin va superadmin.",
+        "operationId": "CallsController_recordingLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingLinkRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Boshqa operatorning yozuvi yoki yuklab olish ruxsati yo‘q"
+          },
+          "404": {
+            "description": "Qo‘ng‘iroq yo‘q; RECORDING_NOT_READY — yozuv yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yozuvni tinglash yoki yuklab olish havolasi (vaqtli)",
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/v1/call-recordings/{token}": {
+      "get": {
+        "description": "`Range` qo‘llab-quvvatlanadi — pleyerda oldinga o‘tish uchun.",
+        "operationId": "CallRecordingsController_stream",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "description": ""
+          },
+          "403": {
+            "description": "Imzosiz, buzilgan yoki muddati o‘tgan havola"
+          }
+        },
+        "summary": "Qo‘ng‘iroq yozuvi (imzolangan havola, 10 daqiqa)",
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/v1/admin/operators/{id}/phone": {
+      "get": {
+        "operationId": "AdminOperatorPhoneController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPhoneDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Telefon biriktirilmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Operator telefoni",
+        "tags": [
+          "calls"
+        ]
+      },
+      "put": {
+        "description": "Faqat operator yoki nazoratchi foydalanuvchiga. Bitta telefon — bitta operator.",
+        "operationId": "AdminOperatorPhoneController_set",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOperatorPhoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPhoneDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Raqam noto‘g‘ri yoki foydalanuvchi operator emas"
+          },
+          "409": {
+            "description": "Telefon boshqa operatorda"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Operatorga telefon biriktirish",
+        "tags": [
+          "calls"
+        ]
+      },
+      "delete": {
+        "description": "Operatorda «Qo‘ng‘iroq» tugmasi o‘chadi, natija qo‘lda kiritiladi.",
+        "operationId": "AdminOperatorPhoneController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "deleted": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Telefonni olib tashlash",
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/v1/webhooks/telephony": {
+      "post": {
+        "description": "`status` — bosqich, `completed` — qo‘ng‘iroq tugadi, `recording` — yozuv tayyor. 503 bo‘lsa provayder qayta yuboradi; takror `eventId` xavfsiz.",
+        "operationId": "TelephonyWebhookController_receive",
+        "parameters": [
+          {
+            "name": "X-Telephony-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelephonyWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "received": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Imzo yo‘q yoki noto‘g‘ri"
+          }
+        },
+        "summary": "Telefoniya provayderi hodisalari (BE-15)",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
     "/api/v1/operator/orders/{id}/cancel": {
       "post": {
         "operationId": "OperatorOrdersController_cancel",
@@ -25073,6 +25669,45 @@
           "totalAmount"
         ]
       },
+      "LeadAttemptCallDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "501"
+          },
+          "startedAt": {
+            "type": "string",
+            "example": "2027-01-14T09:32:00.000Z"
+          },
+          "answered": {
+            "type": "boolean",
+            "example": true
+          },
+          "durationSeconds": {
+            "type": "number",
+            "nullable": true,
+            "example": 118
+          },
+          "recording": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "LIVE",
+              "PENDING",
+              "READY",
+              "MISSING"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "startedAt",
+          "answered",
+          "durationSeconds",
+          "recording"
+        ]
+      },
       "LeadAttemptDto": {
         "type": "object",
         "properties": {
@@ -25104,6 +25739,16 @@
             "type": "string",
             "example": null,
             "nullable": true
+          },
+          "call": {
+            "nullable": true,
+            "description": "BE-15 (TEL-3): qo‘ng‘iroq — boshlanish, javob, davomiylik, yozuv holati; qo‘ng‘iroqsiz urinishda null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LeadAttemptCallDto"
+              }
+            ]
           }
         },
         "required": [
@@ -25697,7 +26342,17 @@
             "type": "number",
             "example": null,
             "nullable": true,
-            "description": "Suhbat davomiyligi — telefoniya bilan (BE-15); hozir null"
+            "description": "Suhbat davomiyligi (BE-15); suhbat bo‘lmagan yoki telefoniya ulanmagan — null"
+          },
+          "call": {
+            "nullable": true,
+            "description": "BE-15: urinishdagi qo‘ng‘iroq; qo‘ng‘iroqsiz — null",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LeadAttemptCallDto"
+              }
+            ]
           }
         },
         "required": [
@@ -25897,13 +26552,19 @@
             "example": "2026-12-01T09:31:00.000Z",
             "nullable": true,
             "description": "Shu holat boshlangan vaqt (FE-08: «Tanaffusdasiz · 6 daqiqa»); holat hali tanlanmagan — null"
+          },
+          "callEnabled": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-15: «Qo‘ng‘iroq» tugmasi ishlaydi — telefoniya ulangan va operatorga telefon biriktirilgan. false — natija qo‘lda"
           }
         },
         "required": [
           "state",
           "activeBookings",
           "maxBookings",
-          "since"
+          "since",
+          "callEnabled"
         ]
       },
       "UpdateOperatorStateDto": {
@@ -26020,6 +26681,316 @@
           "approveRate",
           "saleRate",
           "firstCallMedianMinutes"
+        ]
+      },
+      "LeadCallDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "501"
+          },
+          "leadId": {
+            "type": "string",
+            "example": "7001"
+          },
+          "operatorId": {
+            "type": "string",
+            "example": "41"
+          },
+          "operatorName": {
+            "type": "string",
+            "example": "Dilnoza R."
+          },
+          "customerName": {
+            "type": "string",
+            "example": "Aziza"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "OFFICE",
+              "APP_VOIP",
+              "APP_BRIDGE"
+            ],
+            "example": "OFFICE"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "RINGING_OPERATOR",
+              "RINGING_CUSTOMER",
+              "CONNECTED",
+              "ENDED",
+              "FAILED"
+            ],
+            "example": "ENDED"
+          },
+          "requestedAt": {
+            "type": "string",
+            "example": "2027-01-14T09:32:00.000Z",
+            "description": "Operator tugmani bosgan vaqt"
+          },
+          "answeredAt": {
+            "type": "string",
+            "example": "2027-01-14T09:32:10.000Z",
+            "nullable": true,
+            "description": "Mijoz javob bergan vaqt; javob bo‘lmasa null"
+          },
+          "endedAt": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "durationSeconds": {
+            "type": "number",
+            "nullable": true,
+            "example": 118,
+            "description": "Suhbat davomiyligi, soniya"
+          },
+          "endReason": {
+            "type": "string",
+            "enum": [
+              "ANSWERED",
+              "NO_ANSWER",
+              "BUSY",
+              "UNREACHABLE",
+              "OPERATOR_NO_ANSWER",
+              "CANCELLED",
+              "FAILED"
+            ],
+            "nullable": true
+          },
+          "suggestedOutcome": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "NO_ANSWER",
+              "BUSY",
+              "PHONE_OFF",
+              "CALL_LATER",
+              "THINKING",
+              "REJECTED",
+              "INVALID",
+              "DUPLICATE"
+            ],
+            "nullable": true,
+            "example": "NO_ANSWER",
+            "description": "TEL-4: server holatidan taklif — NO_ANSWER, BUSY yoki PHONE_OFF; boshqa holatda null"
+          },
+          "recording": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "LIVE",
+              "PENDING",
+              "READY",
+              "MISSING"
+            ],
+            "example": "READY",
+            "description": "NONE — suhbat bo‘lmagan; LIVE — suhbat ketmoqda; PENDING — yozuv kutilmoqda; MISSING — yozuvsiz, hisobotda xato (TEL-3)"
+          },
+          "attemptId": {
+            "type": "string",
+            "nullable": true,
+            "example": "9001",
+            "description": "Natija kiritilgan urinish; hali natijasiz — null"
+          }
+        },
+        "required": [
+          "id",
+          "leadId",
+          "operatorId",
+          "operatorName",
+          "customerName",
+          "channel",
+          "status",
+          "requestedAt",
+          "answeredAt",
+          "endedAt",
+          "durationSeconds",
+          "endReason",
+          "suggestedOutcome",
+          "recording",
+          "attemptId"
+        ]
+      },
+      "CallPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadCallDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 41
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "missingRecordings": {
+            "type": "number",
+            "example": 1,
+            "description": "TEL-3: yozuvsiz qo‘ng‘iroqlar soni — `recording` dan boshqa filtrlar bo‘yicha (hisobotda xato)"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "missingRecordings"
+        ]
+      },
+      "RecordingLinkRequestDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "LISTEN",
+              "DOWNLOAD"
+            ],
+            "default": "LISTEN",
+            "description": "DOWNLOAD — faqat admin va superadmin (TEL-7)"
+          }
+        }
+      },
+      "OperatorPhoneDto": {
+        "type": "object",
+        "properties": {
+          "operatorId": {
+            "type": "string",
+            "example": "41"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "EXTENSION",
+              "MOBILE"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "example": "101"
+          },
+          "updatedBy": {
+            "type": "string",
+            "example": "3"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2027-01-10T06:00:00.000Z"
+          }
+        },
+        "required": [
+          "operatorId",
+          "kind",
+          "value",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "SetOperatorPhoneDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "EXTENSION",
+              "MOBILE"
+            ],
+            "example": "EXTENSION"
+          },
+          "value": {
+            "type": "string",
+            "example": "101",
+            "description": "EXTENSION — ichki raqam (2–10 raqam); MOBILE — +998XXXXXXXXX"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ]
+      },
+      "TelephonyWebhookDto": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "evt-8f1c",
+            "description": "Hodisa ID si (takrorsiz)"
+          },
+          "callRef": {
+            "type": "string",
+            "example": "3f0e2f5c-7a1e-4c55-9b0a-0d4c9b1f2a10",
+            "description": "Qo‘ng‘iroqni boshlashda berilgan `callRef`"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "status",
+              "completed",
+              "recording"
+            ],
+            "example": "completed"
+          },
+          "at": {
+            "type": "string",
+            "example": "2027-01-14T09:36:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RINGING_OPERATOR",
+              "RINGING_CUSTOMER",
+              "CONNECTED"
+            ],
+            "description": "`type: status` da majburiy"
+          },
+          "endReason": {
+            "type": "string",
+            "enum": [
+              "ANSWERED",
+              "NO_ANSWER",
+              "BUSY",
+              "UNREACHABLE",
+              "OPERATOR_NO_ANSWER",
+              "CANCELLED",
+              "FAILED"
+            ],
+            "description": "`type: completed` da majburiy"
+          },
+          "answeredAt": {
+            "type": "string",
+            "example": "2027-01-14T09:33:10.000Z",
+            "description": "Mijoz javob bergan vaqt; ANSWERED da majburiy"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "example": 118,
+            "description": "Suhbat davomiyligi, soniya; ANSWERED da majburiy"
+          },
+          "recordingRef": {
+            "type": "string",
+            "example": "rec-5521",
+            "description": "`type: recording` da majburiy; provayderdagi yozuv kaliti (URL emas)"
+          }
+        },
+        "required": [
+          "eventId",
+          "callRef",
+          "type",
+          "at"
         ]
       },
       "WarehouseScanDto": {

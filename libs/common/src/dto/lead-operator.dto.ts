@@ -12,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
+import { LeadAttemptCallDto } from './lead-attempt-call.dto';
 import { DeliveryDisplayMode } from '../pricing/price-calculator';
 import {
   IsLeadBigintId,
@@ -232,6 +233,14 @@ export class LeadAttemptDto {
 
   @ApiProperty({ example: null, nullable: true, type: String })
   comment: string | null;
+
+  @ApiPropertyOptional({
+    type: () => LeadAttemptCallDto,
+    nullable: true,
+    description:
+      'BE-15 (TEL-3): qo‘ng‘iroq — boshlanish, javob, davomiylik, yozuv holati; qo‘ng‘iroqsiz urinishda null',
+  })
+  call?: LeadAttemptCallDto | null;
 }
 
 /** BE-25: tuzatilgan manzil maydoni — eski va yangi qiymat (viloyat va tuman nomi bilan). */
@@ -578,6 +587,13 @@ export class OperatorStateDto {
       'Shu holat boshlangan vaqt (FE-08: «Tanaffusdasiz · 6 daqiqa»); holat hali tanlanmagan — null',
   })
   since: string | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'BE-15: «Qo‘ng‘iroq» tugmasi ishlaydi — telefoniya ulangan va operatorga telefon biriktirilgan. false — natija qo‘lda',
+  })
+  callEnabled: boolean;
 }
 
 export class OperatorQueueOperatorDto {
@@ -854,9 +870,17 @@ export class OperatorAttemptItemDto {
     example: null,
     nullable: true,
     type: Number,
-    description: 'Suhbat davomiyligi — telefoniya bilan (BE-15); hozir null',
+    description:
+      'Suhbat davomiyligi (BE-15); suhbat bo‘lmagan yoki telefoniya ulanmagan — null',
   })
   durationSeconds: number | null;
+
+  @ApiPropertyOptional({
+    type: () => LeadAttemptCallDto,
+    nullable: true,
+    description: 'BE-15: urinishdagi qo‘ng‘iroq; qo‘ng‘iroqsiz — null',
+  })
+  call?: LeadAttemptCallDto | null;
 }
 
 export class OperatorAttemptsPageDto {

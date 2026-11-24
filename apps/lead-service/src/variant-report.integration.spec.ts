@@ -19,6 +19,7 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
+import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
 import { csvCell, VariantReportService } from './variant-report.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -136,6 +137,7 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
         AddFraudCenter1795824000000,
         SiteOrder1798070400000,
         OperatorStateSince1798416000000,
+        Telephony1798675200000,
       ],
       synchronize: false,
       logging: false,

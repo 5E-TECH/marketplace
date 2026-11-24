@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { RequestContext } from '../context/request-context';
+import { redactUrl } from '../security/redact-url';
 
 /**
  * Har HTTP so'rov uchun bitta kirish log satri: requestId, metod, yo'l,
@@ -30,7 +31,7 @@ export class HttpLoggerInterceptor implements NestInterceptor {
     const write = (status: number | string) => {
       const ms = Date.now() - startedAt;
       this.logger.log(
-        `[${requestId}] ${request?.method} ${request?.url} → ${status} (${ms}ms)`,
+        `[${requestId}] ${request?.method} ${redactUrl(request?.url)} → ${status} (${ms}ms)`,
       );
     };
 

@@ -103,6 +103,8 @@ const ANY_SIGNED_IN = [
   'PATCH /notifications/:id/read',
   'PATCH /notifications/read-all',
   'POST /auth/logout',
+  // BE-15 (TEL-7): guard’siz — har rolning urinishi auditga tushsin; ruxsatni lead-service hal qiladi (`recordingAccess`)
+  'POST /calls/:id/recording-link',
   'POST /support/tickets',
   'POST /support/tickets/:id/messages',
 ];
@@ -121,6 +123,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   // Lidni bron qilish va natija kiritish; buyurtmani topshirilgunga qadar bekor qilish (BE-18, BUY-3).
   // BE-25 (FE-08): joriy holat, mahsulot paneli, bugungi urinishlar, navbat hajmi (boshqa operatorlarsiz).
   [Role.OPERATOR_LEAD]: [
+    // BE-15 (OPR-6, TEL-7): qo‘ng‘iroq va o‘z yozuvini tinglash
+    'GET /operator/calls',
+    'GET /operator/calls/:id',
+    'POST /operator/calls/:id/hangup',
+    'POST /operator/leads/:id/call',
     'GET /operator/attempts',
     'GET /operator/leads',
     'GET /operator/leads/:id',
@@ -141,6 +148,12 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   // BE-18: buyurtmalar ro‘yxati va kartasi (TC12, FE-26), bekor qilish (BUY-3).
   // BE-21: kunlik COD sverkasi (TZ «Sverka farqi» → nazoratchi va moliya).
   [Role.SUPERVISOR]: [
+    // BE-15 (TZ 3: «Qo‘ng‘iroq yozuvini tinglash» — nazoratchi hammasini; yuklab olish yo‘q)
+    'GET /calls',
+    'GET /operator/calls',
+    'GET /operator/calls/:id',
+    'POST /operator/calls/:id/hangup',
+    'POST /operator/leads/:id/call',
     'GET /admin/finance/cod-reconciliation',
     'GET /admin/leads',
     'GET /admin/leads/:id',

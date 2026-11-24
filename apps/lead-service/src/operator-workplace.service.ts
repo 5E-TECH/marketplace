@@ -24,6 +24,7 @@ import {
   tashkentParts,
 } from './lead-schedule';
 import { validDay } from './lead-stats.service';
+import { CallService } from './telephony/call.service';
 
 /** Mahsulot 8-bo‘limi: BAD — «Dori vositasi emas» yozuvi (product.dto `isBad` izohi, BE-07). */
 export const BAD_WARNING = 'Dori vositasi emas';
@@ -41,6 +42,7 @@ export class OperatorWorkplaceService {
     private readonly db: DataSource,
     private readonly catalog: CatalogOfferClient,
     @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly calls?: CallService,
   ) {}
 
   /** «Mahsulot ma’lumoti» — faqat shu operatordagi (bron yoki rejalashtirilgan) lid; aks holda 404 (lid kartasi kabi). */
@@ -91,7 +93,7 @@ export class OperatorWorkplaceService {
     const [rows, [{ total }]] = await Promise.all([
       this.db.query(
         `SELECT a.created_at AS "at", a.lead_id::text AS "leadId", a.outcome, a.comment,
-                a.callback_at AS "callbackAt", l.name AS "customerName", l.product_id::text AS "productId",
+                a.call_id AS "callId", a.callback_at AS "callbackAt", l.name AS "customerName", l.product_id::text AS "productId",
                 l.reject_reason AS "rejectReason", l.next_attempt_at AS "nextAttemptAt", l.status,
                 a.id = (SELECT max(a2.id) FROM lead.lead_attempt a2 WHERE a2.lead_id = a.lead_id) AS "latest"
            FROM lead.lead_attempt a JOIN lead.lead l ON l.id = a.lead_id
@@ -112,6 +114,8 @@ export class OperatorWorkplaceService {
           .catch(() => [] as CatalogOfferSnapshot[])
       : [];
     const names = new Map(offers.map((o) => [o.productId, o.name]));
+    // BE-15 (TEL-3): davomiylik va yozuv holati
+    const calls = await this.calls?.forAttempts(rows.map((r) => r.callId));
     return {
       items: rows.map((r) => ({
         at: new Date(r.at).toISOString(),
@@ -122,7 +126,8 @@ export class OperatorWorkplaceService {
         comment: r.comment,
         rejectReason: rejectReasonOf(r),
         nextAttemptAt: nextAttemptOf(r),
-        durationSeconds: null,
+        durationSeconds: calls?.get(r.callId ?? '')?.durationSeconds ?? null,
+        call: r.callId ? (calls?.get(r.callId) ?? null) : null,
       })),
       total,
     };
@@ -140,6 +145,7 @@ export class OperatorWorkplaceService {
 interface AttemptRow {
   at: Date;
   leadId: string;
+  callId: string | null;
   outcome: LeadOutcome;
   comment: string | null;
   callbackAt: Date | null;

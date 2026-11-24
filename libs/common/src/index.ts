@@ -65,6 +65,8 @@ export * from './dto/lead-affiliate.dto';
 export * from './dto/lead-operator.dto';
 export * from './dto/lead-events.dto';
 export * from './dto/lead-fraud.dto';
+export * from './dto/lead-attempt-call.dto';
+export * from './dto/lead-telephony.dto';
 export * from './dto/affiliate-income.dto';
 export * from './dto/withdrawal.dto';
 export * from './dto/finance-settings.dto';
@@ -101,6 +103,7 @@ export * from './security/hmac.util';
 export * from './security/crypto.util';
 export * from './security/totp.util';
 export * from './security/ssrf.util';
+export * from './security/redact-url';
 
 // Messaging
 export * from './messaging/reliable-rmq.server';

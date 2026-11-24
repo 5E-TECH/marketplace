@@ -38,6 +38,7 @@ import {
 } from './entities';
 import { LEAD_RULES } from './lead-rules';
 import { reminderHorizon } from './lead-schedule';
+import { CallService } from './telephony/call.service';
 import { UserNamesClient } from './user-names.client';
 
 const ADDRESS_FIELDS = [
@@ -82,6 +83,7 @@ export class LeadCardService {
     @Inject(RmqClient.CATALOG) private readonly catalogClient: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
     @Optional() private readonly names?: UserNamesClient,
+    @Optional() private readonly calls?: CallService,
   ) {}
 
   /** Operator faqat o‘zidagi (bron yoki rejalashtirilgan) lidni ko‘radi; aks holda 404. */
@@ -209,6 +211,7 @@ export class LeadCardService {
         ])
       : (id: string) => `#${id}`;
     const actorName = (id: string | null) => (id ? nameOf(id) : 'Tizim');
+    const callOf = await this.calls?.forAttempts(attempts.map((a) => a.callId));
     return {
       id: lead.id,
       status: lead.status,
@@ -243,6 +246,7 @@ export class LeadCardService {
         operatorName: actorName(a.operatorId),
         outcome: a.outcome,
         comment: a.comment,
+        call: a.callId ? (callOf?.get(a.callId) ?? null) : null,
       })),
       history: await this.historyView(history, actorName),
       previousLeads: previous,
