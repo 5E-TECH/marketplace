@@ -21,11 +21,13 @@ import { blockedByVariant } from './stock-lots';
 interface VariantInventoryDetails {
   /** BE-16: mahsulot optovigi (qoldiq egasi). */
   wholesalerId: string;
+  wholesalerName: string | null;
   variantId: string;
   productId: string;
   productName: string;
   variantName: string | null;
   sku: string;
+  barcode: string | null;
 }
 
 type VariantInfo = Pick<
@@ -247,7 +249,11 @@ export class AdminInventoryQueryService {
    * bitta). Qator tushib qolmaydi: katalog javob bermasa — `warnings`, variant topilmasa — `catalogMissing: true`.
    */
   private async variantInfo(variantIds: string[]): Promise<{
-    info: (variantId: string) => VariantInfo & { shopId: string | null };
+    info: (variantId: string) => VariantInfo & {
+      shopId: string | null;
+      shopName: string | null;
+      barcode: string | null;
+    };
     warnings: AdminCatalogWarningDto[];
   }> {
     const details = new Map<string, VariantInventoryDetails>();
@@ -273,6 +279,8 @@ export class AdminInventoryQueryService {
         const variant = details.get(String(variantId));
         return {
           shopId: variant?.wholesalerId ?? null,
+          shopName: variant?.wholesalerName ?? null,
+          barcode: variant?.barcode ?? null,
           variantId,
           productId: variant?.productId ?? null,
           productName: variant?.productName ?? null,

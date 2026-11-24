@@ -269,6 +269,7 @@ export class ProductVariantService {
     const qb = this.productVariants
       .createQueryBuilder('variant')
       .innerJoinAndSelect('variant.product', 'product')
+      .leftJoinAndSelect('product.shop', 'shop')
       .where('variant.id IN (:...variantIds)', { variantIds })
       .andWhere('variant.is_deleted = FALSE')
       .andWhere('product.is_deleted = FALSE');
@@ -277,11 +278,14 @@ export class ProductVariantService {
 
     return variants.map((variant) => ({
       wholesalerId: String(variant.product.shopId),
+      // BE-25 (FE-16): «Qoldiq → Ro‘yxat» — optovik nomi va shtrix-kod
+      wholesalerName: variant.product.shop?.name ?? null,
       variantId: variant.id,
       productId: variant.productId,
       productName: variant.product.name,
       variantName: variant.name,
       sku: variant.sku,
+      barcode: variant.barcode ?? null,
     }));
   }
 

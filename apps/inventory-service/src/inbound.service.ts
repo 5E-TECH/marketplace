@@ -19,6 +19,7 @@ import {
   InboundShipmentItemDto,
   InboundShipmentPageDto,
   InboundShipmentStatus,
+  InventoryVariantCell,
   LOT_BLOCKED_EVENT,
   LOT_MIN_SHELF_DAYS,
   LotBlockedEvent,
@@ -30,6 +31,7 @@ import {
   StockLotDto,
   StockMovementType,
   WarehouseOwnerType,
+  WholesalerPageDto,
 } from '@app/common';
 import { Stock } from './entities/stock.entity';
 import { blockedByVariant } from './stock-lots';
@@ -46,6 +48,8 @@ const ID = /^[1-9]\d{0,18}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const CELL = /^[A-Za-z0-9][A-Za-z0-9-]{0,31}$/;
 const NOTIFY_TIMEOUT_MS = 5_000;
+/** Qidiruvda optovik nomini katalogdan kutish — gateway kutishidan (10 s) ancha qisqa. */
+const CATALOG_SEARCH_TIMEOUT_MS = 1_500;
 
 export interface PdfFile {
   fileName: string;
@@ -66,11 +70,11 @@ interface ShipmentRow {
   createdAt: Date;
 }
 
-const SHIPMENT_SELECT = `SELECT id::text, wholesaler_id::text AS "wholesalerId", status,
-  to_char(expected_at, 'YYYY-MM-DD') AS "expectedAt", note, declared_by::text AS "declaredBy",
-  received_by::text AS "receivedBy", received_at AS "receivedAt", receive_comment AS "receiveComment",
-  created_at AS "createdAt"
-  FROM inventory.inbound_shipment`;
+const SHIPMENT_SELECT = `SELECT s.id::text, s.wholesaler_id::text AS "wholesalerId", s.status,
+  to_char(s.expected_at, 'YYYY-MM-DD') AS "expectedAt", s.note, s.declared_by::text AS "declaredBy",
+  s.received_by::text AS "receivedBy", s.received_at AS "receivedAt", s.receive_comment AS "receiveComment",
+  s.created_at AS "createdAt"
+  FROM inventory.inbound_shipment s`;
 
 const ITEM_SELECT = `SELECT id::text, shipment_id::text AS "shipmentId", product_id::text AS "productId",
   product_name AS "productName", variant_id::text AS "variantId", sku, barcode,
@@ -174,9 +178,17 @@ export class InboundService {
     return this.get({ id });
   }
 
+  /**
+   * Postavkalar (yangisi tepada). BE-25 (FE-16): bir nechta holat, qidiruv, kelish sanasi va qabul kuni (Toshkent);
+   * `counts` — holatlar soni, `status` dan boshqa filtrlar bo‘yicha.
+   */
   async list(query: {
-    status?: InboundShipmentStatus;
+    status?: InboundShipmentStatus | InboundShipmentStatus[];
     wholesalerId?: string;
+    search?: string;
+    expectedFrom?: string;
+    expectedTo?: string;
+    receivedOn?: string;
     page?: number;
     limit?: number;
   }): Promise<InboundShipmentPageDto> {
@@ -184,33 +196,107 @@ export class InboundService {
     const limit = Math.min(100, Math.max(1, Number(query?.limit) || 20));
     const where: string[] = ['TRUE'];
     const params: unknown[] = [];
-    if (query?.status) {
-      params.push(query.status);
-      where.push(`status = $${params.length}`);
-    }
-    if (query?.wholesalerId) {
-      params.push(this.id(query.wholesalerId, 'Optovik'));
-      where.push(`wholesaler_id = $${params.length}`);
-    }
+    const param = (value: unknown) => `$${params.push(value)}`;
+    if (query?.wholesalerId)
+      where.push(
+        `s.wholesaler_id = ${param(this.id(query.wholesalerId, 'Optovik'))}`,
+      );
+    if (query?.expectedFrom)
+      where.push(
+        `s.expected_at >= ${param(this.day(query.expectedFrom, 'expectedFrom'))}::date`,
+      );
+    if (query?.expectedTo)
+      where.push(
+        `s.expected_at <= ${param(this.day(query.expectedTo, 'expectedTo'))}::date`,
+      );
+    if (query?.receivedOn)
+      where.push(
+        `(s.received_at AT TIME ZONE 'Asia/Tashkent')::date = ${param(this.day(query.receivedOn, 'receivedOn'))}::date`,
+      );
+    const search = query?.search?.trim();
+    if (search) where.push(await this.searchFilter(search, query, param));
+    const counts = Object.fromEntries(
+      Object.values(InboundShipmentStatus).map((status) => [status, 0]),
+    ) as Record<InboundShipmentStatus, number>;
+    for (const row of (await this.dataSource.query(
+      `SELECT s.status, count(*)::int AS count
+         FROM inventory.inbound_shipment s WHERE ${where.join(' AND ')} GROUP BY s.status`,
+      params,
+    )) as Array<{ status: InboundShipmentStatus; count: number }>)
+      counts[row.status] = Number(row.count);
+    const statuses = [query?.status ?? []].flat();
+    if (statuses.length)
+      where.push(`s.status = ANY(${param(statuses)}::text[])`);
+    const total = (
+      statuses.length
+        ? [...new Set(statuses)]
+        : Object.values(InboundShipmentStatus)
+    ).reduce((sum, status) => sum + (counts[status] ?? 0), 0);
     const rows = (await this.dataSource.query(
-      `${SHIPMENT_SELECT} WHERE ${where.join(' AND ')} ORDER BY id DESC
+      `${SHIPMENT_SELECT} WHERE ${where.join(' AND ')} ORDER BY s.id DESC
         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, (page - 1) * limit],
     )) as ShipmentRow[];
-    const [{ total }] = (await this.dataSource.query(
-      `SELECT count(*)::int AS total FROM inventory.inbound_shipment WHERE ${where.join(' AND ')}`,
-      params,
-    )) as Array<{ total: number }>;
     const items = await this.itemsOf(
       this.dataSource.manager,
       rows.map((row) => row.id),
     );
     return {
       items: rows.map((row) => this.toDto(row, items.get(row.id) ?? [])),
-      total: Number(total),
+      total,
       page,
       limit,
+      counts,
     };
+  }
+
+  /** Raqam (`PS-000014`, `14`), mahsulot nomi, SKU, shtrix-kod yoki optovik nomi (katalog javob bermasa — nomsiz). */
+  private async searchFilter(
+    search: string,
+    query: { wholesalerId?: string },
+    param: (value: unknown) => string,
+  ): Promise<string> {
+    const like = param(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
+    const parts = [
+      `EXISTS (SELECT 1 FROM inventory.inbound_shipment_item i
+                WHERE i.shipment_id = s.id
+                  AND (i.product_name ILIKE ${like} OR i.sku ILIKE ${like} OR i.barcode ILIKE ${like}))`,
+    ];
+    const number = /^(?:PS-?)?0*([1-9]\d{0,17})$/i.exec(search)?.[1];
+    if (number) parts.push(`s.id = ${param(number)}::bigint`);
+    // optovik kabinetida ro‘yxat o‘zi bitta optovikniki — nom bo‘yicha qidiruv kerak emas
+    if (!query?.wholesalerId) {
+      const found = await firstValueFrom(
+        this.catalog
+          .send<WholesalerPageDto>(
+            { cmd: 'catalog.wholesaler.admin-list' },
+            { search, page: 1, limit: 100 },
+          )
+          .pipe(timeout(CATALOG_SEARCH_TIMEOUT_MS)),
+      ).catch((error: Error) => {
+        this.logger.warn(`Optovik nomi bo‘yicha qidirilmadi: ${error.message}`);
+        return null;
+      });
+      const ids = (found?.items ?? []).map((item) => String(item.id));
+      if (ids.length)
+        parts.push(`s.wholesaler_id = ANY(${param(ids)}::bigint[])`);
+    }
+    return `(${parts.join(' OR ')})`;
+  }
+
+  /** OMB-2 (BE-25, FE-17): SKU yacheykasi HQ omborda; yacheykasi yozilmagan variant — null. */
+  async variantCells(variantIds: string[]): Promise<InventoryVariantCell[]> {
+    const ids = [
+      ...new Set((Array.isArray(variantIds) ? variantIds : []).map(String)),
+    ].filter((id) => ID.test(id));
+    if (!ids.length) return [];
+    return (await this.dataSource.query(
+      `SELECT s.variant_id::text AS "variantId", s.cell
+         FROM inventory.stock s
+         JOIN inventory.warehouse w ON w.id = s.warehouse_id
+        WHERE s.variant_id = ANY($1::bigint[]) AND w.owner_type = $2 AND w.is_deleted = FALSE`,
+      [ids, WarehouseOwnerType.HQ],
+    )) as InventoryVariantCell[];
   }
 
   async get(input: { id: string }): Promise<InboundShipmentDto> {
@@ -426,9 +512,11 @@ export class InboundService {
       `SELECT l.id::text, l.variant_id::text AS "variantId", i.sku, i.product_name AS "productName", l.batch,
               to_char(l.expiry_date, 'YYYY-MM-DD') AS "expiryDate",
               to_char(l.sellable_until, 'YYYY-MM-DD') AS "sellableUntil", l.quantity,
-              l.sellable_until < ${TODAY_SQL} AS blocked
+              l.sellable_until < ${TODAY_SQL} AS blocked,
+              s.wholesaler_id::text AS "wholesalerId", l.notified_at AS "notifiedAt"
          FROM inventory.stock_lot l
          JOIN inventory.inbound_shipment_item i ON i.id = l.shipment_item_id
+         JOIN inventory.inbound_shipment s ON s.id = i.shipment_id
         WHERE l.quantity > 0 ${filter}
         ORDER BY l.sellable_until, l.id
         LIMIT 500`,
@@ -698,6 +786,12 @@ export class InboundService {
     const id = String(value ?? '');
     if (!ID.test(id)) throw new BadRequestException(`${label} ID si noto‘g‘ri`);
     return id;
+  }
+
+  private day(value: string, field: string): string {
+    if (!this.validDay(String(value)))
+      throw new BadRequestException(`${field} YYYY-MM-DD bo‘lishi kerak`);
+    return String(value);
   }
 
   private validDay(value: string): boolean {

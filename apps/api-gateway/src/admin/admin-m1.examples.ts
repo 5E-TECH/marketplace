@@ -164,6 +164,7 @@ export const ADMIN_PRODUCTS_PAGE_EXAMPLE = {
       mxikCode: null,
       packageCode: null,
       rating: 0,
+      expiryTracked: false,
       createdAt: '2026-11-20T08:10:00.000Z',
       updatedAt: '2026-11-21T10:00:00.000Z',
       isDeleted: false,

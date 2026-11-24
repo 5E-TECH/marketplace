@@ -25,6 +25,7 @@ import {
   UpdateProductDto,
 } from '@app/common';
 import { Category } from './entities/category.entity';
+import { loadCategoryFlags } from './category-flags';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
 import { ProductVariant } from './entities/product-variant.entity';
@@ -261,7 +262,7 @@ export class ProductService {
       .take(limit)
       .getManyAndCount();
     return {
-      items,
+      items: await this.withExpiryTracked(items),
       total,
       page,
       limit,
@@ -269,8 +270,24 @@ export class ProductService {
     };
   }
 
-  adminGet(id: string): Promise<Product> {
-    return this.getAdminProduct(id);
+  async adminGet(id: string): Promise<Product & { expiryTracked: boolean }> {
+    const [product] = await this.withExpiryTracked([
+      await this.getAdminProduct(id),
+    ]);
+    return product;
+  }
+
+  /** BE-25 (FE-12, FE-16; OMB-3): «muddat kuzatiladi» — BAD mahsulot yoki toifa belgisi (ota toifadan meros). */
+  private async withExpiryTracked(
+    products: Product[],
+  ): Promise<Array<Product & { expiryTracked: boolean }>> {
+    if (!products.length) return [];
+    const flags = await loadCategoryFlags(this.products.manager);
+    return products.map((product) =>
+      Object.assign(product, {
+        expiryTracked: product.isBad || flags(product.categoryId).expiryTracked,
+      }),
+    );
   }
 
   /** BE-07: admin tahriri — CPA maydonlari, BAD va CPA belgilari (ADM-1). Holat faqat tasdiq/rad orqali. */

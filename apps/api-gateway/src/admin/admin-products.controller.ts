@@ -33,6 +33,11 @@ import {
 } from '@app/common';
 
 import { ADMIN_PRODUCTS_PAGE_EXAMPLE } from './admin-m1.examples';
+import {
+  pickFields,
+  seesFullView,
+  WAREHOUSE_PRODUCT_FIELDS,
+} from './warehouse-view';
 
 @ApiTags('admin-products')
 @ApiBearerAuth()
@@ -126,20 +131,30 @@ export class AdminProductsController {
   }
 
   @Get()
+  // BE-25 (FE-16, OMB-1): omborchi arizasiz postavkada optovik mahsulotini tanlaydi
+  @Roles(Role.ADMIN, Role.WAREHOUSE, Role.SUPERADMIN)
   @ApiOperation({
     summary: 'Admin uchun barcha mahsulotlar va moderatsiya filtrlari',
+    description:
+      'Omborchiga faqat `id`, `shopId`, `name`, `status`, `cpaEnabled`, `isBad`, `isBlocked`, `expiryTracked`, `weightGrams` — narx va sotuvchi haqisiz.',
   })
   @ApiOkResponse({
     description:
       '{ items, total, page, limit, totalPages }; optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi',
     schema: { example: ADMIN_PRODUCTS_PAGE_EXAMPLE },
   })
-  list(@Query() query: AdminProductsQueryDto) {
-    return sendRpc(
+  async list(
+    @Query() query: AdminProductsQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    const page = await sendRpc<{ items: ProductDto[] }>(
       this.catalog,
       { cmd: 'catalog.product.admin-list' },
       { query },
     );
+    return seesFullView(user)
+      ? page
+      : pickFields(page, WAREHOUSE_PRODUCT_FIELDS);
   }
 
   @Get(':id')

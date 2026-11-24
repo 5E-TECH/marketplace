@@ -322,6 +322,12 @@ export class ProductDto {
   marketTotal: number | null;
   @ApiProperty({ example: true }) cpaEnabled: boolean;
   @ApiProperty({ example: false }) isBad: boolean;
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida',
+  })
+  expiryTracked?: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;
   @ApiProperty({
     example: null,

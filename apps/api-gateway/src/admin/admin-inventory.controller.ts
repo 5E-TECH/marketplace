@@ -54,6 +54,7 @@ import {
 
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
+import { withLotNames, withShipmentNames } from './inbound-names';
 
 /** inventory `stockResult`: amal, HQ qoldiq qatori va undan keyingi qoldiq (takror kalit — o‘sha javob). */
 const stockResultExample = (
@@ -74,7 +75,23 @@ export class AdminInventoryController {
   constructor(
     @Inject(RmqClient.INVENTORY) private readonly inventory: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
   ) {}
+
+  private names(shipments: InboundShipmentDto[]) {
+    return withShipmentNames(
+      { catalog: this.catalog, identity: this.identity },
+      shipments,
+    );
+  }
+
+  /** BE-25 (FE-16): nomlar va «muddat kuzatiladi» belgisi bilan. */
+  private async named(
+    shipment: InboundShipmentDto,
+  ): Promise<InboundShipmentDto> {
+    const [result] = await this.names([shipment]);
+    return result;
+  }
 
   @Post('inbound')
   @ApiOperation({
@@ -174,22 +191,41 @@ export class AdminInventoryController {
       wholesalerId: dto.wholesalerId,
       items: dto.items,
     });
-    return shipment;
+    return this.named(shipment);
   }
 
   @Get('shipments')
-  @ApiOperation({ summary: 'Postavkalar ro‘yxati' })
+  @ApiOperation({
+    summary: 'Postavkalar ro‘yxati',
+    description:
+      'BE-25: bir nechta holat, qidiruv, kelish sanasi, qabul kuni; `counts` — holatlar soni.',
+  })
   @ApiOkResponse({ type: InboundShipmentPageDto })
-  shipments(@Query() query: InboundShipmentQueryDto) {
-    return sendRpc(this.inventory, { cmd: INBOUND_RPC.LIST }, query);
+  async shipments(
+    @Query() query: InboundShipmentQueryDto,
+  ): Promise<InboundShipmentPageDto> {
+    const page = await sendRpc<InboundShipmentPageDto>(
+      this.inventory,
+      { cmd: INBOUND_RPC.LIST },
+      query,
+    );
+    return { ...page, items: await this.names(page.items) };
   }
 
   @Get('shipments/:id')
   @ApiOperation({ summary: 'Postavka kartasi' })
   @ApiOkResponse({ type: InboundShipmentDto })
   @ApiNotFoundResponse({ description: 'Postavka topilmadi' })
-  shipment(@Param('id', ParseLeadIdPipe) id: string) {
-    return sendRpc(this.inventory, { cmd: INBOUND_RPC.GET }, { id });
+  async shipment(
+    @Param('id', ParseLeadIdPipe) id: string,
+  ): Promise<InboundShipmentDto> {
+    return this.named(
+      await sendRpc<InboundShipmentDto>(
+        this.inventory,
+        { cmd: INBOUND_RPC.GET },
+        { id },
+      ),
+    );
   }
 
   @Post('shipments/:id/in-transit')
@@ -197,8 +233,16 @@ export class AdminInventoryController {
   @ApiOperation({ summary: 'Postavka «Yo‘lda» [taklif — ixtiyoriy]' })
   @ApiOkResponse({ type: InboundShipmentDto })
   @ApiConflictResponse({ description: 'Postavka holati boshqa' })
-  shipmentInTransit(@Param('id', ParseLeadIdPipe) id: string) {
-    return sendRpc(this.inventory, { cmd: INBOUND_RPC.IN_TRANSIT }, { id });
+  async shipmentInTransit(
+    @Param('id', ParseLeadIdPipe) id: string,
+  ): Promise<InboundShipmentDto> {
+    return this.named(
+      await sendRpc<InboundShipmentDto>(
+        this.inventory,
+        { cmd: INBOUND_RPC.IN_TRANSIT },
+        { id },
+      ),
+    );
   }
 
   /** OMB-1, OMB-3: qabul — faqat omborchi va superadmin (TZ rollar jadvali). */
@@ -226,7 +270,7 @@ export class AdminInventoryController {
       status: shipment.status,
       items: dto.items,
     });
-    return shipment;
+    return this.named(shipment);
   }
 
   @Get('shipments/:id/act.pdf')
@@ -255,8 +299,15 @@ export class AdminInventoryController {
   @Get('lots')
   @ApiOperation({ summary: 'Yaroqlilik partiyalari' })
   @ApiOkResponse({ type: [StockLotDto] })
-  lots(@Query() query: LotsQueryDto) {
-    return sendRpc(this.inventory, { cmd: INBOUND_RPC.LOTS }, query);
+  async lots(@Query() query: LotsQueryDto): Promise<StockLotDto[]> {
+    return withLotNames(
+      this.catalog,
+      await sendRpc<StockLotDto[]>(
+        this.inventory,
+        { cmd: INBOUND_RPC.LOTS },
+        query,
+      ),
+    );
   }
 
   @Get('stock')

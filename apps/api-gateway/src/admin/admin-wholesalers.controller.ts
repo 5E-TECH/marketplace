@@ -30,6 +30,11 @@ import {
   WholesalerDto,
   WholesalerPageDto,
 } from '@app/common';
+import {
+  pickFields,
+  seesFullView,
+  WAREHOUSE_WHOLESALER_FIELDS,
+} from './warehouse-view';
 
 /**
  * BE-07 (OPT-1, FE-25): optovikni admin kiritadi — foydalanuvchisiz, rekvizitlar va komissiya shartnomasi bilan.
@@ -65,16 +70,26 @@ export class AdminWholesalersController {
   }
 
   @Get()
+  // BE-25 (FE-16, OMB-1): omborchi arizasiz postavkada optovikni tanlaydi
+  @Roles(Role.ADMIN, Role.WAREHOUSE, Role.SUPERADMIN)
   @ApiOperation({
     summary: 'Optoviklar ro‘yxati (nom yoki STIR bo‘yicha qidiruv)',
+    description:
+      'Omborchiga faqat `id`, `name`, `status`, `tin`, `contractNumber`, `contractDate` — bank rekvizitlari, telefon va kabinet egasisiz.',
   })
   @ApiOkResponse({ type: WholesalerPageDto })
-  list(@Query() query: AdminWholesalersQueryDto) {
-    return sendRpc(
+  async list(
+    @Query() query: AdminWholesalersQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    const page = await sendRpc<WholesalerPageDto>(
       this.catalog,
       { cmd: 'catalog.wholesaler.admin-list' },
       query,
     );
+    return seesFullView(user)
+      ? page
+      : pickFields(page, WAREHOUSE_WHOLESALER_FIELDS);
   }
 
   @Get(':id')

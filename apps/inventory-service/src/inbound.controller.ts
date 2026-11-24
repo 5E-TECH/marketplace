@@ -2,7 +2,7 @@ import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   INBOUND_RPC,
-  InboundShipmentStatus,
+  INVENTORY_VARIANT_CELLS,
   RpcHttpExceptionFilter,
   WHOLESALER_CABINET_RPC,
 } from '@app/common';
@@ -46,12 +46,7 @@ export class InboundController {
   @MessagePattern({ cmd: INBOUND_RPC.LIST })
   list(
     @Payload()
-    data: {
-      status?: InboundShipmentStatus;
-      wholesalerId?: string;
-      page?: number;
-      limit?: number;
-    },
+    data: Parameters<InboundService['list']>[0],
   ) {
     return this.inbound.list(data ?? {});
   }
@@ -82,6 +77,12 @@ export class InboundController {
   @MessagePattern({ cmd: INBOUND_RPC.LOTS })
   lots(@Payload() data: { state?: 'BLOCKED' | 'SELLABLE' | 'ALL' }) {
     return this.inbound.lots(data ?? {});
+  }
+
+  /** BE-25 (FE-17): yig‘ish ro‘yxati uchun yacheykalar (OMB-2). */
+  @MessagePattern({ cmd: INVENTORY_VARIANT_CELLS })
+  cells(@Payload() data: { variantIds?: string[] }) {
+    return this.inbound.variantCells(data?.variantIds ?? []);
   }
 
   @MessagePattern({ cmd: INBOUND_RPC.RETURN_GRADE })

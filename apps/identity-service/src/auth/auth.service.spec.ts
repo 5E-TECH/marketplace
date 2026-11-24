@@ -98,6 +98,27 @@ describe('AuthService (C0.4)', () => {
     );
   });
 
+  it('BE-25: ismlar ID bo‘yicha — takroriy va noto‘g‘ri ID tashlanadi, telefon chiqmaydi', async () => {
+    const find = jest.fn(async () => [
+      { id: '3', name: ' Nodira K. ', role: Role.ADMIN },
+      { id: '5', name: null, role: Role.WAREHOUSE },
+    ]);
+    (service as any).users.find = find;
+    await expect(
+      service.userNames(['3', '3', '5', 'x', '0', '99999999999999999999']),
+    ).resolves.toEqual([
+      { id: '3', name: 'Nodira K.', role: Role.ADMIN },
+      { id: '5', name: null, role: Role.WAREHOUSE },
+    ]);
+    const [options] = find.mock.calls[0] as unknown as [
+      { where: { id: { value: string[] } }; select: Record<string, boolean> },
+    ];
+    expect(options.where.id.value).toEqual(['3', '5']);
+    expect(options.select).toEqual({ id: true, name: true, role: true });
+    await expect(service.userNames([])).resolves.toEqual([]);
+    expect(find).toHaveBeenCalledTimes(1);
+  });
+
   it('TC1: register parolni hash qiladi (plain saqlamaydi)', async () => {
     const res = await service.register({
       name: 'Akmal',

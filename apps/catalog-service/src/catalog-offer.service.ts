@@ -18,6 +18,7 @@ import {
   ShopStatus,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
+import { CategoryFlags, loadCategoryFlags } from './category-flags';
 import { CreativeService } from './creative.service';
 import { Product } from './entities/product.entity';
 import {
@@ -99,12 +100,14 @@ export class CatalogOfferService {
     if (!product) return null;
     const stock = await this.stockOf([String(product.id)]);
     const creatives = await this.creatives.forProducts([String(product.id)]);
+    const flags = await loadCategoryFlags(this.products.manager);
     return toSnapshot(
       product,
       this.pricingOf(product, await this.pricing.context()),
       // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
       stock.get(String(product.id)),
       creatives.get(String(product.id)) ?? [],
+      flags(product.categoryId),
     );
   }
 
@@ -156,12 +159,14 @@ export class CatalogOfferService {
     const creatives = await this.creatives.forProducts(
       rows.map((row) => String(row.id)),
     );
+    const flags = await loadCategoryFlags(this.products.manager);
     return rows.map((row) =>
       toSnapshot(
         row,
         this.pricingOf(row, ctx),
         stock.get(String(row.id)),
         creatives.get(String(row.id)) ?? [],
+        flags(row.categoryId),
       ),
     );
   }
@@ -377,11 +382,18 @@ export class CatalogOfferService {
       : [];
     const products = productIds.length
       ? ((await db.query(
-          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl"
+          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl",
+                  category_id::text AS "categoryId", is_bad AS "isBad"
              FROM catalog.product WHERE id = ANY($1::bigint[])`,
           [productIds],
-        )) as Array<{ id: string; imageUrl: string | null }>)
+        )) as Array<{
+          id: string;
+          imageUrl: string | null;
+          categoryId: string | null;
+          isBad: boolean;
+        }>)
       : [];
+    const flags = products.length ? await loadCategoryFlags(db) : null;
     const variants = variantIds.length
       ? ((await db.query(
           `SELECT v.id::text AS id, p.name,
@@ -402,6 +414,8 @@ export class CatalogOfferService {
       products: products.map((row) => ({
         id: row.id,
         imageUrl: row.imageUrl ?? null,
+        expiryTracked:
+          !!row.isBad || !!flags?.(row.categoryId ?? null).expiryTracked,
       })),
       variants: variants.map((row) => ({
         id: row.id,
@@ -443,6 +457,7 @@ export function toSnapshot(
   pricing?: OfferPricing,
   stock: number | null = 0,
   creatives: CatalogOfferSnapshot['creatives'] = [],
+  flags?: CategoryFlags,
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
@@ -464,7 +479,8 @@ export function toSnapshot(
       )
       .map(([name, value]) => ({ name, value: String(value) })),
     weightGrams: product.weightGrams,
-    isBad: product.isBad,
+    // TZ 8: BAD belgisi mahsulotda yoki toifasida (BE-25)
+    isBad: product.isBad || !!flags?.isBad,
     cpaAvailable: isCpaAvailable(product),
     withdrawn: isWithdrawn(product),
     // BE-09: tasdiqlangan narx, eng katta narx (NRX-4) va ko‘rinadigan yetkazish (bir dona)

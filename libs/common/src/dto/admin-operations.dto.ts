@@ -69,6 +69,11 @@ export class AdminStockItemDto extends AdminVariantInfoDto {
   /** BE-16: mahsulot optovigi (qoldiq egasi); ombor bitta — HQ. */
   @ApiProperty({ example: '15', nullable: true, type: String })
   shopId: string | null;
+  /** BE-25 (FE-16): «Qoldiq → Ro‘yxat» ustunlari; katalog javob bermasa null. */
+  @ApiProperty({ example: 'Gadget Trade MChJ', nullable: true, type: String })
+  shopName: string | null;
+  @ApiProperty({ example: '4780012345678', nullable: true, type: String })
+  barcode: string | null;
   @ApiProperty({ example: '3' }) warehouseId: string;
   @ApiProperty({ example: 'Asosiy ombor' }) warehouseName: string;
   @ApiProperty({ example: true }) warehouseActive: boolean;

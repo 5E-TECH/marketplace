@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { InboundShipmentStatus, LOT_BLOCKED_EVENT } from '@app/common';
 import { INVENTORY_DB } from './database';
@@ -63,6 +63,13 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
             sku: `SKU-${Number(variantId) - 800}`,
           })),
         );
+      // BE-25: ro‘yxat qidiruvi — optovik nomi bo‘yicha
+      if (pattern.cmd === 'catalog.wholesaler.admin-list')
+        return of({
+          items: String(data.search).toLowerCase().includes('gadget')
+            ? [{ id: WHOLESALER }]
+            : [],
+        });
       throw new Error(`kutilmagan katalog so‘rovi: ${pattern.cmd}`);
     }),
   };
@@ -273,6 +280,9 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     expect(notifications.emit).not.toHaveBeenCalled();
     await expect(inbound.lots({ state: 'BLOCKED' })).resolves.toEqual([
       expect.objectContaining({
+        // BE-25: partiya optovigi va xabar vaqti
+        wholesalerId: WHOLESALER,
+        notifiedAt: expect.any(Date),
         sku: 'SKU-43',
         expiryDate: inDays(50),
         sellableUntil: inDays(-10),
@@ -314,6 +324,88 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       ['BAD-2', 1],
     ]);
     await expect(inventory.available(['843'])).resolves.toEqual({ '843': 1 });
+  });
+
+  it('BE-25: ro‘yxat filtrlari — bir nechta holat, qidiruv, kelish sanasi, qabul kuni; sanoq holatdan mustaqil', async () => {
+    const all = await inbound.list({ limit: 100 });
+    const byStatus = (status: InboundShipmentStatus) =>
+      all.items.filter((item) => item.status === status).map((item) => item.id);
+    expect(all.total).toBe(all.items.length);
+    for (const status of Object.values(InboundShipmentStatus))
+      expect(all.counts[status]).toBe(byStatus(status).length);
+    expect(byStatus(InboundShipmentStatus.RECEIVED).length).toBeGreaterThan(0);
+
+    const two = await inbound.list({
+      status: [
+        InboundShipmentStatus.RECEIVED,
+        InboundShipmentStatus.DISCREPANCY,
+      ],
+      limit: 100,
+    });
+    expect(two.items.map((item) => item.id).sort()).toEqual(
+      [
+        ...byStatus(InboundShipmentStatus.RECEIVED),
+        ...byStatus(InboundShipmentStatus.DISCREPANCY),
+      ].sort(),
+    );
+    expect(two.total).toBe(two.items.length);
+    expect(two.counts).toEqual(all.counts); // yorliqlar soni holat filtriga bog‘liq emas
+    // bitta holat (eski chaqiruv shakli)
+    const one = await inbound.list({ status: InboundShipmentStatus.DECLARED });
+    expect(one.items.map((item) => item.id)).toEqual(
+      byStatus(InboundShipmentStatus.DECLARED),
+    );
+
+    const later = await inbound.declare({
+      wholesalerId: '16',
+      expectedAt: inDays(20),
+      items: [{ productId: '99', quantity: 1 }],
+      actorId: '61',
+    });
+    const ids = async (query: Parameters<InboundService['list']>[0]) =>
+      (await inbound.list({ ...query, limit: 100 })).items.map((i) => i.id);
+    await expect(ids({ search: later.number })).resolves.toEqual([later.id]);
+    await expect(ids({ search: 'sku-99' })).resolves.toEqual([later.id]);
+    await expect(ids({ search: '4780099' })).resolves.toEqual([later.id]);
+    await expect(ids({ search: 'mahsulot 99' })).resolves.toEqual([later.id]);
+    await expect(ids({ search: '%' })).resolves.toEqual([]); // joker emas, oddiy belgi
+    const gadget = await ids({ search: 'gadget' });
+    expect(gadget).toEqual(all.items.map((item) => item.id));
+    await expect(
+      ids({ expectedFrom: inDays(15), expectedTo: inDays(20) }),
+    ).resolves.toEqual([later.id]);
+    await expect(ids({ expectedFrom: inDays(21) })).resolves.toEqual([]);
+    const receivedToday = await ids({ receivedOn: inDays(0) });
+    expect(receivedToday.sort()).toEqual(
+      two.items.map((item) => item.id).sort(),
+    );
+    await expect(ids({ receivedOn: inDays(-1) })).resolves.toEqual([]);
+    // optovik bo‘yicha sanoq ham shu optovikniki
+    const own = await inbound.list({ wholesalerId: '16' });
+    expect(own).toMatchObject({
+      total: 1,
+      counts: { DECLARED: 1, IN_TRANSIT: 0, RECEIVED: 0, DISCREPANCY: 0 },
+    });
+    await expect(inbound.list({ receivedOn: '2026-02-30' })).rejects.toThrow(
+      'receivedOn',
+    );
+  });
+
+  it('BE-25: katalog javob bermasa ham qidiruv mahsulot va raqam bo‘yicha ishlaydi', async () => {
+    const broken = new InboundService(
+      ds,
+      { send: () => throwError(() => new Error('katalog yo‘q')) } as never,
+      notifications as never,
+    );
+    const found = await broken.list({ search: 'SKU-42' });
+    expect(found.total).toBeGreaterThan(0);
+  });
+
+  it('BE-25 (OMB-2): yacheykalar variant bo‘yicha — noto‘g‘ri ID tashlanadi, qoldig‘i yo‘q variant chiqmaydi', async () => {
+    await expect(
+      inbound.variantCells(['842', '842', 'x', '123456']),
+    ).resolves.toEqual([{ variantId: '842', cell: 'B-02-1' }]);
+    await expect(inbound.variantCells([])).resolves.toEqual([]);
   });
 
   it('TC3: qaytgan tovar — sotiladigan qoldiqqa +1, brak qoldiqqa kirmaydi va brak akti; takror — o‘sha natija', async () => {

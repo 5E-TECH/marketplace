@@ -12,6 +12,7 @@ import {
   UpdateCategoryDto,
 } from '@app/common';
 import { Category } from './entities/category.entity';
+import { Product } from './entities/product.entity';
 
 @Injectable()
 export class CategoryService {
@@ -37,7 +38,7 @@ export class CategoryService {
   }
 
   async create(dto: CreateCategoryDto): Promise<Category> {
-    const slug = this.toSlug(dto.name);
+    const slug = dto.slug ?? this.toSlug(dto.name);
     await this.ensureSlugAvailable(slug);
     await this.ensureParentExists(dto.parentId);
 
@@ -48,6 +49,8 @@ export class CategoryService {
       iconUrl: dto.iconUrl ?? null,
       sortOrder: dto.sortOrder ?? 0,
       isActive: dto.isActive ?? true,
+      isBad: dto.isBad ?? null,
+      expiryTracked: dto.expiryTracked ?? null,
     });
 
     return this.save(category);
@@ -60,10 +63,10 @@ export class CategoryService {
       await this.ensureValidParent(id, dto.parentId);
     }
 
-    if (dto.name !== undefined) {
-      const slug = this.toSlug(dto.name);
+    if (dto.name !== undefined || dto.slug) {
+      const slug = dto.slug ?? this.toSlug(dto.name!);
       await this.ensureSlugAvailable(slug, id);
-      category.name = dto.name.trim();
+      if (dto.name !== undefined) category.name = dto.name.trim();
       category.slug = slug;
     }
 
@@ -71,6 +74,9 @@ export class CategoryService {
     if (dto.iconUrl !== undefined) category.iconUrl = dto.iconUrl;
     if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
     if (dto.isActive !== undefined) category.isActive = dto.isActive;
+    if (dto.isBad !== undefined) category.isBad = dto.isBad;
+    if (dto.expiryTracked !== undefined)
+      category.expiryTracked = dto.expiryTracked;
 
     return this.save(category);
   }
@@ -83,6 +89,16 @@ export class CategoryService {
     if (child) {
       throw new ConflictException(
         'Ichki kategoriyalari bor kategoriyani o‘chirib bo‘lmaydi',
+      );
+    }
+
+    // BE-25 (FE-12): mahsuloti bor toifa o‘chsa, mahsulot filtrsiz va belgisiz qoladi
+    const products = await this.categories.manager.count(Product, {
+      where: { categoryId: id, isDeleted: false },
+    });
+    if (products > 0) {
+      throw new ConflictException(
+        'Mahsuloti bor kategoriyani o‘chirib bo‘lmaydi',
       );
     }
 
@@ -184,6 +200,8 @@ export class CategoryService {
         iconUrl: category.iconUrl,
         sortOrder: category.sortOrder,
         isActive: category.isActive,
+        isBad: category.isBad ?? null,
+        expiryTracked: category.expiryTracked ?? null,
         children: [],
       });
     }
