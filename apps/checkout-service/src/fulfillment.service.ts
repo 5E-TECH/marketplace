@@ -764,7 +764,6 @@ export class FulfillmentService {
     });
   }
 
-  /** Viloyat va tuman nomi (Elchi geo, BE-38/BE-20); javob bo‘lmasa — SOATO kodi (yorliq baribir chiqadi). */
   /** Viloyat (`1726`) va tuman (`1726/1726262`) nomlari; geo keshi javob bermasa — bo‘sh (ro‘yxat nomsiz qaytadi). */
   private async geoTree(): Promise<Map<string, string>> {
     const names = new Map<string, string>();
@@ -814,6 +813,7 @@ export class FulfillmentService {
     }
   }
 
+  /** Viloyat va tuman nomi (Elchi geo, BE-38/BE-20); javob bo‘lmasa — SOATO kodi (yorliq baribir chiqadi). */
   private async geoNames(
     regionSoato: string,
     districtSoato: string,

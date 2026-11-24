@@ -31,6 +31,12 @@ import { Shop } from './entities/shop.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { hasContract } from './wholesaler.service';
 
+/** Admin ro‘yxati va kartasi: mahsulot va toifa belgilari (BE-25). */
+export type AdminProduct = Product & {
+  expiryTracked: boolean;
+  badByCategory: boolean;
+};
+
 @Injectable()
 export class ProductService {
   private readonly logger = new Logger(ProductService.name);
@@ -262,7 +268,7 @@ export class ProductService {
       .take(limit)
       .getManyAndCount();
     return {
-      items: await this.withExpiryTracked(items),
+      items: await this.withCategoryFlags(items),
       total,
       page,
       limit,
@@ -270,24 +276,29 @@ export class ProductService {
     };
   }
 
-  async adminGet(id: string): Promise<Product & { expiryTracked: boolean }> {
-    const [product] = await this.withExpiryTracked([
+  async adminGet(id: string): Promise<AdminProduct> {
+    const [product] = await this.withCategoryFlags([
       await this.getAdminProduct(id),
     ]);
     return product;
   }
 
-  /** BE-25 (FE-12, FE-16; OMB-3): «muddat kuzatiladi» — BAD mahsulot yoki toifa belgisi (ota toifadan meros). */
-  private async withExpiryTracked(
+  /**
+   * BE-25 (FE-12, FE-16): toifa belgilari (ota toifadan meros) — «muddat kuzatiladi» (OMB-3: BAD yoki toifa) va toifasi
+   * BAD ekani (TZ 8: mahsulotning o‘z belgisidan tashqari ham «Dori vositasi emas» chiqadi).
+   */
+  private async withCategoryFlags(
     products: Product[],
-  ): Promise<Array<Product & { expiryTracked: boolean }>> {
+  ): Promise<AdminProduct[]> {
     if (!products.length) return [];
     const flags = await loadCategoryFlags(this.products.manager);
-    return products.map((product) =>
-      Object.assign(product, {
-        expiryTracked: product.isBad || flags(product.categoryId).expiryTracked,
-      }),
-    );
+    return products.map((product) => {
+      const { isBad, expiryTracked } = flags(product.categoryId);
+      return Object.assign(product, {
+        expiryTracked: product.isBad || expiryTracked,
+        badByCategory: isBad,
+      });
+    });
   }
 
   /** BE-07: admin tahriri — CPA maydonlari, BAD va CPA belgilari (ADM-1). Holat faqat tasdiq/rad orqali. */

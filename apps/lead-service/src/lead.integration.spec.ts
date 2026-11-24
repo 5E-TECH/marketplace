@@ -453,10 +453,35 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         from: '1726266',
         to: '1726262',
       });
-      // manzilga aloqasi yo‘q yozuvlarda — null
+      // manzilga aloqasi yo‘q yozuv o‘z o‘rnida, `changes: null`; bir vaqtda ikki odam saqlasa — ikki yozuv
+      const at = new Date('2026-12-01T05:00:00.000Z');
+      const row = (actorId: string | null, extra: object) =>
+        db.getRepository(LeadHistory).save({
+          leadId: lead.id,
+          fromStatus: LeadStatus.NEW,
+          toStatus: LeadStatus.BOOKED,
+          actorId,
+          createdAt: at,
+          ...extra,
+        });
+      await row('41', { note: 'Bron qilindi' });
+      for (const actor of ['41', '42'])
+        await row(actor, {
+          field: 'address_line',
+          oldValue: { value: 'A' },
+          newValue: { value: actor },
+          note: 'Operator manzilni tuzatdi',
+        });
+      const sameTime = (await card()).history.filter(
+        (h) => new Date(h.at).getTime() === at.getTime(),
+      );
       expect(
-        (await card()).history.filter((h) => h.changes === null).length,
-      ).toBe((await card()).history.length - 2);
+        sameTime.map((h) => [h.note, h.changes?.map((c) => c.to) ?? null]),
+      ).toEqual([
+        ['Bron qilindi', null],
+        ['Operator manzilni tuzatdi', ['41']],
+        ['Operator manzilni tuzatdi', ['42']],
+      ]);
     });
 
     it('TC2: tuman boshqa viloyatniki → 400, lid o‘zgarmaydi', async () => {

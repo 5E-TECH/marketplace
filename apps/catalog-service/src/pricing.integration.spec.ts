@@ -332,6 +332,57 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     expect(view.modes[1].goodsPrice).toBe(view.calculation.recommended);
   });
 
+  it('BE-25 (FE-09): bir donasi 3 kg dan og‘ir (4,2 kg) mahsulot — uch rejimda formula yetkazish summasiga teng', async () => {
+    await ds.query(
+      `UPDATE catalog.product SET weight_grams = 4200 WHERE id = $1`,
+      [productId],
+    );
+    const set = (deliveryMode: DeliveryDisplayMode | null) =>
+      pricing.setPolicy(
+        PricePolicyScope.PRODUCT,
+        productId,
+        { deliveryMode },
+        '1',
+      );
+    // 4,2 kg → +2 kg (48 000); 2 dona 8,4 kg → +6 kg (64 000); qisman: 48 000 − 18 000 = 30 000 ko‘rinadi
+    const expected = {
+      SEPARATE: [
+        { fee: 48_000, base: 40_000, extraKg: 2 },
+        { fee: 64_000, base: 40_000, extraKg: 6 },
+      ],
+      PARTIAL: [
+        { fee: 30_000, base: 30_000, extraKg: 0 },
+        { fee: 46_000, base: 30_000, extraKg: 4 },
+      ],
+    };
+    for (const mode of [
+      DeliveryDisplayMode.SEPARATE,
+      DeliveryDisplayMode.PARTIAL,
+    ] as const) {
+      await set(mode);
+      for (const quantity of [1, 2]) {
+        const quote = await pricing.quote(productId, quantity, 'CENTER');
+        const want = expected[mode][quantity - 1];
+        expect(quote.deliveryFee).toBe(want.fee);
+        expect(quote.deliveryFormula).toMatchObject({
+          base: want.base,
+          extraKg: want.extraKg,
+        });
+        expect(want.base + want.extraKg * 4_000).toBe(want.fee);
+      }
+    }
+    await set(DeliveryDisplayMode.FREE);
+    await expect(pricing.quote(productId, 2, 'CENTER')).resolves.toMatchObject({
+      deliveryFee: 0,
+      deliveryFormula: null,
+    });
+    await set(null);
+    await ds.query(
+      `UPDATE catalog.product SET weight_grams = 450 WHERE id = $1`,
+      [productId],
+    );
+  });
+
   it('BE-25 (FE-13): narx navbati `pricesPending` bilan bir xil; tasdiqlangan mahsulot chiqmaydi, asosi o‘zgarsa qaytadi', async () => {
     const queue = async () => {
       const [page, summary] = [
@@ -351,6 +402,23 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       '1',
     );
     const item = (await queue()).find((i) => i.productId === productId);
+    // tasdig‘i eskirgan — asos (rejim) o‘zgargan vaqt, mahsulotning eski sanasi emas
+    const [policy] = (await ds.query(
+      `SELECT updated_at AS at FROM catalog.price_policy WHERE scope = 'PRODUCT' AND scope_id = $1`,
+      [productId],
+    )) as Array<{ at: Date }>;
+    expect(item!.queuedAt).toBe(new Date(policy.at).toISOString());
+    // bozor narxi kiritilishi navbatdagi o‘rnini o‘zgartirmaydi
+    const updatedAt = async () =>
+      (
+        (await ds.query(
+          `SELECT updated_at AS at FROM catalog.product WHERE id = $1`,
+          [productId],
+        )) as Array<{ at: Date }>
+      )[0].at.getTime();
+    const before = await updatedAt();
+    await pricing.marketCheck(productId, { competitorTotal: 300_000 });
+    expect(await updatedAt()).toBe(before);
     expect(item).toEqual({
       productId,
       name: expect.any(String),

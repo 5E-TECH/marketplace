@@ -329,6 +329,12 @@ export class ProductDto {
       'BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida',
   })
   expiryTracked?: boolean;
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'BE-25 (TZ 8): toifasi BAD — o‘z `isBad` belgisi bo‘lmasa ham sahifada «Dori vositasi emas». Faqat admin ro‘yxati va kartasida',
+  })
+  badByCategory?: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;
   @ApiProperty({
     example: null,

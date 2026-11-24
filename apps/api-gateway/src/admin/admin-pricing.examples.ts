@@ -60,12 +60,15 @@ export const PRICING_VIEW_EXAMPLE = {
  * BE-25 (QA 2026-11-23, 2-tur): optovik narx hisobi — catalog `wholesaler-cabinet.service.ts` `pricingView`. Ichki
  * siyosat (`params`), Elchi tarifi va bozor narxi berilmaydi; hisob — admin ko‘radigan bilan bir xil kalkulyator.
  */
+const { recommendedBaseExact: _exact, ...wholesalerCalculation } = calculation;
+const { maxAffiliateFee: _max, ...wholesalerEvaluation } =
+  PRICING_VIEW_EXAMPLE.evaluation;
 export const WHOLESALER_PRICING_EXAMPLE = {
   productId: PRICING_VIEW_EXAMPLE.productId,
   basePrice: PRODUCT.basePrice,
   affiliateFee: PRODUCT.affiliateFee,
-  calculation,
-  evaluation: PRICING_VIEW_EXAMPLE.evaluation,
+  calculation: wholesalerCalculation,
+  evaluation: wholesalerEvaluation,
   approvedPrice,
   priceStatus: PriceStatus.GREEN,
 };

@@ -33,6 +33,22 @@ const BLOCKED: ReadonlySet<ShopStatus> = new Set([
   ShopStatus.SUSPENDED,
 ]);
 
+export type WholesalerProductView = Omit<
+  Product,
+  'marketTotal' | 'marketSource' | 'marketCheckedAt'
+>;
+
+/** Bozor narxi (raqobatchi summasi, manbasi, vaqti) optovikka berilmaydi — narx hisobidagi kabi. */
+function withoutMarket(product: Product): WholesalerProductView {
+  const {
+    marketTotal: _total,
+    marketSource: _source,
+    marketCheckedAt: _at,
+    ...view
+  } = product;
+  return view as WholesalerProductView;
+}
+
 /**
  * BE-30 (TZ 6.9 OPT-1–4, NRX-2): optovik kabineti — catalog tomoni. Optovik JWT foydalanuvchisi bo‘yicha
  * (`catalog.shop.owner_user_id`) aniqlanadi; boshqa optovikning mahsuloti va hujjati — 403.
@@ -208,7 +224,7 @@ export class WholesalerCabinetService {
   async createProduct(
     ownerUserId: string,
     dto: CreateProductDto,
-  ): Promise<Product> {
+  ): Promise<WholesalerProductView> {
     const shop = await this.requireOwnShop(ownerUserId);
     if (BLOCKED.has(shop.status))
       throw new ForbiddenException(
@@ -234,7 +250,9 @@ export class WholesalerCabinetService {
       images: dto.images,
       attributes: dto.attributes,
     };
-    return this.productService.adminCreate(String(shop.id), proposal as never);
+    return withoutMarket(
+      await this.productService.adminCreate(String(shop.id), proposal as never),
+    );
   }
 
   async listProducts(
@@ -251,7 +269,7 @@ export class WholesalerCabinetService {
       take: limit,
     });
     return {
-      items,
+      items: items.map(withoutMarket),
       total,
       page,
       limit,
@@ -259,9 +277,12 @@ export class WholesalerCabinetService {
     };
   }
 
-  async getProduct(ownerUserId: string, productId: string): Promise<Product> {
+  async getProduct(
+    ownerUserId: string,
+    productId: string,
+  ): Promise<WholesalerProductView> {
     const shop = await this.requireOwnShop(ownerUserId);
-    return this.ownProduct(shop, productId);
+    return withoutMarket(await this.ownProduct(shop, productId));
   }
 
   // ------------------------------------------------------------------ narx hisobi (NRX-2)
@@ -280,12 +301,15 @@ export class WholesalerCabinetService {
     const view = await this.pricing.calculate(String(product.id), {
       price: query.price,
     });
+    // BE-25: yaxlitlanmagan tavsiya va eng katta haq — admin ekrani uchun (ulardan ichki M va K chiqariladi)
+    const { recommendedBaseExact: _exact, ...calculation } = view.calculation;
+    const { maxAffiliateFee: _max, ...evaluation } = view.evaluation;
     return {
       productId: view.productId,
       basePrice: product.basePrice,
       affiliateFee: product.affiliateFee,
-      calculation: view.calculation,
-      evaluation: view.evaluation,
+      calculation,
+      evaluation,
       approvedPrice: view.approvedPrice,
       priceStatus: view.priceStatus,
     };

@@ -40,6 +40,15 @@ type VariantInfo = Pick<
   | 'catalogMissing'
 >;
 
+/** Harakatlar jurnalida optovik nomi va shtrix-kod yo‘q (faqat qoldiq ro‘yxatida, BE-25). */
+function variantOnly<T extends { shopName: unknown; barcode: unknown }>({
+  shopName: _shopName,
+  barcode: _barcode,
+  ...rest
+}: T): Omit<T, 'shopName' | 'barcode'> {
+  return rest;
+}
+
 @Injectable()
 export class AdminInventoryQueryService {
   constructor(
@@ -216,7 +225,7 @@ export class AdminInventoryQueryService {
     );
     const items = rows.map<AdminStockMovementItemDto>((row) => ({
       id: row.id,
-      ...info(row.variantId),
+      ...variantOnly(info(row.variantId)),
       warehouseId: row.warehouseId,
       warehouseName: row.stock.warehouse.name,
       warehouseActive: row.stock.warehouse.isActive,

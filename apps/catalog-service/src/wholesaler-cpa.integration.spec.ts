@@ -345,6 +345,8 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       isBad: false,
       categoryId: String(child.id),
     });
+    const badByCategory = async () =>
+      (await products.adminGet(productId)).badByCategory;
     const tracked = async () => ({
       list: (
         await products.adminList({ shopId: wholesalerId, page: 1, limit: 100 })
@@ -367,7 +369,9 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       display: false,
       offerBad: false,
     });
+    await expect(badByCategory()).resolves.toBe(false);
     await categories.update(String(parent.id), { isBad: true });
+    await expect(badByCategory()).resolves.toBe(true);
     await expect(tracked()).resolves.toEqual({
       list: true,
       card: true,
@@ -397,6 +401,16 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       isBad: null,
       expiryTracked: null,
     });
+  });
+
+  it('BE-25: optovik qidiruvida `%` va `_` — oddiy belgi (hamma optovik chiqmaydi)', async () => {
+    const total = async (search: string) =>
+      (await wholesalers.list({ search, page: 1, limit: 100 })).total;
+    await expect(total('%')).resolves.toBe(0);
+    await expect(total('_')).resolves.toBe(0);
+    await expect(total(WHOLESALER.name.slice(0, 5))).resolves.toBeGreaterThan(
+      0,
+    );
   });
 
   it('OPT-1: shartnomasiz optovikka mahsulot qo‘shib bo‘lmaydi — 409', async () => {

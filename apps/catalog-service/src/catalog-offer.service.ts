@@ -99,15 +99,20 @@ export class CatalogOfferService {
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
-    const stock = await this.stockOf([String(product.id)]);
-    const creatives = await this.creatives.forProducts([String(product.id)]);
-    const flags = await loadCategoryFlags(this.products.manager);
+    const id = String(product.id);
+    // har sahifa ko‘rinishida va lid qabulida chaqiriladi — so‘rovlar parallel
+    const [stock, creatives, flags, ctx] = await Promise.all([
+      this.stockOf([id]),
+      this.creatives.forProducts([id]),
+      this.categoryFlags([product]),
+      this.pricing.context(),
+    ]);
     return toSnapshot(
       product,
-      this.pricingOf(product, await this.pricing.context()),
+      this.pricingOf(product, ctx),
       // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
-      stock.get(String(product.id)),
-      creatives.get(String(product.id)) ?? [],
+      stock.get(id),
+      creatives.get(id) ?? [],
       flags(product.categoryId),
     );
   }
@@ -160,7 +165,7 @@ export class CatalogOfferService {
     const creatives = await this.creatives.forProducts(
       rows.map((row) => String(row.id)),
     );
-    const flags = await loadCategoryFlags(this.products.manager);
+    const flags = await this.categoryFlags(rows);
     return rows.map((row) =>
       toSnapshot(
         row,
@@ -170,6 +175,15 @@ export class CatalogOfferService {
         flags(row.categoryId),
       ),
     );
+  }
+
+  /** Toifa belgisi faqat toifasi bor, o‘zi BAD bo‘lmagan mahsulotga kerak — aks holda toifalar o‘qilmaydi. */
+  private async categoryFlags(
+    products: Product[],
+  ): Promise<(categoryId: string | null) => CategoryFlags | undefined> {
+    return products.some((p) => !p.isBad && p.categoryId)
+      ? loadCategoryFlags(this.products.manager)
+      : () => undefined;
   }
 
   /** Narx sozlamasi buzilgan bo‘lsa ham offer qaytadi — narxsiz (lead-service uni ochmaydi). */
@@ -354,7 +368,7 @@ export class CatalogOfferService {
           basePrice: product.basePrice ?? null,
           recommended: price?.recommended ?? null,
           deliveryMode: price?.deliveryMode ?? null,
-          queuedAt: new Date(product.updatedAt).toISOString(),
+          queuedAt: this.pricing.queuedAt(product, ctx).toISOString(),
         };
       })
       .sort(

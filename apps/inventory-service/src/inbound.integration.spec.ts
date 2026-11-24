@@ -369,6 +369,19 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     await expect(ids({ search: '4780099' })).resolves.toEqual([later.id]);
     await expect(ids({ search: 'mahsulot 99' })).resolves.toEqual([later.id]);
     await expect(ids({ search: '%' })).resolves.toEqual([]); // joker emas, oddiy belgi
+    // optovik kabineti: qidiruv boshqa optovik postavkasini ochmaydi, sana ham qo‘shiladi
+    await expect(
+      ids({ search: later.number, wholesalerId: WHOLESALER }),
+    ).resolves.toEqual([]);
+    await expect(
+      ids({ search: 'mahsulot', wholesalerId: '16' }),
+    ).resolves.toEqual([later.id]);
+    await expect(
+      ids({ search: later.number, expectedFrom: inDays(21) }),
+    ).resolves.toEqual([]);
+    catalog.send.mockClear();
+    await ids({ search: 'gadget', wholesalerId: '16' });
+    expect(catalog.send).not.toHaveBeenCalled(); // kabinetda optovik nomi bo‘yicha qidirilmaydi
     const gadget = await ids({ search: 'gadget' });
     expect(gadget).toEqual(all.items.map((item) => item.id));
     await expect(

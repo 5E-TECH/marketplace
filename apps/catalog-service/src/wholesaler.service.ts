@@ -70,7 +70,11 @@ export class WholesalerService {
         new Brackets((w) =>
           w.where('shop.name ILIKE :search').orWhere('shop.tin = :tin'),
         ),
-        { search: `%${search}%`, tin: search },
+        // `%`/`_` foydalanuvchi matnida joker bo‘lib qolmasin
+        {
+          search: `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+          tin: search,
+        },
       );
     const [rows, total] = await qb
       .orderBy('shop.createdAt', 'DESC')

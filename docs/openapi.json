@@ -3944,6 +3944,8 @@
                         "approvedPrice": 251000,
                         "priceStatus": "APPROVED",
                         "marketTotal": null,
+                        "marketSource": null,
+                        "marketCheckedAt": null,
                         "isBad": false,
                         "isBlocked": false,
                         "blockReason": null,
@@ -3951,6 +3953,7 @@
                         "packageCode": null,
                         "rating": 0,
                         "expiryTracked": false,
+                        "badByCategory": false,
                         "createdAt": "2026-11-20T08:10:00.000Z",
                         "updatedAt": "2026-11-21T10:00:00.000Z",
                         "isDeleted": false
@@ -11728,14 +11731,12 @@
                     "cpaEnabled": true,
                     "approvedPrice": null,
                     "priceStatus": null,
-                    "marketTotal": null,
                     "isBad": false,
                     "isBlocked": false,
                     "blockReason": null,
                     "mxikCode": null,
                     "packageCode": null,
                     "rating": 0,
-                    "expiryTracked": false,
                     "createdAt": "2026-11-20T08:10:00.000Z",
                     "updatedAt": "2026-11-20T08:10:00.000Z",
                     "isDeleted": false
@@ -11820,14 +11821,12 @@
                         "cpaEnabled": true,
                         "approvedPrice": null,
                         "priceStatus": null,
-                        "marketTotal": null,
                         "isBad": false,
                         "isBlocked": false,
                         "blockReason": null,
                         "mxikCode": null,
                         "packageCode": null,
                         "rating": 0,
-                        "expiryTracked": false,
                         "createdAt": "2026-11-20T08:10:00.000Z",
                         "updatedAt": "2026-11-20T08:10:00.000Z",
                         "isDeleted": false
@@ -11902,14 +11901,12 @@
                     "cpaEnabled": true,
                     "approvedPrice": null,
                     "priceStatus": null,
-                    "marketTotal": null,
                     "isBad": false,
                     "isBlocked": false,
                     "blockReason": null,
                     "mxikCode": null,
                     "packageCode": null,
                     "rating": 0,
-                    "expiryTracked": false,
                     "createdAt": "2026-11-20T08:10:00.000Z",
                     "updatedAt": "2026-11-20T08:10:00.000Z",
                     "isDeleted": false
@@ -11973,7 +11970,6 @@
                       "basePrice": 140000,
                       "affiliateFee": 65000,
                       "recommendedBase": 251000,
-                      "recommendedBaseExact": 250120,
                       "breakevenBase": 240561,
                       "hardFloorBase": 225206,
                       "delivery": {
@@ -12003,8 +11999,7 @@
                       "platformResult100": 24641,
                       "affiliateResult": 14580,
                       "belowRecommended": 0,
-                      "safeAffiliateFee": null,
-                      "maxAffiliateFee": null
+                      "safeAffiliateFee": null
                     },
                     "approvedPrice": 262000,
                     "priceStatus": "GREEN"
@@ -17309,6 +17304,11 @@
             "type": "boolean",
             "example": false,
             "description": "BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida"
+          },
+          "badByCategory": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25 (TZ 8): toifasi BAD — o‘z `isBad` belgisi bo‘lmasa ham sahifada «Dori vositasi emas». Faqat admin ro‘yxati va kartasida"
           },
           "isBlocked": {
             "type": "boolean",

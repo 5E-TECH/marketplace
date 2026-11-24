@@ -4,11 +4,19 @@ import { ADMIN_PRODUCTS_PAGE_EXAMPLE } from '../admin/admin-m1.examples';
 /**
  * BE-25 (QA 2026-11-23, 2-tur): optovik kabineti javob misollari (BE-30). catalog `wholesaler-cabinet.service.ts`:
  * `createProduct`, `getProduct` va `listProducts` mahsulot qatorini (`Product`, `shop` bog‘lanishisiz) qaytaradi —
- * admin ro‘yxatidagi qator bilan bir xil maydonlar. Taklif qilingan mahsulot admin tasdig‘igacha `PENDING_REVIEW`,
+ * admin ro‘yxatidagi qator maydonlari, bozor narxisiz. Taklif qilingan mahsulot admin tasdig‘igacha `PENDING_REVIEW`,
  * `price` = bazaviy narx; sotuvchi haqi (A) va sotuv narxini admin belgilaydi (`product.service.ts` `createForShop`).
  */
-const { shop: _shop, ...ADMIN_PRODUCT_ROW } =
-  ADMIN_PRODUCTS_PAGE_EXAMPLE.items[0];
+const {
+  shop: _shop,
+  // BE-25: bozor narxi va admin belgilari optovikka berilmaydi
+  marketTotal: _market,
+  marketSource: _source,
+  marketCheckedAt: _checkedAt,
+  expiryTracked: _expiry,
+  badByCategory: _bad,
+  ...ADMIN_PRODUCT_ROW
+} = ADMIN_PRODUCTS_PAGE_EXAMPLE.items[0];
 
 export const WHOLESALER_PRODUCT_EXAMPLE = {
   ...ADMIN_PRODUCT_ROW,

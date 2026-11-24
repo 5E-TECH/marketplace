@@ -58,6 +58,8 @@ const PARAM_KEYS = [
 export interface PricingContext {
   policies: PricePolicy[];
   tariff: ElchiTariff;
+  /** Joriy tarif kuchga kirgan vaqt. */
+  tariffSince: Date;
 }
 
 /** Mahsulot narxi bo‘yicha offer maydonlari (BE-11 shartnomasi `CatalogOfferSnapshot`). */
@@ -93,7 +95,8 @@ export class PricingService {
       this.policies.find({ where: { isDeleted: false } }),
       this.currentTariff(now),
     ]);
-    return { policies, tariff };
+    const { effectiveFrom, ...values } = tariff;
+    return { policies, tariff: values, tariffSince: effectiveFrom };
   }
 
   /** Global → kategoriya → mahsulot; bo‘sh maydon yuqori darajadan (TZ 2.4 «Sozlama tartibi»). */
@@ -252,6 +255,8 @@ export class PricingService {
         marketTotal: competitorTotal,
         marketSource: source,
         marketCheckedAt: checkedAt,
+        // narx navbatidagi o‘rni (`queuedAt`) bozor narxi kiritilgani uchun o‘zgarmasin
+        updatedAt: () => '"updated_at"',
       },
     );
     return { ...result, source, checkedAt };
@@ -601,9 +606,21 @@ export class PricingService {
   }
 
   /**
-   * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
-   * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
+   * BE-25 (FE-13): narx navbatiga tushgan vaqt [taklif]. Hali tasdiqlanmagan — mahsulot oxirgi o‘zgargan vaqt; tasdig‘i
+   * eskirgan — asosi oxirgi o‘zgargan vaqt: mahsulot, narx sozlamasi darajalari yoki Elchi tarifi.
    */
+  queuedAt(product: Product, ctx: PricingContext): Date {
+    const times = [new Date(product.updatedAt)];
+    if (product.approvedPrice != null)
+      times.push(
+        new Date(ctx.tariffSince),
+        ...this.layersFor(product, ctx).flatMap((layer) =>
+          layer ? [new Date(layer.updatedAt)] : [],
+        ),
+      );
+    return new Date(Math.max(...times.map((at) => at.getTime())));
+  }
+
   /** BE-25 (FE-13): narx navbati uchun tavsiya va rejim; hisoblab bo‘lmasa — null (mahsulot baribir navbatda). */
   queuePrice(
     product: Product,
@@ -629,6 +646,10 @@ export class PricingService {
     return this.isApprovalCurrent(product, this.paramsFor(product, ctx), ctx);
   }
 
+  /**
+   * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
+   * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
+   */
   private isApprovalCurrent(
     product: Product,
     params: PricingParams,
@@ -673,7 +694,9 @@ export class PricingService {
     return product;
   }
 
-  private async currentTariff(now: Date): Promise<ElchiTariff> {
+  private async currentTariff(
+    now: Date,
+  ): Promise<ElchiTariff & { effectiveFrom: Date }> {
     const row = await this.tariffs.findOne({
       where: { effectiveFrom: LessThanOrEqual(now), isDeleted: false },
       order: { effectiveFrom: 'DESC', id: 'DESC' },
@@ -684,6 +707,7 @@ export class PricingService {
       baseWeightGrams: row.baseWeightGrams,
       perExtraKg: row.perExtraKg,
       addressExtra: row.addressExtra,
+      effectiveFrom: row.effectiveFrom,
     };
   }
 
