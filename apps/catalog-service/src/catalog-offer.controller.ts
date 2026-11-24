@@ -59,6 +59,12 @@ export class CatalogOfferController {
     return this.offers.moderationSummary();
   }
 
+  /** BE-25 (FE-13): narx navbati. */
+  @MessagePattern({ cmd: CATALOG_MODERATION_RPC.PRICES })
+  priceQueue() {
+    return this.offers.priceQueue();
+  }
+
   @MessagePattern({ cmd: LEAD_CATALOG_RPC.OFFER_LIST })
   list(@Payload() query: CatalogOfferListQuery) {
     return this.offers.list(query ?? {});

@@ -56,6 +56,7 @@ import { AddCapiFields1795651200000 } from './migrations/1795651200000-add-capi-
 import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-fraud-center';
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
+import { UserNamesClient } from './user-names.client';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueService } from './lead-queue.service';
@@ -371,6 +372,91 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         .getRepository(Lead)
         .findOneByOrFail({ id: lead.id });
       expect(saved.addressConfirmedBy).toBe('42');
+    });
+
+    it('BE-25 (FE-09 TC5): kartada bitta saqlash — bitta yozuv, eski va yangi qiymat nomi bilan; o‘zgarishsiz tasdiq — bo‘sh ro‘yxat', async () => {
+      const stream = await newStream();
+      const lead = await db.getRepository(Lead).save(landingLead(stream.id));
+      const tree = [
+        {
+          satoCode: '1726',
+          name: 'Toshkent shahri',
+          districts: [
+            { satoCode: '1726266', name: 'Yunusobod tumani' },
+            { satoCode: '1726262', name: 'Chilonzor tumani' },
+          ],
+        },
+      ];
+      const card = async (geoWorks = true, names = true) =>
+        new LeadCardService(
+          db.getRepository(Lead),
+          db.getRepository(LeadAttempt),
+          db.getRepository(LeadHistory),
+          db.getRepository(OfferContent),
+          { get: async () => null, list: async () => [] } as never,
+          {
+            send: () => throwError(() => new Error('katalog yo‘q')),
+          } as never,
+          {
+            send: ({ cmd }: { cmd: string }) =>
+              cmd === 'integration.geo.region-tree'
+                ? geoWorks
+                  ? of(tree)
+                  : throwError(() => new Error('geo yo‘q'))
+                : of(resolution),
+          } as never,
+          names
+            ? new UserNamesClient({
+                send: () =>
+                  of([{ id: '41', name: 'Dilnoza R.', role: 'OPERATOR_LEAD' }]),
+              } as never)
+            : undefined,
+        ).build(await db.getRepository(Lead).findOneByOrFail({ id: lead.id }));
+      await makeService().confirmByOperator(lead.id, '41', formAddress);
+      await makeService().confirmByOperator(lead.id, '41', {
+        ...formAddress,
+        districtSoato: '1726262',
+        addressLine: 'Bunyodkor ko‘chasi, 5-uy',
+        whereDeliver: CheckoutDeliveryDestination.ADDRESS,
+      });
+      const address = (await card()).history.filter(
+        (h) => h.changes !== null && h.changes !== undefined,
+      );
+      expect(address).toHaveLength(2);
+      expect(address[0]).toMatchObject({
+        actor: 'Dilnoza R.',
+        note: 'Operator manzilni tasdiqladi',
+        changes: [],
+      });
+      expect(address[1]).toMatchObject({
+        actor: 'Dilnoza R.',
+        note: 'Operator manzilni tuzatdi',
+      });
+      expect(address[1].changes).toEqual([
+        {
+          field: 'district',
+          from: 'Yunusobod tumani',
+          to: 'Chilonzor tumani',
+        },
+        {
+          field: 'addressLine',
+          from: 'Turkiston ko‘chasi, 27-uy',
+          to: 'Bunyodkor ko‘chasi, 5-uy',
+        },
+        { field: 'whereDeliver', from: 'CENTER', to: 'ADDRESS' },
+      ]);
+      // geo va identity javob bermasa — SOATO kodi va #ID, karta baribir ochiladi
+      const bare = (await card(false, false)).history.filter((h) => h.changes);
+      expect(bare[1].actor).toBe('#41');
+      expect(bare[1].changes![0]).toEqual({
+        field: 'district',
+        from: '1726266',
+        to: '1726262',
+      });
+      // manzilga aloqasi yo‘q yozuvlarda — null
+      expect(
+        (await card()).history.filter((h) => h.changes === null).length,
+      ).toBe((await card()).history.length - 2);
     });
 
     it('TC2: tuman boshqa viloyatniki → 400, lid o‘zgarmaydi', async () => {
@@ -1984,6 +2070,18 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         affiliateName: '#42',
       });
       expect((await admin().list({ page: 2, limit: 3 })).items).toHaveLength(1);
+      // BE-25 (FE-26): sotuvchi va operator ismi; identity da ismi yo‘q — `#ID`
+      const named = new LeadAdminService(
+        db.getRepository(Lead),
+        catalogFake as never,
+        cardService(),
+        new UserNamesClient({
+          send: () => of([{ id: '41', name: 'Dilnoza R.', role: 'X' }]),
+        } as never),
+      );
+      const row = (await named.list({ operatorId: '41' })).items[0];
+      expect(row.operatorName).toBe('Dilnoza R.');
+      expect(row.affiliateName).toBe(`#${a.affiliateId}`);
     });
 
     it('TC4: karta shu telefondagi oldingi lidni holati bilan ko‘rsatadi; lid yo‘q → 404', async () => {

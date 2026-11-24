@@ -1,16 +1,28 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
+import { firstValueFrom, timeout } from 'rxjs';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import {
+  CatalogOfferQuote,
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
+  DeliveryDisplayMode,
   LEAD_CATALOG_RPC,
   LeadAddressDto,
   LeadAddressResolution,
   LeadCardDto,
+  LeadHistoryChangeDto,
+  LeadHistoryEntryDto,
   LeadOutcome,
   LeadPriceDto,
+  LeadRegionGroupDto,
   LeadStatus,
   OperatorLeadListItemDto,
   RmqClient,
@@ -26,6 +38,7 @@ import {
 } from './entities';
 import { LEAD_RULES } from './lead-rules';
 import { reminderHorizon } from './lead-schedule';
+import { UserNamesClient } from './user-names.client';
 
 const ADDRESS_FIELDS = [
   'region_soato',
@@ -33,8 +46,16 @@ const ADDRESS_FIELDS = [
   'address_line',
   'where_deliver',
 ];
+const ADDRESS_CONFIRMED = 'address_confirmed_at';
+const CHANGE_FIELD: Record<string, LeadHistoryChangeDto['field']> = {
+  region_soato: 'region',
+  district_soato: 'district',
+  address_line: 'addressLine',
+  where_deliver: 'whereDeliver',
+};
+/** Viloyat/tuman nomlarini kutish: javob bo‘lmasa tarixda SOATO kodi qoladi [taklif]. */
+const GEO_TIMEOUT_MS = 1_500;
 const PREVIOUS_LIMIT = 10;
-const actorName = (id: string | null) => (id ? `#${id}` : 'Tizim');
 
 /** Operatorga ko‘rinadigan raqam: «+998 90 *** ** 67» (EQ-02 javobiga qadar niqoblangan). */
 export const maskPhone = (p: string) =>
@@ -43,10 +64,12 @@ export const maskPhone = (p: string) =>
 /**
  * Lid kartasi (OPR-2, BE-13; mijoz tarixi BE-42): mahsulot, narx obyekti, suhbat skripti, manzil «formadan»,
  * urinishlar, tarix va shu raqamdagi oldingi lidlar. Variant chiqmaydi (LID-8).
- * Ismlar identity bilan (BE-05 dan keyin); hozircha `#ID`.
+ * Ismlar identity dan (BE-25); identity javob bermasa `#ID`.
  */
 @Injectable()
 export class LeadCardService {
+  private readonly logger = new Logger(LeadCardService.name);
+
   constructor(
     @InjectRepository(Lead) private readonly leads: Repository<Lead>,
     @InjectRepository(LeadAttempt)
@@ -58,6 +81,7 @@ export class LeadCardService {
     private readonly catalog: CatalogOfferClient,
     @Inject(RmqClient.CATALOG) private readonly catalogClient: ClientProxy,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
+    @Optional() private readonly names?: UserNamesClient,
   ) {}
 
   /** Operator faqat o‘zidagi (bron yoki rejalashtirilgan) lidni ko‘radi; aks holda 404. */
@@ -178,6 +202,13 @@ export class LeadCardService {
         lineTotal: unitPrice * quantity,
       };
     });
+    const nameOf = this.names
+      ? await this.names.resolve([
+          ...attempts.map((a) => a.operatorId),
+          ...history.map((h) => h.actorId),
+        ])
+      : (id: string) => `#${id}`;
+    const actorName = (id: string | null) => (id ? nameOf(id) : 'Tizim');
     return {
       id: lead.id,
       status: lead.status,
@@ -213,16 +244,92 @@ export class LeadCardService {
         outcome: a.outcome,
         comment: a.comment,
       })),
-      history: history.map((h) => ({
+      history: await this.historyView(history, actorName),
+      previousLeads: previous,
+      createdAt: lead.createdAt,
+    };
+  }
+
+  /**
+   * Tarix. BE-25 (FE-09 TC5): bitta manzil saqlash (tuzatilgan maydonlar va tasdiq — bitta tranzaksiya, bir xil vaqt va
+   * odam) bitta yozuv, eski va yangi qiymat bilan; o‘zgarishsiz tasdiq — `changes: []`.
+   */
+  private async historyView(
+    history: LeadHistory[],
+    actorName: (id: string | null) => string,
+  ): Promise<LeadHistoryEntryDto[]> {
+    const isAddress = (h: LeadHistory) =>
+      h.field !== null &&
+      (h.field in CHANGE_FIELD || h.field === ADDRESS_CONFIRMED);
+    const keyOf = (h: LeadHistory) =>
+      `${h.actorId ?? ''}|${new Date(h.createdAt).getTime()}`;
+    const geo = history.some(
+      (h) => h.field === 'region_soato' || h.field === 'district_soato',
+    )
+      ? await this.geoNames()
+      : new Map<string, string>();
+    const text = (h: LeadHistory, value: Record<string, unknown> | null) => {
+      const raw = value?.value;
+      if (typeof raw !== 'string' || !raw) return null;
+      return h.field === 'region_soato' || h.field === 'district_soato'
+        ? (geo.get(raw) ?? raw)
+        : raw;
+    };
+    const saves = new Map<string, LeadHistoryEntryDto>();
+    const view: LeadHistoryEntryDto[] = [];
+    for (const h of history) {
+      const base = {
         at: h.createdAt,
         fromStatus: h.fromStatus,
         toStatus: h.toStatus,
         actor: actorName(h.actorId),
         note: h.note,
-      })),
-      previousLeads: previous,
-      createdAt: lead.createdAt,
-    };
+      };
+      if (!isAddress(h)) {
+        view.push({ ...base, changes: null });
+        continue;
+      }
+      let entry = saves.get(keyOf(h));
+      if (!entry) {
+        entry = { ...base, changes: [] };
+        saves.set(keyOf(h), entry);
+        view.push(entry);
+      }
+      const field = CHANGE_FIELD[h.field!];
+      if (!field) continue;
+      entry.note = h.note; // «Operator manzilni tuzatdi» — tasdiq izohidan ustun
+      entry.changes!.push({
+        field,
+        from: text(h, h.oldValue),
+        to: text(h, h.newValue),
+      });
+    }
+    return view;
+  }
+
+  /** Viloyat va tuman nomlari SOATO bo‘yicha; geo keshi javob bermasa — bo‘sh (kod ko‘rsatiladi). */
+  private async geoNames(): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    try {
+      const tree = await firstValueFrom(
+        this.integration
+          .send<LeadRegionGroupDto[]>(
+            { cmd: 'integration.geo.region-tree' },
+            {},
+          )
+          .pipe(timeout(GEO_TIMEOUT_MS)),
+      );
+      for (const region of Array.isArray(tree) ? tree : []) {
+        names.set(region.satoCode, region.name);
+        for (const district of region.districts)
+          names.set(district.satoCode, district.name);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Lid tarixi: viloyat/tuman nomlari olinmadi — ${(error as Error).message}`,
+      );
+    }
+    return names;
   }
 
   /** Narx obyekti (FE-09): yetkazish og‘irlikka qarab katalogdan (BE-09); bitta dona — sahifadagi ko‘rinadigan yetkazish. */
@@ -234,8 +341,9 @@ export class LeadCardService {
   ): Promise<LeadPriceDto | null> {
     const unitPrice = Number(lead.salePrice);
     let deliveryFee: number | null = null;
+    let quote: CatalogOfferQuote | null = null;
     try {
-      const quote = await sendRpc<{ deliveryFee: number }>(
+      quote = await sendRpc<CatalogOfferQuote>(
         this.catalogClient,
         { cmd: LEAD_CATALOG_RPC.OFFER_QUOTE },
         { productId: lead.productId, quantity, whereDeliver },
@@ -257,6 +365,11 @@ export class LeadCardService {
       whereDeliver,
       deliveryFee,
       totalAmount: subtotal + deliveryFee,
+      // BE-25 (FE-09): hisob izohi — katalogdan (yo‘q bo‘lsa null)
+      deliveryMode: quote?.deliveryMode ?? null,
+      weightGrams: quote?.weightGrams ?? null,
+      deliveryOptions: quote?.deliveryOptions ?? null,
+      deliveryFormula: quote?.deliveryFormula ?? null,
     };
   }
 
@@ -266,12 +379,22 @@ export class LeadCardService {
     whereDeliver: CheckoutDeliveryDestination,
   ): Promise<LeadPriceDto | null> {
     let deliveryFee: number | null = null;
+    let deliveryMode: DeliveryDisplayMode | null = null;
+    let weightGrams: number | null = null;
     try {
       const snapshot = await this.catalog.orderSnapshotMany(
         items.map(({ productId, quantity }) => ({ productId, quantity })),
         whereDeliver,
       );
       deliveryFee = snapshot?.delivery?.shown ?? null;
+      deliveryMode =
+        (snapshot?.delivery?.mode as DeliveryDisplayMode | undefined) ?? null;
+      const lines = snapshot?.items ?? [];
+      if (lines.length === items.length && lines.every(Boolean))
+        weightGrams = lines.reduce(
+          (sum, line, index) => sum + line!.weightGrams * items[index].quantity,
+          0,
+        );
     } catch {
       deliveryFee = null;
     }
@@ -287,6 +410,10 @@ export class LeadCardService {
       whereDeliver,
       deliveryFee,
       totalAmount: subtotal + deliveryFee,
+      deliveryMode,
+      weightGrams,
+      deliveryOptions: null,
+      deliveryFormula: null,
     };
   }
 

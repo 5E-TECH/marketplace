@@ -12,6 +12,7 @@ import {
   ValidateBy,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
+import { DeliveryDisplayMode } from '../pricing/price-calculator';
 
 // Lid-sotuv: sotuvchi sahifasi (oqim), klik va lid qabul qilish (BE-25 shartnomasi).
 // Real kod: BE-10 (lead-service), BE-11 (sahifa va klik), BE-12 (POST /leads), BE-38 (manzil).
@@ -550,6 +551,22 @@ export type LeadAddressResolution =
       elchiDistrictId: string;
     }
   | { ok: false; field: 'regionSoato' | 'districtSoato'; error: string };
+
+/** `catalog.offer.quote` javobi (BE-09; BE-25 — hisob izohi, FE-09). */
+export interface CatalogOfferQuote {
+  deliveryFee: number;
+  elchiTariff: number;
+  deliveryMode: DeliveryDisplayMode;
+  weightGrams: number;
+  deliveryOptions: Record<CheckoutDeliveryDestination, number>;
+  /** deliveryFee = base + extraKg × perExtraKg; bepul rejimda null. */
+  deliveryFormula: {
+    base: number;
+    extraKg: number;
+    perExtraKg: number;
+    baseWeightGrams: number;
+  } | null;
+}
 
 /**
  * lead-service ← catalog-service: offer ma’lumoti (BE-11). lead-service shu shaklni kutadi;

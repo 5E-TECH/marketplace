@@ -5,6 +5,7 @@ import {
   marketCheck,
   maxSalePriceFor,
   PriceStatus,
+  pricingModes,
   recommendedAffiliateFee,
   TZ_DEFAULT_ELCHI_TARIFF,
   TZ_DEFAULT_PRICING,
@@ -33,14 +34,20 @@ const competitorTotal = 299_000;
 export const PRICING_VIEW_EXAMPLE = {
   productId: '42',
   approvalCurrent: true,
-  params: TZ_DEFAULT_PRICING,
+  params: { ...TZ_DEFAULT_PRICING, deliveryModeSource: 'GLOBAL' },
   tariff: TZ_DEFAULT_ELCHI_TARIFF,
   recommendedAffiliateFee: recommendedAffiliateFee(TZ_DEFAULT_PRICING),
   calculation,
   evaluation: evaluatePrice(TZ_DEFAULT_PRICING, calculation, approvedPrice),
+  modes: pricingModes(TZ_DEFAULT_PRICING, TZ_DEFAULT_ELCHI_TARIFF, PRODUCT),
   approvedPrice,
   priceStatus: PriceStatus.GREEN,
   marketTotal: competitorTotal,
+  market: {
+    ...marketCheck(TZ_DEFAULT_PRICING, calculation, competitorTotal),
+    source: 'Uzum Market, 2026-11-19',
+    checkedAt: '2026-11-19T09:10:00.000Z',
+  },
   maxSalePrice: maxSalePriceFor(
     TZ_DEFAULT_PRICING,
     approvedPrice,
@@ -85,15 +92,16 @@ export const PRICE_DECISION_EXAMPLE = {
   approvedPrice: null,
   priceStatus: null,
   marketTotal: null,
+  market: null,
   maxSalePrice: null,
 };
 
 /** `catalog.pricing.market-check` (NRX-5): 299 000 → eng yuqori bazaviy narx 148 099. */
-export const MARKET_CHECK_EXAMPLE = marketCheck(
-  TZ_DEFAULT_PRICING,
-  calculation,
-  competitorTotal,
-);
+export const MARKET_CHECK_EXAMPLE = {
+  ...marketCheck(TZ_DEFAULT_PRICING, calculation, competitorTotal),
+  source: 'Uzum Market, 2026-11-19',
+  checkedAt: '2026-11-19T09:10:00.000Z',
+};
 
 /** `catalog.pricing.policy-get` / `policy-set` (`PricingService.policyView`): global daraja. */
 export const GLOBAL_POLICY_EXAMPLE = {

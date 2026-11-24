@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { CreativeType, PriceStatus } from '@app/common';
+import { DeliveryDisplayMode, CreativeType, PriceStatus } from '@app/common';
 import { CATALOG_DB } from './database';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -197,15 +197,39 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
 
   it('TC6 (NRX-5): bozor narxi — «mos»/«qimmat», eng yuqori bazaviy narx; summa saqlanadi va ustamani cheklaydi', async () => {
     // «Narx» varag‘i C62/C63 (docs/dizayn/manbalar/p-a1.md 2.2): 285 000 → qimmat, eng yuqori B 134 369
-    const dear = await pricing.marketCheck(productId, 285_000);
+    const dear = await pricing.marketCheck(productId, {
+      competitorTotal: 285_000,
+      source: '  Uzum Market  ',
+    });
     expect(dear).toEqual({
       ourTotal: 292_000,
       competitorTotal: 285_000,
       verdict: 'QIMMAT',
       maxBasePrice: 134_369,
+      source: 'Uzum Market',
+      checkedAt: expect.any(Date),
     });
-    const ok = await pricing.marketCheck(productId, 300_000);
-    expect(ok.verdict).toBe('MOS');
+    // BE-25 (FE-13): oxirgi tekshiruv hisobda, manbasi bilan; oldindan ko‘rish hech narsani o‘zgartirmaydi
+    const view = await pricing.calculate(productId);
+    expect(view.market).toEqual(dear);
+    await expect(
+      pricing.marketCheck(productId, {
+        competitorTotal: 400_000,
+        preview: true,
+      }),
+    ).resolves.toMatchObject({
+      verdict: 'MOS',
+      source: null,
+      checkedAt: null,
+    });
+    await expect(pricing.calculate(productId)).resolves.toMatchObject({
+      marketTotal: 285_000,
+      market: { competitorTotal: 285_000, source: 'Uzum Market' },
+    });
+    const ok = await pricing.marketCheck(productId, {
+      competitorTotal: 300_000,
+    });
+    expect(ok).toMatchObject({ verdict: 'MOS', source: null });
     // ustama: jami 300 000 dan oshmaydi → 300 000 − 30 000 = 270 000
     await expect(offers.get(productId)).resolves.toMatchObject({
       maxSalePrice: 270_000,
@@ -244,19 +268,105 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       { visibleCenter: null },
       '1',
     );
+    const perKg = { perExtraKg: 4_000, baseWeightGrams: 3_000 };
     await expect(pricing.quote(productId, 1, 'CENTER')).resolves.toEqual({
       deliveryFee: 30_000,
       elchiTariff: 40_000,
+      // BE-25 (FE-09): rejim, og‘irlik, ikkala yetkazish turi va «base + kg × narx» izohi
+      deliveryMode: 'PARTIAL',
+      weightGrams: 450,
+      deliveryOptions: { CENTER: 30_000, ADDRESS: 50_000 },
+      deliveryFormula: { base: 30_000, extraKg: 0, ...perKg },
     });
     // 450 g × 8 = 3 600 g → +1 kg → tarif 44 000; ko‘rinadigan 30 000 + 4 000
     await expect(pricing.quote(productId, 8, 'CENTER')).resolves.toEqual({
       deliveryFee: 34_000,
       elchiTariff: 44_000,
+      deliveryMode: 'PARTIAL',
+      weightGrams: 3_600,
+      deliveryOptions: { CENTER: 34_000, ADDRESS: 54_000 },
+      deliveryFormula: { base: 30_000, extraKg: 1, ...perKg },
     });
-    await expect(pricing.quote(productId, 1, 'ADDRESS')).resolves.toEqual({
-      deliveryFee: 50_000,
-      elchiTariff: 60_000,
+    await expect(pricing.quote(productId, 1, 'ADDRESS')).resolves.toMatchObject(
+      { deliveryFee: 50_000, elchiTariff: 60_000 },
+    );
+    // BE-25: alohida rejim — Elchi bazasidan; bepul — izoh yo‘q. Formula har doim yetkazish summasiga teng
+    const set = (deliveryMode: DeliveryDisplayMode | null) =>
+      pricing.setPolicy(
+        PricePolicyScope.PRODUCT,
+        productId,
+        { deliveryMode },
+        '1',
+      );
+    await set(DeliveryDisplayMode.SEPARATE);
+    for (const [quantity, kind] of [
+      [1, 'CENTER'],
+      [9, 'ADDRESS'],
+      [20, 'CENTER'],
+    ] as const) {
+      const quote = await pricing.quote(productId, quantity, kind);
+      const formula = quote.deliveryFormula!;
+      expect(formula.base + formula.extraKg * formula.perExtraKg).toBe(
+        quote.deliveryFee,
+      );
+      expect(formula.base).toBe(kind === 'ADDRESS' ? 60_000 : 40_000);
+    }
+    await expect(pricing.calculate(productId)).resolves.toMatchObject({
+      params: { deliveryMode: 'SEPARATE', deliveryModeSource: 'PRODUCT' },
     });
+    await set(DeliveryDisplayMode.FREE);
+    await expect(pricing.quote(productId, 20, 'CENTER')).resolves.toMatchObject(
+      { deliveryFee: 0, deliveryMode: 'FREE', deliveryFormula: null },
+    );
+    await set(null);
+    const view = await pricing.calculate(productId);
+    expect(view.params).toMatchObject({
+      deliveryMode: 'PARTIAL',
+      deliveryModeSource: 'GLOBAL',
+    });
+    expect(view.modes.map((m) => m.mode)).toEqual([
+      'SEPARATE',
+      'PARTIAL',
+      'FREE',
+    ]);
+    expect(view.modes[1].goodsPrice).toBe(view.calculation.recommended);
+  });
+
+  it('BE-25 (FE-13): narx navbati `pricesPending` bilan bir xil; tasdiqlangan mahsulot chiqmaydi, asosi o‘zgarsa qaytadi', async () => {
+    const queue = async () => {
+      const [page, summary] = [
+        await offers.priceQueue(),
+        await offers.moderationSummary(),
+      ];
+      expect(page.total).toBe(page.items.length);
+      expect(page.total).toBe(summary.pricesPending);
+      return page.items;
+    };
+    expect((await queue()).map((i) => i.productId)).not.toContain(productId);
+    // rejim bepulga o‘tsa tasdiqlangan 262 000 qizil bo‘ladi — yangi qaror kerak
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { deliveryMode: DeliveryDisplayMode.FREE },
+      '1',
+    );
+    const item = (await queue()).find((i) => i.productId === productId);
+    expect(item).toEqual({
+      productId,
+      name: expect.any(String),
+      shopName: 'Gadget Trade MChJ',
+      basePrice: 140_000,
+      recommended: 294_000,
+      deliveryMode: 'FREE',
+      queuedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    await pricing.setPolicy(
+      PricePolicyScope.PRODUCT,
+      productId,
+      { deliveryMode: null },
+      '1',
+    );
+    expect((await queue()).map((i) => i.productId)).not.toContain(productId);
   });
 
   it('BE-18: buyurtma narx nusxasi — tasdiqlangan narxdagi taqsimot, variant, optovik; TC5: 4,2 kg → Elchi 48 000', async () => {

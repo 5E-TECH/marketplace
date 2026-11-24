@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -22,16 +23,16 @@ import { LeadCardService, maskPhone } from './lead-card.service';
 import { LOCK_SPACE_LEAD } from './lead-intake.service';
 import { contactDeadline } from './lead-rules';
 import { tashkentDayStart as dayStart } from './lead-schedule';
+import { UserNamesClient } from './user-names.client';
 
 const ACTIVE = [LeadStatus.NEW, LeadStatus.BOOKED, LeadStatus.CALLBACK];
 
 const DEFAULT_LIMIT = 20;
-const nameOf = (id: string | null) => (id ? `#${id}` : null);
 
 /**
  * Admin va nazoratchi uchun lidlar (BE-42; FE-26). Filtrlar FE-26 dagi bilan bir xil: holat, sotuvchi,
  * mahsulot, operator, sana (Toshkent kuni, `to` kuni ham kiradi). Telefon niqoblangan (TC2).
- * Sotuvchi va operator ismlari identity bilan (BE-05 dan keyin); hozircha `#ID`.
+ * Sotuvchi va operator ismlari identity dan (BE-25); identity javob bermasa `#ID`.
  */
 @Injectable()
 export class LeadAdminService {
@@ -39,6 +40,7 @@ export class LeadAdminService {
     @InjectRepository(Lead) private readonly leads: Repository<Lead>,
     private readonly catalog: CatalogOfferClient,
     private readonly cards: LeadCardService,
+    @Optional() private readonly userNames?: UserNamesClient,
   ) {}
 
   async list(query: AdminLeadsQueryDto): Promise<AdminLeadsPageDto> {
@@ -74,6 +76,12 @@ export class LeadAdminService {
           .catch(() => [] as CatalogOfferSnapshot[])
       : [];
     const names = new Map(offers.map((o) => [o.productId, o.name]));
+    const resolved = this.userNames
+      ? await this.userNames.resolve(
+          rows.flatMap((r) => [r.affiliateId, r.operatorId]),
+        )
+      : (id: string) => `#${id}`;
+    const nameOf = (id: string | null) => (id ? resolved(id) : null);
     return {
       items: rows.map((r) => ({
         id: r.id,

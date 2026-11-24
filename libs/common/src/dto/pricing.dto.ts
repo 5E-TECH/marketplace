@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -72,6 +73,24 @@ export class MarketCheckDto {
   @ApiProperty({ example: 290000 })
   @apply(...money(1))
   competitorTotal: number;
+
+  @ApiPropertyOptional({
+    example: 'Uzum Market, 2026-12-01',
+    description: 'BE-25 (FE-13): qayerda ko‘rildi',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(300)
+  source?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'BE-25 (FE-13): true — natija saqlanmaydi (oldindan ko‘rish)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  preview?: boolean;
 }
 
 /**

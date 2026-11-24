@@ -13,6 +13,7 @@ import {
   isLeadBigintId,
   INBOUND_RPC,
   ModerationSummaryDto,
+  PriceQueueDto,
   ProductStatus,
   RmqClient,
   ShopStatus,
@@ -298,12 +299,6 @@ export class CatalogOfferService {
       else if (p.status in byStatus) byStatus[p.status]++;
     }
     const ctx = await this.pricing.context();
-    const priced = products.filter(
-      (p) =>
-        p.cpaEnabled &&
-        !p.isBlocked &&
-        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(p.status),
-    );
     const onSale = products.filter(isCpaAvailable);
     const stock = await this.stockOf(onSale.map((p) => String(p.id)));
     const stockValues = [...stock.values()];
@@ -320,14 +315,54 @@ export class CatalogOfferService {
     }
     return {
       productsPending: byStatus.PENDING_REVIEW,
-      pricesPending: priced.filter((p) => !this.approvalCurrentSafe(p, ctx))
-        .length,
+      pricesPending: this.pricePending(products, ctx).length,
       byStatus,
       outOfStock: stockValues.some((v) => v === null)
         ? null
         : stockValues.filter((v) => (v ?? 0) <= 0).length,
       expirySoon,
     };
+  }
+
+  /** Narx qarori kutayotganlar: CPA, yashirilmagan, tasdiq kutayotgan yoki sotuvdagi, tasdiqlangan narxi yo‘q yoki amalda emas. */
+  private pricePending(products: Product[], ctx: PricingContext): Product[] {
+    return products.filter(
+      (p) =>
+        p.cpaEnabled &&
+        !p.isBlocked &&
+        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(
+          p.status,
+        ) &&
+        !this.approvalCurrentSafe(p, ctx),
+    );
+  }
+
+  /** BE-25 (FE-13): narx navbati — `pricesPending` bilan bir xil qoida, eskisi oldin. */
+  async priceQueue(): Promise<PriceQueueDto> {
+    const products = await this.base()
+      .where('product.is_deleted = FALSE')
+      .andWhere('product.cpa_enabled = TRUE')
+      .getMany();
+    const ctx = await this.pricing.context();
+    const items = this.pricePending(products, ctx)
+      .map((product) => {
+        const price = this.pricing.queuePrice(product, ctx);
+        return {
+          productId: String(product.id),
+          name: product.name,
+          shopName: product.shop?.name ?? null,
+          basePrice: product.basePrice ?? null,
+          recommended: price?.recommended ?? null,
+          deliveryMode: price?.deliveryMode ?? null,
+          queuedAt: new Date(product.updatedAt).toISOString(),
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.queuedAt.localeCompare(b.queuedAt) ||
+          Number(a.productId) - Number(b.productId),
+      );
+    return { items, total: items.length };
   }
 
   /** Bitta mahsulotning buzilgan narx sozlamasi hisoblagichni yiqitmasin — u narx qarorini kutadi deb sanaladi. */

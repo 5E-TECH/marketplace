@@ -46,10 +46,10 @@ export class PricingController {
 
   @MessagePattern({ cmd: 'catalog.pricing.market-check' })
   market(@Payload() data: { productId: string; dto: MarketCheckDto }) {
-    return this.pricing.marketCheck(
-      String(data.productId),
-      Number(data.dto.competitorTotal),
-    );
+    return this.pricing.marketCheck(String(data.productId), {
+      ...data.dto,
+      competitorTotal: Number(data.dto.competitorTotal),
+    });
   }
 
   @MessagePattern({ cmd: 'catalog.pricing.policy-get' })

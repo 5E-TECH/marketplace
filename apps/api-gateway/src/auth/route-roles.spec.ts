@@ -168,6 +168,10 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
   // Qoldiqni ko‘rish; HQ kirim va tuzatish — BE-16 (to‘liq qabul akti BE-17); yig‘ish, qadoq, yorliq, topshirish — BE-19.
   // BE-17: postavka qabuli, partiyalar, qaytganlarni saralash (qabul va saralash — faqat omborchi va superadmin).
   [Role.WAREHOUSE]: [
+    // BE-25 (OMB-1): arizasiz postavkada optovik va mahsulot tanlanadi — faqat ro‘yxat, narx va rekvizitlarsiz
+    // (`warehouse-view.ts`, `warehouse-view.spec.ts`)
+    'GET /admin/wholesalers',
+    'GET /admin/products',
     'GET /admin/inventory/lots',
     'GET /admin/inventory/shipments',
     'GET /admin/inventory/shipments/:id',

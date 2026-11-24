@@ -12,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
+import { DeliveryDisplayMode } from '../pricing/price-calculator';
 import {
   IsLeadBigintId,
   LeadSource,
@@ -151,6 +152,60 @@ export class LeadPriceDto {
 
   @ApiProperty({ example: 292000, description: 'Jami, so‘m' })
   totalAmount: number;
+
+  @ApiPropertyOptional({
+    enum: DeliveryDisplayMode,
+    nullable: true,
+    example: DeliveryDisplayMode.PARTIAL,
+    description:
+      'BE-25 (FE-09): yetkazish rejimi; katalog hisoblay olmasa null',
+  })
+  deliveryMode?: DeliveryDisplayMode | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    example: 4200,
+    description: 'BE-25: posilkaning jami og‘irligi, gramm',
+  })
+  weightGrams?: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    properties: { CENTER: { type: 'number' }, ADDRESS: { type: 'number' } },
+    additionalProperties: false,
+    example: { CENTER: 30000, ADDRESS: 50000 },
+    description:
+      'BE-25: shu miqdor uchun ikkala yetkazish turi; ko‘p tovarli posilkada null',
+  })
+  deliveryOptions?: Record<CheckoutDeliveryDestination, number> | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    properties: {
+      base: { type: 'number' },
+      extraKg: { type: 'number' },
+      perExtraKg: { type: 'number' },
+      baseWeightGrams: { type: 'number' },
+    },
+    additionalProperties: false,
+    example: {
+      base: 40000,
+      extraKg: 3,
+      perExtraKg: 4000,
+      baseWeightGrams: 3000,
+    },
+    description:
+      'BE-25: deliveryFee = base + extraKg × perExtraKg («40 000 + 3 × 4 000 = 52 000»). Bepul rejim va ko‘p tovarli posilkada null',
+  })
+  deliveryFormula?: {
+    base: number;
+    extraKg: number;
+    perExtraKg: number;
+    baseWeightGrams: number;
+  } | null;
 }
 
 /** POST /operator/leads/:id/quote — miqdor yoki yetkazish turi o‘zgarganda summani oldindan ko‘rish (FE-09 TC2, TC3). */
@@ -179,6 +234,21 @@ export class LeadAttemptDto {
   comment: string | null;
 }
 
+/** BE-25: tuzatilgan manzil maydoni — eski va yangi qiymat (viloyat va tuman nomi bilan). */
+export class LeadHistoryChangeDto {
+  @ApiProperty({
+    enum: ['region', 'district', 'addressLine', 'whereDeliver'],
+    example: 'district',
+  })
+  field: 'region' | 'district' | 'addressLine' | 'whereDeliver';
+
+  @ApiProperty({ example: 'Qo‘qon shahri', nullable: true, type: String })
+  from: string | null;
+
+  @ApiProperty({ example: 'Farg‘ona shahri', nullable: true, type: String })
+  to: string | null;
+}
+
 export class LeadHistoryEntryDto {
   @ApiProperty({ example: '2027-01-14T09:32:00.000Z' }) at: Date;
   @ApiProperty({ example: null, nullable: true, enum: LeadStatus })
@@ -200,6 +270,14 @@ export class LeadHistoryEntryDto {
     description: 'Izoh, masalan manzil tuzatilgani',
   })
   note: string | null;
+
+  @ApiPropertyOptional({
+    type: [LeadHistoryChangeDto],
+    nullable: true,
+    description:
+      'BE-25 (FE-09 TC5): manzil saqlanganda o‘zgargan maydonlar — bitta saqlash bitta yozuv. Bo‘sh — o‘zgarishsiz tasdiqlandi; manzilga aloqasi yo‘q yozuvda null',
+  })
+  changes?: LeadHistoryChangeDto[] | null;
 }
 
 /** Shu telefondagi oldingi lidlar (OPR-2, BE-42). */

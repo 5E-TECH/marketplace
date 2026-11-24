@@ -12,6 +12,7 @@ import {
   AuthErrorResponseDto,
   CATALOG_MODERATION_RPC,
   ModerationSummaryDto,
+  PriceQueueDto,
   Role,
   Roles,
   RmqClient,
@@ -38,5 +39,20 @@ export class AdminModerationController {
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
   summary(): Promise<ModerationSummaryDto> {
     return sendRpc(this.catalog, { cmd: CATALOG_MODERATION_RPC.SUMMARY }, {});
+  }
+
+  /** BE-25 (FE-13): «Moderatsiya → Narx» tabi. */
+  @Get('prices')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Narx navbati: narx qarori kutayotgan mahsulotlar',
+    description:
+      '`summary.pricesPending` bilan bir xil qoida; tavsiya narx — joriy sozlama va mahsulot sotuvchi haqi bilan. Eskisi oldin, sahifalashsiz.',
+  })
+  @ApiOkResponse({ type: PriceQueueDto })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiForbiddenResponse({ type: AuthErrorResponseDto })
+  prices(): Promise<PriceQueueDto> {
+    return sendRpc(this.catalog, { cmd: CATALOG_MODERATION_RPC.PRICES }, {});
   }
 }

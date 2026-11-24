@@ -7,6 +7,7 @@ import {
   marketCheck,
   maxSalePriceFor,
   PriceStatus,
+  pricingModes,
   recommendedAffiliateFee,
   TZ_DEFAULT_ELCHI_TARIFF as TARIFF,
   TZ_DEFAULT_PRICING,
@@ -182,6 +183,37 @@ describe('BE-09 narx kalkulyatori (TZ 2-bo‘lim)', () => {
     expect(red.platformResult70).toBe(-19_943);
     expect(red.platformResult100).toBe(-5_487);
     expect(red.safeAffiliateFee).toBeNull(); // 44 226 < 50 420
+    // BE-25 (FE-13): reklama xarajatidan kam bo‘lsa ham ko‘rsatiladi
+    expect(red.maxAffiliateFee).toBe(44_226);
+    expect(evaluatePrice(partial, p, 245_000)).toMatchObject({
+      safeAffiliateFee: 58_936,
+      maxAffiliateFee: 58_936,
+    });
+    // zarar yo‘q yoki haq manfiy chiqadi — yo‘q
+    expect(evaluatePrice(partial, p, 262_000).maxAffiliateFee).toBeNull();
+    expect(evaluatePrice(partial, p, 150_000).maxAffiliateFee).toBeNull();
+  });
+
+  it('BE-25 (FE-13): tavsiya yaxlitlanmasdan 250 120; uch rejim — 251 000 + 40 000, 262 000 + 30 000, 294 000 + 0', () => {
+    expect(calc(partial).recommendedBaseExact).toBe(250_120);
+    const modes = pricingModes(partial, TARIFF, {
+      basePrice: 140_000,
+      affiliateFee: A,
+      weightGrams: WEIGHT,
+    });
+    expect(
+      modes.map((m) => [
+        m.mode,
+        m.goodsPrice,
+        m.delivery,
+        m.customerTotal,
+        m.platformResult70,
+      ]),
+    ).toEqual([
+      [DeliveryDisplayMode.SEPARATE, 251_000, 40_000, 291_000, 9_828],
+      [DeliveryDisplayMode.PARTIAL, 262_000, 30_000, 292_000, 10_185],
+      [DeliveryDisplayMode.FREE, 294_000, 0, 294_000, 10_313],
+    ]);
   });
 
   it('chegarada aniq: natija aynan 0 bo‘lgan narx sariq (suzuvchi nuqta xatosi yo‘q)', () => {
