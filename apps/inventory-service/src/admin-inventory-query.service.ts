@@ -21,11 +21,13 @@ import { blockedByVariant } from './stock-lots';
 interface VariantInventoryDetails {
   /** BE-16: mahsulot optovigi (qoldiq egasi). */
   wholesalerId: string;
+  wholesalerName: string | null;
   variantId: string;
   productId: string;
   productName: string;
   variantName: string | null;
   sku: string;
+  barcode: string | null;
 }
 
 type VariantInfo = Pick<
@@ -37,6 +39,15 @@ type VariantInfo = Pick<
   | 'sku'
   | 'catalogMissing'
 >;
+
+/** Harakatlar jurnalida optovik nomi va shtrix-kod yo‘q (faqat qoldiq ro‘yxatida, BE-25). */
+function variantOnly<T extends { shopName: unknown; barcode: unknown }>({
+  shopName: _shopName,
+  barcode: _barcode,
+  ...rest
+}: T): Omit<T, 'shopName' | 'barcode'> {
+  return rest;
+}
 
 @Injectable()
 export class AdminInventoryQueryService {
@@ -214,7 +225,7 @@ export class AdminInventoryQueryService {
     );
     const items = rows.map<AdminStockMovementItemDto>((row) => ({
       id: row.id,
-      ...info(row.variantId),
+      ...variantOnly(info(row.variantId)),
       warehouseId: row.warehouseId,
       warehouseName: row.stock.warehouse.name,
       warehouseActive: row.stock.warehouse.isActive,
@@ -247,7 +258,11 @@ export class AdminInventoryQueryService {
    * bitta). Qator tushib qolmaydi: katalog javob bermasa — `warnings`, variant topilmasa — `catalogMissing: true`.
    */
   private async variantInfo(variantIds: string[]): Promise<{
-    info: (variantId: string) => VariantInfo & { shopId: string | null };
+    info: (variantId: string) => VariantInfo & {
+      shopId: string | null;
+      shopName: string | null;
+      barcode: string | null;
+    };
     warnings: AdminCatalogWarningDto[];
   }> {
     const details = new Map<string, VariantInventoryDetails>();
@@ -273,6 +288,8 @@ export class AdminInventoryQueryService {
         const variant = details.get(String(variantId));
         return {
           shopId: variant?.wholesalerId ?? null,
+          shopName: variant?.wholesalerName ?? null,
+          barcode: variant?.barcode ?? null,
           variantId,
           productId: variant?.productId ?? null,
           productName: variant?.productName ?? null,

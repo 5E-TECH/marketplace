@@ -19,11 +19,14 @@ import {
   ElchiTariffDto,
   elchiTariffFor,
   evaluatePrice,
+  extraKgFor,
+  MarketCheckDto,
   marketCheck,
   maxSalePriceFor,
   PriceDecisionDto,
   PricePolicyDto,
   PriceStatus,
+  pricingModes,
   PricingParams,
   recommendedAffiliateFee,
   RmqClient,
@@ -55,6 +58,8 @@ const PARAM_KEYS = [
 export interface PricingContext {
   policies: PricePolicy[];
   tariff: ElchiTariff;
+  /** Joriy tarif kuchga kirgan vaqt. */
+  tariffSince: Date;
 }
 
 /** Mahsulot narxi bo‘yicha offer maydonlari (BE-11 shartnomasi `CatalogOfferSnapshot`). */
@@ -90,7 +95,8 @@ export class PricingService {
       this.policies.find({ where: { isDeleted: false } }),
       this.currentTariff(now),
     ]);
-    return { policies, tariff };
+    const { effectiveFrom, ...values } = tariff;
+    return { policies, tariff: values, tariffSince: effectiveFrom };
   }
 
   /** Global → kategoriya → mahsulot; bo‘sh maydon yuqori darajadan (TZ 2.4 «Sozlama tartibi»). */
@@ -98,17 +104,7 @@ export class PricingService {
     product: Pick<Product, 'id' | 'categoryId'>,
     ctx: PricingContext,
   ): PricingParams {
-    const find = (scope: PricePolicyScope, id: string | null) =>
-      ctx.policies.find(
-        (p) => p.scope === scope && (p.scopeId ?? null) === (id ?? null),
-      );
-    const layers = [
-      find(PricePolicyScope.GLOBAL, null),
-      product.categoryId
-        ? find(PricePolicyScope.CATEGORY, String(product.categoryId))
-        : undefined,
-      find(PricePolicyScope.PRODUCT, String(product.id)),
-    ];
+    const layers = this.layersFor(product, ctx);
     if (!layers[0])
       throw new ConflictException(
         'Narx kalkulyatorining global sozlamasi yo‘q',
@@ -120,6 +116,35 @@ export class PricingService {
           if (layer[key] !== null && layer[key] !== undefined)
             params[key] = layer[key];
     return params as unknown as PricingParams;
+  }
+
+  /** Global, kategoriya, mahsulot darajasi (bo‘lmagani — undefined). */
+  private layersFor(
+    product: Pick<Product, 'id' | 'categoryId'>,
+    ctx: PricingContext,
+  ): Array<PricePolicy | undefined> {
+    const find = (scope: PricePolicyScope, id: string | null) =>
+      ctx.policies.find(
+        (p) => p.scope === scope && (p.scopeId ?? null) === (id ?? null),
+      );
+    return [
+      find(PricePolicyScope.GLOBAL, null),
+      product.categoryId
+        ? find(PricePolicyScope.CATEGORY, String(product.categoryId))
+        : undefined,
+      find(PricePolicyScope.PRODUCT, String(product.id)),
+    ];
+  }
+
+  /** BE-25 (FE-13): yetkazish rejimi qaysi darajadan — «qisman, global sozlamadan». */
+  private deliveryModeSource(
+    product: Pick<Product, 'id' | 'categoryId'>,
+    ctx: PricingContext,
+  ): PricePolicyScope {
+    const [, category, own] = this.layersFor(product, ctx);
+    if (own?.deliveryMode) return PricePolicyScope.PRODUCT;
+    if (category?.deliveryMode) return PricePolicyScope.CATEGORY;
+    return PricePolicyScope.GLOBAL;
   }
 
   /** Mahsulot uchun to‘liq hisob: tavsiya, chegaralar, yetkazish, kiritilgan (yoki tasdiqlangan) narx holati. */
@@ -206,8 +231,12 @@ export class PricingService {
     return rows.map((row) => this.decisionView(row));
   }
 
-  /** NRX-5: raqobatchida mijoz jami bilan solishtirish; summa mahsulotda saqlanadi (ustama chegarasi uchun, NRX-4). */
-  async marketCheck(productId: string, competitorTotal: number) {
+  /**
+   * NRX-5: raqobatchida mijoz jami bilan solishtirish; summa va manbasi mahsulotda saqlanadi (ustama chegarasi uchun,
+   * NRX-4). `preview` — faqat natija, saqlanmaydi (BE-25, FE-13).
+   */
+  async marketCheck(productId: string, dto: MarketCheckDto) {
+    const { competitorTotal } = dto;
     const product = await this.product(productId);
     const ctx = await this.context();
     const params = this.paramsFor(product, ctx);
@@ -216,11 +245,21 @@ export class PricingService {
       ...this.inputs(product),
       affiliateFee: product.affiliateFee ?? recommendedAffiliateFee(params),
     });
+    const result = marketCheck(params, calc, competitorTotal);
+    const source = dto.source?.trim() || null;
+    if (dto.preview) return { ...result, source, checkedAt: null };
+    const checkedAt = new Date();
     await this.products.update(
       { id: product.id },
-      { marketTotal: competitorTotal },
+      {
+        marketTotal: competitorTotal,
+        marketSource: source,
+        marketCheckedAt: checkedAt,
+        // narx navbatidagi o‘rni (`queuedAt`) bozor narxi kiritilgani uchun o‘zgarmasin
+        updatedAt: () => '"updated_at"',
+      },
     );
-    return marketCheck(params, calc, competitorTotal);
+    return { ...result, source, checkedAt };
   }
 
   /** Sozlama darajasi (o‘qish). */
@@ -335,7 +374,26 @@ export class PricingService {
    */
   async quote(productId: string, quantity: number, whereDeliver: string) {
     const product = await this.product(productId);
-    return this.quoteFor(product, await this.context(), quantity, whereDeliver);
+    const ctx = await this.context();
+    const quote = this.quoteFor(product, ctx, quantity, whereDeliver);
+    // BE-25 (FE-09): operator formasi — ikkala yetkazish turi va «40 000 + 3 × 4 000» izohi
+    return {
+      ...quote,
+      deliveryOptions: {
+        [DeliveryKind.CENTER]: this.quoteFor(
+          product,
+          ctx,
+          quantity,
+          DeliveryKind.CENTER,
+        ).deliveryFee,
+        [DeliveryKind.ADDRESS]: this.quoteFor(
+          product,
+          ctx,
+          quantity,
+          DeliveryKind.ADDRESS,
+        ).deliveryFee,
+      },
+    };
   }
 
   /**
@@ -462,7 +520,30 @@ export class PricingService {
       params.deliveryMode === DeliveryDisplayMode.FREE
         ? 0
         : Math.min(tariff, visibleUnit + (tariff - unitTariff));
-    return { deliveryFee, elchiTariff: tariff };
+    const weightGrams = product.weightGrams! * quantity;
+    const extraKg = extraKgFor(ctx.tariff, weightGrams);
+    const unitExtraKg = extraKgFor(ctx.tariff, product.weightGrams!);
+    return {
+      deliveryFee,
+      elchiTariff: tariff,
+      deliveryMode: params.deliveryMode,
+      weightGrams,
+      // BE-25: deliveryFee = base + extraKg × perExtraKg. Alohida — Elchi bazasidan va hamma ortiqcha kg; qisman — bir
+      // dona ko‘rinadigan summasidan va jami og‘irlik qo‘shgan kg; bepulda yo‘q
+      deliveryFormula:
+        params.deliveryMode === DeliveryDisplayMode.FREE
+          ? null
+          : {
+              ...(params.deliveryMode === DeliveryDisplayMode.SEPARATE
+                ? {
+                    base: visibleUnit - unitExtraKg * ctx.tariff.perExtraKg,
+                    extraKg,
+                  }
+                : { base: visibleUnit, extraKg: extraKg - unitExtraKg }),
+              perExtraKg: ctx.tariff.perExtraKg,
+              baseWeightGrams: ctx.tariff.baseWeightGrams,
+            },
+    };
   }
 
   private view(
@@ -486,14 +567,32 @@ export class PricingService {
       productId: String(product.id),
       /** Tasdiq joriymi: asosi o‘zgarib holati yomonlashgan bo‘lsa — false (offer sotuvdan tushgan, yangi qaror kerak). */
       approvalCurrent: this.isApprovalCurrent(product, params, ctx),
-      params,
+      params: {
+        ...params,
+        /** BE-25 (FE-13): rejim qaysi darajadan. */
+        deliveryModeSource: this.deliveryModeSource(product, ctx),
+      },
       tariff: ctx.tariff,
       recommendedAffiliateFee: recommendedAffiliateFee(params),
       calculation,
       evaluation,
+      /** BE-25 (FE-13): uch rejim solishtiruvi, shu sotuvchi haqi bilan. */
+      modes: pricingModes(params, ctx.tariff, {
+        ...this.inputs(product),
+        affiliateFee,
+      }),
       approvedPrice: product.approvedPrice,
       priceStatus: product.priceStatus,
       marketTotal: product.marketTotal,
+      /** BE-25 (FE-13): oxirgi bozor narxi tekshiruvi shu hisob bilan; kiritilmagan — null. */
+      market:
+        product.marketTotal == null
+          ? null
+          : {
+              ...marketCheck(params, calculation, product.marketTotal),
+              source: product.marketSource ?? null,
+              checkedAt: product.marketCheckedAt ?? null,
+            },
       maxSalePrice:
         product.approvedPrice == null
           ? null
@@ -507,14 +606,50 @@ export class PricingService {
   }
 
   /**
-   * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
-   * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
+   * BE-25 (FE-13): narx navbatiga tushgan vaqt [taklif]. Hali tasdiqlanmagan — mahsulot oxirgi o‘zgargan vaqt; tasdig‘i
+   * eskirgan — asosi oxirgi o‘zgargan vaqt: mahsulot, narx sozlamasi darajalari yoki Elchi tarifi.
    */
+  queuedAt(product: Product, ctx: PricingContext): Date {
+    const times = [new Date(product.updatedAt)];
+    if (product.approvedPrice != null)
+      times.push(
+        new Date(ctx.tariffSince),
+        ...this.layersFor(product, ctx).flatMap((layer) =>
+          layer ? [new Date(layer.updatedAt)] : [],
+        ),
+      );
+    return new Date(Math.max(...times.map((at) => at.getTime())));
+  }
+
+  /** BE-25 (FE-13): narx navbati uchun tavsiya va rejim; hisoblab bo‘lmasa — null (mahsulot baribir navbatda). */
+  queuePrice(
+    product: Product,
+    ctx: PricingContext,
+  ): { recommended: number; deliveryMode: DeliveryDisplayMode } | null {
+    try {
+      const params = this.paramsFor(product, ctx);
+      const { recommended } = calculatePrice(params, ctx.tariff, {
+        ...this.inputs(product),
+        affiliateFee: product.affiliateFee ?? recommendedAffiliateFee(params),
+      });
+      return { recommended, deliveryMode: params.deliveryMode };
+    } catch (error) {
+      this.logger.warn(
+        `Narx navbati: ${product.id} hisoblanmadi — ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   /** BE-27: tasdiqlangan narx hozir ham amaldami (moderatsiya hisoblagichi uchun). */
   approvalCurrent(product: Product, ctx: PricingContext): boolean {
     return this.isApprovalCurrent(product, this.paramsFor(product, ctx), ctx);
   }
 
+  /**
+   * Tasdiq joriymi: joriy sozlamada qizil bo‘lsa yoki yangi zarar paydo bo‘lsa (yashil/sariq qaror endi to‘q sariq) —
+   * yo‘q. Yashil → sariq (hech kim zarar ko‘rmaydi, masalan M oshganda) tasdiqni bekor qilmaydi.
+   */
   private isApprovalCurrent(
     product: Product,
     params: PricingParams,
@@ -559,7 +694,9 @@ export class PricingService {
     return product;
   }
 
-  private async currentTariff(now: Date): Promise<ElchiTariff> {
+  private async currentTariff(
+    now: Date,
+  ): Promise<ElchiTariff & { effectiveFrom: Date }> {
     const row = await this.tariffs.findOne({
       where: { effectiveFrom: LessThanOrEqual(now), isDeleted: false },
       order: { effectiveFrom: 'DESC', id: 'DESC' },
@@ -570,6 +707,7 @@ export class PricingService {
       baseWeightGrams: row.baseWeightGrams,
       perExtraKg: row.perExtraKg,
       addressExtra: row.addressExtra,
+      effectiveFrom: row.effectiveFrom,
     };
   }
 

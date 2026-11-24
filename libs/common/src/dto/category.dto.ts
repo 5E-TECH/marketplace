@@ -41,6 +41,40 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    example: 'mobil-telefonlar',
+    description: 'Berilmasa — nomdan hosil qilinadi; takrori 409',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message: 'slug: kichik lotin harflari, raqam va «-»',
+  })
+  slug?: string;
+
+  @ApiPropertyOptional({
+    example: null,
+    nullable: true,
+    type: Boolean,
+    description:
+      'BAD toifasi (TZ 8): mahsulotlarida «Dori vositasi emas». null — ota toifadan, eng yuqorida «yo‘q»',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isBad?: boolean | null;
+
+  @ApiPropertyOptional({
+    example: null,
+    nullable: true,
+    type: Boolean,
+    description:
+      'Postavkada partiya muddati kuzatiladi (OMB-3). null — ota toifadan; BAD toifasida doim kuzatiladi',
+  })
+  @IsOptional()
+  @IsBoolean()
+  expiryTracked?: boolean | null;
 }
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}
@@ -66,6 +100,22 @@ export class CategoryDto {
 
   @ApiProperty({ example: true })
   isActive: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Boolean,
+    description: 'Toifaning o‘z belgisi; null — ota toifadan',
+  })
+  isBad: boolean | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Boolean,
+    description: 'Toifaning o‘z belgisi; null — ota toifadan',
+  })
+  expiryTracked: boolean | null;
 }
 
 export class CategoryTreeDto extends CategoryDto {

@@ -13,11 +13,13 @@ import {
   isLeadBigintId,
   INBOUND_RPC,
   ModerationSummaryDto,
+  PriceQueueDto,
   ProductStatus,
   RmqClient,
   ShopStatus,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
+import { CategoryFlags, loadCategoryFlags } from './category-flags';
 import { CreativeService } from './creative.service';
 import { Product } from './entities/product.entity';
 import {
@@ -97,14 +99,21 @@ export class CatalogOfferService {
       .where('product.id = :id', { id: String(productId) })
       .getOne();
     if (!product) return null;
-    const stock = await this.stockOf([String(product.id)]);
-    const creatives = await this.creatives.forProducts([String(product.id)]);
+    const id = String(product.id);
+    // har sahifa ko‘rinishida va lid qabulida chaqiriladi — so‘rovlar parallel
+    const [stock, creatives, flags, ctx] = await Promise.all([
+      this.stockOf([id]),
+      this.creatives.forProducts([id]),
+      this.categoryFlags([product]),
+      this.pricing.context(),
+    ]);
     return toSnapshot(
       product,
-      this.pricingOf(product, await this.pricing.context()),
+      this.pricingOf(product, ctx),
       // null (noma’lum) saqlanadi — `?? 0` uni 0 ga aylantirib yuborardi
-      stock.get(String(product.id)),
-      creatives.get(String(product.id)) ?? [],
+      stock.get(id),
+      creatives.get(id) ?? [],
+      flags(product.categoryId),
     );
   }
 
@@ -156,14 +165,25 @@ export class CatalogOfferService {
     const creatives = await this.creatives.forProducts(
       rows.map((row) => String(row.id)),
     );
+    const flags = await this.categoryFlags(rows);
     return rows.map((row) =>
       toSnapshot(
         row,
         this.pricingOf(row, ctx),
         stock.get(String(row.id)),
         creatives.get(String(row.id)) ?? [],
+        flags(row.categoryId),
       ),
     );
+  }
+
+  /** Toifa belgisi faqat toifasi bor, o‘zi BAD bo‘lmagan mahsulotga kerak — aks holda toifalar o‘qilmaydi. */
+  private async categoryFlags(
+    products: Product[],
+  ): Promise<(categoryId: string | null) => CategoryFlags | undefined> {
+    return products.some((p) => !p.isBad && p.categoryId)
+      ? loadCategoryFlags(this.products.manager)
+      : () => undefined;
   }
 
   /** Narx sozlamasi buzilgan bo‘lsa ham offer qaytadi — narxsiz (lead-service uni ochmaydi). */
@@ -293,12 +313,6 @@ export class CatalogOfferService {
       else if (p.status in byStatus) byStatus[p.status]++;
     }
     const ctx = await this.pricing.context();
-    const priced = products.filter(
-      (p) =>
-        p.cpaEnabled &&
-        !p.isBlocked &&
-        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(p.status),
-    );
     const onSale = products.filter(isCpaAvailable);
     const stock = await this.stockOf(onSale.map((p) => String(p.id)));
     const stockValues = [...stock.values()];
@@ -315,14 +329,54 @@ export class CatalogOfferService {
     }
     return {
       productsPending: byStatus.PENDING_REVIEW,
-      pricesPending: priced.filter((p) => !this.approvalCurrentSafe(p, ctx))
-        .length,
+      pricesPending: this.pricePending(products, ctx).length,
       byStatus,
       outOfStock: stockValues.some((v) => v === null)
         ? null
         : stockValues.filter((v) => (v ?? 0) <= 0).length,
       expirySoon,
     };
+  }
+
+  /** Narx qarori kutayotganlar: CPA, yashirilmagan, tasdiq kutayotgan yoki sotuvdagi, tasdiqlangan narxi yo‘q yoki amalda emas. */
+  private pricePending(products: Product[], ctx: PricingContext): Product[] {
+    return products.filter(
+      (p) =>
+        p.cpaEnabled &&
+        !p.isBlocked &&
+        [ProductStatus.PENDING_REVIEW, ProductStatus.ACTIVE].includes(
+          p.status,
+        ) &&
+        !this.approvalCurrentSafe(p, ctx),
+    );
+  }
+
+  /** BE-25 (FE-13): narx navbati — `pricesPending` bilan bir xil qoida, eskisi oldin. */
+  async priceQueue(): Promise<PriceQueueDto> {
+    const products = await this.base()
+      .where('product.is_deleted = FALSE')
+      .andWhere('product.cpa_enabled = TRUE')
+      .getMany();
+    const ctx = await this.pricing.context();
+    const items = this.pricePending(products, ctx)
+      .map((product) => {
+        const price = this.pricing.queuePrice(product, ctx);
+        return {
+          productId: String(product.id),
+          name: product.name,
+          shopName: product.shop?.name ?? null,
+          basePrice: product.basePrice ?? null,
+          recommended: price?.recommended ?? null,
+          deliveryMode: price?.deliveryMode ?? null,
+          queuedAt: this.pricing.queuedAt(product, ctx).toISOString(),
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.queuedAt.localeCompare(b.queuedAt) ||
+          Number(a.productId) - Number(b.productId),
+      );
+    return { items, total: items.length };
   }
 
   /** Bitta mahsulotning buzilgan narx sozlamasi hisoblagichni yiqitmasin — u narx qarorini kutadi deb sanaladi. */
@@ -377,11 +431,18 @@ export class CatalogOfferService {
       : [];
     const products = productIds.length
       ? ((await db.query(
-          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl"
+          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl",
+                  category_id::text AS "categoryId", is_bad AS "isBad"
              FROM catalog.product WHERE id = ANY($1::bigint[])`,
           [productIds],
-        )) as Array<{ id: string; imageUrl: string | null }>)
+        )) as Array<{
+          id: string;
+          imageUrl: string | null;
+          categoryId: string | null;
+          isBad: boolean;
+        }>)
       : [];
+    const flags = products.length ? await loadCategoryFlags(db) : null;
     const variants = variantIds.length
       ? ((await db.query(
           `SELECT v.id::text AS id, p.name,
@@ -402,6 +463,8 @@ export class CatalogOfferService {
       products: products.map((row) => ({
         id: row.id,
         imageUrl: row.imageUrl ?? null,
+        expiryTracked:
+          !!row.isBad || !!flags?.(row.categoryId ?? null).expiryTracked,
       })),
       variants: variants.map((row) => ({
         id: row.id,
@@ -443,6 +506,7 @@ export function toSnapshot(
   pricing?: OfferPricing,
   stock: number | null = 0,
   creatives: CatalogOfferSnapshot['creatives'] = [],
+  flags?: CategoryFlags,
 ): CatalogOfferSnapshot {
   const images = product.images?.length
     ? product.images
@@ -464,7 +528,8 @@ export function toSnapshot(
       )
       .map(([name, value]) => ({ name, value: String(value) })),
     weightGrams: product.weightGrams,
-    isBad: product.isBad,
+    // TZ 8: BAD belgisi mahsulotda yoki toifasida (BE-25)
+    isBad: product.isBad || !!flags?.isBad,
     cpaAvailable: isCpaAvailable(product),
     withdrawn: isWithdrawn(product),
     // BE-09: tasdiqlangan narx, eng katta narx (NRX-4) va ko‘rinadigan yetkazish (bir dona)

@@ -26,7 +26,7 @@ describe('AdminProductsController (C4.5)', () => {
   it('list filterlarni catalog servisiga uzatadi', async () => {
     const { controller, catalog } = setup();
     const query = { blocked: true, page: 1, limit: 20 } as never;
-    await controller.list(query);
+    await controller.list(query, { sub: '7', role: Role.ADMIN } as never);
     expect(catalog).toHaveBeenCalledWith(
       { cmd: 'catalog.product.admin-list' },
       { query },

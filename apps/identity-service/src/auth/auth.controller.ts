@@ -5,6 +5,7 @@ import {
   CreateSupportTicketDto,
   ErrorCode,
   ForgotPasswordDto,
+  IDENTITY_USER_NAMES,
   LoginDto,
   RegisterDto,
   ResetPasswordDto,
@@ -123,6 +124,12 @@ export class AuthController {
   @MessagePattern({ cmd: 'identity.user.active-by-role' })
   activeByRole(@Payload() data: { role: Role }) {
     return this.authService.activeByRole(data.role);
+  }
+
+  /** BE-25: ichki — ism va rol ID bo‘yicha (ekranlarda `#ID` o‘rniga). */
+  @MessagePattern({ cmd: IDENTITY_USER_NAMES })
+  userNames(@Payload() data: { ids?: string[] }) {
+    return this.authService.userNames(data?.ids ?? []);
   }
 
   @MessagePattern({ cmd: 'identity.user.count-by-role' })

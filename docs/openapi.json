@@ -3820,6 +3820,7 @@
         ]
       },
       "get": {
+        "description": "Omborchiga faqat `id`, `shopId`, `name`, `status`, `cpaEnabled`, `isBad`, `isBlocked`, `expiryTracked`, `weightGrams` — narx va sotuvchi haqisiz.",
         "operationId": "AdminProductsController_list",
         "parameters": [
           {
@@ -3943,12 +3944,16 @@
                         "approvedPrice": 251000,
                         "priceStatus": "APPROVED",
                         "marketTotal": null,
+                        "marketSource": null,
+                        "marketCheckedAt": null,
                         "isBad": false,
                         "isBlocked": false,
                         "blockReason": null,
                         "mxikCode": null,
                         "packageCode": null,
                         "rating": 0,
+                        "expiryTracked": false,
+                        "badByCategory": false,
                         "createdAt": "2026-11-20T08:10:00.000Z",
                         "updatedAt": "2026-11-21T10:00:00.000Z",
                         "isDeleted": false
@@ -4486,6 +4491,7 @@
         ]
       },
       "get": {
+        "description": "Omborchiga faqat `id`, `name`, `status`, `tin`, `contractNumber`, `contractDate` — bank rekvizitlari, telefon va kabinet egasisiz.",
         "operationId": "AdminWholesalersController_list",
         "parameters": [
           {
@@ -4676,7 +4682,8 @@
                       "markupCapPercent": 10,
                       "deliveryMode": "PARTIAL",
                       "visibleCenter": 30000,
-                      "visibleAddress": 50000
+                      "visibleAddress": 50000,
+                      "deliveryModeSource": "GLOBAL"
                     },
                     "tariff": {
                       "centerBase": 40000,
@@ -4689,6 +4696,7 @@
                       "basePrice": 140000,
                       "affiliateFee": 65000,
                       "recommendedBase": 251000,
+                      "recommendedBaseExact": 250120,
                       "breakevenBase": 240561,
                       "hardFloorBase": 225206,
                       "delivery": {
@@ -4718,11 +4726,46 @@
                       "platformResult100": 24641,
                       "affiliateResult": 14580,
                       "belowRecommended": 0,
-                      "safeAffiliateFee": null
+                      "safeAffiliateFee": null,
+                      "maxAffiliateFee": null
                     },
+                    "modes": [
+                      {
+                        "mode": "SEPARATE",
+                        "goodsPrice": 251000,
+                        "delivery": 40000,
+                        "customerTotal": 291000,
+                        "platformResult70": 9828,
+                        "platformResult100": 24284
+                      },
+                      {
+                        "mode": "PARTIAL",
+                        "goodsPrice": 262000,
+                        "delivery": 30000,
+                        "customerTotal": 292000,
+                        "platformResult70": 10185,
+                        "platformResult100": 24641
+                      },
+                      {
+                        "mode": "FREE",
+                        "goodsPrice": 294000,
+                        "delivery": 0,
+                        "customerTotal": 294000,
+                        "platformResult70": 10313,
+                        "platformResult100": 24769
+                      }
+                    ],
                     "approvedPrice": 262000,
                     "priceStatus": "GREEN",
                     "marketTotal": 299000,
+                    "market": {
+                      "ourTotal": 292000,
+                      "competitorTotal": 299000,
+                      "verdict": "MOS",
+                      "maxBasePrice": 148099,
+                      "source": "Uzum Market, 2026-11-19",
+                      "checkedAt": "2026-11-19T09:10:00.000Z"
+                    },
                     "maxSalePrice": 269000
                   }
                 }
@@ -4797,7 +4840,8 @@
                       "markupCapPercent": 10,
                       "deliveryMode": "PARTIAL",
                       "visibleCenter": 30000,
-                      "visibleAddress": 50000
+                      "visibleAddress": 50000,
+                      "deliveryModeSource": "GLOBAL"
                     },
                     "tariff": {
                       "centerBase": 40000,
@@ -4810,6 +4854,7 @@
                       "basePrice": 140000,
                       "affiliateFee": 65000,
                       "recommendedBase": 251000,
+                      "recommendedBaseExact": 250120,
                       "breakevenBase": 240561,
                       "hardFloorBase": 225206,
                       "delivery": {
@@ -4839,11 +4884,39 @@
                       "platformResult100": 24641,
                       "affiliateResult": 14580,
                       "belowRecommended": 0,
-                      "safeAffiliateFee": null
+                      "safeAffiliateFee": null,
+                      "maxAffiliateFee": null
                     },
+                    "modes": [
+                      {
+                        "mode": "SEPARATE",
+                        "goodsPrice": 251000,
+                        "delivery": 40000,
+                        "customerTotal": 291000,
+                        "platformResult70": 9828,
+                        "platformResult100": 24284
+                      },
+                      {
+                        "mode": "PARTIAL",
+                        "goodsPrice": 262000,
+                        "delivery": 30000,
+                        "customerTotal": 292000,
+                        "platformResult70": 10185,
+                        "platformResult100": 24641
+                      },
+                      {
+                        "mode": "FREE",
+                        "goodsPrice": 294000,
+                        "delivery": 0,
+                        "customerTotal": 294000,
+                        "platformResult70": 10313,
+                        "platformResult100": 24769
+                      }
+                    ],
                     "approvedPrice": null,
                     "priceStatus": null,
                     "marketTotal": null,
+                    "market": null,
                     "maxSalePrice": null
                   }
                 }
@@ -4903,6 +4976,7 @@
     },
     "/api/v1/admin/products/{id}/market-check": {
       "post": {
+        "description": "Summa va manba mahsulotda saqlanadi. `preview: true` — faqat natija, saqlanmaydi va auditga yozilmaydi (`checkedAt: null`).",
         "operationId": "AdminPricingController_market",
         "parameters": [
           {
@@ -4934,7 +5008,9 @@
                     "ourTotal": 292000,
                     "competitorTotal": 299000,
                     "verdict": "MOS",
-                    "maxBasePrice": 148099
+                    "maxBasePrice": 148099,
+                    "source": "Uzum Market, 2026-11-19",
+                    "checkedAt": "2026-11-19T09:10:00.000Z"
                   }
                 }
               }
@@ -7232,20 +7308,65 @@
         ]
       },
       "get": {
+        "description": "BE-25: bir nechta holat, qidiruv, kelish sanasi, qabul kuni; `counts` — holatlar soni.",
         "operationId": "AdminInventoryController_shipments",
         "parameters": [
           {
             "name": "status",
             "required": false,
             "in": "query",
+            "description": "Bir yoki bir nechta holat: `status=DECLARED,IN_TRANSIT` yoki takroriy parametr",
             "schema": {
-              "type": "string",
-              "enum": [
-                "DECLARED",
-                "IN_TRANSIT",
-                "RECEIVED",
-                "DISCREPANCY"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DECLARED",
+                  "IN_TRANSIT",
+                  "RECEIVED",
+                  "DISCREPANCY"
+                ]
+              }
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Postavka raqami (`PS-000014` yoki 14), mahsulot nomi, SKU, shtrix-kod yoki optovik nomi (BE-25)",
+            "schema": {
+              "example": "vitamin",
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Kutilgan kelish sanasi, dan (BE-25)",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedTo",
+            "required": false,
+            "in": "query",
+            "description": "Kutilgan kelish sanasi, gacha (shu kun ham)",
+            "schema": {
+              "example": "2026-12-07",
+              "type": "string"
+            }
+          },
+          {
+            "name": "receivedOn",
+            "required": false,
+            "in": "query",
+            "description": "Qabul qilingan kun (Toshkent)",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
             }
           },
           {
@@ -10082,6 +10203,54 @@
         ]
       }
     },
+    "/api/v1/admin/moderation/prices": {
+      "get": {
+        "description": "`summary.pricesPending` bilan bir xil qoida; tavsiya narx — joriy sozlama va mahsulot sotuvchi haqi bilan. Eskisi oldin, sahifalashsiz.",
+        "operationId": "AdminModerationController_prices",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceQueueDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Narx navbati: narx qarori kutayotgan mahsulotlar",
+        "tags": [
+          "admin-products"
+        ]
+      }
+    },
     "/api/v1/admin/finance/settlements": {
       "get": {
         "operationId": "AdminSettlementsController_list",
@@ -11562,7 +11731,6 @@
                     "cpaEnabled": true,
                     "approvedPrice": null,
                     "priceStatus": null,
-                    "marketTotal": null,
                     "isBad": false,
                     "isBlocked": false,
                     "blockReason": null,
@@ -11653,7 +11821,6 @@
                         "cpaEnabled": true,
                         "approvedPrice": null,
                         "priceStatus": null,
-                        "marketTotal": null,
                         "isBad": false,
                         "isBlocked": false,
                         "blockReason": null,
@@ -11734,7 +11901,6 @@
                     "cpaEnabled": true,
                     "approvedPrice": null,
                     "priceStatus": null,
-                    "marketTotal": null,
                     "isBad": false,
                     "isBlocked": false,
                     "blockReason": null,
@@ -11906,14 +12072,58 @@
             "name": "status",
             "required": false,
             "in": "query",
+            "description": "Bir yoki bir nechta holat: `status=DECLARED,IN_TRANSIT` yoki takroriy parametr",
             "schema": {
-              "type": "string",
-              "enum": [
-                "DECLARED",
-                "IN_TRANSIT",
-                "RECEIVED",
-                "DISCREPANCY"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "DECLARED",
+                  "IN_TRANSIT",
+                  "RECEIVED",
+                  "DISCREPANCY"
+                ]
+              }
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Postavka raqami (`PS-000014` yoki 14), mahsulot nomi, SKU, shtrix-kod yoki optovik nomi (BE-25)",
+            "schema": {
+              "example": "vitamin",
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Kutilgan kelish sanasi, dan (BE-25)",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedTo",
+            "required": false,
+            "in": "query",
+            "description": "Kutilgan kelish sanasi, gacha (shu kun ham)",
+            "schema": {
+              "example": "2026-12-07",
+              "type": "string"
+            }
+          },
+          {
+            "name": "receivedOn",
+            "required": false,
+            "in": "query",
+            "description": "Qabul qilingan kun (Toshkent)",
+            "schema": {
+              "example": "2026-12-01",
+              "type": "string"
             }
           },
           {
@@ -12940,14 +13150,24 @@
                             "sku": "KOL-300",
                             "barcode": null,
                             "quantity": 1,
-                            "pickedQty": 1
+                            "pickedQty": 1,
+                            "cell": "C-03-2",
+                            "weightKg": 0.32
                           }
                         ],
+                        "customerName": "Rustam",
+                        "regionName": "Buxoro viloyati",
+                        "districtName": "Buxoro shahri",
+                        "deliveryMode": "DOOR",
+                        "codAmount": 312000,
+                        "confirmedAt": "2026-12-07T08:55:00.000Z",
+                        "packedAt": "2026-12-07T10:20:00.000Z",
                         "parcel": {
                           "elchiState": "FAILED",
                           "shipmentId": null,
                           "labelReady": false,
-                          "error": "DISTRICT_NOT_FOUND: Tuman topilmadi: SOATO 1726266 (viloyat 1726)"
+                          "error": "DISTRICT_NOT_FOUND: Tuman topilmadi: SOATO 1726266 (viloyat 1726)",
+                          "qrCodeToken": null
                         }
                       },
                       {
@@ -12968,14 +13188,24 @@
                             "sku": "VIT-D3-60",
                             "barcode": "4780012345678",
                             "quantity": 2,
-                            "pickedQty": 0
+                            "pickedQty": 0,
+                            "cell": "B-02-1",
+                            "weightKg": 0.15
                           }
                         ],
+                        "customerName": "Dilnoza",
+                        "regionName": "Toshkent shahri",
+                        "districtName": "Chilonzor tumani",
+                        "deliveryMode": "CENTER",
+                        "codAmount": 292000,
+                        "confirmedAt": "2026-12-08T06:40:00.000Z",
+                        "packedAt": null,
                         "parcel": {
                           "elchiState": "CREATED",
                           "shipmentId": "987",
                           "labelReady": true,
-                          "error": null
+                          "error": null,
+                          "qrCodeToken": "qr-8f2c1d"
                         }
                       }
                     ],
@@ -14976,6 +15206,18 @@
             "type": "boolean",
             "example": true
           },
+          "isBad": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Toifaning o‘z belgisi; null — ota toifadan"
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Toifaning o‘z belgisi; null — ota toifadan"
+          },
           "children": {
             "type": "array",
             "items": {
@@ -14991,6 +15233,8 @@
           "iconUrl",
           "sortOrder",
           "isActive",
+          "isBad",
+          "expiryTracked",
           "children"
         ]
       },
@@ -15020,6 +15264,23 @@
             "type": "boolean",
             "example": true,
             "default": true
+          },
+          "slug": {
+            "type": "string",
+            "example": "mobil-telefonlar",
+            "description": "Berilmasa — nomdan hosil qilinadi; takrori 409"
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "BAD toifasi (TZ 8): mahsulotlarida «Dori vositasi emas». null — ota toifadan, eng yuqorida «yo‘q»"
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Postavkada partiya muddati kuzatiladi (OMB-3). null — ota toifadan; BAD toifasida doim kuzatiladi"
           }
         },
         "required": [
@@ -15058,6 +15319,18 @@
           "isActive": {
             "type": "boolean",
             "example": true
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Toifaning o‘z belgisi; null — ota toifadan"
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Toifaning o‘z belgisi; null — ota toifadan"
           }
         },
         "required": [
@@ -15067,7 +15340,9 @@
           "parentId",
           "iconUrl",
           "sortOrder",
-          "isActive"
+          "isActive",
+          "isBad",
+          "expiryTracked"
         ]
       },
       "UpdateCategoryDto": {
@@ -15096,6 +15371,23 @@
             "type": "boolean",
             "example": true,
             "default": true
+          },
+          "slug": {
+            "type": "string",
+            "example": "mobil-telefonlar",
+            "description": "Berilmasa — nomdan hosil qilinadi; takrori 409"
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "BAD toifasi (TZ 8): mahsulotlarida «Dori vositasi emas». null — ota toifadan, eng yuqorida «yo‘q»"
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": null,
+            "nullable": true,
+            "description": "Postavkada partiya muddati kuzatiladi (OMB-3). null — ota toifadan; BAD toifasida doim kuzatiladi"
           }
         }
       },
@@ -17008,6 +17300,16 @@
             "type": "boolean",
             "example": false
           },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida"
+          },
+          "badByCategory": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25 (TZ 8): toifasi BAD — o‘z `isBad` belgisi bo‘lmasa ham sahifada «Dori vositasi emas». Faqat admin ro‘yxati va kartasida"
+          },
           "isBlocked": {
             "type": "boolean",
             "example": false
@@ -17730,6 +18032,16 @@
           "competitorTotal": {
             "type": "number",
             "example": 290000
+          },
+          "source": {
+            "type": "string",
+            "example": "Uzum Market, 2026-12-01",
+            "description": "BE-25 (FE-13): qayerda ko‘rildi"
+          },
+          "preview": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25 (FE-13): true — natija saqlanmaydi (oldindan ko‘rish)"
           }
         },
         "required": [
@@ -18995,6 +19307,12 @@
             "type": "object",
             "nullable": true,
             "example": "B-02-1"
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "nullable": true,
+            "example": true,
+            "description": "BE-25 (OMB-3): muddat kuzatiladi — BAD mahsulot yoki toifa belgisi. Katalog javob bermasa null. Optovik kabinetida yo‘q"
           }
         },
         "required": [
@@ -19021,6 +19339,11 @@
             "type": "string",
             "example": "15"
           },
+          "wholesalerName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Gadget Trade MChJ"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -19044,10 +19367,36 @@
             "type": "string",
             "example": "3"
           },
+          "declaredByName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Nodira K."
+          },
+          "declaredByRole": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "AFFILIATE",
+              "WHOLESALER",
+              "OPERATOR_LEAD",
+              "SUPERVISOR",
+              "WAREHOUSE",
+              "FINANCE",
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "ADMIN",
+            "description": "Kiritgan odam roli: optovik, omborchi, admin yoki superadmin"
+          },
           "receivedBy": {
             "type": "object",
             "nullable": true,
             "example": "5"
+          },
+          "receivedByName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Jasur T."
           },
           "receivedAt": {
             "type": "object",
@@ -19102,13 +19451,24 @@
           "limit": {
             "type": "number",
             "example": 20
+          },
+          "counts": {
+            "type": "object",
+            "example": {
+              "DECLARED": 3,
+              "IN_TRANSIT": 1,
+              "RECEIVED": 12,
+              "DISCREPANCY": 2
+            },
+            "description": "BE-25: holatlar soni — `status` dan boshqa filtrlar bo‘yicha (yorliqlar)"
           }
         },
         "required": [
           "items",
           "total",
           "page",
-          "limit"
+          "limit",
+          "counts"
         ]
       },
       "ReceiveInboundItemDto": {
@@ -19209,6 +19569,23 @@
           "blocked": {
             "type": "boolean",
             "example": false
+          },
+          "wholesalerId": {
+            "type": "string",
+            "example": "15"
+          },
+          "wholesalerName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Gadget Trade MChJ",
+            "description": "BE-25: katalog javob bermasa null"
+          },
+          "notifiedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": null,
+            "description": "BE-25 (OMB-3): sotuvdan chiqqani haqida admin va superadminga xabar vaqti; hali yuborilmagan — null"
           }
         },
         "required": [
@@ -19219,7 +19596,9 @@
           "expiryDate",
           "sellableUntil",
           "quantity",
-          "blocked"
+          "blocked",
+          "wholesalerId",
+          "notifiedAt"
         ]
       },
       "AdminStockItemDto": {
@@ -19257,6 +19636,16 @@
           "shopId": {
             "type": "string",
             "example": "15",
+            "nullable": true
+          },
+          "shopName": {
+            "type": "string",
+            "example": "Gadget Trade MChJ",
+            "nullable": true
+          },
+          "barcode": {
+            "type": "string",
+            "example": "4780012345678",
             "nullable": true
           },
           "warehouseId": {
@@ -19305,6 +19694,8 @@
           "sku",
           "catalogMissing",
           "shopId",
+          "shopName",
+          "barcode",
           "warehouseId",
           "warehouseName",
           "warehouseActive",
@@ -22476,6 +22867,77 @@
           "expirySoon"
         ]
       },
+      "PriceQueueItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "511"
+          },
+          "name": {
+            "type": "string",
+            "example": "Simsiz quloqchinlar"
+          },
+          "shopName": {
+            "type": "string",
+            "example": "Namuna Savdo MChJ",
+            "nullable": true
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "nullable": true
+          },
+          "recommended": {
+            "type": "number",
+            "example": 262000,
+            "nullable": true,
+            "description": "Tavsiya narx (joriy rejimda). Bazaviy narx, og‘irlik yoki sozlama yo‘q — hisoblanmaydi, null"
+          },
+          "deliveryMode": {
+            "type": "string",
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "nullable": true
+          },
+          "queuedAt": {
+            "type": "string",
+            "example": "2027-01-06T05:05:00.000Z",
+            "description": "Mahsulot oxirgi o‘zgargan vaqt [taklif]; tartib — eskisi oldin"
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "shopName",
+          "basePrice",
+          "recommended",
+          "deliveryMode",
+          "queuedAt"
+        ]
+      },
+      "PriceQueueDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceQueueItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
       "WholesalerSettlementItemDto": {
         "type": "object",
         "properties": {
@@ -24539,6 +25001,67 @@
             "type": "number",
             "example": 292000,
             "description": "Jami, so‘m"
+          },
+          "deliveryMode": {
+            "type": "string",
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "nullable": true,
+            "example": "PARTIAL",
+            "description": "BE-25 (FE-09): yetkazish rejimi; katalog hisoblay olmasa null"
+          },
+          "weightGrams": {
+            "type": "number",
+            "nullable": true,
+            "example": 4200,
+            "description": "BE-25: posilkaning jami og‘irligi, gramm"
+          },
+          "deliveryOptions": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "CENTER": {
+                "type": "number"
+              },
+              "ADDRESS": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false,
+            "example": {
+              "CENTER": 30000,
+              "ADDRESS": 50000
+            },
+            "description": "BE-25: shu miqdor uchun ikkala yetkazish turi; ko‘p tovarli posilkada null"
+          },
+          "deliveryFormula": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "base": {
+                "type": "number"
+              },
+              "extraKg": {
+                "type": "number"
+              },
+              "perExtraKg": {
+                "type": "number"
+              },
+              "baseWeightGrams": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false,
+            "example": {
+              "base": 40000,
+              "extraKg": 3,
+              "perExtraKg": 4000,
+              "baseWeightGrams": 3000
+            },
+            "description": "BE-25: deliveryFee = base + extraKg × perExtraKg («40 000 + 3 × 4 000 = 52 000»). Bepul rejim va ko‘p tovarli posilkada null"
           }
         },
         "required": [
@@ -24590,6 +25113,36 @@
           "comment"
         ]
       },
+      "LeadHistoryChangeDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "region",
+              "district",
+              "addressLine",
+              "whereDeliver"
+            ],
+            "example": "district"
+          },
+          "from": {
+            "type": "string",
+            "example": "Qo‘qon shahri",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "example": "Farg‘ona shahri",
+            "nullable": true
+          }
+        },
+        "required": [
+          "field",
+          "from",
+          "to"
+        ]
+      },
       "LeadHistoryEntryDto": {
         "type": "object",
         "properties": {
@@ -24637,6 +25190,14 @@
             "example": null,
             "nullable": true,
             "description": "Izoh, masalan manzil tuzatilgani"
+          },
+          "changes": {
+            "nullable": true,
+            "description": "BE-25 (FE-09 TC5): manzil saqlanganda o‘zgargan maydonlar — bitta saqlash bitta yozuv. Bo‘sh — o‘zgarishsiz tasdiqlandi; manzilga aloqasi yo‘q yozuvda null",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadHistoryChangeDto"
+            }
           }
         },
         "required": [

@@ -1,8 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsArray,
   IsDateString,
   IsIn,
   IsInt,
@@ -14,6 +15,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { Role } from '../enums';
 
 /**
  * Ombor qabuli va qaytganlarni saralash (BE-17; TZ 6.6 OMB-1, OMB-2, OMB-3, OMB-6; T4 `inbound_shipment`,
@@ -41,6 +43,14 @@ export const INBOUND_RPC = {
   RETURN_GET: 'inventory.return.get',
   DEFECT_ACT_PDF: 'inventory.return.defect-act-pdf',
 } as const;
+
+/** checkout → inventory (BE-25, FE-17): SKU yacheykasi (OMB-2) HQ omborda, variant bo‘yicha. */
+export const INVENTORY_VARIANT_CELLS = 'inventory.variant-cells';
+
+export interface InventoryVariantCell {
+  variantId: string;
+  cell: string | null;
+}
 
 /** inventory → catalog: CPA mahsulotining yagona faol varianti (SKU, shtrix-kod, optovik). */
 export const CATALOG_INVENTORY_PRODUCTS = 'catalog.inventory.products';
@@ -196,11 +206,66 @@ export class ReceiveInboundDto {
   comment?: string;
 }
 
+/** `status=DECLARED,IN_TRANSIT` yoki `status=DECLARED&status=IN_TRANSIT`; bo‘sh — filtrsiz. */
+const toStatusList = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) return undefined;
+  const list = (Array.isArray(value) ? value : [value])
+    .flatMap((item) => String(item).split(','))
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return list.length ? [...new Set(list)] : undefined;
+};
+
 export class InboundShipmentQueryDto {
-  @ApiPropertyOptional({ enum: InboundShipmentStatus })
+  @ApiPropertyOptional({
+    enum: InboundShipmentStatus,
+    isArray: true,
+    description:
+      'Bir yoki bir nechta holat: `status=DECLARED,IN_TRANSIT` yoki takroriy parametr',
+  })
   @IsOptional()
-  @IsIn(Object.values(InboundShipmentStatus))
-  status?: InboundShipmentStatus;
+  @Transform(toStatusList)
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsIn(Object.values(InboundShipmentStatus), { each: true })
+  status?: InboundShipmentStatus[];
+
+  @ApiPropertyOptional({
+    example: 'vitamin',
+    description:
+      'Postavka raqami (`PS-000014` yoki 14), mahsulot nomi, SKU, shtrix-kod yoki optovik nomi (BE-25)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-12-01',
+    description: 'Kutilgan kelish sanasi, dan (BE-25)',
+  })
+  @IsOptional()
+  @Matches(DAY, { message: 'expectedFrom YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString()
+  expectedFrom?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-12-07',
+    description: 'Kutilgan kelish sanasi, gacha (shu kun ham)',
+  })
+  @IsOptional()
+  @Matches(DAY, { message: 'expectedTo YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString()
+  expectedTo?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-12-01',
+    description: 'Qabul qilingan kun (Toshkent)',
+  })
+  @IsOptional()
+  @Matches(DAY, { message: 'receivedOn YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString()
+  receivedOn?: string;
 
   @ApiPropertyOptional({ example: '15' })
   @IsOptional()
@@ -257,12 +322,27 @@ export class InboundShipmentItemDto {
   expiryDate: string | null;
   @ApiPropertyOptional({ nullable: true, example: 'B-02-1' })
   cell: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Boolean,
+    example: true,
+    description:
+      'BE-25 (OMB-3): muddat kuzatiladi — BAD mahsulot yoki toifa belgisi. Katalog javob bermasa null. Optovik kabinetida yo‘q',
+  })
+  expiryTracked?: boolean | null;
 }
 
+/** BE-25: ism maydonlari `admin/inventory/shipments*` da; katalog yoki identity javob bermasa — null. */
 export class InboundShipmentDto {
   @ApiProperty({ example: '14' }) id: string;
   @ApiProperty({ example: 'PS-000014' }) number: string;
   @ApiProperty({ example: '15' }) wholesalerId: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    example: 'Gadget Trade MChJ',
+  })
+  wholesalerName?: string | null;
   @ApiProperty({
     enum: InboundShipmentStatus,
     example: InboundShipmentStatus.DISCREPANCY,
@@ -272,8 +352,19 @@ export class InboundShipmentDto {
   @ApiPropertyOptional({ nullable: true, example: 'Haftalik postavka' })
   note: string | null;
   @ApiProperty({ example: '3' }) declaredBy: string;
+  @ApiPropertyOptional({ nullable: true, type: String, example: 'Nodira K.' })
+  declaredByName?: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: Role,
+    example: Role.ADMIN,
+    description: 'Kiritgan odam roli: optovik, omborchi, admin yoki superadmin',
+  })
+  declaredByRole?: Role | null;
   @ApiPropertyOptional({ nullable: true, example: '5' })
   receivedBy: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String, example: 'Jasur T.' })
+  receivedByName?: string | null;
   @ApiPropertyOptional({ nullable: true, example: '2026-12-01T06:40:00.000Z' })
   receivedAt: Date | null;
   @ApiPropertyOptional({ nullable: true, example: '2 dona qadog‘i yirtilgan' })
@@ -288,6 +379,12 @@ export class InboundShipmentPageDto {
   @ApiProperty({ example: 1 }) total: number;
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({
+    example: { DECLARED: 3, IN_TRANSIT: 1, RECEIVED: 12, DISCREPANCY: 2 },
+    description:
+      'BE-25: holatlar soni — `status` dan boshqa filtrlar bo‘yicha (yorliqlar)',
+  })
+  counts: Record<InboundShipmentStatus, number>;
 }
 
 export class StockLotDto {
@@ -306,6 +403,23 @@ export class StockLotDto {
   sellableUntil: string;
   @ApiProperty({ example: 96 }) quantity: number;
   @ApiProperty({ example: false }) blocked: boolean;
+  @ApiProperty({ example: '15' }) wholesalerId: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    example: 'Gadget Trade MChJ',
+    description: 'BE-25: katalog javob bermasa null',
+  })
+  wholesalerName?: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    example: null,
+    description:
+      'BE-25 (OMB-3): sotuvdan chiqqani haqida admin va superadminga xabar vaqti; hali yuborilmagan — null',
+  })
+  notifiedAt: Date | null;
 }
 
 export class GradeReturnItemDto {

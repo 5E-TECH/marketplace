@@ -196,12 +196,29 @@ describeWithPostgres(
               return inventory.release(data as never);
             if (pattern.cmd === 'inventory.commit')
               return inventory.commit(data as never);
+            // BE-25 (OMB-2): yig‘ish ro‘yxatidagi yacheyka
+            if (pattern.cmd === 'inventory.variant-cells')
+              return (data.variantIds as string[]).map((variantId) => ({
+                variantId,
+                cell: variantId === VARIANT ? 'B-02-1' : null,
+              }));
             throw new Error(`kutilmagan ombor so‘rovi: ${pattern.cmd}`);
           }),
       };
       const integration = {
         send: (pattern: { cmd: string }) =>
           rpc(async () => {
+            // BE-25: yig‘ish ro‘yxatidagi viloyat va tuman nomlari
+            if (pattern.cmd === 'integration.geo.region-tree')
+              return [
+                {
+                  satoCode: '1726',
+                  name: 'Toshkent shahri',
+                  districts: [
+                    { satoCode: '1726262', name: 'Chilonzor tumani' },
+                  ],
+                },
+              ];
             if (pattern.cmd !== 'integration.geo.resolve-address')
               throw new Error(`kutilmagan so‘rov: ${pattern.cmd}`);
             return {
@@ -229,6 +246,7 @@ describeWithPostgres(
         status,
         new ShippingLabelService(),
         integration as never,
+        inventoryClient as never,
       );
       parcels = new ElchiParcelEventsService(checkoutDs);
       const quiet = { emit: () => from([undefined]) };
@@ -279,7 +297,20 @@ describeWithPostgres(
         quantity: 2,
         pickedQty: 0,
         overdue: false,
-        parcel: { elchiState: 'PENDING', labelReady: false },
+        // BE-25 (FE-17): yorliqdagi ma’lumot — mijoz, manzil, summa, tasdiq vaqti
+        customerName: 'Dilnoza',
+        regionName: 'Toshkent shahri',
+        districtName: 'Chilonzor tumani',
+        deliveryMode: 'CENTER',
+        codAmount: 276_000 * 2 + 30_000,
+        confirmedAt: '2026-12-15T08:55:00.000Z',
+        packedAt: null,
+        lines: [{ cell: 'B-02-1', weightKg: 1 }],
+        parcel: {
+          elchiState: 'PENDING',
+          labelReady: false,
+          qrCodeToken: null,
+        },
       });
       // ertasi kun: 7002 va kechikkan 7001
       const tomorrow = await fulfillment.pickList('2026-12-16');
@@ -410,6 +441,7 @@ describeWithPostgres(
         shipmentId: String(1_251_100 + Number(order.id)),
         labelReady: true,
         error: null,
+        qrCodeToken: 'tok-7001', // BE-25: yorliqdagi QR — topshirish skani uchun
       });
     });
 
@@ -717,6 +749,37 @@ describeWithPostgres(
           reason: expect.stringContaining('yaratilmadi'),
         },
       ]);
+    });
+
+    it('BE-25: geo va ombor javob bermasa ham ro‘yxat qaytadi — nom va yacheykasiz; posilka tayyor bo‘lsa QR va Elchi summasi', async () => {
+      const down = {
+        send: () => rpc(async () => Promise.reject(new Error('yo‘q'))),
+      };
+      const bare = new FulfillmentService(
+        checkoutDs,
+        status,
+        new ShippingLabelService(),
+        down as never,
+        down as never,
+      );
+      await orders.onLeadConfirmed(confirmed('7950', '2026-12-15T05:00:00Z'));
+      const order = await orderOf('7950');
+      await created(order.id, 'qr-7950');
+      const item = (await bare.pickList('2026-12-15')).items.find(
+        (row) => row.orderId === order.id,
+      );
+      expect(item).toMatchObject({
+        customerName: 'Dilnoza',
+        regionName: null,
+        districtName: null,
+        codAmount: 306_000, // Elchi javobidagi summa — yorliqdagidek
+        lines: [{ cell: null, weightKg: 1 }],
+        parcel: { labelReady: true, qrCodeToken: 'qr-7950' },
+      });
+      await checkoutDs.query(
+        `UPDATE checkout.fulfillment_task SET status = 'CANCELLED' WHERE order_id = $1`,
+        [order.id],
+      );
     });
 
     it('mavjud bo‘lmagan sana — 400 (500 emas)', async () => {

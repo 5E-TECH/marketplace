@@ -8,6 +8,7 @@ import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
 import { ProductVariant } from './entities/product-variant.entity';
 import { Shop } from './entities/shop.entity';
+import { CategoryService } from './category.service';
 import { CatalogOfferService } from './catalog-offer.service';
 import { CreativeService } from './creative.service';
 import { Creative } from './entities/creative.entity';
@@ -327,6 +328,89 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     await expect(offers.get(productId)).resolves.toMatchObject({
       isBad: true,
     });
+  });
+
+  it('BE-25 (OMB-3, TZ 8): toifa belgisi mahsulotga o‘tadi — «muddat kuzatiladi» ro‘yxat, karta va ko‘rinish javobida; BAD toifasi offerda', async () => {
+    const categories = new CategoryService(ds.getRepository(Category));
+    const parent = await categories.create({
+      name: 'Parvarish BE25',
+      expiryTracked: true,
+    });
+    const child = await categories.create({
+      name: 'Kremlar BE25',
+      slug: 'kremlar-be25',
+      parentId: String(parent.id),
+    });
+    await products.adminUpdate(productId, {
+      isBad: false,
+      categoryId: String(child.id),
+    });
+    const badByCategory = async () =>
+      (await products.adminGet(productId)).badByCategory;
+    const tracked = async () => ({
+      list: (
+        await products.adminList({ shopId: wholesalerId, page: 1, limit: 100 })
+      ).items.find((p) => String(p.id) === productId)?.expiryTracked,
+      card: (await products.adminGet(productId)).expiryTracked,
+      display: (await offers.displayLookup({ productIds: [productId] }))
+        .products[0].expiryTracked,
+      offerBad: (await offers.get(productId))?.isBad,
+    });
+    await expect(tracked()).resolves.toEqual({
+      list: true,
+      card: true,
+      display: true,
+      offerBad: false,
+    });
+    await categories.update(String(child.id), { expiryTracked: false });
+    await expect(tracked()).resolves.toEqual({
+      list: false,
+      card: false,
+      display: false,
+      offerBad: false,
+    });
+    await expect(badByCategory()).resolves.toBe(false);
+    await categories.update(String(parent.id), { isBad: true });
+    await expect(badByCategory()).resolves.toBe(true);
+    await expect(tracked()).resolves.toEqual({
+      list: true,
+      card: true,
+      display: true,
+      offerBad: true,
+    });
+    const listed = (await offers.list({ productIds: [productId] }))[0];
+    expect(listed.isBad).toBe(true);
+    // mahsuloti bor toifa o‘chmaydi
+    await expect(categories.remove(String(child.id))).rejects.toMatchObject({
+      status: 409,
+    });
+    // ombor qoldiq ro‘yxati: optovik nomi va shtrix-kod
+    const [variant] = await ds
+      .getRepository(ProductVariant)
+      .find({ where: { productId } });
+    await expect(
+      variants.getInventoryDetails(null, [String(variant.id)]),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        wholesalerName: WHOLESALER.name,
+        barcode: variant.barcode,
+      }),
+    ]);
+    await products.adminUpdate(productId, { isBad: true });
+    await categories.update(String(parent.id), {
+      isBad: null,
+      expiryTracked: null,
+    });
+  });
+
+  it('BE-25: optovik qidiruvida `%` va `_` — oddiy belgi (hamma optovik chiqmaydi)', async () => {
+    const total = async (search: string) =>
+      (await wholesalers.list({ search, page: 1, limit: 100 })).total;
+    await expect(total('%')).resolves.toBe(0);
+    await expect(total('_')).resolves.toBe(0);
+    await expect(total(WHOLESALER.name.slice(0, 5))).resolves.toBeGreaterThan(
+      0,
+    );
   });
 
   it('OPT-1: shartnomasiz optovikka mahsulot qo‘shib bo‘lmaydi — 409', async () => {

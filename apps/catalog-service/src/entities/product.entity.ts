@@ -148,6 +148,18 @@ export class Product extends BaseEntity {
   })
   marketTotal: number | null;
 
+  /** BE-25 (FE-13): bozor narxi qayerda va qachon ko‘rilgani. */
+  @Column({
+    name: 'market_source',
+    type: 'varchar',
+    length: 300,
+    nullable: true,
+  })
+  marketSource: string | null;
+
+  @Column({ name: 'market_checked_at', type: 'timestamptz', nullable: true })
+  marketCheckedAt: Date | null;
+
   /** BAD (dori vositasi emas) — admin qo‘yadi (ADM-1); sotuvchi sahifasi ogohlantirishni shundan ko‘rsatadi. */
   @Column({ name: 'is_bad', type: 'boolean', default: false })
   isBad: boolean;

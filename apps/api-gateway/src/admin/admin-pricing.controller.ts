@@ -124,6 +124,8 @@ export class AdminPricingController {
   @ApiOperation({
     summary:
       'Bozor narxi tekshiruvi (NRX-5): «mos»/«qimmat» va optovik uchun eng yuqori bazaviy narx',
+    description:
+      'Summa va manba mahsulotda saqlanadi. `preview: true` — faqat natija, saqlanmaydi va auditga yozilmaydi (`checkedAt: null`).',
   })
   @ApiCreatedResponse({ schema: { example: MARKET_CHECK_EXAMPLE } })
   async market(
@@ -137,7 +139,11 @@ export class AdminPricingController {
       { cmd: 'catalog.pricing.market-check' },
       { productId: id, dto },
     );
-    this.audit(admin.sub, 'price.market-check', 'Product', id, ip, { ...dto });
+    // BE-25: oldindan ko‘rish hech narsa o‘zgartirmaydi — auditga yozilmaydi
+    if (!dto.preview)
+      this.audit(admin.sub, 'price.market-check', 'Product', id, ip, {
+        ...dto,
+      });
     return result;
   }
 

@@ -5,18 +5,23 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  CheckoutDeliveryDestination,
   ErrorCode,
   FulfillmentTaskStatus,
   HandoverActsPage,
   HandoverActView,
+  INVENTORY_VARIANT_CELLS,
+  InventoryVariantCell,
   LeadOrderActor,
   LeadOrderActorType,
   LeadOrderStatus,
+  LeadRegionGroupDto,
   ParcelElchiState,
   PickListItem,
   PickListLine,
@@ -47,6 +52,8 @@ const isRealDate = (day: string) =>
 const MAX_ACT_PARCELS = 200;
 /** Yorliqdagi viloyat/tuman nomi uchun kutish — gateway kutishidan ancha qisqa. */
 const GEO_TIMEOUT_MS = 3_000;
+/** Yacheykalarni ombordan kutish: javob bo‘lmasa ro‘yxat yacheykasiz qaytadi [taklif]. */
+const CELLS_TIMEOUT_MS = 1_500;
 /** Bir kunlik ro‘yxat chegarasi (sahifalashsiz); oshsa — `truncated`. */
 const PICK_LIST_LIMIT = 1_000;
 /** Yorliqdagi jo‘natuvchi — bitta platforma marketi (BE-20 `ELCHI_PLATFORM_MARKET_ID`) [taklif]. */
@@ -75,6 +82,30 @@ interface TaskRow {
   orderStatus: LeadOrderStatus;
 }
 
+/** Yig‘ish ro‘yxatining tovar qatori (SQL `json_agg`). */
+interface PickLineRow {
+  variantId: string | null;
+  productName: string | null;
+  sku: string | null;
+  barcode: string | null;
+  quantity: number;
+  pickedQty: number;
+  weightGrams: number | null;
+}
+
+const deliveryModeOf = (value: unknown): 'CENTER' | 'DOOR' | null =>
+  value === CheckoutDeliveryDestination.CENTER
+    ? 'CENTER'
+    : value === CheckoutDeliveryDestination.ADDRESS
+      ? 'DOOR'
+      : null;
+
+const isoOrNull = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  const at = new Date(value as string | Date);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+};
+
 export interface WarehouseActor {
   id: string;
   role?: string | null;
@@ -95,6 +126,9 @@ export class FulfillmentService {
     private readonly status: LeadOrderStatusService,
     private readonly labels: ShippingLabelService,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
+    @Optional()
+    @Inject(RmqClient.INVENTORY)
+    private readonly inventory?: ClientProxy,
   ) {}
 
   /**
@@ -112,13 +146,23 @@ export class FulfillmentService {
               i.product_name AS "productName", i.sku, i.barcode,
               p.elchi_state AS "elchiState", p.elchi_shipment_id::text AS "shipmentId",
               (p.elchi_shipment_id IS NOT NULL AND p.qr_code_token IS NOT NULL) AS "labelReady",
-              p.elchi_error AS "elchiError",
+              p.elchi_error AS "elchiError", p.qr_code_token AS "qrCodeToken",
+              t.packed_at AS "packedAt", o.buyer_name AS "customerName",
+              o.region_soato AS "regionSoato", o.district_soato AS "districtSoato",
+              o.where_deliver AS "whereDeliver",
+              COALESCE(p.elchi_to_be_paid, o.cod_amount)::text AS "codAmount",
+              COALESCE((SELECT r.payload->>'confirmedAt' FROM checkout.lead_order_request r
+                         WHERE r.order_id = o.id LIMIT 1),
+                       to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) AS "confirmedAt",
               (SELECT json_agg(json_build_object(
+                        'variantId', x.variant_id::text,
                         'productName', x.product_name, 'sku', x.sku, 'barcode', x.barcode,
-                        'quantity', x.quantity, 'pickedQty', x.picked_qty) ORDER BY x.id)
+                        'quantity', x.quantity, 'pickedQty', x.picked_qty,
+                        'weightGrams', x.weight_grams) ORDER BY x.id)
                  FROM checkout.sales_order_item x WHERE x.sales_order_seller_id = p.id) AS lines
          FROM checkout.fulfillment_task t
          JOIN checkout.parcel p ON p.id = t.parcel_id
+         JOIN checkout.sales_order o ON o.id = t.order_id
          JOIN LATERAL (
            SELECT product_name, sku, barcode FROM checkout.sales_order_item
             WHERE sales_order_seller_id = p.id ORDER BY id LIMIT 1
@@ -130,7 +174,18 @@ export class FulfillmentService {
       [day, PICK_LIST_LIMIT + 1],
     )) as Array<Record<string, unknown>>;
     const truncated = rows.length > PICK_LIST_LIMIT;
-    const items: PickListItem[] = rows.slice(0, PICK_LIST_LIMIT).map((r) => ({
+    const page = rows.slice(0, PICK_LIST_LIMIT);
+    const linesOf = (r: Record<string, unknown>) =>
+      (r.lines as PickLineRow[] | null) ?? [];
+    const [geo, cells] = page.length
+      ? await Promise.all([
+          this.geoTree(),
+          this.cellsOf(
+            page.flatMap((r) => linesOf(r).map((line) => line.variantId)),
+          ),
+        ])
+      : [new Map<string, string>(), new Map<string, string | null>()];
+    const items: PickListItem[] = page.map((r) => ({
       taskId: String(r.taskId),
       orderId: String(r.orderId),
       orderNumber: leadOrderNumber(String(r.orderId)),
@@ -142,18 +197,30 @@ export class FulfillmentService {
       barcode: (r.barcode as string) ?? null,
       quantity: Number(r.requiredQty),
       pickedQty: Number(r.pickedQty),
-      lines: ((r.lines as PickListLine[] | null) ?? []).map((line) => ({
+      lines: linesOf(r).map((line): PickListLine => ({
         productName: String(line.productName ?? ''),
         sku: line.sku ?? null,
         barcode: line.barcode ?? null,
         quantity: Number(line.quantity),
         pickedQty: Number(line.pickedQty),
+        cell: line.variantId ? (cells.get(line.variantId) ?? null) : null,
+        weightKg:
+          line.weightGrams == null ? null : Number(line.weightGrams) / 1_000,
       })),
+      customerName: (r.customerName as string) || null,
+      regionName: geo.get(String(r.regionSoato)) ?? null,
+      districtName:
+        geo.get(`${String(r.regionSoato)}/${String(r.districtSoato)}`) ?? null,
+      deliveryMode: deliveryModeOf(r.whereDeliver),
+      codAmount: r.codAmount == null ? null : Number(r.codAmount),
+      confirmedAt: isoOrNull(r.confirmedAt),
+      packedAt: isoOrNull(r.packedAt),
       parcel: {
         elchiState: (r.elchiState as ParcelElchiState) ?? null,
         shipmentId: (r.shipmentId as string) ?? null,
         labelReady: Boolean(r.labelReady),
         error: (r.elchiError as string) ?? null,
+        qrCodeToken: (r.qrCodeToken as string) ?? null,
       },
     }));
     const count = (status: FulfillmentTaskStatus) =>
@@ -695,6 +762,55 @@ export class FulfillmentService {
       message: `${action[0].toUpperCase()}${action.slice(1)} mumkin emas: ${reason}`,
       errorCode: ErrorCode.INVALID_STATE,
     });
+  }
+
+  /** Viloyat (`1726`) va tuman (`1726/1726262`) nomlari; geo keshi javob bermasa — bo‘sh (ro‘yxat nomsiz qaytadi). */
+  private async geoTree(): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    try {
+      const tree = await firstValueFrom(
+        this.integration
+          .send<LeadRegionGroupDto[]>(
+            { cmd: 'integration.geo.region-tree' },
+            {},
+          )
+          .pipe(timeout(GEO_TIMEOUT_MS)),
+      );
+      for (const region of tree ?? []) {
+        names.set(region.satoCode, region.name);
+        for (const district of region.districts)
+          names.set(`${region.satoCode}/${district.satoCode}`, district.name);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Yig‘ish ro‘yxati: viloyat/tuman nomlari olinmadi — ${(error as Error).message}`,
+      );
+    }
+    return names;
+  }
+
+  /** OMB-2: yacheykalar (inventory); javob bo‘lmasa — bo‘sh. */
+  private async cellsOf(
+    variantIds: Array<string | null>,
+  ): Promise<Map<string, string | null>> {
+    const ids = [...new Set(variantIds.filter((id): id is string => !!id))];
+    if (!this.inventory || !ids.length) return new Map();
+    try {
+      const rows = await firstValueFrom(
+        this.inventory
+          .send<InventoryVariantCell[]>(
+            { cmd: INVENTORY_VARIANT_CELLS },
+            { variantIds: ids },
+          )
+          .pipe(timeout(CELLS_TIMEOUT_MS)),
+      );
+      return new Map((rows ?? []).map((row) => [row.variantId, row.cell]));
+    } catch (error) {
+      this.logger.warn(
+        `Yig‘ish ro‘yxati: yacheykalar olinmadi — ${(error as Error).message}`,
+      );
+      return new Map();
+    }
   }
 
   /** Viloyat va tuman nomi (Elchi geo, BE-38/BE-20); javob bo‘lmasa — SOATO kodi (yorliq baribir chiqadi). */

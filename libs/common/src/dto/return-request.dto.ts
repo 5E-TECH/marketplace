@@ -263,7 +263,12 @@ export interface CatalogDisplayLookupRequest {
 
 export interface CatalogDisplayLookupResult {
   shops: Array<{ id: string; name: string | null }>;
-  products: Array<{ id: string; imageUrl: string | null }>;
+  /** `expiryTracked` — postavkada muddat kuzatiladi (BAD yoki toifa belgisi, OMB-3; BE-25). */
+  products: Array<{
+    id: string;
+    imageUrl: string | null;
+    expiryTracked: boolean;
+  }>;
   /** Variant rasmi, u bo‘lmasa mahsulot rasmi yoki birinchi rasmi; nomi — mahsulot nomi. */
   variants: Array<{ id: string; name: string | null; imageUrl: string | null }>;
 }

@@ -338,8 +338,24 @@ describeWithPostgres('BE-30 optovik kabineti — catalog (PostgreSQL)', () => {
         platformService: expect.any(Number),
       }),
     );
-    expect(view).not.toHaveProperty('params');
-    expect(view).not.toHaveProperty('tariff');
+    for (const key of ['params', 'tariff', 'modes', 'market', 'marketTotal'])
+      expect(view).not.toHaveProperty(key);
+    // BE-25: yaxlitlanmagan tavsiya va eng katta haq ham yo‘q (ulardan ichki M va K chiqariladi)
+    expect(view.calculation).not.toHaveProperty('recommendedBaseExact');
+    expect(view.evaluation).not.toHaveProperty('maxAffiliateFee');
+    // bozor narxi (summa, manba, vaqt) optovik mahsulotida ham yo‘q
+    await ds.query(
+      `UPDATE catalog.product SET market_total = 285000, market_source = 'Uzum Market', market_checked_at = now()
+        WHERE id = $1`,
+      [product.id],
+    );
+    const card = await cabinet.getProduct('7030', String(product.id));
+    const listed = (await cabinet.listProducts('7030')).items[0];
+    for (const key of ['marketTotal', 'marketSource', 'marketCheckedAt']) {
+      expect(card).not.toHaveProperty(key);
+      expect(listed).not.toHaveProperty(key);
+    }
+    expect(card).toMatchObject({ basePrice: 140_000 });
     await cabinet.selfRegister({
       ...PROFILE,
       tin: '305999007',

@@ -35,6 +35,7 @@ import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
 import { LeadAddressService } from './lead-address.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { PostbackService } from './postback.service';
+import { UserNamesClient } from './user-names.client';
 import { contactDeadline, LEAD_RULES } from './lead-rules';
 import {
   bookingUntil,
@@ -74,6 +75,8 @@ export class LeadQueueService {
     @Optional() private readonly postback?: PostbackService,
     // BE-18 TC1: tasdiqlangan lid commit dan keyin darhol checkout’ga (cron 10 s — zaxira)
     @Optional() private readonly relay?: LeadOutboxRelayService,
+    // BE-25: navbat xulosasida operator ismi
+    @Optional() private readonly userNames?: UserNamesClient,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -334,10 +337,14 @@ export class LeadQueueService {
             .getRepository(OperatorState)
             .find({ order: { operatorId: 'ASC' } }),
     ]);
+    const nameOf =
+      this.userNames && states.length
+        ? await this.userNames.resolve(states.map((s) => s.operatorId))
+        : (id: string) => `#${id}`;
     const operators = await Promise.all(
       states.map(async (s) => ({
         operatorId: s.operatorId,
-        name: `#${s.operatorId}`,
+        name: nameOf(s.operatorId),
         state: s.state,
         activeBookings: await this.activeNewBookings(
           this.db.manager,

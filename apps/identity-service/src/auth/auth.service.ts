@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
 import {
@@ -24,6 +24,8 @@ import {
   Role,
   RmqClient,
   UpdateProfileDto,
+  USER_NAMES_LIMIT,
+  UserNameRow,
   VerifyPhoneDto,
   ErrorCode,
 } from '@app/common';
@@ -132,6 +134,23 @@ export class AuthService {
     user.isActive = isActive;
     const saved = await this.users.save(user);
     return this.sanitize(saved);
+  }
+
+  /** BE-25: ism va rol ID bo‘yicha; o‘chirilgani ham (tarix), noto‘g‘ri va takroriy ID tashlanadi. */
+  async userNames(ids: string[]): Promise<UserNameRow[]> {
+    const unique = [...new Set((Array.isArray(ids) ? ids : []).map(String))]
+      .filter((id) => /^[1-9]\d{0,18}$/.test(id))
+      .slice(0, USER_NAMES_LIMIT);
+    if (!unique.length) return [];
+    const rows = await this.users.find({
+      where: { id: In(unique) },
+      select: { id: true, name: true, role: true },
+    });
+    return rows.map((u) => ({
+      id: String(u.id),
+      name: u.name?.trim() || null,
+      role: u.role,
+    }));
   }
 
   /** BE-09: faol (bloklanmagan, o‘chirilmagan) foydalanuvchilar — bildirishnoma qabul qiluvchilari. */

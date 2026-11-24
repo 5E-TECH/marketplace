@@ -144,6 +144,10 @@ export interface PickListLine {
   barcode: string | null;
   quantity: number;
   pickedQty: number;
+  /** BE-25 (FE-17, OMB-2): yacheyka HQ omborda; yozilmagan yoki ombor javob bermadi — null. */
+  cell: string | null;
+  /** BE-25: bitta dona og‘irligi, kg (buyurtma nusxasi); eski qatorda null. */
+  weightKg: number | null;
 }
 
 export interface PickListItem {
@@ -164,11 +168,24 @@ export interface PickListItem {
    * qator (eski maydonlar), `quantity`/`pickedQty` — jami.
    */
   lines: PickListLine[];
+  /** BE-25 (FE-17): posilka sarlavhasi, yig‘ish varaqasi va akt ustunlari — yorliqdagi ma’lumot bilan bir xil. */
+  customerName: string | null;
+  /** Tasdiqlangan manzil; geo keshi javob bermasa — null. */
+  regionName: string | null;
+  districtName: string | null;
+  deliveryMode: 'CENTER' | 'DOOR' | null;
+  /** Olganda to‘lanadi, so‘m (Elchi javobidagi summa, u yo‘q bo‘lsa — buyurtmadagi). */
+  codAmount: number | null;
+  /** Operator tasdiqlagan vaqt (14:00 chegarasi shundan), ISO 8601. */
+  confirmedAt: string | null;
+  packedAt: string | null;
   parcel: {
     elchiState: ParcelElchiState | null;
     shipmentId: string | null;
     labelReady: boolean;
     error: string | null;
+    /** BE-25: yorliqdagi QR — topshirishda har skanga darhol javob uchun. */
+    qrCodeToken: string | null;
   };
 }
 

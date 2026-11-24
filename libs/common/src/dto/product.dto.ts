@@ -22,6 +22,7 @@ import {
   PartialType,
 } from '@nestjs/swagger';
 import { ProductStatus } from '../enums';
+import { DeliveryDisplayMode } from '../pricing/price-calculator';
 
 /** Og‘irlik (g) va o‘lcham (mm) uchun texnik yuqori chegara — INTEGER ustuni (2^31 − 1). */
 const MAX_DIMENSION = 2_147_483_647;
@@ -322,6 +323,18 @@ export class ProductDto {
   marketTotal: number | null;
   @ApiProperty({ example: true }) cpaEnabled: boolean;
   @ApiProperty({ example: false }) isBad: boolean;
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida',
+  })
+  expiryTracked?: boolean;
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'BE-25 (TZ 8): toifasi BAD — o‘z `isBad` belgisi bo‘lmasa ham sahifada «Dori vositasi emas». Faqat admin ro‘yxati va kartasida',
+  })
+  badByCategory?: boolean;
   @ApiProperty({ example: false }) isBlocked: boolean;
   @ApiProperty({
     example: null,
@@ -409,4 +422,37 @@ export class ModerationSummaryDto {
 
 export const CATALOG_MODERATION_RPC = {
   SUMMARY: 'catalog.moderation.summary',
+  /** BE-25 (FE-13): narx qarori kutayotgan mahsulotlar ro‘yxati (`pricesPending` bilan bir xil qoida). */
+  PRICES: 'catalog.moderation.prices',
 } as const;
+
+/** BE-25 (FE-13): narx navbati qatori. */
+export class PriceQueueItemDto {
+  @ApiProperty({ example: '511' }) productId: string;
+  @ApiProperty({ example: 'Simsiz quloqchinlar' }) name: string;
+  @ApiProperty({ example: 'Namuna Savdo MChJ', nullable: true, type: String })
+  shopName: string | null;
+  @ApiProperty({ example: 140000, nullable: true, type: Number })
+  basePrice: number | null;
+  @ApiProperty({
+    example: 262000,
+    nullable: true,
+    type: Number,
+    description:
+      'Tavsiya narx (joriy rejimda). Bazaviy narx, og‘irlik yoki sozlama yo‘q — hisoblanmaydi, null',
+  })
+  recommended: number | null;
+  @ApiProperty({ enum: DeliveryDisplayMode, nullable: true })
+  deliveryMode: DeliveryDisplayMode | null;
+  @ApiProperty({
+    example: '2027-01-06T05:05:00.000Z',
+    description:
+      'Mahsulot oxirgi o‘zgargan vaqt [taklif]; tartib — eskisi oldin',
+  })
+  queuedAt: string;
+}
+
+export class PriceQueueDto {
+  @ApiProperty({ type: [PriceQueueItemDto] }) items: PriceQueueItemDto[];
+  @ApiProperty({ example: 1 }) total: number;
+}

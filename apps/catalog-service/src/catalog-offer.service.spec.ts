@@ -59,29 +59,44 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
     );
 
   it('ID lar bo‘yicha do‘kon nomi, mahsulot va variant rasmi; noto‘g‘ri va takroriy ID tashlanadi', async () => {
-    const query = jest.fn(async (sql: string, [ids]: string[][]) => {
+    const query = jest.fn(async (sql: string, [ids]: string[][] = [[]]) => {
       if (sql.includes('FROM catalog.shop'))
         return ids.map((id) => ({ id, name: `Do‘kon ${id}` }));
       if (sql.includes('FROM catalog.product_variant'))
         return ids.map((id) => ({ id, name: 'Smartfon', imageUrl: '' }));
-      return ids.map((id) => ({ id, imageUrl: `https://cdn/${id}.webp` }));
+      // BE-25: «muddat kuzatiladi» belgisi toifadan meros
+      if (sql.includes('FROM catalog.category'))
+        return [
+          { id: '3', parentId: null, isBad: null, expiryTracked: true },
+          { id: '4', parentId: '3', isBad: null, expiryTracked: null },
+        ];
+      return ids.map((id) => ({
+        id,
+        imageUrl: `https://cdn/${id}.webp`,
+        categoryId: id === '10' ? '4' : null,
+        isBad: id === '12',
+      }));
     });
 
     await expect(
       make(query).displayLookup({
         shopIds: ['7', '7', 'x', '0'],
-        productIds: ['10', '99999999999999999999'],
+        productIds: ['10', '12', '13', '99999999999999999999'],
         variantIds: ['11'],
       }),
     ).resolves.toEqual({
       shops: [{ id: '7', name: 'Do‘kon 7' }],
-      products: [{ id: '10', imageUrl: 'https://cdn/10.webp' }],
+      products: [
+        { id: '10', imageUrl: 'https://cdn/10.webp', expiryTracked: true },
+        { id: '12', imageUrl: 'https://cdn/12.webp', expiryTracked: true },
+        { id: '13', imageUrl: 'https://cdn/13.webp', expiryTracked: false },
+      ],
       variants: [{ id: '11', name: 'Smartfon', imageUrl: null }],
     });
-    expect(query).toHaveBeenCalledTimes(3);
     expect(query.mock.calls.map((call) => call[1])).toEqual([
       [['7']],
-      [['10']],
+      [['10', '12', '13']],
+      undefined, // toifa belgilari — bir marta
       [['11']],
     ]);
   });

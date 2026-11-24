@@ -46,6 +46,7 @@ import { StreamService } from './stream.service';
 import { VariantReportController } from './variant-report.controller';
 import { VariantReportService } from './variant-report.service';
 import { AffiliateIdentityClient } from './affiliate-identity.client';
+import { UserNamesClient } from './user-names.client';
 import { FraudScheduler } from './fraud.scheduler';
 import { FraudService } from './fraud.service';
 import { LeadSupervisorController } from './lead-supervisor.controller';
@@ -172,6 +173,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     LeadOrderService,
     CapiService,
     AffiliateIdentityClient,
+    UserNamesClient,
     FraudService,
     FraudScheduler,
     LeadSupervisorService,

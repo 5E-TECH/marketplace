@@ -41,6 +41,14 @@ export class Category extends BaseEntity {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
+  /** BE-25 (FE-12, TZ 8): BAD toifasi; null — ota toifadan. */
+  @Column({ name: 'is_bad', type: 'boolean', nullable: true })
+  isBad: boolean | null;
+
+  /** BE-25 (FE-12, TZ OMB-3): postavkada partiya muddati kuzatiladi; null — ota toifadan. */
+  @Column({ name: 'expiry_tracked', type: 'boolean', nullable: true })
+  expiryTracked: boolean | null;
+
   @OneToMany(() => Product, (product) => product.category)
   products: Product[];
 }

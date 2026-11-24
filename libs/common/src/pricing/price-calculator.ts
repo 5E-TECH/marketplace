@@ -114,19 +114,19 @@ export const ceilTo = (value: number, step: number) =>
 export const floorTo = (value: number, step: number) =>
   Math.floor(value / step) * step;
 
+/** Bazaviy og‘irlikdan ortiq, har boshlangan kg (NRX-7). */
+export const extraKgFor = (tariff: ElchiTariff, weightGrams: number): number =>
+  Math.max(0, Math.ceil((weightGrams - tariff.baseWeightGrams) / 1000));
+
 /** Elchi tarifi: og‘irlik va yetkazish turi bo‘yicha (NRX-7). Ortiqcha og‘irlik har boshlangan kg uchun. */
 export function elchiTariffFor(
   tariff: ElchiTariff,
   weightGrams: number,
   kind: DeliveryKind,
 ): number {
-  const extraKg = Math.max(
-    0,
-    Math.ceil((weightGrams - tariff.baseWeightGrams) / 1000),
-  );
   return (
     tariff.centerBase +
-    extraKg * tariff.perExtraKg +
+    extraKgFor(tariff, weightGrams) * tariff.perExtraKg +
     (kind === DeliveryKind.ADDRESS ? tariff.addressExtra : 0)
   );
 }
@@ -221,6 +221,8 @@ export interface PriceCalculation {
   affiliateFee: number;
   /** Tavsiya narx alohida rejimda, 1 000 ga yuqoriga (TZ 2.1; 2.3 jadvali). */
   recommendedBase: number;
+  /** Tavsiya 1 000 ga yaxlitlanmasdan, butun so‘mga pastga — formula izohi uchun (FE-13: «= 250 120 → 251 000»). */
+  recommendedBaseExact: number;
   /** Zararsizlik narxi alohida rejimda (M = 0), butun so‘mga yuqoriga (TZ 2.3). */
   breakevenBase: number;
   /**
@@ -269,6 +271,7 @@ export function calculatePrice(
     basePrice,
     affiliateFee,
     recommendedBase,
+    recommendedBaseExact: num(floorDiv(rn, rd)),
     breakevenBase: num(ceilDiv(bn, bd)),
     hardFloorBase: num(floorDiv(fn, fd)),
     delivery,
@@ -305,6 +308,11 @@ export interface PriceEvaluation {
   belowRecommended: number;
   /** NRX-13: zarar bo‘lsa hech kim zarar ko‘rmaydigan sotuvchi haqining eng yuqori qiymati; yo‘q bo‘lsa — null. */
   safeAffiliateFee: number | null;
+  /**
+   * FE-13 (qizil holat izohi): platforma natijasi (70%) ≥ 0 bo‘ladigan eng katta haq — reklama xarajatidan kam bo‘lsa
+   * ham. Zarar yo‘q yoki bunday haq manfiy bo‘lsa — null.
+   */
+  maxAffiliateFee: number | null;
 }
 
 /**
@@ -338,6 +346,7 @@ export function evaluatePrice(
 
   // NRX-13: platforma natijasi (70%) ≥ 0 bo‘ladigan eng katta sotuvchi haqi; reklama xarajatidan kam bo‘lsa — yo‘q
   let safeAffiliateFee: number | null = null;
+  let maxAffiliateFee: number | null = null;
   if (status === PriceStatus.ORANGE || status === PriceStatus.RED) {
     const max = num(
       floorDiv(
@@ -348,6 +357,7 @@ export function evaluatePrice(
       ),
     );
     safeAffiliateFee = max >= p.adCost ? max : null;
+    maxAffiliateFee = max >= 0 ? max : null;
   }
   const hiddenDelivery = calc.delivery.hiddenPriceAdd;
   return {
@@ -366,6 +376,7 @@ export function evaluatePrice(
     affiliateResult,
     belowRecommended: Math.max(0, calc.recommended - price),
     safeAffiliateFee,
+    maxAffiliateFee,
   };
 }
 
@@ -424,6 +435,41 @@ export function marketCheck(
     verdict: ourTotal <= competitorTotal ? 'MOS' : 'QIMMAT',
     maxBasePrice: maxBase >= 0 ? maxBase : null,
   };
+}
+
+/** Bitta rejim: tavsiya tovar narxi, ko‘rinadigan yetkazish (markazgacha) va platforma natijasi (TZ 2.4). */
+export interface PricingModeRow {
+  mode: DeliveryDisplayMode;
+  goodsPrice: number;
+  delivery: number;
+  customerTotal: number;
+  platformResult70: number;
+  platformResult100: number;
+}
+
+/** FE-13 «Rejim · mijoz ko‘radi»: uch rejim solishtiruvi — har rejimda o‘z tavsiya narxi bilan (TZ 2.4). */
+export function pricingModes(
+  p: PricingParams,
+  tariff: ElchiTariff,
+  input: { basePrice: number; affiliateFee: number; weightGrams: number },
+): PricingModeRow[] {
+  return [
+    DeliveryDisplayMode.SEPARATE,
+    DeliveryDisplayMode.PARTIAL,
+    DeliveryDisplayMode.FREE,
+  ].map((mode) => {
+    const params = { ...p, deliveryMode: mode };
+    const calc = calculatePrice(params, tariff, input);
+    const result = evaluatePrice(params, calc, calc.recommended);
+    return {
+      mode,
+      goodsPrice: calc.recommended,
+      delivery: calc.delivery.visibleCenter,
+      customerTotal: calc.recommended + calc.delivery.visibleCenter,
+      platformResult70: result.platformResult70,
+      platformResult100: result.platformResult100,
+    };
+  });
 }
 
 /** Sotuvchi haqi tavsiyasi: reklama xarajati × koeffitsient, 1 000 gacha (TZ 2.1: 50 420 × 1.29 → 65 000). */
