@@ -109,6 +109,26 @@ export const envValidationSchema = Joi.object({
   // Notification provider adapterlari (ixtiyoriy)
   EMAIL_WEBHOOK_URL: Joi.string().uri().optional(),
   SMS_WEBHOOK_URL: Joi.string().uri().optional(),
+
+  // BE-15: telefoniya provayderi (EQ-02). URL berilmasa qo'ng'iroq tugmasi o'chiq, natija qo'lda (BE-13 dagidek).
+  TELEPHONY_API_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .allow('')
+    .optional(),
+  TELEPHONY_API_TOKEN: Joi.string().allow('').optional(),
+  // provayder webhooki imzosi (X-Telephony-Signature, HMAC-SHA256)
+  TELEPHONY_WEBHOOK_SECRET: Joi.string().min(16).allow('').optional(),
+  // TEL-1: mijozga ko'rinadigan mahalliy raqam; berilmasa provayder o'zi tanlaydi
+  TELEPHONY_CALLER_ID: Joi.string()
+    .pattern(/^\+998\d{9}$/)
+    .allow('')
+    .optional(),
+  // suhbatdan keyin yozuv shuncha daqiqada kelmasa — «yozuvsiz» (TEL-3) [taklif]
+  TELEPHONY_RECORDING_GRACE_MINUTES: Joi.number()
+    .integer()
+    .min(1)
+    .max(1440)
+    .default(30),
   TELEGRAM_BOT_TOKEN: Joi.string().optional(),
 
   // C4.2 — xaridor posilka yetkazilgandan keyin necha kun ichida qaytarish
