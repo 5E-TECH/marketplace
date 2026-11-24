@@ -337,6 +337,17 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       elchiTariff: 44_000,
     });
     expect(two.items).toHaveLength(2);
+    // BE-41: sayt buyurtmasi ham chek nusxasini oladi — optovik STIR i (`select: false`) bitta tovar yo‘li bilan bir xil;
+    // usiz sayt buyurtmasi Elchi’ga chek maydonlarisiz ketadi (QA 2026-11-23)
+    const fiscal = {
+      mxikCode: '08517001001000000',
+      packageCode: '1500012',
+      wholesalerTin: '305123456',
+    };
+    expect(one.items[0]!.fiscal).toEqual(fiscal);
+    expect(two.items.map((item) => item!.fiscal)).toEqual([fiscal, fiscal]);
+    const single = await offers.orderSnapshot(productId, 1, 'CENTER');
+    expect(one.items[0]).toEqual(single);
     // topilmagan mahsulot — null, posilka yetkazishi hisoblanmaydi
     await expect(
       offers.orderSnapshotMany(
