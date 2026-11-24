@@ -52,7 +52,15 @@ export const WHOLESALER_CABINET_RPC = {
   PRIVATE_GET: 'file.private.get',
   STOCK_SUMMARY: 'inventory.wholesaler.summary',
   BALANCE: 'finance.wholesaler.balance',
+  /** finance: panel «sotilgan» — yetkazilgan va teskari yozilmagan dona (mahsulot bo‘yicha), pul bilan bir hisob. */
+  SOLD_UNITS: 'finance.wholesaler.sold-units',
 } as const;
+
+/** Ichki: `finance.wholesaler.sold-units` javobi qatori — mahsulot bo‘yicha sotilgan dona. */
+export interface WholesalerSoldUnit {
+  productId: string;
+  quantity: number;
+}
 
 /** Elektron komissiya shartnomasi raqami (OPT-1) — o‘zi ro‘yxatdan o‘tgan optovikda [taklif, egaga savol 3]. */
 export const SELF_CONTRACT_PREFIX = 'OPT-E-';
@@ -305,7 +313,17 @@ export class WholesalerStockRowDto {
     description: 'Yo‘lda — e’lon qilingan, hali qabul qilinmagan postavka',
   })
   inTransit: number;
-  @ApiProperty({ example: 34, description: 'Sotilgan (Elchi’ga topshirilgan)' })
+  @ApiProperty({
+    example: 6,
+    description:
+      'Mijozga yo‘lda — Elchi’ga topshirilgan, taqdiri hali aniq emas (yetkazilmagan yoki qaytib kelmoqda): topshirilgan − sotilgan − qaytgan (sotiladigan va brak) [taklif]',
+  })
+  outForDelivery: number;
+  @ApiProperty({
+    example: 34,
+    description:
+      'Sotilgan — yetkazilgan va teskari yozilmagan dona, moliya hisobidan: pul (ushlab turilgan, to‘lanadigan, to‘langan) shu sotuvlardan',
+  })
   sold: number;
   @ApiProperty({ example: 3, description: 'Qaytgan (saralangan)' })
   returned: number;

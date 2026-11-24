@@ -42,6 +42,7 @@ import {
   WholesalerDocumentRecord,
   WholesalerMoneyDto,
   WholesalerProfileDto,
+  WholesalerSoldUnit,
   WholesalerStockRowDto,
   WholesalerStockTotals,
 } from '@app/common';
@@ -139,7 +140,7 @@ export class WholesalerCabinetController {
   @Get('dashboard')
   @ApiOperation({
     summary:
-      'Panel (OPT-3): mahsulotlar bo‘yicha omborda, bandda, yo‘lda, sotilgan, qaytgan, brak; pul holati',
+      'Panel (OPT-3): mahsulotlar bo‘yicha omborda, bandda, yo‘lda (postavka), mijozga yo‘lda, sotilgan (moliyadan), qaytgan, brak; pul holati',
   })
   @ApiOkResponse({ type: WholesalerDashboardDto })
   async dashboard(
@@ -154,14 +155,12 @@ export class WholesalerCabinetController {
         >
       >
     >(this.catalog, { cmd: RPC.VARIANTS }, { wholesalerId: wholesaler.id });
-    const [stock, money] = await Promise.all([
-      sendRpc<{
-        items: WholesalerStockRowDto[];
-        totals: WholesalerStockTotals;
-      }>(
-        this.inventory,
-        { cmd: RPC.STOCK_SUMMARY },
-        { wholesalerId: wholesaler.id, variants },
+    // «Sotilgan» moliya hisobidan (pul bilan bir hisob) — ombor qolgan raqamlarni shu son bilan hisoblaydi
+    const [sold, money] = await Promise.all([
+      sendRpc<WholesalerSoldUnit[]>(
+        this.finance,
+        { cmd: RPC.SOLD_UNITS },
+        { wholesalerId: wholesaler.id },
       ),
       sendRpc<WholesalerMoneyDto>(
         this.finance,
@@ -169,6 +168,14 @@ export class WholesalerCabinetController {
         { wholesalerId: wholesaler.id },
       ),
     ]);
+    const stock = await sendRpc<{
+      items: WholesalerStockRowDto[];
+      totals: WholesalerStockTotals;
+    }>(
+      this.inventory,
+      { cmd: RPC.STOCK_SUMMARY },
+      { wholesalerId: wholesaler.id, variants, sold },
+    );
     return { stock: stock.items, stockTotals: stock.totals, money };
   }
 

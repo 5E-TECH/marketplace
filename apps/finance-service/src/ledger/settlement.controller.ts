@@ -25,6 +25,12 @@ export class SettlementController {
     return this.balances.balance(input);
   }
 
+  /** BE-30 (OPT-3): optovik paneli — sotilgan dona moliya hisobidan (pul bilan bir hisob). */
+  @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.SOLD_UNITS })
+  soldUnits(@Payload() input: { wholesalerId: string }) {
+    return this.balances.soldUnits(input);
+  }
+
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RPC.SETTINGS_GET })
   settings() {
     return this.settlements.settings();
