@@ -13,6 +13,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateBy,
   ValidateIf,
 } from 'class-validator';
 import { Role } from '../enums';
@@ -85,7 +86,9 @@ export enum CallErrorCode {
   TELEPHONY_FAILED = 'TELEPHONY_FAILED',
   /** Operatorga ichki raqam yoki telefon biriktirilmagan — 409. */
   OPERATOR_PHONE_MISSING = 'OPERATOR_PHONE_MISSING',
-  /** Operatorda tugamagan qo‘ng‘iroq bor — 409. */
+  /** So‘rov navbatda eskirib qolgan — 409, tugma qayta bosiladi. */
+  CALL_REQUEST_EXPIRED = 'CALL_REQUEST_EXPIRED',
+  /** Operatorda yoki shu lidda tugamagan qo‘ng‘iroq bor — 409. */
   CALL_ACTIVE = 'CALL_ACTIVE',
   /** «Javob bermadi», «band», «o‘chiq» — avval qo‘ng‘iroq qilinadi (TEL-4) — 409. */
   CALL_REQUIRED = 'CALL_REQUIRED',
@@ -116,6 +119,23 @@ export const CALL_EVENTS = {
 } as const;
 
 const PROVIDER_REF = /^[\x21-\x7e]{1,200}$/;
+const INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Vaqt zonasi bilan to‘liq ISO vaqt (`…Z` yoki `…+05:00`): zonasiz yoki JS o‘qiy olmaydigan shakl — xato. */
+function IsInstant(): PropertyDecorator {
+  return ValidateBy({
+    name: 'isInstant',
+    validator: {
+      validate: (value: unknown) =>
+        typeof value === 'string' &&
+        INSTANT.test(value) &&
+        !Number.isNaN(Date.parse(value)),
+      defaultMessage: () =>
+        '$property vaqt zonasi bilan ISO 8601 bo‘lishi kerak',
+    },
+  });
+}
 
 interface CallEventBase {
   /** Provayder hodisasi ID si — takror kelsa bir marta ishlanadi. */
@@ -163,7 +183,7 @@ export class TelephonyWebhookDto {
   type: 'status' | 'completed' | 'recording';
 
   @ApiProperty({ example: '2027-01-14T09:36:00.000Z' })
-  @IsDateString({ strict: true })
+  @IsInstant()
   at: string;
 
   @ApiPropertyOptional({
@@ -199,7 +219,7 @@ export class TelephonyWebhookDto {
       dto.type === 'completed' &&
       (dto.endReason === CallEndReason.ANSWERED || dto.answeredAt != null),
   )
-  @IsDateString({ strict: true })
+  @IsInstant()
   answeredAt?: string;
 
   @ApiPropertyOptional({

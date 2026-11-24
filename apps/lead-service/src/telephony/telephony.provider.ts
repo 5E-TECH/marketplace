@@ -14,6 +14,16 @@ export interface OriginateInput {
   callerId: string | null;
 }
 
+/** Ulanish bo‘lmagan — qo‘ng‘iroq aniq boshlanmadi. */
+const NOT_CONNECTED: ReadonlySet<string> = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
 /** Natija noma’lum (vaqt tugadi, aloqa uzildi): qo‘ng‘iroq boshlangan bo‘lishi mumkin — FAILED deb yozilmaydi. */
 export class TelephonyUnknownError extends Error {}
 
@@ -99,6 +109,11 @@ export class TelephonyProvider {
         redirect: 'error',
       });
     } catch (error) {
+      const code = (error as { cause?: { code?: string } })?.cause?.code;
+      if (code && NOT_CONNECTED.has(code))
+        throw new TelephonyRejectedError(
+          `provayderga ulanib bo‘lmadi: ${code}`,
+        );
       throw new TelephonyUnknownError(
         (error as Error)?.name === 'TimeoutError'
           ? 'provayder 3 soniyada javob bermadi'

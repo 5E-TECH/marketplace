@@ -41,7 +41,7 @@ describe('TelephonyWebhookController', () => {
       ...base,
       type: 'completed',
       endReason: 'ANSWERED',
-      answeredAt: '2026-12-01T09:00:00Z',
+      answeredAt: '2026-12-01T14:00:00+05:00',
       durationSeconds: 118,
     });
     await send({ ...base, type: 'completed', endReason: 'NO_ANSWER' });
@@ -53,7 +53,7 @@ describe('TelephonyWebhookController', () => {
         {
           ...base,
           endReason: 'ANSWERED',
-          answeredAt: '2026-12-01T09:00:00Z',
+          answeredAt: '2026-12-01T09:00:00.000Z', // UTC ga keltiriladi
           durationSeconds: 118,
         },
       ],
@@ -129,6 +129,19 @@ describe('TelephonyWebhookController', () => {
       'vaqt noto‘g‘ri',
       { ...base, at: 'kecha', type: 'recording', recordingRef: 'r' },
     ],
+    ...[
+      '2027-01-14T09:36:00+05',
+      '20270114T093600Z',
+      '2027-W03-4',
+      '2027-01-14T09:36:00',
+      '2027-13-45T09:36:00Z',
+    ].map(
+      (at) =>
+        [
+          `vaqt ${at}`,
+          { ...base, at, type: 'recording', recordingRef: 'r' },
+        ] as [string, unknown],
+    ),
     ['massiv', [base]],
   ])('yaroqsiz tana (%s) — 400', async (_name, body) => {
     const { emit, send } = setup();

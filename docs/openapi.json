@@ -13081,7 +13081,7 @@
             "description": "Lid topilmadi yoki bu operatorda emas"
           },
           "409": {
-            "description": "OPERATOR_PHONE_MISSING — telefon biriktirilmagan; CALL_ACTIVE — tugamagan qo‘ng‘iroq bor"
+            "description": "OPERATOR_PHONE_MISSING — telefon biriktirilmagan; CALL_ACTIVE — operatorda yoki shu lidda tugamagan qo‘ng‘iroq bor; CALL_REQUEST_EXPIRED — so‘rov eskirdi"
           },
           "502": {
             "description": "TELEPHONY_FAILED — provayder qo‘ng‘iroqni boshlamadi"

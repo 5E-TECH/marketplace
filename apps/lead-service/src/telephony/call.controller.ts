@@ -21,8 +21,19 @@ export class CallController {
   constructor(private readonly calls: CallService) {}
 
   @MessagePattern({ cmd: CALL_RPC.START })
-  start(@Payload() input: { operatorId: string; leadId: string }) {
-    return this.calls.start(input.operatorId, input.leadId);
+  start(
+    @Payload()
+    input: {
+      operatorId: string;
+      leadId: string;
+      requestedAt: string;
+    },
+  ) {
+    return this.calls.start(
+      input.operatorId,
+      input.leadId,
+      new Date(input.requestedAt),
+    );
   }
 
   @MessagePattern({ cmd: CALL_RPC.GET })

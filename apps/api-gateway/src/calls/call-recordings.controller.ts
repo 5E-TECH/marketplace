@@ -50,6 +50,7 @@ export class CallRecordingsController {
 
   constructor(
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
+    @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     private readonly links: RecordingLinkService,
     private readonly config: ConfigService,
   ) {}
@@ -106,6 +107,8 @@ export class CallRecordingsController {
           headers: {
             ...(token_ ? { authorization: `Bearer ${token_}` } : {}),
             ...(range && RANGE.test(range) ? { range } : {}),
+            // siqilgan javobda content-length audio hajmiga teng bo‘lmaydi
+            'accept-encoding': 'identity',
           },
           redirect: 'error',
           signal: abort.signal,
@@ -131,6 +134,13 @@ export class CallRecordingsController {
         errorCode: CallErrorCode.RECORDING_NOT_READY,
       });
     }
+    if (upstream.status === 416) {
+      await upstream.body?.cancel();
+      const total = upstream.headers.get('content-range');
+      if (total) res.setHeader('Content-Range', total);
+      res.status(416).end();
+      return;
+    }
     if (
       (upstream.status !== 200 && upstream.status !== 206) ||
       !upstream.body ||
@@ -151,10 +161,35 @@ export class CallRecordingsController {
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // panel boshqa domenda: helmet sukuti (`same-origin`) `<audio>` ni to‘sadi; himoya — imzolangan havola
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader(
       'Content-Disposition',
       `${target.mode === RecordingMode.DOWNLOAD ? 'attachment' : 'inline'}; filename="qongiroq-${target.callId}${EXTENSION[type] ?? ''}"`,
     );
+    if (req.method === 'HEAD') {
+      await upstream.body.cancel();
+      req.off('close', onClose);
+      res.end();
+      return;
+    }
+    // TEL-6: har ijro boshlanishi (pleyerda oldinga surish emas) — havola egasi nomidan
+    if (!range || !RANGE.test(range) || /^bytes=0-/.test(range))
+      void sendRpc(
+        this.identity,
+        { cmd: 'identity.audit.log' },
+        {
+          actorId: target.userId,
+          action: 'call.recording.play',
+          entityType: 'Call',
+          entityId: target.callId,
+          meta: { mode: target.mode, ip: req.ip ?? null },
+        },
+      ).catch((error: Error) =>
+        this.logger.error(
+          `Ijro auditga yozilmadi: qo‘ng‘iroq ${target.callId}, foydalanuvchi ${target.userId} — ${error?.message}`,
+        ),
+      );
     try {
       await pipeline(Readable.fromWeb(upstream.body as never), res);
     } catch (error) {

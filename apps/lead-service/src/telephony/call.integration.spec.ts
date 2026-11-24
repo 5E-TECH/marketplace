@@ -90,6 +90,14 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
       undefined,
       service,
     );
+  /** Hech kim tinglamayotgan manzil. */
+  const closedUrl = async () => {
+    const probe = createServer();
+    await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r));
+    const { port } = probe.address() as AddressInfo;
+    await new Promise((r) => probe.close(r));
+    return `http://127.0.0.1:${port}`;
+  };
   const read = (req: IncomingMessage) =>
     new Promise<string>((resolve) => {
       let body = '';
@@ -278,6 +286,21 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
       await expect(calls().start(OPERATOR, queued.id)).rejects.toMatchObject({
         status: 404,
       });
+      // bron muddati o‘tgan (hali supurilmagan) va navbatda eskirgan so‘rov — qo‘ng‘iroq qilinmaydi
+      const expired = await booked({
+        bookedUntil: new Date(Date.now() - 1_000),
+        phoneE164: '+998901110011',
+      });
+      await expect(calls().start(OPERATOR, expired.id)).rejects.toMatchObject({
+        status: 404,
+      });
+      for (const at of [new Date(Date.now() - 10_500), new Date('x')])
+        await expect(
+          calls().start(OPERATOR, lead.id, at),
+        ).rejects.toMatchObject({
+          status: 409,
+          response: { errorCode: CallErrorCode.CALL_REQUEST_EXPIRED },
+        });
       await calls().deletePhone(OPERATOR);
       await expect(calls().start(OPERATOR, lead.id)).rejects.toMatchObject({
         status: 409,
@@ -332,6 +355,13 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
         endReason: CallEndReason.FAILED,
         failure: 'provayder HTTP 422',
       });
+      // ulanib bo‘lmadi — qo‘ng‘iroq aniq boshlanmagan, operator bloklanmaydi
+      await expect(
+        calls({ TELEPHONY_API_URL: await closedUrl() }).start(
+          OPERATOR,
+          lead.id,
+        ),
+      ).rejects.toMatchObject({ status: 502 });
       mode = 'ok';
       await expect(calls().start(OPERATOR, lead.id)).resolves.toBeDefined();
     });
@@ -494,21 +524,128 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
       );
     });
 
-    it('oldingi bron va boshqa operator qo‘ng‘irog‘i dalil emas', async () => {
+    it('oldingi bron (10 daqiqalik oynadan oldin) va boshqa operator qo‘ng‘irog‘i dalil emas', async () => {
       const lead = await booked();
       const old = await calls().start(OPERATOR, lead.id);
       await completed(old.id, CallEndReason.NO_ANSWER);
-      await db.query(
-        `UPDATE lead.call SET requested_at = now() - interval '1 hour' WHERE id = $1`,
-        [old.id],
-      );
-      await expect(
+      const submit = () =>
         queue().submitResult(OPERATOR, lead.id, {
           outcome: LeadOutcome.NO_ANSWER,
-        }),
-      ).rejects.toMatchObject({
+        });
+      const required = {
         response: { errorCode: CallErrorCode.CALL_REQUIRED },
+      };
+      // bron boshlangan vaqtdan bir soniya oldin
+      await db.query(
+        `UPDATE lead.call SET requested_at = l.booked_until - interval '10 minutes 1 second'
+           FROM lead.lead l WHERE l.id = lead_id AND lead.call.id = $1`,
+        [old.id],
+      );
+      await expect(submit()).rejects.toMatchObject(required);
+      // shu bron ichida, lekin boshqa operatorniki
+      await db.query(
+        `UPDATE lead.call SET requested_at = now(), operator_id = $2 WHERE id = $1`,
+        [old.id, OTHER],
+      );
+      await expect(submit()).rejects.toMatchObject(required);
+      // bron boshlangan vaqtda — dalil
+      await db.query(
+        `UPDATE lead.call SET requested_at = l.booked_until - interval '10 minutes', operator_id = $2
+           FROM lead.lead l WHERE l.id = lead_id AND lead.call.id = $1`,
+        [old.id, OPERATOR],
+      );
+      await expect(submit()).resolves.toBeDefined();
+    });
+
+    it('urinishda oxirgi suhbat ko‘rinadi; boshlanmagan, operator olmagan yoki to‘xtatilgan qo‘ng‘iroq mijoz holatini bildirmaydi', async () => {
+      const lead = await booked();
+      const talk = await calls().start(OPERATOR, lead.id);
+      await completed(talk.id, CallEndReason.ANSWERED, {
+        answeredAt: new Date().toISOString(),
+        durationSeconds: 118,
       });
+      mode = 'reject';
+      await calls()
+        .start(OPERATOR, lead.id)
+        .catch(() => undefined);
+      mode = 'ok';
+      await queue().submitResult(OPERATOR, lead.id, {
+        outcome: LeadOutcome.THINKING,
+      });
+      const [attempt] = await db.getRepository(LeadAttempt).find();
+      expect(attempt.callId).toBe(talk.id);
+
+      const second = await booked({ phoneE164: '+998901110009' });
+      const missed = await calls().start(OPERATOR, second.id);
+      await completed(missed.id, CallEndReason.NO_ANSWER);
+      for (const reason of [
+        CallEndReason.OPERATOR_NO_ANSWER,
+        CallEndReason.CANCELLED,
+      ]) {
+        const redial = await calls().start(OPERATOR, second.id);
+        await completed(redial.id, reason);
+      }
+      await expect(
+        queue().submitResult(OPERATOR, second.id, {
+          outcome: LeadOutcome.NO_ANSWER,
+        }),
+      ).resolves.toBeDefined();
+      const attempts = await db
+        .getRepository(LeadAttempt)
+        .find({ where: { leadId: second.id } });
+      expect(attempts[0].callId).toBe(missed.id);
+    });
+
+    it('takroriy `eventId` ikkinchi marta ishlanmaydi (bosqich oldinga bo‘lsa ham)', async () => {
+      const call = await calls().start(OPERATOR, (await booked()).id);
+      const event = {
+        eventId: 'dup',
+        callRef: await refOf(call.id),
+        at: new Date().toISOString(),
+      };
+      await calls().onStatus({ ...event, status: CallStatus.RINGING_OPERATOR });
+      await calls().onStatus({ ...event, status: CallStatus.CONNECTED });
+      await expect(calls().get(OPERATOR, call.id)).resolves.toMatchObject({
+        status: CallStatus.RINGING_OPERATOR,
+        answeredAt: null,
+      });
+    });
+
+    it('suhbat ketayotganda bron tugasa lid navbatga qaytmaydi; tugagach qaytadi; telefoniyasiz avvalgidek', async () => {
+      const lead = await booked();
+      const plain = await booked({ phoneE164: '+998901110010' });
+      const call = await calls().start(OPERATOR, lead.id);
+      await db.query(
+        `UPDATE lead.lead SET booked_until = now() - interval '1 minute'`,
+      );
+      const status = async (id: string) =>
+        (await db.getRepository(Lead).findOneByOrFail({ id })).status;
+      expect((await queue().sweep()).released).toBe(1);
+      expect(await status(plain.id)).toBe(LeadStatus.NEW);
+      expect(await status(lead.id)).toBe(LeadStatus.BOOKED);
+      await completed(call.id, CallEndReason.ANSWERED, {
+        answeredAt: new Date().toISOString(),
+        durationSeconds: 60,
+      });
+      expect((await queue().sweep()).released).toBe(1);
+      expect(await status(lead.id)).toBe(LeadStatus.NEW);
+    });
+
+    it('lid boshqa operatorga o‘tkazilsa ham mijoz bilan suhbat tugamaguncha ikkinchi qo‘ng‘iroq yo‘q', async () => {
+      await calls().setPhone(
+        OTHER,
+        { kind: OperatorPhoneKind.EXTENSION, value: '102' },
+        '3',
+      );
+      const lead = await booked();
+      const first = await calls().start(OPERATOR, lead.id);
+      await db.query(`UPDATE lead.lead SET operator_id = $1`, [OTHER]);
+      await expect(calls().start(OTHER, lead.id)).rejects.toMatchObject({
+        status: 409,
+        response: { errorCode: CallErrorCode.CALL_ACTIVE },
+      });
+      await completed(first.id, CallEndReason.BUSY);
+      await expect(calls().start(OTHER, lead.id)).resolves.toBeDefined();
     });
 
     it('telefoniya ulanmagan yoki operatorda telefon yo‘q — natija avvalgidek qo‘lda (BE-13)', async () => {
@@ -735,6 +872,21 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
         (await calls({ TELEPHONY_RECORDING_GRACE_MINUTES: 10 }).list({}))
           .missingRecordings,
       ).toBe(3);
+    });
+
+    it('hech qanday hodisa kelmagan qo‘ng‘iroq (webhook ishlamayapti) — muddatdan keyin hisobotda xato', async () => {
+      const call = await calls().start(OPERATOR, (await booked()).id);
+      const state = async () =>
+        (await calls().get(OPERATOR, call.id)).recording;
+      expect(await state()).toBe('NONE');
+      await db.query(
+        `UPDATE lead.call SET requested_at = now() - interval '31 minutes' WHERE id = $1`,
+        [call.id],
+      );
+      expect(await state()).toBe('MISSING');
+      expect((await calls().list({})).missingRecordings).toBe(1);
+      await completed(call.id, CallEndReason.NO_ANSWER);
+      expect(await state()).toBe('NONE');
     });
 
     it('tugash hodisasi yo‘qolgan: tugatish so‘ralganidan keyin ham yozuv kutiladi, keyin xato', async () => {

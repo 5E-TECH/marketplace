@@ -108,7 +108,9 @@ export function toEvent(dto: TelephonyWebhookDto): {
   pattern: string;
   payload: CallStatusEvent | CallCompletedEvent | RecordingReadyEvent;
 } {
-  const base = { eventId: dto.eventId, callRef: dto.callRef, at: dto.at };
+  // vaqt UTC ga keltiriladi (`+05:00` ham, `Z` ham)
+  const iso = (value: string) => new Date(value).toISOString();
+  const base = { eventId: dto.eventId, callRef: dto.callRef, at: iso(dto.at) };
   if (dto.type === 'status')
     return {
       pattern: CALL_EVENTS.STATUS,
@@ -124,7 +126,7 @@ export function toEvent(dto: TelephonyWebhookDto): {
     payload: {
       ...base,
       endReason: dto.endReason!,
-      answeredAt: dto.answeredAt ?? null,
+      answeredAt: dto.answeredAt ? iso(dto.answeredAt) : null,
       durationSeconds: dto.durationSeconds ?? null,
     },
   };

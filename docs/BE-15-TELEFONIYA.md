@@ -6,7 +6,7 @@ Provayder EQ-02 da tanlanadi. Bu yerda provayderga bog‘liq bo‘lmagan yadro v
 ## Yoqish (deploy, Dilshod)
 
 1. `.env.production`: `TELEPHONY_API_URL`, `TELEPHONY_API_TOKEN`, `TELEPHONY_WEBHOOK_SECRET` (kamida 16 belgi),
-   `TELEPHONY_CALLER_ID` (+998…; berilmasa provayder o‘zi tanlaydi). O‘zgaruvchilar `lead-service` va `api-gateway` ga kerak.
+   `TELEPHONY_CALLER_ID` (+998…; berilmasa provayder o‘zi tanlaydi). URL bo‘lib kalit bo‘lmasa servislar ishga tushmaydi. O‘zgaruvchilar `lead-service` va `api-gateway` ga kerak.
 2. Provayderda webhook: `https://<api>/api/v1/webhooks/telephony`.
 3. Admin har operatorga telefon biriktiradi: `PUT /api/v1/admin/operators/{id}/phone` (`EXTENSION` 2–10 raqam yoki
    `MOBILE` +998XXXXXXXXX). Telefoni yo‘q operatorda tugma o‘chiq, natija qo‘lda.
@@ -37,7 +37,7 @@ shakli). 503 — provayder qayta yuboradi; takror `eventId` bir marta ishlanadi.
 
 | `type` | Maydonlar |
 | --- | --- |
-| `status` | `eventId, callRef, at, status` — `RINGING_OPERATOR`, `RINGING_CUSTOMER`, `CONNECTED` |
+| `status` | `eventId, callRef, at` (zonali ISO: `…Z` yoki `…+05:00`)`, status` — `RINGING_OPERATOR`, `RINGING_CUSTOMER`, `CONNECTED` |
 | `completed` | `eventId, callRef, at, endReason` — `ANSWERED`, `NO_ANSWER`, `BUSY`, `UNREACHABLE`, `OPERATOR_NO_ANSWER`, `CANCELLED`, `FAILED`; `ANSWERED` da `answeredAt`, `durationSeconds` |
 | `recording` | `eventId, callRef, at, recordingRef` (URL emas) |
 
@@ -52,10 +52,16 @@ shakli). 503 — provayder qayta yuboradi; takror `eventId` bir marta ishlanadi.
 | `GET /call-recordings/{token}` | havola egasi | Audio oqimi (`Range`) |
 | `GET/PUT/DELETE /admin/operators/{id}/phone` | admin, superadmin | Operator telefoni |
 
-Audit: `call.recording.listen`, `call.recording.download`, `call.recording.denied` (yozilmasa havola berilmaydi),
-`operator.phone.set`, `operator.phone.delete`.
+Audit: `call.recording.listen`, `call.recording.download` (yozilmasa havola berilmaydi), `call.recording.play` (har ijro
+boshlanishi, havola egasi nomidan), `call.recording.denied` (har rol), `operator.phone.set`, `operator.phone.delete`.
+
+Havola tokeni gateway logida yashiriladi (`redactUrl`); Caddy access logida ham yashirilsin (deploy, Dilshod).
+
+**Suhbat va bron [taklif]:** suhbat ketayotganda bron muddati tugasa lid navbatga qaytmaydi (qo‘ng‘iroq tugagach yoki
+operator «Tugatish» bosgach qaytadi); lid boshqa operatorga o‘tgan bo‘lsa ham suhbat tugamaguncha o‘sha mijozga ikkinchi
+qo‘ng‘iroq boshlanmaydi. Hech qanday hodisasi kelmagan qo‘ng‘iroq muddatdan keyin hisobotda xato (webhook ishlamayapti).
 
 ## Xatolar
 
-`TELEPHONY_NOT_CONFIGURED` 503, `TELEPHONY_FAILED` 502, `OPERATOR_PHONE_MISSING` 409, `CALL_ACTIVE` 409,
+`CALL_REQUEST_EXPIRED` 409 (so‘rov 10 s dan eski), `TELEPHONY_NOT_CONFIGURED` 503, `TELEPHONY_FAILED` 502, `OPERATOR_PHONE_MISSING` 409, `CALL_ACTIVE` 409,
 `CALL_REQUIRED` 409, `CALL_OUTCOME_MISMATCH` 409, `RECORDING_NOT_READY` 404.

@@ -6,6 +6,7 @@ import {
   Get,
   Inject,
   Ip,
+  Logger,
   NotFoundException,
   Param,
   Put,
@@ -35,12 +36,21 @@ import {
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 
+/** Ish joyida qo‘ng‘iroq qila oladiganlar (`operator/leads/:id/call` rollari). */
+const CALLER_ROLES: readonly Role[] = [
+  Role.OPERATOR_LEAD,
+  Role.SUPERVISOR,
+  Role.SUPERADMIN,
+];
+
 /** BE-15: operatorga ichki raqam yoki mobil biriktirish (admin, superadmin). Har o‘zgarish auditda (ADM-6). */
 @ApiTags('calls')
 @ApiBearerAuth()
 @Roles(Role.ADMIN, Role.SUPERADMIN)
 @Controller('admin/operators')
 export class AdminOperatorPhoneController {
+  private readonly logger = new Logger(AdminOperatorPhoneController.name);
+
   constructor(
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
@@ -80,9 +90,9 @@ export class AdminOperatorPhoneController {
       { cmd: IDENTITY_USER_NAMES },
       { ids: [operatorId] },
     );
-    if (!user || ![Role.OPERATOR_LEAD, Role.SUPERVISOR].includes(user.role))
+    if (!user || !CALLER_ROLES.includes(user.role))
       throw new BadRequestException(
-        'Telefon faqat operator yoki nazoratchiga biriktiriladi',
+        'Telefon faqat operator, nazoratchi yoki superadminga biriktiriladi',
       );
     const before = await this.current(operatorId);
     const after = await sendRpc<OperatorPhoneDto>(
@@ -147,6 +157,10 @@ export class AdminOperatorPhoneController {
         entityId,
         meta: { ...meta, ip: ip ?? null },
       },
-    ).catch(() => undefined);
+    ).catch((error: Error) =>
+      this.logger.error(
+        `Audit yozilmadi (${action}, operator ${entityId}): ${error?.message}`,
+      ),
+    );
   }
 }

@@ -50,6 +50,17 @@ const MOBILE = /^\+998\d{9}$/;
 const DEFAULT_GRACE_MINUTES = 30;
 const ACTIVE_INDEX = 'uq_lead_call_operator_active';
 const PHONE_INDEX = 'uq_lead_operator_phone_value';
+/** Gateway javobni shuncha kutadi (`RPC_TIMEOUT_MS`): undan eski so‘rovni operator allaqachon xato deb ko‘rgan. */
+const START_MAX_AGE_MS = 10_000;
+/** Tugamagan va tugatish so‘ralmagan qo‘ng‘iroq; bir kundan eskisi — hodisasi yo‘qolgan. */
+export const ACTIVE_CALL = `ended_at IS NULL AND hangup_requested_at IS NULL AND requested_at > now() - interval '1 day'`;
+/** Mijozgacha yetgan qo‘ng‘iroq natijasi — TEL-4 dalili. */
+const REACHED: ReadonlySet<CallEndReason> = new Set([
+  CallEndReason.ANSWERED,
+  CallEndReason.NO_ANSWER,
+  CallEndReason.BUSY,
+  CallEndReason.UNREACHABLE,
+]);
 
 /** Bosqich tartibi: hodisalar navbatda almashib kelsa ham holat orqaga qaytmaydi. */
 const RANK: Record<CallStatus, number> = {
@@ -78,12 +89,15 @@ interface CallRow {
 }
 
 /**
- * Yozuv holati (TEL-3), `$1` — kutish daqiqasi. Suhbat bo‘lmagan qo‘ng‘iroqda yozuv kutilmaydi. Tugash hodisasi
+ * Yozuv holati (TEL-3), `$1` — kutish daqiqasi. Suhbat bo‘lmagan qo‘ng‘iroqda yozuv kutilmaydi; hech qanday hodisa
+ * kelmay qolgan qo‘ng‘iroq ham xato (webhook ishlamayapti — suhbat bo‘lgan-bo‘lmagani noma’lum). Tugash hodisasi
  * yo‘qolgan bo‘lsa — tugatish so‘ralgan vaqtdan yoki javobdan bir kun keyin (eng uzun qo‘ng‘iroq chegarasi) hisoblanadi.
  */
 const RECORDING_STATE = `CASE
   WHEN c.recording_ready_at IS NOT NULL THEN 'READY'
-  WHEN c.answered_at IS NULL THEN 'NONE'
+  WHEN c.answered_at IS NULL AND (c.ended_at IS NOT NULL
+       OR COALESCE(c.hangup_requested_at, c.requested_at) > now() - make_interval(mins => $1::int)) THEN 'NONE'
+  WHEN c.answered_at IS NULL THEN 'MISSING'
   WHEN COALESCE(c.ended_at, c.hangup_requested_at) IS NULL
        AND c.answered_at > now() - interval '1 day' THEN 'LIVE'
   WHEN COALESCE(c.ended_at, c.hangup_requested_at, c.answered_at + interval '1 day')
@@ -126,7 +140,20 @@ export class CallService {
    * OPR-6, T6: lid kartasidan qo‘ng‘iroq — provayder avval operatorga, keyin mijozga ulaydi. Raqam lid bo‘yicha shu yerda
    * olinadi, javobda yo‘q. Lid shu operatorning bronida bo‘lishi shart; bir operatorda bitta tugamagan qo‘ng‘iroq.
    */
-  async start(operatorId: string, leadId: string): Promise<LeadCallDto> {
+  async start(
+    operatorId: string,
+    leadId: string,
+    /** Operator bosgan vaqt (gateway): navbatda turib qolgan eski so‘rov kutilmaganda qo‘ng‘iroq qilmasin. */
+    requestedAt: Date = new Date(),
+  ): Promise<LeadCallDto> {
+    if (
+      !Number.isFinite(requestedAt.getTime()) ||
+      Date.now() - requestedAt.getTime() > START_MAX_AGE_MS
+    )
+      throw new ConflictException({
+        message: 'Qo‘ng‘iroq so‘rovi eskirdi — tugmani qayta bosing',
+        errorCode: CallErrorCode.CALL_REQUEST_EXPIRED,
+      });
     if (!this.provider.isConfigured())
       throw new ServiceUnavailableException({
         message: 'Telefoniya ulanmagan',
@@ -143,9 +170,21 @@ export class CallService {
         if (
           !lead ||
           lead.status !== LeadStatus.BOOKED ||
-          lead.operatorId !== operatorId
+          lead.operatorId !== operatorId ||
+          !lead.bookedUntil ||
+          lead.bookedUntil.getTime() <= Date.now()
         )
           throw new NotFoundException('Lid topilmadi yoki bu operatorda emas');
+        // lid boshqa operatorga o‘tgan bo‘lsa ham mijoz bilan suhbat ketayotganda ikkinchi qo‘ng‘iroq boshlanmaydi
+        const [busy] = (await manager.query(
+          `SELECT 1 FROM lead.call WHERE lead_id = $1 AND operator_id <> $2 AND ${ACTIVE_CALL} LIMIT 1`,
+          [leadId, operatorId],
+        )) as unknown[];
+        if (busy)
+          throw new ConflictException({
+            message: 'Bu mijoz bilan hozir boshqa operator gaplashmoqda',
+            errorCode: CallErrorCode.CALL_ACTIVE,
+          });
         const phone = await manager
           .getRepository(OperatorPhone)
           .findOne({ where: { operatorId } });
@@ -327,31 +366,39 @@ export class CallService {
   /**
    * Natija kiritilganda: shu bron davridagi qo‘ng‘iroqlar urinishga bog‘lanadi. Telefoniya ulangan operatorda «javob
    * bermadi», «band», «o‘chiq» qo‘lda kiritilmaydi — oxirgi tugagan qo‘ng‘iroqning server holati bilan bir xil bo‘lishi
-   * shart (TEL-4). Javob: urinishga yoziladigan qo‘ng‘iroq.
+   * shart (TEL-4). Javob: bog‘lanadigan qo‘ng‘iroqlar va urinishda ko‘rinadigani.
    */
   async checkResult(
     manager: EntityManager,
     lead: Pick<Lead, 'id' | 'bookedUntil'>,
     operatorId: string,
     outcome: LeadOutcome,
-  ): Promise<Call[]> {
+  ): Promise<{ calls: Call[]; shown: Call | null }> {
     const calls = await this.bookingCalls(manager, lead, operatorId);
+    // urinishda ko‘rinadigan qo‘ng‘iroq: oxirgi suhbat, u yo‘q bo‘lsa mijozga yetib borgani, u ham yo‘q bo‘lsa oxirgisi
+    const reached = calls.filter(
+      (call) => call.endReason && REACHED.has(call.endReason),
+    );
+    const shown =
+      calls.find((call) => call.answeredAt) ?? reached[0] ?? calls[0] ?? null;
+    const result = { calls, shown };
     if (
       !SERVER_OUTCOMES.includes(outcome) ||
       !(await this.enabledFor(operatorId, manager))
     )
-      return calls;
-    const [latest] = calls;
+      return result;
+    if (calls.some((call) => !call.endedAt && !call.hangupRequestedAt))
+      throw new ConflictException({
+        message: 'Qo‘ng‘iroq hali tugamagan',
+        errorCode: CallErrorCode.CALL_ACTIVE,
+      });
+    // boshlanmagan, operator olmagan yoki o‘zi to‘xtatgan qo‘ng‘iroq mijoz holatini bildirmaydi
+    const [latest] = reached;
     if (!latest)
       throw new ConflictException({
         message:
           'Avval qo‘ng‘iroq qiling: bu natija qo‘ng‘iroq holatidan olinadi (TEL-4)',
         errorCode: CallErrorCode.CALL_REQUIRED,
-      });
-    if (!latest.endedAt)
-      throw new ConflictException({
-        message: 'Qo‘ng‘iroq hali tugamagan',
-        errorCode: CallErrorCode.CALL_ACTIVE,
       });
     const suggested = CALL_OUTCOME[latest.endReason!] ?? null;
     if (suggested !== outcome)
@@ -361,7 +408,7 @@ export class CallService {
           : 'Bu qo‘ng‘iroqda «javob bermadi», «band» yoki «o‘chiq» aniqlanmagan — boshqa natija tanlang yoki qayta qo‘ng‘iroq qiling',
         errorCode: CallErrorCode.CALL_OUTCOME_MISMATCH,
       });
-    return calls;
+    return { calls, shown: latest }; // urinish — shu holat dalili
   }
 
   /** Bron boshlangandan beri shu operator qilgan, hali natijaga bog‘lanmagan qo‘ng‘iroqlar, yangisi birinchi. */

@@ -103,6 +103,7 @@ export * from './security/hmac.util';
 export * from './security/crypto.util';
 export * from './security/totp.util';
 export * from './security/ssrf.util';
+export * from './security/redact-url';
 
 // Messaging
 export * from './messaging/reliable-rmq.server';

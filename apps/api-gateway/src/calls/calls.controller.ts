@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Ip,
+  Logger,
   Param,
   Post,
   Query,
@@ -54,6 +55,8 @@ const DENIED: Record<string, string> = {
 @ApiBearerAuth()
 @Controller('calls')
 export class CallsController {
+  private readonly logger = new Logger(CallsController.name);
+
   constructor(
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
@@ -74,7 +77,7 @@ export class CallsController {
 
   @Post(':id/recording-link')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.OPERATOR_LEAD, Role.SUPERVISOR, Role.ADMIN, Role.SUPERADMIN)
+  // rol guard’i yo‘q ataylab: ruxsatni lead-service hal qiladi (TEL-7), shunda boshqa rolning urinishi ham auditga tushadi
   @ApiOperation({
     summary: 'Yozuvni tinglash yoki yuklab olish havolasi (vaqtli)',
     description:
@@ -111,7 +114,11 @@ export class CallsController {
         ...meta,
         mode,
         reason: access.reason,
-      }).catch(() => undefined);
+      }).catch((error: Error) =>
+        this.logger.error(
+          `Rad auditga yozilmadi: qo‘ng‘iroq ${callId}, foydalanuvchi ${user.sub}, ${access.reason} — ${error?.message}`,
+        ),
+      );
       throw new ForbiddenException(DENIED[access.reason]);
     }
     try {
@@ -128,7 +135,7 @@ export class CallsController {
         'Audit yozilmadi — yozuv hozir ochilmaydi, qayta urinib ko‘ring',
       );
     }
-    return this.links.sign({ callId, mode });
+    return this.links.sign({ callId, mode, userId: String(user.sub) });
   }
 
   private audit(

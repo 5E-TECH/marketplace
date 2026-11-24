@@ -103,6 +103,8 @@ const ANY_SIGNED_IN = [
   'PATCH /notifications/:id/read',
   'PATCH /notifications/read-all',
   'POST /auth/logout',
+  // BE-15 (TEL-7): guard’siz — har rolning urinishi auditga tushsin; ruxsatni lead-service hal qiladi (`recordingAccess`)
+  'POST /calls/:id/recording-link',
   'POST /support/tickets',
   'POST /support/tickets/:id/messages',
 ];
@@ -124,7 +126,6 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     // BE-15 (OPR-6, TEL-7): qo‘ng‘iroq va o‘z yozuvini tinglash
     'GET /operator/calls',
     'GET /operator/calls/:id',
-    'POST /calls/:id/recording-link',
     'POST /operator/calls/:id/hangup',
     'POST /operator/leads/:id/call',
     'GET /operator/attempts',
@@ -151,7 +152,6 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'GET /calls',
     'GET /operator/calls',
     'GET /operator/calls/:id',
-    'POST /calls/:id/recording-link',
     'POST /operator/calls/:id/hangup',
     'POST /operator/leads/:id/call',
     'GET /admin/finance/cod-reconciliation',

@@ -26,16 +26,25 @@ describe('RecordingLinkService (BE-15, TEL-7)', () => {
 
   it('havola: to‘g‘ri — ochiladi, buzilgan, muddati o‘tgan yoki boshqa kalit — yo‘q', () => {
     const now = Date.now();
-    const link = links.sign({ callId: '501', mode: RecordingMode.LISTEN }, now);
+    const link = links.sign(
+      { callId: '501', mode: RecordingMode.LISTEN, userId: '41' },
+      now,
+    );
     const token = link.url.split('/').at(-1)!;
     expect(link.url).toMatch(/^\/api\/v1\/call-recordings\//);
     expect(links.verify(token, now)).toEqual({
       callId: '501',
       mode: RecordingMode.LISTEN,
+      userId: '41',
     });
     const [payload, mac] = token.split('.');
     const forged = Buffer.from(
-      JSON.stringify({ c: '502', d: true, e: Math.floor(now / 1000) + 600 }),
+      JSON.stringify({
+        c: '502',
+        u: '41',
+        d: true,
+        e: Math.floor(now / 1000) + 600,
+      }),
     ).toString('base64url');
     for (const bad of [
       '',
@@ -55,6 +64,7 @@ describe('RecordingLinkService (BE-15, TEL-7)', () => {
     const download = links.sign({
       callId: '501',
       mode: RecordingMode.DOWNLOAD,
+      userId: '3',
     });
     expect(links.verify(download.url.split('/').at(-1)!)?.mode).toBe(
       RecordingMode.DOWNLOAD,
@@ -73,7 +83,7 @@ describe('CallsController: tinglash va audit (TC4)', () => {
     return { controller, lead, audit };
   };
 
-  it('rollar: hisobot — nazoratchi, admin, superadmin; havola — operator ham', () => {
+  it('rollar: hisobot — nazoratchi, admin, superadmin; havola ruxsati — lead-service da', () => {
     const roles = (name: 'list' | 'recordingLink') =>
       Reflect.getMetadata(ROLES_KEY, CallsController.prototype[name]);
     expect(roles('list')).toEqual([
@@ -81,12 +91,8 @@ describe('CallsController: tinglash va audit (TC4)', () => {
       Role.ADMIN,
       Role.SUPERADMIN,
     ]);
-    expect(roles('recordingLink')).toEqual([
-      Role.OPERATOR_LEAD,
-      Role.SUPERVISOR,
-      Role.ADMIN,
-      Role.SUPERADMIN,
-    ]);
+    // guard’siz: rolni lead-service hal qiladi, rad ham auditda (TEL-7)
+    expect(roles('recordingLink')).toBeUndefined();
   });
 
   it.each([
@@ -175,7 +181,8 @@ describe('CallRecordingsController: yozuv oqimi', () => {
   const AUDIO = Buffer.from('0123456789');
   let server: Server;
   let url: string;
-  let reply: 'audio' | 'html' | 'missing' | 'error' | 'redirect' = 'audio';
+  let reply: 'audio' | 'html' | 'missing' | 'error' | 'redirect' | 'range' =
+    'audio';
   const seen: Array<{ path?: string; auth?: string; range?: string }> = [];
 
   beforeAll(async () => {
@@ -186,6 +193,8 @@ describe('CallRecordingsController: yozuv oqimi', () => {
         range: req.headers.range,
       });
       if (reply === 'missing') return void res.writeHead(404).end();
+      if (reply === 'range')
+        return void res.writeHead(416, { 'content-range': 'bytes */10' }).end();
       if (reply === 'error') return void res.writeHead(500).end('x');
       if (reply === 'redirect')
         return void res
@@ -229,10 +238,13 @@ describe('CallRecordingsController: yozuv oqimi', () => {
     token: string,
     range?: string,
     over: Record<string, unknown> = {},
+    method = 'GET',
   ) => {
     const send = jest.fn(() => of({ recordingRef: 'rec/../5521?x' }));
+    const audit = jest.fn(() => of({}));
     const controller = new CallRecordingsController(
       { send } as never,
+      { send: audit } as never,
       links,
       config({
         TELEPHONY_API_URL: url,
@@ -263,16 +275,22 @@ describe('CallRecordingsController: yozuv oqimi', () => {
     await controller.stream(
       token,
       range,
-      new EventEmitter() as never,
+      Object.assign(new EventEmitter(), { method, ip: '1.2.3.4' }) as never,
       res as never,
     );
-    return { send, body: Buffer.concat(chunks).toString(), headers, res };
+    return {
+      send,
+      audit,
+      body: Buffer.concat(chunks).toString(),
+      headers,
+      res,
+    };
   };
   const token = (mode = RecordingMode.LISTEN) =>
-    links.sign({ callId: '501', mode }).url.split('/').at(-1)!;
+    links.sign({ callId: '501', mode, userId: '41' }).url.split('/').at(-1)!;
 
   it('to‘liq yozuv: provayder kaliti serverda, yo‘l kodlangan, keshsiz; provayder cookie si uzatilmaydi', async () => {
-    const { body, headers, res, send } = await get(token());
+    const { body, headers, res, send, audit } = await get(token());
     expect(body).toBe('0123456789');
     expect(res.code).toBe(200);
     expect(send).toHaveBeenCalledWith(
@@ -291,9 +309,22 @@ describe('CallRecordingsController: yozuv oqimi', () => {
       'content-length': '10',
       'accept-ranges': 'bytes',
       'cache-control': 'private, no-store',
+      // panel boshqa domenda — helmet sukuti `<audio>` ni to‘smasin
+      'cross-origin-resource-policy': 'cross-origin',
       'content-disposition': 'inline; filename="qongiroq-501.mp3"',
     });
     expect(headers['set-cookie']).toBeUndefined();
+    // TEL-6: ijro boshlanishi havola egasi nomidan auditda
+    expect(audit).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: '41',
+        action: 'call.recording.play',
+        entityType: 'Call',
+        entityId: '501',
+        meta: { mode: RecordingMode.LISTEN, ip: '1.2.3.4' },
+      },
+    );
   });
 
   it('`Range` — 206; noto‘g‘ri `Range` uzatilmaydi; yuklab olish — attachment', async () => {
@@ -301,6 +332,15 @@ describe('CallRecordingsController: yozuv oqimi', () => {
     expect(part.res.code).toBe(206);
     expect(part.body).toBe('234');
     expect(part.headers['content-range']).toBe('bytes 2-4/10');
+    expect(part.audit).not.toHaveBeenCalled(); // oldinga surish — yangi tinglash emas
+    const head = await get(token(), undefined, {}, 'HEAD');
+    expect(head.body).toBe('');
+    expect(head.headers['content-length']).toBe('10');
+    expect(head.audit).not.toHaveBeenCalled();
+    reply = 'range';
+    const beyond = await get(token(), 'bytes=99-');
+    expect(beyond.res.code).toBe(416);
+    reply = 'audio';
     await get(token(), 'bytes=0-1,5-6');
     expect(seen.at(-1)!.range).toBeUndefined();
     const file = await get(token(RecordingMode.DOWNLOAD));

@@ -54,7 +54,7 @@ export class OperatorCallsController {
   @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
   @ApiConflictResponse({
     description:
-      'OPERATOR_PHONE_MISSING — telefon biriktirilmagan; CALL_ACTIVE — tugamagan qo‘ng‘iroq bor',
+      'OPERATOR_PHONE_MISSING — telefon biriktirilmagan; CALL_ACTIVE — operatorda yoki shu lidda tugamagan qo‘ng‘iroq bor; CALL_REQUEST_EXPIRED — so‘rov eskirdi',
   })
   @ApiBadGatewayResponse({
     description: 'TELEPHONY_FAILED — provayder qo‘ng‘iroqni boshlamadi',
@@ -66,7 +66,11 @@ export class OperatorCallsController {
     @CurrentUser('sub') operatorId: string,
     @Param('id', ParseLeadIdPipe) leadId: string,
   ): Promise<LeadCallDto> {
-    return sendRpc(this.lead, { cmd: CALL_RPC.START }, { operatorId, leadId });
+    return sendRpc(
+      this.lead,
+      { cmd: CALL_RPC.START },
+      { operatorId, leadId, requestedAt: new Date().toISOString() },
+    );
   }
 
   @Get('calls')
