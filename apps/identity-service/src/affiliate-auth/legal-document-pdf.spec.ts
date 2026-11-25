@@ -73,5 +73,58 @@ describe('BE-25 6-tur: hujjat PDF i', () => {
       }),
     );
     expect(text).toContain('60. Bo‘lim');
+    const raw = Buffer.from(
+      (
+        await legalDocumentPdf(
+          doc({
+            sections: Array.from({ length: 60 }, (_, i) => ({
+              id: `s${i}`,
+              title: `${i + 1}`,
+              body: 'Matn '.repeat(120),
+            })),
+          }),
+        )
+      ).base64,
+      'base64',
+    ).toString('latin1');
+    expect(raw.match(/\/Type \/Page\b/g)!.length).toBeGreaterThan(1);
+  });
+
+  it('bo‘sh matn, sana va qatorlar (e’lon DTO si ruxsat beradi) — yiqilmaydi, keyingi bo‘limlar joyida', async () => {
+    const text = await textOf(
+      doc({
+        effectiveAt: null,
+        summary: [
+          { term: 'Haq', text: '' },
+          { term: 'Soliq', text: '1%' },
+        ],
+        sections: [
+          { id: 's1', title: '', body: '' },
+          { id: 's2', title: '2. Pul', body: 'A\r\nB' },
+        ],
+      }),
+    );
+    expect(text).not.toContain('kuchga kirgan');
+    for (const part of ['Haq —', 'Soliq —', '1%', '2. Pul', 'A', 'B'])
+      expect(text).toContain(part);
+    // bo‘sh matnli shart keyingisi bilan bir qatorga qo‘shilib ketmaydi
+    const lines = inspectPdf(
+      Buffer.from(
+        (
+          await legalDocumentPdf(
+            doc({
+              summary: [
+                { term: 'Haq', text: '' },
+                { term: 'Soliq', text: '1%' },
+              ],
+            }),
+          )
+        ).base64,
+        'base64',
+      ),
+    ).text.split('\n');
+    expect(lines.some((l) => l.includes('Haq') && l.includes('Soliq'))).toBe(
+      false,
+    );
   });
 });
