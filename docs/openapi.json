@@ -17654,7 +17654,8 @@
           },
           "description": {
             "type": "string",
-            "example": "Titanium, 256 GB"
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -17706,6 +17707,7 @@
           },
           "imageUrl": {
             "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
@@ -17999,7 +18001,8 @@
           },
           "description": {
             "type": "string",
-            "example": "Titanium, 256 GB"
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -18051,6 +18054,7 @@
           },
           "imageUrl": {
             "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
@@ -25169,7 +25173,8 @@
           },
           "description": {
             "type": "string",
-            "example": "Titanium, 256 GB"
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -25221,6 +25226,7 @@
           },
           "imageUrl": {
             "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },

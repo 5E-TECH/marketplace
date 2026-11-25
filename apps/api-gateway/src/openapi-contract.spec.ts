@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
  */
 type Json = Record<string, unknown>;
 const doc = JSON.parse(
-  readFileSync(resolve(process.cwd(), 'docs/openapi.json'), 'utf8'),
+  readFileSync(resolve(__dirname, '../../../docs/openapi.json'), 'utf8'),
 ) as {
   paths: Record<string, Record<string, Json>>;
   components: { schemas: Record<string, Json> };

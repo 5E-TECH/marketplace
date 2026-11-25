@@ -39,7 +39,11 @@ export class CreateProductDto {
   @Matches(/^\d+$/, { message: "categoryId musbat son bo'lishi kerak" })
   categoryId?: string | null;
 
-  @ApiPropertyOptional({ type: String, example: 'Titanium, 256 GB' })
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Titanium, 256 GB',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   description?: string | null;
@@ -118,6 +122,7 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({
     type: String,
+    nullable: true,
     example: 'https://cdn.example.com/iphone.jpg',
     description:
       'Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)',
