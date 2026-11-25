@@ -273,6 +273,27 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
         { leadId: '7001', viewer: { admin: false } },
       );
       expect(addressEdit(card.history.slice(0, 1) as never)).toBeNull();
+      // mijoz yozmagan maydon operatorniki bilan to‘ldirilmaydi
+      const blank = await makeController(
+        jest.fn(() => of(order)),
+        undefined,
+        () =>
+          of({
+            ...card,
+            history: [
+              {
+                at: '2026-12-01T09:12:00.000Z',
+                actor: 'Dilnoza R.',
+                changes: [
+                  { field: 'district', from: null, to: 'Yunusobod tumani' },
+                ],
+              },
+            ],
+          }),
+      ).get('1042', user(Role.ADMIN));
+      expect(blank.customer).toMatchObject({
+        original: { districtName: null, regionName: 'Toshkent shahri' },
+      });
     });
 
     it('lid-service javob bermasa karta baribir ochiladi', async () => {

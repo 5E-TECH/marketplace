@@ -215,7 +215,10 @@ export class AdminOrdersController {
   })
   @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  async get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+  async get(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @CurrentUser() user: JwtUser,
+  ) {
     const order = await sendRpc<OrderDetailRpc>(
       this.checkout,
       { cmd: 'checkout.admin.order-get' },

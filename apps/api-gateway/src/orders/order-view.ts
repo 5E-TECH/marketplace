@@ -64,6 +64,14 @@ export async function withLeadContext(
   }
   const edit = addressEdit(card.history ?? []);
   const customer = order.customer;
+  // tuzatilgan maydon — mijoz yozgani (yozmagan bo‘lsa null), tuzatilmagani — hozirgidek
+  const originalOf = (
+    field: LeadHistoryChangeDto['field'],
+    current: string | null | undefined,
+  ): string | null =>
+    edit && field in edit.original
+      ? (edit.original[field] ?? null)
+      : (current ?? null);
   return {
     ...order,
     customer: customer
@@ -73,15 +81,13 @@ export async function withLeadContext(
           // mijoz sahifada yozgani — faqat operator tuzatgan bo‘lsa (tuzatilmagan maydonlar hozirgidek)
           original: edit
             ? {
-                regionName: edit.original.region ?? customer.regionName ?? null,
-                districtName:
-                  edit.original.district ?? customer.districtName ?? null,
-                addressLine:
-                  edit.original.addressLine ?? customer.addressLine ?? null,
-                whereDeliver:
-                  edit.original.whereDeliver ??
-                  order.lead?.whereDeliver ??
-                  null,
+                regionName: originalOf('region', customer.regionName),
+                districtName: originalOf('district', customer.districtName),
+                addressLine: originalOf('addressLine', customer.addressLine),
+                whereDeliver: originalOf(
+                  'whereDeliver',
+                  order.lead?.whereDeliver,
+                ),
               }
             : null,
           addressEditedBy: edit?.by ?? null,

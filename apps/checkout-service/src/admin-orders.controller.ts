@@ -31,6 +31,12 @@ export class AdminOrdersRpcController {
     return this.orders.get(String(data?.orderId), viewerOf(data?.viewer));
   }
 
+  /** Lid kartasi (gateway): buyurtma qisqachasi — raqam va sotuvchi ma’lumotisiz. */
+  @MessagePattern({ cmd: 'checkout.admin.order-brief' })
+  brief(@Payload() data: { orderId: string }) {
+    return this.orders.brief(String(data?.orderId));
+  }
+
   @MessagePattern({ cmd: 'checkout.admin.order-label-reprint' })
   reprint(
     @Payload() data: { orderId: string; actorId: string; reason: string },

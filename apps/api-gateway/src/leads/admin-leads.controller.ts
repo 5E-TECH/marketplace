@@ -53,7 +53,6 @@ import {
 } from '@app/common';
 import { csvStream } from '../exports/csv-stream';
 import { ExportLinkService } from '../exports/export-link.service';
-import { orderViewer } from '../orders/order-view';
 import { ParseLeadIdPipe } from './lead-id.pipe';
 
 /** Buyurtma qisqachasi kutish vaqti: checkout javob bermasa karta baribir ochiladi [taklif]. */
@@ -243,7 +242,7 @@ export class AdminLeadsController {
       { cmd: 'lead.admin.card' },
       { leadId, viewer: viewerOf(user) },
     );
-    return { ...card, order: await this.orderBrief(card.orderId, user) };
+    return { ...card, order: await this.orderBrief(card.orderId) };
   }
 
   @Post(':id/reopen')
@@ -299,7 +298,6 @@ export class AdminLeadsController {
 
   private async orderBrief(
     orderId: string | null,
-    user: JwtUser,
   ): Promise<AdminLeadOrderDto | null> {
     if (!orderId) return null;
     try {
@@ -310,10 +308,7 @@ export class AdminLeadsController {
             status: string;
             createdAt: string;
             totalAmount: number;
-          }>(
-            { cmd: 'checkout.admin.order-get' },
-            { orderId, viewer: orderViewer(user) },
-          )
+          }>({ cmd: 'checkout.admin.order-brief' }, { orderId })
           .pipe(timeout(ORDER_TIMEOUT_MS)),
       );
       return {

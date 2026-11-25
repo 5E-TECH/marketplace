@@ -14799,7 +14799,7 @@
                         "sellersCount": 1,
                         "shipmentsCount": 1,
                         "createdAt": "2026-12-01T09:14:00.000Z",
-                        "source": null,
+                        "source": "LANDING",
                         "leadId": "7001",
                         "affiliateId": null,
                         "phoneMasked": "****4567",
@@ -14888,7 +14888,7 @@
                     "sellerOrders": [
                       {
                         "id": "2051",
-                        "shopId": "12",
+                        "shopId": null,
                         "subtotal": 262000,
                         "deliveryFee": 30000,
                         "codAmount": 292000,

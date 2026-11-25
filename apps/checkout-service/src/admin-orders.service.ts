@@ -21,6 +21,7 @@ import {
   elchiOrderRef,
   ElchiWebhookDto,
   ErrorCode,
+  isLeadBigintId,
   LabelReprintDto,
   LeadOrderStatus,
   LeadRegionGroupDto,
@@ -33,7 +34,6 @@ import {
   OrderViewer,
   ParcelElchiState,
   RmqClient,
-  sendRpc,
   tashkentDate,
   UserNamesClient,
 } from '@app/common';
@@ -53,6 +53,10 @@ const ID = /^[1-9]\d{0,18}$/;
 /** Nomlar — ko‘rinish ma’lumoti: javob bo‘lmasa ro‘yxat kod yoki bo‘sh nom bilan ochiladi [taklif]. */
 const NAMES_TIMEOUT_MS = 1_500;
 const EXPORT_CHUNK = 1_000;
+/** Elchi’dan holat kutish — gateway kutishidan (10 s) qisqa [taklif]. */
+const ELCHI_TIMEOUT_MS = 7_000;
+/** Eksportda nomlar majburiy: kelmasa oqim uziladi (bo‘sh ustunli fayl to‘liq bo‘lib ko‘rinmasin) [taklif]. */
+const EXPORT_NAMES_TIMEOUT_MS = 5_000;
 /** TEL-6: nizoli buyurtmaning qo‘ng‘iroq yozuvi 1 yil saqlanadi. */
 const DISPUTE_KEEP_YEARS = 1;
 const OPEN_DISPUTE_INDEX = 'uq_checkout_order_dispute_open';
@@ -119,6 +123,13 @@ export const csvCell = (value: string): string => {
   const v = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 };
+
+const lastAt = (dates: Date[]): string | null =>
+  dates.length
+    ? new Date(
+        Math.max(...dates.map((at) => new Date(at).getTime())),
+      ).toISOString()
+    : null;
 
 const two = (n: number) => String(n).padStart(2, '0');
 /** «T-0231» — topshirish akti (dizayn). */
@@ -203,6 +214,32 @@ export class AdminOrdersService {
     };
   }
 
+  /** Lid kartasidagi buyurtma qisqachasi — tashqi nomlarsiz. */
+  async brief(orderId: string): Promise<{
+    id: string;
+    status: string;
+    createdAt: string;
+    totalAmount: number;
+  }> {
+    const row = await this.one<{
+      id: string;
+      status: string;
+      createdAt: Date;
+      totalAmount: string;
+    }>(
+      `SELECT id::text AS id, status, created_at AS "createdAt", total_amount::text AS "totalAmount"
+         FROM checkout.sales_order WHERE id = $1`,
+      [this.id(orderId)],
+    );
+    if (!row) throw new NotFoundException('Buyurtma topilmadi');
+    return {
+      id: row.id,
+      status: row.status,
+      createdAt: new Date(row.createdAt).toISOString(),
+      totalAmount: Number(row.totalAmount),
+    };
+  }
+
   async get(orderId: string, viewer: OrderViewer, now = new Date()) {
     const id = this.id(orderId);
     const order = await this.orders.adminGetOrder(id);
@@ -250,7 +287,8 @@ export class AdminOrdersService {
           [id],
         ),
         this.dataSource.query(
-          `SELECT occurred_at AS at, status, result, detail FROM checkout.elchi_webhook_event
+          `SELECT occurred_at AS at, status, result, detail, event_id LIKE 'refresh:%' AS refresh
+             FROM checkout.elchi_webhook_event
             WHERE order_id = $1 ORDER BY processed_at, event_id`,
           [id],
         ) as Promise<
@@ -259,10 +297,13 @@ export class AdminOrdersService {
             status: string;
             result: string;
             detail: string | null;
+            refresh: boolean;
           }>
         >,
         this.one<{ at: Date; by: string | null; reason: string }>(
-          `SELECT created_at AS at, created_by::text AS by, reason FROM checkout.return_request
+          `SELECT created_at AS at, created_by::text AS by,
+                  COALESCE(NULLIF(btrim(comment), ''), reason) AS reason
+             FROM checkout.return_request
             WHERE sales_order_id = $1 ORDER BY id DESC LIMIT 1`,
           [id],
         ),
@@ -285,6 +326,9 @@ export class AdminOrdersService {
     const last = [...history]
       .reverse()
       .find((h) => h.accepted && h.toStatus === order.status);
+    const pickingStart = history.find(
+      (h) => h.accepted && h.toStatus === LeadOrderStatus.PICKING,
+    );
     const [nameOf, geo, codes] = await Promise.all([
       this.namesOf([
         lead.affiliateId,
@@ -315,6 +359,8 @@ export class AdminOrdersService {
         ? order.sellerOrders
         : order.sellerOrders.map((s) => ({
             ...s,
+            // lid buyurtmasida posilka «do‘koni» — optovik; operatorga ko‘rinmaydi
+            shopId: viewer.kind === 'OPERATOR' ? null : s.shopId,
             items: (s.items as Array<Record<string, unknown>>).map((i) => ({
               ...i,
               priceSnapshot: null,
@@ -395,21 +441,31 @@ export class AdminOrdersService {
               count: Number(reprint.count),
             }
           : null,
-        lastWebhookAt: elchiEvents.length
-          ? new Date(elchiEvents[elchiEvents.length - 1].at).toISOString()
-          : null,
+        // admin so‘ragan holat webhook emas — «48 soat xabar yo‘q» ogohlantirishi o‘chib qolmasin
+        lastWebhookAt: lastAt(
+          elchiEvents.filter((e) => !e.refresh).map((e) => e.at),
+        ),
       },
       elchiEvents: elchiEvents.map((e) => ({
         at: new Date(e.at).toISOString(),
         title: e.status,
-        detail: e.detail,
+        detail: e.refresh
+          ? ['Admin so‘rovi', e.detail].filter(Boolean).join(': ')
+          : e.detail,
         state: e.result === 'REJECTED' ? 'REJECTED' : 'ACCEPTED',
       })),
       picking: task
         ? {
-            by: task.pickedBy ? nameOf(task.pickedBy) : null,
+            // yig‘uvchi skaner tugaganda yoziladi; ungacha — yig‘ishni boshlagan omborchi
+            by: task.pickedBy
+              ? nameOf(task.pickedBy)
+              : pickingStart?.actorId
+                ? nameOf(pickingStart.actorId)
+                : null,
             wave: task.pickDate,
-            from: task.pickedAt ? new Date(task.pickedAt).toISOString() : null,
+            from: pickingStart
+              ? new Date(pickingStart.createdAt).toISOString()
+              : null,
             to: task.packedAt ? new Date(task.packedAt).toISOString() : null,
             scanned: Number(task.scanned),
             total: Number(task.total),
@@ -613,11 +669,7 @@ export class AdminOrdersService {
         message: 'Posilka hozir Elchi’da emas',
         errorCode: ErrorCode.INVALID_STATE,
       });
-    const result = await sendRpc<ElchiShipmentsStatusResult>(
-      this.integration,
-      { cmd: ELCHI_CHECK_RPC.SHIPMENTS_STATUS },
-      { shipmentIds: [row.shipmentId] },
-    );
+    const result = await this.shipmentStatus(row.shipmentId);
     const item = result.items.find((i) => i.shipmentId === row.shipmentId);
     if (!item)
       return {
@@ -631,15 +683,19 @@ export class AdminOrdersService {
       };
     const raw = item.status.trim().toLowerCase();
     const status = ELCHI_STATUS_ALIASES[raw];
-    if (!status || !REFRESHABLE.has(status))
+    const unchanged =
+      status === 'on_the_road' && row.status === LeadOrderStatus.IN_TRANSIT;
+    if (!status || !REFRESHABLE.has(status) || unchanged)
       return {
         orderId: id,
         elchiStatus: item.status,
         status: row.status,
         applied: false,
-        detail: status
-          ? 'Bu holat buyurtmaga so‘rov bilan qo‘llanmaydi (pul holati — webhook yoki kunlik tekshiruv)'
-          : 'Noma’lum Elchi holati',
+        detail: !status
+          ? 'Noma’lum Elchi holati'
+          : status === 'paid' || status === 'partly_paid'
+            ? 'Pul holati so‘rov bilan qo‘llanmaydi — webhook yoki kunlik tekshiruv'
+            : 'Holat o‘zgarmagan',
       };
     const outcome = await this.webhook.process({
       // bir xil holatni qayta so‘rash — takror (bir marta ishlanadi)
@@ -664,6 +720,31 @@ export class AdminOrdersService {
     };
   }
 
+  /** Elchi sekin bo‘lsa gateway kutishi (10 s) tugamasdan tushunarli javob. */
+  private async shipmentStatus(
+    shipmentId: string,
+  ): Promise<ElchiShipmentsStatusResult> {
+    try {
+      return await firstValueFrom(
+        this.integration
+          .send<ElchiShipmentsStatusResult>(
+            { cmd: ELCHI_CHECK_RPC.SHIPMENTS_STATUS },
+            { shipmentIds: [shipmentId] },
+          )
+          .pipe(timeout(ELCHI_TIMEOUT_MS)),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Elchi holati olinmadi (${shipmentId}): ${(error as Error)?.message}`,
+      );
+      return {
+        items: [],
+        notFound: [],
+        failed: [{ shipmentId, error: 'javob yo‘q' }],
+      };
+    }
+  }
+
   async exportCount(
     filters: OrderExportFilterDto,
     until: Date,
@@ -684,13 +765,21 @@ export class AdminOrdersService {
     );
     const [geo, codes, subs] = await Promise.all([
       columns.includes(OrderExportColumn.CUSTOMER)
-        ? this.geo(true)
+        ? this.geo(rows.length > 0, EXPORT_NAMES_TIMEOUT_MS)
         : new Map<string, string>(),
       columns.includes(OrderExportColumn.STREAM)
-        ? this.streamCodes(rows.map((r) => r.streamId))
+        ? this.leadMap(
+            'lead.stream.codes',
+            rows.map((r) => r.streamId),
+            EXPORT_NAMES_TIMEOUT_MS,
+          )
         : new Map<string, string>(),
       columns.includes(OrderExportColumn.SUBS)
-        ? this.leadSubs(rows.map((r) => r.leadId))
+        ? this.leadMap(
+            'lead.subs',
+            rows.map((r) => r.leadId),
+            EXPORT_NAMES_TIMEOUT_MS,
+          )
         : new Map<string, string>(),
     ]);
     const cells: Record<OrderExportColumn, (r: AdminOrderRow) => string[]> = {
@@ -791,7 +880,7 @@ export class AdminOrdersService {
       sellersCount: i.sellersCount,
       shipmentsCount: i.shipmentsCount,
       createdAt: i.createdAt,
-      source: operator ? null : i.source,
+      source: i.source, // LANDING, SITE, API — sotuvchini oshkor qilmaydi
       leadId: i.leadId,
       affiliateId: operator ? null : i.affiliateId,
       phoneMasked: i.phoneMasked,
@@ -856,7 +945,10 @@ export class AdminOrdersService {
   }
 
   /** Viloyat (`1726`) va tuman (`1726/1726266`) nomlari; geo javob bermasa — bo‘sh. */
-  private async geo(needed: boolean): Promise<Map<string, string>> {
+  private async geo(
+    needed: boolean,
+    strictMs?: number,
+  ): Promise<Map<string, string>> {
     const names = new Map<string, string>();
     if (!needed) return names;
     try {
@@ -866,7 +958,7 @@ export class AdminOrdersService {
             { cmd: 'integration.geo.region-tree' },
             {},
           )
-          .pipe(timeout(NAMES_TIMEOUT_MS)),
+          .pipe(timeout(strictMs ?? NAMES_TIMEOUT_MS)),
       );
       for (const region of Array.isArray(tree) ? tree : []) {
         names.set(region.satoCode, region.name);
@@ -874,6 +966,7 @@ export class AdminOrdersService {
           names.set(`${region.satoCode}/${district.satoCode}`, district.name);
       }
     } catch (error) {
+      if (strictMs) throw error;
       this.logger.warn(
         `Buyurtmalar: viloyat/tuman nomlari olinmadi — ${(error as Error).message}`,
       );
@@ -894,14 +987,11 @@ export class AdminOrdersService {
     return this.leadMap('lead.stream.codes', ids);
   }
 
-  private leadSubs(ids: Array<string | null | undefined>) {
-    return this.leadMap('lead.subs', ids);
-  }
-
   /** lead-service dan id → matn; javob bo‘lmasa — bo‘sh. */
   private async leadMap(
     cmd: string,
     ids: Array<string | null | undefined>,
+    strictMs?: number,
   ): Promise<Map<string, string>> {
     const unique = [...new Set(ids.filter((id): id is string => !!id))];
     if (!unique.length) return new Map();
@@ -909,10 +999,11 @@ export class AdminOrdersService {
       const rows = await firstValueFrom(
         this.lead
           .send<Record<string, string>>({ cmd }, { ids: unique })
-          .pipe(timeout(NAMES_TIMEOUT_MS)),
+          .pipe(timeout(strictMs ?? NAMES_TIMEOUT_MS)),
       );
       return new Map(Object.entries(rows ?? {}));
     } catch (error) {
+      if (strictMs) throw error;
       this.logger.warn(`Buyurtmalar: ${cmd} — ${(error as Error).message}`);
       return new Map();
     }
@@ -946,7 +1037,7 @@ export class AdminOrdersService {
 
   private id(value: unknown): string {
     const id = String(value ?? '');
-    if (!ID.test(id)) throw new NotFoundException('Buyurtma topilmadi');
+    if (!isLeadBigintId(id)) throw new NotFoundException('Buyurtma topilmadi');
     return id;
   }
 

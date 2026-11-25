@@ -184,7 +184,6 @@ export const OPERATOR_ORDERS_PAGE_EXAMPLE = {
   ...ADMIN_ORDERS_PAGE_EXAMPLE,
   items: ADMIN_ORDERS_PAGE_EXAMPLE.items.map((item) => ({
     ...item,
-    source: null,
     affiliateId: null,
     affiliateName: null,
     streamCode: null,
@@ -197,6 +196,7 @@ export const OPERATOR_ORDER_EXAMPLE = {
   ...ADMIN_ORDER_EXAMPLE,
   sellerOrders: ADMIN_ORDER_EXAMPLE.sellerOrders.map((seller) => ({
     ...seller,
+    shopId: null,
     items: seller.items.map((item) => ({ ...item, priceSnapshot: null })),
   })),
   lead: {

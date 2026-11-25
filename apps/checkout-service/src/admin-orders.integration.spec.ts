@@ -417,7 +417,7 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
       affiliateId: null,
       affiliateName: null,
       streamCode: null,
-      source: null,
+      source: 'LANDING', // tur — sotuvchini oshkor qilmaydi (dizayn «Manba»)
       phoneMasked: '****4567',
     });
     const card = (await service().get(own, OPERATOR, NOW)) as Record<
@@ -436,8 +436,9 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
         wholesalerId: null,
         deliveryCost: null,
       },
+      sellerOrders: [{ shopId: null }], // posilka «do‘koni» — optovik
     });
-    for (const id of [other, legacy, '999999'])
+    for (const id of [other, legacy, '999999', '9'.repeat(19), 'x'])
       await expect(service().get(id, OPERATOR, NOW)).rejects.toMatchObject({
         status: 404,
       });
@@ -552,6 +553,63 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
       ['Tizim', false],
       ['Umida S.', true],
     ]);
+  });
+
+  it('yig‘ish boshlangan (skaner tugamagan): kim va qachondan; qaytarish sababi — izoh matni', async () => {
+    const id = await addOrder({ status: 'PICKING' });
+    await addHistory(id, 'CONFIRMED', 'PICKING', '2027-01-14T09:36:00Z', '55');
+    await db.query(
+      `INSERT INTO checkout.return_request (sales_order_id, sales_order_seller_id, shop_id, customer_id, status, reason, comment, requested_amount, source, created_by)
+       SELECT $1, p.id, p.shop_id, NULL, 'SUBMITTED', 'OTHER', 'Rangi boshqa keldi', 0, 'STAFF', 7
+         FROM checkout.parcel p WHERE p.sales_order_id = $1`,
+      [id],
+    );
+    expect(await service().get(id, ADMIN, NOW)).toMatchObject({
+      statusDetail: 'Otabek N.',
+      picking: { by: 'Otabek N.', from: '2027-01-14T09:36:00.000Z', to: null },
+      returnRequest: { by: 'Nodira K.', reason: 'Rangi boshqa keldi' },
+    });
+  });
+
+  it('qisqacha (lid kartasi uchun) tashqi nomlarsiz', async () => {
+    const id = await addOrder();
+    expect(await service().brief(id)).toEqual({
+      id,
+      status: 'CONFIRMED',
+      createdAt: '2027-01-14T09:14:00.000Z',
+      totalAmount: 292000,
+    });
+    await expect(service().brief('999999')).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('ro‘yxat indekslardan foydalanadi: posilka va tovar qatori buyurtma bo‘yicha', async () => {
+    for (let i = 0; i < 3; i++) await addOrder();
+    await db.query('SET enable_seqscan = off');
+    try {
+      for (const [sql, index] of [
+        [
+          `SELECT 1 FROM checkout.parcel WHERE sales_order_id = 1`,
+          'idx_checkout_parcel_order',
+        ],
+        [
+          `SELECT 1 FROM checkout.sales_order_item WHERE sales_order_seller_id = 1`,
+          'idx_checkout_sales_order_item_parcel',
+        ],
+        [
+          `SELECT 1 FROM checkout.sales_order WHERE confirmed_by = 41 ORDER BY created_at DESC LIMIT 20`,
+          'idx_checkout_sales_order_confirmed_by',
+        ],
+      ]) {
+        const plan = (await db.query(`EXPLAIN ${sql}`)) as Array<
+          Record<string, string>
+        >;
+        expect(JSON.stringify(plan)).toContain(index);
+      }
+    } finally {
+      await db.query('SET enable_seqscan = on');
+    }
   });
 
   it('nizo: bitta ochiq, yozuv 1 yil; yopilgach qayta ochiladi; operatorga ko‘rinmaydi', async () => {
@@ -706,6 +764,12 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
       expect(await service().refreshFromElchi(id, NOW)).toMatchObject({
         status: LeadOrderStatus.IN_TRANSIT,
         applied: false,
+        detail: 'Holat o‘zgarmagan',
+      });
+      // admin so‘rovi webhook emas: «48 soat xabar yo‘q» ogohlantirishi o‘chib qolmaydi
+      expect(await service().get(id, ADMIN, NOW)).toMatchObject({
+        parcel: { lastWebhookAt: null },
+        elchiEvents: [{ title: 'on_the_road', state: 'ACCEPTED' }],
       });
       const [{ n }] = (await db.query(
         `SELECT count(*)::int AS n FROM checkout.elchi_webhook_event WHERE order_id = $1`,
@@ -748,6 +812,33 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
         service().refreshFromElchi('999999', NOW),
       ).rejects.toMatchObject({ status: 404 });
     });
+  });
+
+  it('CSV: lid-service javob bermasa fayl bo‘sh ustun bilan chiqmaydi — xato', async () => {
+    await addOrder();
+    const broken = new AdminOrdersService(
+      db,
+      new SellerOrdersService(db),
+      statuses(),
+      {} as never,
+      integration as never,
+      { send: () => throwError(() => new Error('lid yo‘q')) } as never,
+      names,
+    );
+    const input = {
+      filters: {} as never,
+      until: NOW.toISOString(),
+      afterId: null,
+    };
+    for (const column of [OrderExportColumn.STREAM, OrderExportColumn.SUBS])
+      await expect(
+        broken.exportChunk({ ...input, columns: [column] }),
+      ).rejects.toThrow('lid yo‘q');
+    await expect(
+      broken.exportChunk({ ...input, columns: [OrderExportColumn.ORDER] }),
+    ).resolves.toMatchObject({ nextAfterId: null });
+    // ro‘yxatda esa — bo‘sh nom bilan ochiladi
+    expect((await broken.list({}, ADMIN, NOW)).items[0].streamCode).toBeNull();
   });
 
   it('CSV: ro‘yxat filtri (`from`/`to`), so‘ralgan vaqtdan keyingisi kirmaydi, telefon oxirgi 4, narx nusxasi, sub, formula himoyasi', async () => {

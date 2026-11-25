@@ -68,6 +68,13 @@ export interface AdminOrderListQuery {
   leadOnly?: boolean;
 }
 
+/** Joriy holatga qachon va kim o‘tkazgani. */
+const STATUS_AT_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT h.created_at, h.actor_id::text AS actor_id FROM checkout.order_status_history h
+     WHERE h.order_id = so.id AND h.accepted AND h.to_status = so.status
+     ORDER BY h.id DESC LIMIT 1) st ON true`;
+
 /** Posilka, birinchi tovar, holat oxirgi o‘zgarishi va yig‘ish vazifasi — har buyurtmaga bittadan qator. */
 const ADMIN_ORDER_JOINS = `
   LEFT JOIN LATERAL (
@@ -79,11 +86,7 @@ const ADMIN_ORDER_JOINS = `
   LEFT JOIN LATERAL (
     SELECT x.elchi_shipment_id::text AS track, x.elchi_state, x.handover_act_id::text AS act_id
       FROM checkout.parcel x WHERE x.sales_order_id = so.id
-     ORDER BY (x.elchi_shipment_id IS NULL), x.id LIMIT 1) pa ON true
-  LEFT JOIN LATERAL (
-    SELECT h.created_at, h.actor_id::text AS actor_id FROM checkout.order_status_history h
-     WHERE h.order_id = so.id AND h.accepted AND h.to_status = so.status
-     ORDER BY h.id DESC LIMIT 1) st ON true
+     ORDER BY (x.elchi_shipment_id IS NULL), x.id LIMIT 1) pa ON true${STATUS_AT_JOIN}
   LEFT JOIN checkout.fulfillment_task ft ON ft.order_id = so.id`;
 
 const ADMIN_ORDER_COLUMNS = `so.id, so.buyer_name AS "buyerName", so.status, so.payment_method AS "paymentMethod",
@@ -341,17 +344,21 @@ export class SellerOrdersService {
     );
     const total = Number(countRows[0]?.total ?? 0);
 
+    // avval kerakli sahifaning ID lari (saralash uchun faqat holat vaqti), keyin shu qatorlarga tovar, posilka va vazifa
     const direction = query?.sort === 'statusAt' ? 'ASC' : 'DESC';
-    const order = query?.sort
-      ? `"statusAt" ${direction}, so.id ${direction}`
-      : 'so.created_at DESC, so.id DESC';
     const listParams = [...params, limit, (page - 1) * limit];
+    const paging = `LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`;
+    const pageIds = query?.sort
+      ? `SELECT so.id, COALESCE(st.created_at, so.created_at) AS k
+           FROM checkout.sales_order so ${STATUS_AT_JOIN}
+          WHERE ${where} ORDER BY k ${direction}, so.id ${direction} ${paging}`
+      : `SELECT so.id, so.created_at AS k FROM checkout.sales_order so
+          WHERE ${where} ORDER BY so.created_at DESC, so.id DESC ${paging}`;
     const rows = (await this.dataSource.query(
       `SELECT ${ADMIN_ORDER_COLUMNS}
-         FROM checkout.sales_order so ${ADMIN_ORDER_JOINS}
-        WHERE ${where}
-        ORDER BY ${order}
-        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
+         FROM (${pageIds}) page
+         JOIN checkout.sales_order so ON so.id = page.id ${ADMIN_ORDER_JOINS}
+        ORDER BY page.k ${direction}, so.id ${direction}`,
       listParams,
     )) as Array<Record<string, unknown>>;
 
@@ -386,10 +393,12 @@ export class SellerOrdersService {
     const { where, params } = adminOrderWhere(query ?? {});
     const rows = (await this.dataSource.query(
       `SELECT ${ADMIN_ORDER_COLUMNS}
-         FROM checkout.sales_order so ${ADMIN_ORDER_JOINS}
-        WHERE ${where} AND so.created_at <= $${params.length + 1}
-          AND ($${params.length + 2}::bigint IS NULL OR so.id < $${params.length + 2}::bigint)
-        ORDER BY so.id DESC LIMIT $${params.length + 3}`,
+         FROM (SELECT so.id FROM checkout.sales_order so
+                WHERE ${where} AND so.created_at <= $${params.length + 1}
+                  AND ($${params.length + 2}::bigint IS NULL OR so.id < $${params.length + 2}::bigint)
+                ORDER BY so.id DESC LIMIT $${params.length + 3}) page
+         JOIN checkout.sales_order so ON so.id = page.id ${ADMIN_ORDER_JOINS}
+        ORDER BY so.id DESC`,
       [...params, until, afterId, limit],
     )) as Array<Record<string, unknown>>;
     return rows.map(adminOrderRow);
