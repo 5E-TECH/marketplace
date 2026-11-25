@@ -1,12 +1,22 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   GatewayTimeoutException,
+  HttpException,
+  InternalServerErrorException,
   PayloadTooLargeException,
+  ServiceUnavailableException,
   StreamableFile,
 } from '@nestjs/common';
 import { lastValueFrom, of, throwError } from 'rxjs';
-import { Role, ROLES_KEY, SelfEmployedReason } from '@app/common';
+import {
+  openPinfl,
+  Role,
+  ROLES_KEY,
+  sealPinfl,
+  SelfEmployedReason,
+} from '@app/common';
 import { AdminSelfEmployedController } from '../withdrawals/admin-self-employed.controller';
 import { AffiliateProfileController } from './affiliate-profile.controller';
 import {
@@ -15,6 +25,12 @@ import {
 } from './affiliate-self-employed.controller';
 
 const PINFL = '30101195600018';
+const KEY = 'test-self-employed-key-32-characters!!';
+const config = (key: string | undefined = KEY) =>
+  ({
+    get: (name: string) =>
+      name === 'SELF_EMPLOYED_SECRET_KEY' ? key : undefined,
+  }) as never;
 const user = { sub: '77', role: Role.AFFILIATE } as never;
 const finance7 = { sub: '7', role: Role.FINANCE } as never;
 const FILE = {
@@ -24,6 +40,7 @@ const FILE = {
   size: 12,
 };
 const INFO = { status: 'PENDING', pinflLast4: '0018' };
+const SUBMITTED = { id: '12', info: INFO };
 
 /** RPC stub: buyruq → javob (yoki xato); chaqiruvlar tartibi `calls` da. */
 function rpc(
@@ -34,13 +51,22 @@ function rpc(
     send: jest.fn(({ cmd }: { cmd: string }, data: unknown) => {
       calls.push([cmd, data]);
       const a = answers[cmd];
-      return a instanceof Error ? throwError(() => a) : of(a ?? { ok: true });
+      // servis xatosi RMQ dan shu shaklda keladi (RpcHttpExceptionFilter)
+      if (a instanceof HttpException) {
+        const body = a.getResponse() as { errorCode?: string };
+        return throwError(() => ({
+          statusCode: a.getStatus(),
+          message: a.message,
+          errorCode: body.errorCode,
+        }));
+      }
+      return of(a ?? { ok: true });
     }),
   } as never;
 }
 
 describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
-  const make = (answers: Record<string, unknown> = {}) => {
+  const make = (answers: Record<string, unknown> = {}, key?: string) => {
     const calls: Array<[string, unknown]> = [];
     const client = rpc(
       {
@@ -48,7 +74,7 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
           firstName: ' Sevara ',
           lastName: 'Yusupova',
         },
-        'finance.self-employed.submit': INFO,
+        'finance.self-employed.submit': SUBMITTED,
         'file.affiliate-document.commit': FILE,
         ...answers,
       },
@@ -56,7 +82,12 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
     );
     return {
       calls,
-      c: new AffiliateSelfEmployedController(client, client, client),
+      c: new AffiliateSelfEmployedController(
+        client,
+        client,
+        client,
+        config(key),
+      ),
     };
   };
   const flush = () => new Promise((r) => setImmediate(r));
@@ -67,16 +98,23 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
     await flush();
     expect(calls.map(([cmd]) => cmd)).toEqual([
       'identity.affiliate.profile.get',
+      'finance.self-employed.check',
       'finance.self-employed.submit',
       'identity.audit.log',
     ]);
-    expect(calls[1][1]).toEqual({
+    const sent = calls[2][1] as { pinflSealed: string };
+    expect(sent).toMatchObject({
       affiliateId: '77',
-      pinfl: PINFL,
       fullName: 'Sevara Yusupova',
       document: null,
     });
-    expect(JSON.stringify(calls[2][1])).not.toContain(PINFL);
+    // servislararo xabarda ham ochiq raqam yo‘q
+    expect(JSON.stringify(calls)).not.toContain(PINFL);
+    expect(openPinfl(sent.pinflSealed, KEY)).toBe(PINFL);
+    expect(calls[3][1]).toMatchObject({
+      entityId: '12',
+      meta: { affiliateId: '77', pinflLast4: '0018' },
+    });
   });
 
   it('JShShIR 14 raqam emas — PINFL_INVALID, hech qanday chaqiruv yo‘q', async () => {
@@ -85,6 +123,41 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
       await expect(c.submit({ pinfl }, user, '')).rejects.toMatchObject({
         response: { errorCode: 'PINFL_INVALID' },
       });
+    expect(calls).toEqual([]);
+  });
+
+  it('kalit yo‘q — 503, hech narsa yuborilmaydi; tekshiruv rad etsa fayl ko‘chirilmaydi', async () => {
+    const off = make({}, '');
+    await expect(
+      off.c.submit({ pinfl: PINFL, documentId: 'd.pdf' }, user, ''),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(off.calls).toEqual([]);
+    const pending = make({
+      'finance.self-employed.check': new ConflictException({
+        message: 'x',
+        errorCode: 'ALREADY_PENDING',
+      }),
+    });
+    await expect(
+      pending.c.submit({ pinfl: PINFL, documentId: 'd.pdf' }, user, ''),
+    ).rejects.toMatchObject({ response: { errorCode: 'ALREADY_PENDING' } });
+    expect(pending.calls.map(([cmd]) => cmd)).not.toContain(
+      'file.affiliate-document.commit',
+    );
+  });
+
+  it('superadmin «nomidan ko‘rish» rejimida: yuklash, yuborish va hujjat — 403', async () => {
+    const { calls, c } = make();
+    const as = { ...(user as object), impersonatedBy: '1' } as never;
+    expect(() => c.uploadDocument({ size: 1 } as never, as)).toThrow(
+      ForbiddenException,
+    );
+    await expect(c.submit({ pinfl: PINFL }, as, '')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(c.document(as, {} as never)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(calls).toEqual([]);
   });
 
@@ -103,16 +176,24 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
     expect(rejected.calls.map(([cmd]) => cmd)).toContain(
       'file.affiliate-document.remove',
     );
-    const unknown = make({
-      'finance.self-employed.submit': new GatewayTimeoutException(),
-    });
-    await expect(unknown.c.submit(dto, user, '')).rejects.toMatchObject({
-      status: 504,
-    });
-    await flush();
-    expect(unknown.calls.map(([cmd]) => cmd)).not.toContain(
-      'file.affiliate-document.remove',
-    );
+    for (const [error, status, removed] of [
+      [new GatewayTimeoutException(), 504, false],
+      [new InternalServerErrorException(), 500, false],
+      [new ServiceUnavailableException(), 503, true],
+    ] as const) {
+      const other = make({ 'finance.self-employed.submit': error });
+      await expect(other.c.submit(dto, user, '')).rejects.toMatchObject({
+        status,
+      });
+      await flush();
+      expect(
+        other.calls.some(([cmd]) => cmd === 'file.affiliate-document.remove'),
+      ).toBe(removed);
+    }
+    const commit = rejected.calls.find(
+      ([cmd]) => cmd === 'file.affiliate-document.commit',
+    )![1] as { deadline: number };
+    expect(commit.deadline - Date.now()).toBeGreaterThan(0);
   });
 
   it('yuklash: fayl yo‘q — FILE_REQUIRED; nom latin1 dan tiklanadi', async () => {
@@ -129,15 +210,12 @@ describe('BE-25 5-tur: sotuvchi JShShIR arizasi (gateway)', () => {
       } as never,
       user,
     );
-    expect(calls[0]).toEqual([
-      'file.affiliate-document.store',
-      {
-        affiliateId: '77',
-        contentType: 'application/pdf',
-        fileName: 'Маълумот ʻ.pdf',
-        base64: 'YWJj',
-      },
-    ]);
+    expect(calls[0][0]).toBe('file.affiliate-document.store');
+    expect(calls[0][1]).toMatchObject({
+      data: { affiliateId: '77', fileName: 'Маълумот ʻ.pdf', base64: 'YWJj' },
+      // hujjat navbatda diskka yozilmaydi
+      options: { persistent: false },
+    });
   });
 
   it('multer chegarasi — 413 FILE_TOO_LARGE; boshqa xato o‘zgarmaydi', async () => {
@@ -191,13 +269,17 @@ describe('BE-25 5-tur: ism-familiya o‘zgarishi (gateway)', () => {
   it('avval moliya (qayta tekshiruv), keyin ism', async () => {
     const { calls, c } = make({
       'identity.affiliate.profile.update': { id: '77' },
-      'finance.self-employed.current': INFO,
+      'finance.self-employed.rename': { recheck: true, info: INFO },
     });
-    expect((await c.update(user, dto)).selfEmployed).toBe(INFO);
+    expect(await c.update(user, dto, '')).toEqual({
+      id: '77',
+      selfEmployed: INFO,
+      card: null,
+    });
     expect(calls.map(([cmd]) => cmd)).toEqual([
       'finance.self-employed.rename',
+      'identity.audit.log',
       'identity.affiliate.profile.update',
-      'finance.self-employed.current',
     ]);
     expect(calls[0][1]).toEqual({
       affiliateId: '77',
@@ -209,7 +291,9 @@ describe('BE-25 5-tur: ism-familiya o‘zgarishi (gateway)', () => {
     const { calls, c } = make({
       'finance.self-employed.rename': new GatewayTimeoutException(),
     });
-    await expect(c.update(user, dto)).rejects.toMatchObject({ status: 504 });
+    await expect(c.update(user, dto, '')).rejects.toMatchObject({
+      status: 504,
+    });
     expect(calls).toHaveLength(1);
   });
 
@@ -233,7 +317,7 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
           affiliateId: '77',
           status: 'VERIFIED',
         },
-        'finance.self-employed.reveal': { pinfl: PINFL },
+        'finance.self-employed.reveal': { pinflSealed: sealPinfl(PINFL, KEY) },
         'finance.self-employed.document': FILE,
         'identity.affiliate.profile.get': {
           firstName: 'Sevara',
@@ -245,7 +329,7 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
     );
     return {
       calls,
-      c: new AdminSelfEmployedController(client, client, client),
+      c: new AdminSelfEmployedController(client, client, client, config()),
     };
   };
   const res = { setHeader: jest.fn() } as never;
@@ -274,10 +358,15 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
       pinfl: PINFL,
     });
     expect(ok.calls.map(([cmd]) => cmd)).toEqual([
+      'finance.self-employed.get',
       'identity.audit.log',
       'finance.self-employed.reveal',
     ]);
-    expect(JSON.stringify(ok.calls[0][1])).not.toContain(PINFL);
+    expect(ok.calls[1][1]).toMatchObject({
+      entityId: '12',
+      meta: { affiliateId: '77' },
+    });
+    expect(JSON.stringify(ok.calls)).not.toContain(PINFL);
     const down = make({ 'identity.audit.log': new GatewayTimeoutException() });
     await expect(down.c.reveal('12', finance7, '', res)).rejects.toMatchObject({
       status: 503,
@@ -288,6 +377,42 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
     const opened = down.calls.map(([cmd]) => cmd);
     expect(opened).not.toContain('finance.self-employed.reveal');
     expect(opened).not.toContain('file.private.get');
+  });
+
+  it('shifr kaliti almashgan — 409, 500 emas', async () => {
+    const { c } = make({
+      'finance.self-employed.reveal': {
+        pinflSealed: sealPinfl(PINFL, `${KEY}-eski`),
+      },
+    });
+    await expect(c.reveal('12', finance7, '', res)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('ism arizadagidan farq qilsa: ariza hozirgi ism bilan yangilanadi (tiqilib qolmaydi), 409', async () => {
+    const { calls, c } = make({
+      'finance.self-employed.approve': new ConflictException({
+        message: 'x',
+        errorCode: 'NAME_CHANGED',
+      }),
+    });
+    await expect(c.approve('12', finance7, '')).rejects.toMatchObject({
+      response: { errorCode: 'NAME_CHANGED' },
+    });
+    expect(calls.at(-1)).toEqual([
+      'finance.self-employed.rename',
+      { affiliateId: '77', fullName: 'Sevara Yusupova' },
+    ]);
+    const other = make({
+      'finance.self-employed.approve': new ConflictException('x'),
+    });
+    await expect(other.c.approve('12', finance7, '')).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(other.calls.map(([cmd]) => cmd)).not.toContain(
+      'finance.self-employed.rename',
+    );
   });
 
   it('tasdiq: hozirgi ism identity dan, xodim tokendan', async () => {

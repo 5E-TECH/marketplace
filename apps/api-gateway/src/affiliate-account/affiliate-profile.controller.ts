@@ -28,6 +28,7 @@ import {
   JwtUser,
   Role,
   Roles,
+  RenameSelfEmployedResult,
   RmqClient,
   SELF_EMPLOYED_RPC,
   SelfEmployedInfoDto,
@@ -76,20 +77,39 @@ export class AffiliateProfileController {
   async update(
     @CurrentUser() user: JwtUser,
     @Body() dto: UpdateAffiliateProfileDto,
+    @Ip() ip: string,
   ): Promise<AffiliateProfileDto> {
     // ism o‘zgarsa tasdiqlangan maqom AVVAL qayta tekshiruvga (pul yechish yopiladi), keyin ism yangilanadi:
     // yangi ism bilan eski tasdiq hech qachon birga turmasin. Moliya javob bermasa — ism ham o‘zgarmaydi.
-    await sendRpc(
+    const { recheck, info } = await sendRpc<RenameSelfEmployedResult>(
       this.finance,
       { cmd: SELF_EMPLOYED_RPC.RENAME },
       { affiliateId: user.sub, fullName: affiliateFullName(dto) },
     );
+    if (recheck)
+      void sendRpc(
+        this.identity,
+        { cmd: 'identity.audit.log' },
+        {
+          actorId: user.sub,
+          action: 'self-employed.recheck',
+          entityType: 'User',
+          entityId: user.sub,
+          meta: {
+            status: info.status,
+            impersonatedBy: user.impersonatedBy ?? null,
+            ip: ip ?? null,
+          },
+        },
+      ).catch((e: Error) =>
+        this.logger.warn(`Qayta tekshiruv auditga yozilmadi: ${e.message}`),
+      );
     const profile = await sendRpc<AffiliateProfileDto>(
       this.identity,
       { cmd: AFFILIATE_AUTH_RPC.PROFILE_UPDATE },
       { userId: user.sub, dto },
     );
-    return this.withSelfEmployed(user.sub, profile);
+    return { ...profile, selfEmployed: info, card: null };
   }
 
   @Post('agreements')

@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -14,6 +15,7 @@ import {
   ServiceUnavailableException,
   StreamableFile,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
@@ -26,13 +28,12 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import {
-  AFFILIATE_AUTH_RPC,
   AffiliateDocumentFile,
-  affiliateFullName,
-  AffiliateProfileDto,
   CurrentUser,
   JwtUser,
+  openPinfl,
   PinflDto,
+  pinflKey,
   RejectSelfEmployedDto,
   RevokeSelfEmployedDto,
   RmqClient,
@@ -46,6 +47,7 @@ import {
 } from '@app/common';
 import { sendPrivateFile } from '../affiliate-account/private-file-response';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { currentFullName, recheckOnNameChange } from './name-recheck';
 
 /**
  * BE-25 5-tur (ega, 2026-11-25; P-A5): moliya sotuvchining o‘zini o‘zi band qilganlik arizasini qo‘lda tekshiradi.
@@ -62,6 +64,7 @@ export class AdminSelfEmployedController {
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
     @Inject(RmqClient.FILE) private readonly files: ClientProxy,
+    private readonly config: ConfigService,
   ) {}
 
   @Get()
@@ -98,16 +101,30 @@ export class AdminSelfEmployedController {
   })
   @ApiOkResponse({ type: PinflDto })
   @ApiNotFoundResponse({ description: 'Ariza yoki JShShIR yo‘q' })
-  @ApiConflictResponse({ description: 'Ariza eskirgan' })
+  @ApiConflictResponse({
+    description: 'Ariza eskirgan yoki shifr kaliti almashgan',
+  })
   async reveal(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser() user: JwtUser,
     @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PinflDto> {
-    await this.mustAudit(user, 'self-employed.reveal', id, ip);
+    const key = pinflKey(this.config);
+    const { affiliateId } = await this.get(id);
+    await this.mustAudit(user, 'self-employed.reveal', id, affiliateId, ip);
+    const { pinflSealed } = await sendRpc<{ pinflSealed: string }>(
+      this.finance,
+      { cmd: SELF_EMPLOYED_RPC.REVEAL },
+      { id },
+    );
+    const pinfl = openPinfl(pinflSealed, key);
+    if (!pinfl)
+      throw new ConflictException(
+        'JShShIR ochilmadi — shifr kaliti almashgan; arizani rad eting, sotuvchi qayta yuboradi',
+      );
     res.setHeader('Cache-Control', 'private, no-store');
-    return sendRpc(this.finance, { cmd: SELF_EMPLOYED_RPC.REVEAL }, { id });
+    return { pinfl };
   }
 
   @Get(':id/document')
@@ -121,12 +138,13 @@ export class AdminSelfEmployedController {
     @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
+    const { affiliateId } = await this.get(id);
     const document = await sendRpc<AffiliateDocumentFile>(
       this.finance,
       { cmd: SELF_EMPLOYED_RPC.DOCUMENT },
       { id },
     );
-    await this.mustAudit(user, 'self-employed.document', id, ip);
+    await this.mustAudit(user, 'self-employed.document', id, affiliateId, ip);
     return sendPrivateFile(this.files, res, document);
   }
 
@@ -137,7 +155,7 @@ export class AdminSelfEmployedController {
   @ApiOkResponse({ type: SelfEmployedDetailDto })
   @ApiConflictResponse({
     description:
-      'Ariza tekshiruvda emas yoki eskirgan; NAME_CHANGED — profildagi ism arizadagidan farq qiladi',
+      'Ariza tekshiruvda emas yoki eskirgan; NAME_CHANGED — profildagi ism arizadagidan farq qiladi, ariza hozirgi ism bilan yangilandi (navbatdan qayta oching)',
   })
   async approve(
     @Param('id', ParseLeadIdPipe) id: string,
@@ -145,19 +163,17 @@ export class AdminSelfEmployedController {
     @Ip() ip: string,
   ): Promise<SelfEmployedDetailDto> {
     const { affiliateId } = await this.get(id);
-    const profile = await sendRpc<AffiliateProfileDto>(
-      this.identity,
-      { cmd: AFFILIATE_AUTH_RPC.PROFILE_GET },
-      { userId: affiliateId },
-    );
-    const result = await sendRpc<SelfEmployedDetailDto>(
+    const fullName = await currentFullName(this.identity, affiliateId);
+    const result = await recheckOnNameChange(
       this.finance,
-      { cmd: SELF_EMPLOYED_RPC.APPROVE },
-      {
-        id,
-        reviewerId: user.sub,
-        currentFullName: affiliateFullName(profile),
-      },
+      affiliateId,
+      fullName,
+      () =>
+        sendRpc<SelfEmployedDetailDto>(
+          this.finance,
+          { cmd: SELF_EMPLOYED_RPC.APPROVE },
+          { id, reviewerId: user.sub, currentFullName: fullName },
+        ),
     );
     this.audit(user, 'self-employed.approve', result, ip);
     return result;
@@ -214,10 +230,15 @@ export class AdminSelfEmployedController {
     user: JwtUser,
     action: string,
     id: string,
+    affiliateId: string,
     ip: string,
   ): Promise<void> {
     try {
-      await this.write(user, action, id, { role: user.role, ip: ip ?? null });
+      await this.write(user, action, id, {
+        affiliateId,
+        role: user.role,
+        ip: ip ?? null,
+      });
     } catch {
       throw new ServiceUnavailableException(
         'Audit yozilmadi — hozir ochilmaydi, qayta urinib ko‘ring',

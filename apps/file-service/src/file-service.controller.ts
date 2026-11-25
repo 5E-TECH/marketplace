@@ -80,7 +80,6 @@ export class FileServiceController {
     @Payload()
     data: {
       affiliateId: string;
-      contentType: string;
       fileName: string;
       base64: string;
     },
@@ -90,7 +89,12 @@ export class FileServiceController {
 
   @MessagePattern({ cmd: AFFILIATE_DOCUMENT_RPC.COMMIT })
   commitAffiliateDocument(
-    @Payload() data: { affiliateId: string; documentId: string },
+    @Payload()
+    data: {
+      affiliateId: string;
+      documentId: string;
+      deadline: number;
+    },
   ) {
     return this.privateFiles.commitAffiliateDocument(data);
   }

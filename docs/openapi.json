@@ -9520,7 +9520,7 @@
     },
     "/api/v1/admin/finance/withdrawals/{id}/approve": {
       "post": {
-        "description": "5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi.",
+        "description": "5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi. Maqomi tasdiqlanmagan sotuvchi — 400.",
         "operationId": "AdminWithdrawalsController_approve",
         "parameters": [
           {
@@ -9547,7 +9547,7 @@
             "description": "So‘rov topilmadi"
           },
           "409": {
-            "description": "INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan"
+            "description": "INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan; NAME_CHANGED: ism tasdiqlangandan farq qiladi — maqom qayta tekshiruvda"
           }
         },
         "security": [
@@ -9993,6 +9993,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "SELF_EMPLOYED_SECRET_KEY sozlanmagan"
           }
         },
         "security": [
@@ -10137,7 +10140,7 @@
             "description": "Ariza yoki JShShIR yo‘q"
           },
           "409": {
-            "description": "Ariza eskirgan"
+            "description": "Ariza eskirgan yoki shifr kaliti almashgan"
           }
         },
         "security": [
@@ -10205,7 +10208,7 @@
             }
           },
           "409": {
-            "description": "Ariza tekshiruvda emas yoki eskirgan; NAME_CHANGED — profildagi ism arizadagidan farq qiladi"
+            "description": "Ariza tekshiruvda emas yoki eskirgan; NAME_CHANGED — profildagi ism arizadagidan farq qiladi, ariza hozirgi ism bilan yangilandi (navbatdan qayta oching)"
           }
         },
         "security": [
@@ -23800,12 +23803,13 @@
           "status": {
             "type": "string",
             "enum": [
-              "NOT_SUBMITTED",
               "PENDING",
               "VERIFIED",
               "REJECTED",
-              "REVOKED"
-            ]
+              "REVOKED",
+              "SUPERSEDED"
+            ],
+            "description": "SUPERSEDED — ism o‘zgargan, o‘rniga yangi ariza (ro‘yxatda chiqmaydi)"
           },
           "source": {
             "type": "string",
@@ -23963,12 +23967,13 @@
           "status": {
             "type": "string",
             "enum": [
-              "NOT_SUBMITTED",
               "PENDING",
               "VERIFIED",
               "REJECTED",
-              "REVOKED"
-            ]
+              "REVOKED",
+              "SUPERSEDED"
+            ],
+            "description": "SUPERSEDED — ism o‘zgargan, o‘rniga yangi ariza (ro‘yxatda chiqmaydi)"
           },
           "source": {
             "type": "string",

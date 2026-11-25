@@ -91,7 +91,7 @@ export const envValidationSchema = Joi.object({
     then: Joi.required(),
     otherwise: Joi.optional(),
   }),
-  // BE-25 5-tur: sotuvchi JShShIR ini shifrlash kaliti (finance-service). Berilmasa ariza qabul qilinmaydi (503).
+  // BE-25 5-tur: sotuvchi JShShIR ini shifrlash kaliti (gateway va finance-service). Berilmasa ariza qabul qilinmaydi (503).
   // Bir marta qo‘yiladi: almashtirilsa eski JShShIR lar ochilmaydi.
   SELF_EMPLOYED_SECRET_KEY: Joi.string().min(32).allow('').optional(),
   // BE-26: prod’da Swagger sukut bo‘yicha yopiq; monitor ko‘rsatkichlari tokeni (gateway `health/ops`)

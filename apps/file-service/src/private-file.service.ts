@@ -208,14 +208,10 @@ export class PrivateFileService {
   /** Tanlangan fayl vaqtinchalik yopiq joyga; tur bosh baytlardan tekshiriladi. `documentId` faqat egasiga ishlaydi. */
   async storeAffiliateDocument(input: {
     affiliateId: string;
-    contentType: string;
     fileName: string;
     base64: string;
   }): Promise<SelfEmployedDocumentDto> {
     const affiliateId = this.affiliateId(input?.affiliateId);
-    const contentType = String(input?.contentType ?? '')
-      .trim()
-      .toLowerCase() as PrivateDocumentContentType;
     const body = Buffer.from(String(input?.base64 ?? ''), 'base64');
     if (!body.length)
       throw new BadRequestException({
@@ -227,10 +223,11 @@ export class PrivateFileService {
         message: 'Fayl 10 MB dan katta',
         errorCode: ErrorCode.FILE_TOO_LARGE,
       });
-    if (
-      !PRIVATE_DOCUMENT_TYPES.includes(contentType) ||
-      !signatureMatches(body.subarray(0, 16), contentType)
-    )
+    // tur brauzer aytganidan emas, bosh baytlardan (ba’zi qurilmalar turini bo‘sh yuboradi)
+    const contentType = PRIVATE_DOCUMENT_TYPES.find((type) =>
+      signatureMatches(body.subarray(0, 16), type),
+    );
+    if (!contentType)
       throw new BadRequestException({
         message: 'Faqat PDF, JPG yoki PNG',
         errorCode: ErrorCode.FILE_TYPE_INVALID,
@@ -263,6 +260,8 @@ export class PrivateFileService {
   async commitAffiliateDocument(input: {
     affiliateId: string;
     documentId: string;
+    /** Chaqiruvchi shu vaqtgacha kutadi (epoch ms) — kechikkan buyruq egasiz nusxa qoldirmasin. */
+    deadline: number;
   }): Promise<AffiliateDocumentFile> {
     const affiliateId = this.affiliateId(input?.affiliateId);
     const documentId = String(input?.documentId ?? '');
@@ -271,7 +270,8 @@ export class PrivateFileService {
         message: 'Hujjat topilmadi — qayta yuklang',
         errorCode: ErrorCode.DOCUMENT_NOT_FOUND,
       });
-    if (!DOCUMENT_ID.test(documentId)) throw missing();
+    if (!DOCUMENT_ID.test(documentId) || !(Date.now() < input.deadline))
+      throw missing();
     const uploadKey = `${AFFILIATE_UPLOAD_FOLDER}/${affiliateId}/${documentId}`;
     const upload = await this.statOrNull(uploadKey);
     if (!upload) throw missing();

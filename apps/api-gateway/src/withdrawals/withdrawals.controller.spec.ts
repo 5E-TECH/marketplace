@@ -5,7 +5,7 @@ import { AffiliateWithdrawalsController } from './affiliate-withdrawals.controll
 
 describe('BE-23: pul yechish endpointlari finance-service ga', () => {
   const make = () => {
-    const send = jest.fn(() => of({ ok: true }));
+    const send = jest.fn(() => of<Record<string, unknown>>({ ok: true }));
     return { send, client: { send } as never };
   };
 
@@ -32,13 +32,20 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
   it('moliya: xodim ID si tokendan; tasdiq, rad, «To‘landi» va maqom — FINANCE va SUPERADMIN (BE-05)', async () => {
     const { send, client } = make();
     const identity = {
-      send: jest.fn(() => of({ firstName: 'Jasur', lastName: ' Tursunov ' })),
+      send: jest.fn((..._args: unknown[]) =>
+        of({ firstName: 'Jasur', lastName: ' Tursunov ' }),
+      ),
     };
     const c = new AdminWithdrawalsController(client, identity as never);
+    send.mockReturnValueOnce(of({ ok: true, affiliateId: '42' }));
     await c.approve('12', '7');
+    expect(identity.send).toHaveBeenLastCalledWith(
+      { cmd: 'identity.affiliate.profile.get' },
+      { userId: '42' },
+    );
     expect(send).toHaveBeenLastCalledWith(
       { cmd: 'finance.withdrawal.approve' },
-      { id: '12', approverId: '7' },
+      { id: '12', approverId: '7', currentFullName: 'Jasur Tursunov' },
     );
     await c.reject('12', '7', { reason: 'Karta xato' });
     expect(send).toHaveBeenLastCalledWith(
@@ -50,7 +57,7 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
       { cmd: 'finance.withdrawal.paid' },
       { id: '12', paidBy: '8' },
     );
-    await c.setSelfEmployed('42', '7', { selfEmployed: true });
+    await c.setSelfEmployed('42', '7', { selfEmployed: true }, '');
     expect(send).toHaveBeenLastCalledWith(
       { cmd: 'finance.affiliate.self-employed.set' },
       {
@@ -62,7 +69,7 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     );
     identity.send.mockReturnValueOnce(of({ firstName: '', lastName: '' }));
     await expect(
-      c.setSelfEmployed('42', '7', { selfEmployed: true }),
+      c.setSelfEmployed('42', '7', { selfEmployed: true }, ''),
     ).rejects.toMatchObject({
       response: { errorCode: 'PROFILE_NAME_REQUIRED' },
     });

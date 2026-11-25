@@ -90,7 +90,6 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
       const { svc, client } = make();
       const result = await svc.storeAffiliateDocument({
         affiliateId: '77',
-        contentType: 'application/pdf',
         fileName: '../../Маълумотнома ʻ1.html',
         base64: pdf.toString('base64'),
       });
@@ -108,24 +107,20 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
 
     it('tarkib turga mos emas, bo‘sh, katta — rad, MinIO ga yozilmaydi', async () => {
       const { svc, client } = make();
-      const store = (contentType: string, body: Buffer) =>
+      const store = (body: Buffer) =>
         svc.storeAffiliateDocument({
           affiliateId: '77',
-          contentType,
           fileName: 'x',
           base64: body.toString('base64'),
         });
-      await expect(
-        store('application/pdf', Buffer.from('<html>')),
-      ).rejects.toMatchObject({ response: { errorCode: 'FILE_TYPE_INVALID' } });
-      await expect(store('text/html', pdf)).rejects.toMatchObject({
+      await expect(store(Buffer.from('<html>'))).rejects.toMatchObject({
         response: { errorCode: 'FILE_TYPE_INVALID' },
       });
+      await expect(store(Buffer.alloc(0))).rejects.toMatchObject({
+        response: { errorCode: 'FILE_REQUIRED' },
+      });
       await expect(
-        store('application/pdf', Buffer.alloc(0)),
-      ).rejects.toMatchObject({ response: { errorCode: 'FILE_REQUIRED' } });
-      await expect(
-        store('application/pdf', Buffer.alloc(10 * 1024 * 1024 + 1, 1)),
+        store(Buffer.alloc(10 * 1024 * 1024 + 1, 1)),
       ).rejects.toMatchObject({ response: { errorCode: 'FILE_TOO_LARGE' } });
       expect(client.putObject).not.toHaveBeenCalled();
     });
@@ -147,13 +142,16 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
             ),
       );
       const documentId = `${ID36}.pdf`;
+      const deadline = Date.now() + 10_000;
       const one = await svc.commitAffiliateDocument({
         affiliateId: '77',
         documentId,
+        deadline,
       });
       const two = await svc.commitAffiliateDocument({
         affiliateId: '77',
         documentId,
+        deadline,
       });
       expect(one).toMatchObject({
         fileName: 'maqom.pdf',
@@ -164,12 +162,16 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
         /^private\/affiliate\/77\/[0-9a-f-]{36}\.pdf$/,
       );
       expect(one.objectKey).not.toBe(two.objectKey);
+      expect(client.copyObject).toHaveBeenCalledTimes(2);
       // vaqtinchalik nusxa o‘chirilmaydi — qayta urinish ishlaydi
       expect(client.removeObject).not.toHaveBeenCalled();
       for (const bad of [
-        { affiliateId: '78', documentId },
-        { affiliateId: '77', documentId: `../78/${documentId}` },
-        { affiliateId: '77', documentId: 'doc-1' },
+        { affiliateId: '78', documentId, deadline },
+        { affiliateId: '77', documentId: `../78/${documentId}`, deadline },
+        { affiliateId: '77', documentId: 'doc-1', deadline },
+        // gateway kutib bo‘lgan (504) — kechikkan buyruq nusxa qoldirmaydi
+        { affiliateId: '77', documentId, deadline: Date.now() - 1 },
+        { affiliateId: '77', documentId } as never,
       ])
         await expect(svc.commitAffiliateDocument(bad)).rejects.toMatchObject({
           response: { errorCode: 'DOCUMENT_NOT_FOUND' },

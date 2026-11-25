@@ -2,6 +2,8 @@ import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import {
   ErrorCode,
+  openPinfl,
+  sealPinfl,
   SelfEmployedReason,
   SelfEmployedSource,
   SelfEmployedStatus,
@@ -27,16 +29,24 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
   let seq = 100;
 
   const config = (key: string | undefined = KEY) =>
-    ({ get: () => key }) as never;
+    ({
+      get: (name: string) =>
+        name === 'SELF_EMPLOYED_SECRET_KEY' ? key : undefined,
+    }) as never;
   const id = () => String(++seq);
-  const submit = (affiliateId: string, over: Record<string, unknown> = {}) =>
-    svc.submit({
-      affiliateId,
-      pinfl: PINFL,
-      fullName: 'Sevara Yusupova',
-      document: null,
-      ...over,
-    });
+  const submit = async (
+    affiliateId: string,
+    { pinfl = PINFL, ...over }: Record<string, unknown> = {},
+  ) =>
+    (
+      await svc.submit({
+        affiliateId,
+        pinflSealed: sealPinfl(String(pinfl), KEY),
+        fullName: 'Sevara Yusupova',
+        document: null,
+        ...over,
+      })
+    ).info;
   const last = async (affiliateId: string) =>
     (
       (await ds.query(
@@ -137,7 +147,10 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
     )) as Array<{ j: string }>;
     expect(row.j).not.toContain(PINFL);
     expect(row.j).toContain('0018');
-    expect(await svc.reveal({ id: await last(a) })).toEqual({ pinfl: PINFL });
+    const { pinflSealed } = await svc.reveal({ id: await last(a) });
+    expect(pinflSealed).not.toContain(PINFL);
+    expect(openPinfl(pinflSealed, KEY)).toBe(PINFL);
+    expect(openPinfl(pinflSealed, `${KEY}2`)).toBeNull();
   });
 
   it('kalit yo‘q yoki qisqa — ariza qabul qilinmaydi (ochiq saqlanmaydi)', async () => {
@@ -146,27 +159,39 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
       await expect(
         new SelfEmployedService(ds, config(key)).submit({
           affiliateId: a,
-          pinfl: PINFL,
+          pinflSealed: sealPinfl(PINFL, KEY),
           fullName: 'A B',
           document: null,
         }),
       ).rejects.toMatchObject({ status: 503 });
+    for (const key of ['', 'qisqa'])
+      await expect(
+        new SelfEmployedService(ds, config(key)).check({
+          affiliateId: a,
+          fullName: 'A B',
+        }),
+      ).rejects.toMatchObject({ status: 503 });
+    // servislarda kalit har xil — saqlanmaydi, raqam xabarda yo‘q
+    const other = await svc
+      .submit({
+        affiliateId: a,
+        pinflSealed: sealPinfl(PINFL, `${KEY}-boshqa`),
+        fullName: 'A B',
+        document: null,
+      })
+      .catch((e: unknown) => e);
+    expect(other).toMatchObject({ status: 503 });
+    expect(JSON.stringify(other)).not.toContain(PINFL);
     expect((await svc.current({ affiliateId: a })).status).toBe(
       SelfEmployedStatus.NOT_SUBMITTED,
     );
   });
 
-  it('noto‘g‘ri JShShIR, ismsiz profil, boshqa sotuvchi fayli — 400; xabarda raqam yo‘q', async () => {
+  it('noto‘g‘ri JShShIR, ismsiz profil, boshqa sotuvchi fayli — rad; xabarda raqam yo‘q', async () => {
     const a = id();
-    for (const pinfl of [
-      '3010119560001',
-      '301011956000188',
-      '3010119560001x',
-    ]) {
+    for (const pinfl of ['3010119560001', '3010119560001x']) {
       const error = await submit(a, { pinfl }).catch((e: unknown) => e);
-      expect(error).toMatchObject({
-        response: { errorCode: ErrorCode.PINFL_INVALID },
-      });
+      expect(error).toMatchObject({ status: 503 });
       expect(JSON.stringify(error)).not.toContain(pinfl);
     }
     await expect(submit(a, { fullName: '  ' })).rejects.toMatchObject({
@@ -188,9 +213,22 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
 
   it('tekshirilayotganda va tasdiqlangandan keyin qayta yuborilmaydi; parallel ikki yuborishdan bittasi o‘tadi', async () => {
     const a = id();
+    expect(await svc.check({ affiliateId: a, fullName: 'A B' })).toEqual({
+      ok: true,
+    });
+    await expect(
+      svc.check({ affiliateId: a, fullName: ' ' }),
+    ).rejects.toMatchObject({
+      response: { errorCode: ErrorCode.PROFILE_NAME_REQUIRED },
+    });
     const results = await Promise.allSettled([submit(a), submit(a), submit(a)]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     await expect(submit(a)).rejects.toMatchObject({
+      response: { errorCode: ErrorCode.ALREADY_PENDING },
+    });
+    await expect(
+      svc.check({ affiliateId: a, fullName: 'A B' }),
+    ).rejects.toMatchObject({
       response: { errorCode: ErrorCode.ALREADY_PENDING },
     });
     await approve(a);
@@ -280,11 +318,14 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
       await approve(a);
       expect(
         await svc.rename({ affiliateId: a, fullName: ' Sevara   Yusupova ' }),
-      ).toEqual({ recheck: false });
+      ).toMatchObject({ recheck: false });
       expect(await gate(a)).toBe(true);
       expect(
         await svc.rename({ affiliateId: a, fullName: 'Sevara Karimova' }),
-      ).toEqual({ recheck: true });
+      ).toMatchObject({
+        recheck: true,
+        info: { status: SelfEmployedStatus.PENDING },
+      });
       expect(await gate(a)).toBe(false);
       const row = await svc.get({ id: await last(a) });
       expect(row).toMatchObject({
@@ -307,6 +348,7 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
       const first = await last(a);
       const before = await svc.get({ id: first });
       await svc.rename({ affiliateId: a, fullName: 'Sevara Karimova' });
+      expect((await svc.get({ id: first })).status).toBe('SUPERSEDED');
       const after = await svc.get({ id: await last(a) });
       expect(after.id).not.toBe(first);
       expect(after.submittedAt).toBe(before.submittedAt);
@@ -321,9 +363,9 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
 
     it('yuborilmagan, rad etilgan — o‘zgarmaydi; qo‘lda tasdiqlangani — bekor, JShShIR so‘raladi', async () => {
       const a = id();
-      expect(await svc.rename({ affiliateId: a, fullName: 'A B' })).toEqual({
-        recheck: false,
-      });
+      expect(
+        await svc.rename({ affiliateId: a, fullName: 'A B' }),
+      ).toMatchObject({ recheck: false });
       await svc.setManually({
         affiliateId: a,
         selfEmployed: true,
@@ -337,10 +379,49 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
         status: SelfEmployedStatus.REVOKED,
         reason: 'F.I.Sh. o‘zgardi — JShShIR ni qayta yuboring',
       });
-      expect(await svc.rename({ affiliateId: a, fullName: 'A D' })).toEqual({
-        recheck: false,
-      });
+      expect(
+        await svc.rename({ affiliateId: a, fullName: 'A D' }),
+      ).toMatchObject({ recheck: false });
     });
+  });
+
+  it('eski versiya qo‘ygan arizasiz darvoza: ism o‘zgarsa yopiladi', async () => {
+    const a = id();
+    await ds.query(
+      `INSERT INTO finance.affiliate_payout_profile (affiliate_id, self_employed, updated_by) VALUES ($1, true, '7')`,
+      [a],
+    );
+    expect(await svc.rename({ affiliateId: a, fullName: 'A B' })).toMatchObject(
+      {
+        recheck: true,
+        info: { status: SelfEmployedStatus.NOT_SUBMITTED },
+      },
+    );
+    expect(await gate(a)).toBe(false);
+  });
+
+  it('qo‘lda belgi va ism: qo‘lda tasdiqlangani yangi ism bilan qayta belgilanadi, arizalisi — NAME_CHANGED', async () => {
+    const [a, b] = [id(), id()];
+    const set = (affiliateId: string, fullName: string) =>
+      svc.setManually({
+        affiliateId,
+        selfEmployed: true,
+        updatedBy: '7',
+        fullName,
+      });
+    await set(a, '');
+    await set(a, 'Anvar J');
+    expect((await svc.get({ id: await last(a) })).fullName).toBe('Anvar J');
+    expect(
+      await svc.rename({ affiliateId: a, fullName: 'Anvar J' }),
+    ).toMatchObject({ recheck: false });
+    await submit(b);
+    await approve(b);
+    await expect(set(b, 'Boshqa Ism')).rejects.toMatchObject({
+      response: { errorCode: ErrorCode.NAME_CHANGED },
+    });
+    await set(b, 'Sevara Yusupova');
+    expect(await gate(b)).toBe(true);
   });
 
   it('qo‘lda belgi: ochiq ariza bo‘lsa 409; olib tashlansa bekor; takror — o‘zgarmaydi', async () => {
@@ -350,7 +431,7 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
         affiliateId: a,
         selfEmployed,
         updatedBy: '7',
-        fullName: 'A B',
+        fullName: 'Sevara Yusupova',
       });
     await submit(a);
     await expect(set(true)).rejects.toMatchObject({

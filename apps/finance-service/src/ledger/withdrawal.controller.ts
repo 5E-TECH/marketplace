@@ -40,8 +40,20 @@ export class WithdrawalController {
     return this.withdrawals.adminList(input);
   }
 
+  @MessagePattern({ cmd: FINANCE_WITHDRAWAL_RPC.GET })
+  one(@Payload() input: { id: string }) {
+    return this.withdrawals.one(input);
+  }
+
   @MessagePattern({ cmd: FINANCE_WITHDRAWAL_RPC.APPROVE })
-  approve(@Payload() input: { id: string; approverId: string }) {
+  approve(
+    @Payload()
+    input: {
+      id: string;
+      approverId: string;
+      currentFullName: string;
+    },
+  ) {
     return this.withdrawals.approve(input);
   }
 

@@ -11,7 +11,10 @@ Har yuborish — alohida qator (`finance.self_employed_application`), amaldagisi
 
 **Ism-familiya o‘zgarsa** (`PATCH /affiliate/profile`): avval moliya maqomni qayta tekshiruvga qo‘yadi (yangi `PENDING`,
 eskisi `SUPERSEDED`, pul yechish yopiladi), keyin ism yangilanadi. Moliya javob bermasa ism ham o‘zgarmaydi. Tasdiqda
-profildagi ism arizadagi bilan solishtiriladi (`NAME_CHANGED`).
+profildagi ism arizadagi bilan solishtiriladi: farq qilsa ariza hozirgi ism bilan yangilanadi va 409 `NAME_CHANGED`.
+
+**Pul o‘tkazishdan oldin** (`POST admin/finance/withdrawals/:id/approve`) maqom va tasdiqlangan ism yana tekshiriladi:
+maqom yo‘q — 400; ism boshqa — 409 `NAME_CHANGED`, maqom qayta tekshiruvga tushadi va pul yechish yopiladi.
 
 ## API
 
@@ -27,17 +30,20 @@ profildagi ism arizadagi bilan solishtiriladi (`NAME_CHANGED`).
 | `PUT /admin/finance/affiliates/:id/self-employed` | moliya, superadmin | Arizasiz qo‘lda (BE-23); ochiq ariza bo‘lsa 409 |
 
 Xatolar: `PINFL_INVALID`, `PROFILE_NAME_REQUIRED`, `DOCUMENT_NOT_FOUND`, `FILE_REQUIRED`, `FILE_TYPE_INVALID` 400;
-`FILE_TOO_LARGE` 413; `ALREADY_PENDING`, `ALREADY_VERIFIED`, `NAME_CHANGED` 409.
+`FILE_TOO_LARGE` 413; `ALREADY_PENDING`, `ALREADY_VERIFIED`, `NAME_CHANGED` 409; kalit yo‘q — 503; superadmin «nomidan
+ko‘rish» rejimida — 403. Yuklash va yuborish — IP dan daqiqasiga 10 ta [taklif].
 
 ## Shaxsiy ma’lumot
 
-- JShShIR AES-256-GCM bilan shifrlangan; ochiq faqat oxirgi 4 raqam. Kalitli xesh — bir JShShIR ikki sotuvchida ekanini
-  ko‘rsatish uchun (faqat ogohlantirish [taklif]).
-- Kalit `SELF_EMPLOYED_SECRET_KEY` (kamida 32 belgi) — faqat finance-service ishlatadi. Yo‘q bo‘lsa yangi ariza 503. Bir
-  marta qo‘yiladi: almashtirilsa eski raqamlar ochilmaydi (arizalar qayta yuboriladi).
+- JShShIR AES-256-GCM bilan shifrlangan: gateway shifrlaydi, finance tekshiradi va shunday saqlaydi — servislararo
+  xabarda, navbatda va DLQ da ham ochiq raqam yo‘q. Ochiq faqat oxirgi 4 raqam. Kalitli xesh — bir JShShIR ikki
+  sotuvchida ekanini ko‘rsatish uchun (faqat ogohlantirish [taklif]).
+- Kalit `SELF_EMPLOYED_SECRET_KEY` (kamida 32 belgi; gateway va finance-service). Yo‘q bo‘lsa yangi ariza 503. Bir marta
+  qo‘yiladi: almashtirilsa eski raqamlar ochilmaydi (`reveal` 409 — arizani rad eting, sotuvchi qayta yuboradi).
 - Hujjat: yuborilgunga qadar `private-uploads/affiliate/<id>/` (1 kunda o‘chadi), yuborilgach `private/affiliate/<id>/`.
   Ochiq URL yo‘q — faqat gateway orqali, egasiga yoki moliyaga.
-- Audit: `self-employed.submit`, `.reveal`, `.document`, `.approve`, `.reject`, `.revoke` — to‘liq raqamsiz.
+- Audit: `self-employed.submit`, `.reveal`, `.document`, `.approve`, `.reject`, `.revoke`, `.recheck` (ism o‘zgardi), `.manual`
+  (qo‘lda belgi) — to‘liq raqamsiz.
 
 ## Deploy
 

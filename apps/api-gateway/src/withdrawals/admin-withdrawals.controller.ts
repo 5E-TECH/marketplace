@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Ip,
   Param,
   Post,
   Put,
@@ -24,9 +25,6 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminWithdrawalQueryDto,
-  AFFILIATE_AUTH_RPC,
-  affiliateFullName,
-  AffiliateProfileDto,
   AffiliateSelfEmployedDto,
   CurrentUser,
   ErrorCode,
@@ -41,6 +39,7 @@ import {
   WithdrawalPageDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { currentFullName, recheckOnNameChange } from './name-recheck';
 
 /**
  * Moliya: pul yechish so‘rovlari (BE-23; MOL-5, FE-20). Tasdiq, rad va «To‘landi» — moliya xodimi (T01:170);
@@ -79,21 +78,31 @@ export class AdminWithdrawalsController {
   @ApiOperation({
     summary: 'Tasdiqlash',
     description:
-      '5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi.',
+      '5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi. Maqomi tasdiqlanmagan sotuvchi — 400.',
   })
   @ApiOkResponse({ type: WithdrawalDto })
   @ApiNotFoundResponse({ description: 'So‘rov topilmadi' })
   @ApiConflictResponse({
-    description: 'INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan',
+    description:
+      'INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan; NAME_CHANGED: ism tasdiqlangandan farq qiladi — maqom qayta tekshiruvda',
   })
-  approve(
+  async approve(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser('sub') approverId: string,
   ): Promise<WithdrawalDto> {
-    return sendRpc(
+    // pul shundan keyin o‘tkaziladi — maqom tasdiqlangan ism bilan hali mos ekani shu yerda tekshiriladi (BE-25 5-tur)
+    const { affiliateId } = await sendRpc<WithdrawalDto>(
       this.finance,
-      { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
-      { id, approverId },
+      { cmd: FINANCE_WITHDRAWAL_RPC.GET },
+      { id },
+    );
+    const fullName = await currentFullName(this.identity, affiliateId);
+    return recheckOnNameChange(this.finance, affiliateId, fullName, () =>
+      sendRpc<WithdrawalDto>(
+        this.finance,
+        { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
+        { id, approverId, currentFullName: fullName },
+      ),
     );
   }
 
@@ -172,26 +181,41 @@ export class AdminWithdrawalsController {
     @Param('id', ParseLeadIdPipe) affiliateId: string,
     @CurrentUser('sub') updatedBy: string,
     @Body() dto: SetSelfEmployedDto,
+    @Ip() ip: string,
   ): Promise<AffiliateSelfEmployedDto> {
     // qo‘lda tasdiq ham ism bilan bog‘lanadi: ism o‘zgarsa qayta tekshiriladi (BE-25 5-tur)
     const fullName = dto.selfEmployed
-      ? affiliateFullName(
-          await sendRpc<AffiliateProfileDto>(
-            this.identity,
-            { cmd: AFFILIATE_AUTH_RPC.PROFILE_GET },
-            { userId: affiliateId },
-          ),
-        )
+      ? await currentFullName(this.identity, affiliateId)
       : '';
     if (dto.selfEmployed && !fullName)
       throw new ConflictException({
         message: 'Sotuvchi profilida ism va familiya yo‘q',
         errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
       });
-    return sendRpc(
+    const result = await recheckOnNameChange(
       this.finance,
-      { cmd: FINANCE_WITHDRAWAL_RPC.SELF_EMPLOYED_SET },
-      { affiliateId, selfEmployed: dto.selfEmployed, updatedBy, fullName },
+      affiliateId,
+      fullName,
+      () =>
+        sendRpc<AffiliateSelfEmployedDto>(
+          this.finance,
+          { cmd: FINANCE_WITHDRAWAL_RPC.SELF_EMPLOYED_SET },
+          { affiliateId, selfEmployed: dto.selfEmployed, updatedBy, fullName },
+        ),
     );
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: updatedBy,
+        action: 'self-employed.manual',
+        entityType: 'User',
+        entityId: affiliateId,
+        meta: { affiliateId, selfEmployed: dto.selfEmployed, ip: ip ?? null },
+      },
+    ).catch((error: Error) =>
+      this.logger.warn(`Qo‘lda belgi auditga yozilmadi: ${error.message}`),
+    );
+    return result;
   }
 }

@@ -28,6 +28,7 @@ const {
   AUTH_TOKENS_IN_BODY: _authInBody,
   REDIS_URL: _redisUrl,
   REDIS_PASSWORD: _redisPassword,
+  SELF_EMPLOYED_SECRET_KEY: _selfEmployedKey,
   ...baseEnv
 } = process.env;
 
@@ -135,4 +136,21 @@ test('BE-36: Redis ixtiyoriy; REDIS_URL parol bilan, profil yoqilsa parol URL bi
   });
   assert.equal(external.status, 0, external.stderr);
   assert.doesNotMatch(external.stderr, /REDIS/);
+});
+
+test('BE-25: JShShIR kaliti — yo‘q bo‘lsa ogohlantirish, qisqa bo‘lsa xato', async (t) => {
+  const missing = await run(t, validEnv);
+  assert.equal(missing.status, 0, missing.stderr);
+  assert.match(missing.stderr, /SELF_EMPLOYED_SECRET_KEY yo‘q/);
+  const short = await run(t, {
+    ...validEnv,
+    SELF_EMPLOYED_SECRET_KEY: 'qisqa',
+  });
+  assert.notEqual(short.status, 0);
+  const ok = await run(t, {
+    ...validEnv,
+    SELF_EMPLOYED_SECRET_KEY: 'k'.repeat(32),
+  });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.doesNotMatch(ok.stderr, /SELF_EMPLOYED_SECRET_KEY/);
 });

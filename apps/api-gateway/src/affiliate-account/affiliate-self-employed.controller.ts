@@ -4,6 +4,7 @@ import {
   CallHandler,
   Controller,
   ExecutionContext,
+  ForbiddenException,
   Get,
   HttpException,
   Inject,
@@ -18,7 +19,8 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { ConfigService } from '@nestjs/config';
+import { ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
@@ -32,6 +34,7 @@ import {
   ApiOperation,
   ApiPayloadTooLargeResponse,
   ApiProduces,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -49,7 +52,11 @@ import {
   ErrorCode,
   JwtUser,
   PINFL,
+  pinflKey,
   PRIVATE_DOCUMENT_MAX_BYTES,
+  RPC_TIMEOUT_MS,
+  sealPinfl,
+  SubmitSelfEmployedResult,
   RmqClient,
   Role,
   Roles,
@@ -98,10 +105,12 @@ export class AffiliateSelfEmployedController {
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
     @Inject(RmqClient.FILE) private readonly files: ClientProxy,
+    private readonly config: ConfigService,
   ) {}
 
   @Post('document')
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // bir IP (mobil operator NAT i) ortida bir necha sotuvchi bo‘lishi mumkin [taklif]
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary:
       'Maqom ma’lumotnomasini oldindan yuklash (PDF, JPG, PNG, 10 MB gacha)',
@@ -131,13 +140,15 @@ export class AffiliateSelfEmployedController {
   @UseInterceptors(
     FileTooLargeInterceptor,
     FileInterceptor('file', {
-      limits: { fileSize: PRIVATE_DOCUMENT_MAX_BYTES, files: 1 },
+      // busboy chegaraga teng faylni ham kesadi — aynan 10 MB o‘tsin (ortig‘ini file-service rad etadi)
+      limits: { fileSize: PRIVATE_DOCUMENT_MAX_BYTES + 1, files: 1 },
     }),
   )
   uploadDocument(
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtUser,
   ): Promise<SelfEmployedDocumentDto> {
+    ownOnly(user);
     if (!file?.size)
       throw new BadRequestException({
         message: 'Faylni tanlang',
@@ -146,13 +157,15 @@ export class AffiliateSelfEmployedController {
     return sendRpc(
       this.files,
       { cmd: AFFILIATE_DOCUMENT_RPC.STORE },
-      {
+      // shaxsiy hujjat navbatda diskka yozilmasin
+      new RmqRecordBuilder({
         affiliateId: user.sub,
-        contentType: file.mimetype,
         // multer nomni latin1 deb o‘qiydi — kirill va ʻ buzilmasin
         fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
         base64: file.buffer.toString('base64'),
-      },
+      })
+        .setOptions({ persistent: false })
+        .build(),
     );
   }
 
@@ -164,6 +177,7 @@ export class AffiliateSelfEmployedController {
     @CurrentUser() user: JwtUser,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
+    ownOnly(user);
     const document = await sendRpc<AffiliateDocumentFile>(
       this.finance,
       { cmd: SELF_EMPLOYED_RPC.DOCUMENT_MINE },
@@ -173,6 +187,8 @@ export class AffiliateSelfEmployedController {
   }
 
   @Post()
+  // bir IP (mobil operator NAT i) ortida bir necha sotuvchi bo‘lishi mumkin [taklif]
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary: 'JShShIR va ma’lumotnomani tekshiruvga yuborish',
     description:
@@ -189,11 +205,15 @@ export class AffiliateSelfEmployedController {
       'ALREADY_PENDING — tekshirilmoqda; ALREADY_VERIFIED — tasdiqlangan',
     type: AuthErrorResponseDto,
   })
+  @ApiServiceUnavailableResponse({
+    description: 'SELF_EMPLOYED_SECRET_KEY sozlanmagan',
+  })
   async submit(
     @Body() dto: SubmitSelfEmployedDto,
     @CurrentUser() user: JwtUser,
     @Ip() ip: string,
   ): Promise<SelfEmployedInfoDto> {
+    ownOnly(user);
     const affiliateId = user.sub;
     const pinfl = String(dto.pinfl ?? '').trim();
     if (!PINFL.test(pinfl))
@@ -201,25 +221,37 @@ export class AffiliateSelfEmployedController {
         message: 'JShShIR 14 ta raqamdan iborat',
         errorCode: ErrorCode.PINFL_INVALID,
       });
-    const profile = await sendRpc<AffiliateProfileDto>(
-      this.identity,
-      { cmd: AFFILIATE_AUTH_RPC.PROFILE_GET },
-      { userId: affiliateId },
+    const pinflSealed = sealPinfl(pinfl, pinflKey(this.config));
+    const fullName = affiliateFullName(
+      await sendRpc<AffiliateProfileDto>(
+        this.identity,
+        { cmd: AFFILIATE_AUTH_RPC.PROFILE_GET },
+        { userId: affiliateId },
+      ),
+    );
+    await sendRpc(
+      this.finance,
+      { cmd: SELF_EMPLOYED_RPC.CHECK },
+      { affiliateId, fullName },
     );
     const document = dto.documentId
       ? await sendRpc<AffiliateDocumentFile>(
           this.files,
           { cmd: AFFILIATE_DOCUMENT_RPC.COMMIT },
-          { affiliateId, documentId: dto.documentId },
+          {
+            affiliateId,
+            documentId: dto.documentId,
+            deadline: Date.now() + RPC_TIMEOUT_MS,
+          },
         )
       : null;
-    const info = await sendRpc<SelfEmployedInfoDto>(
+    const { id, info } = await sendRpc<SubmitSelfEmployedResult>(
       this.finance,
       { cmd: SELF_EMPLOYED_RPC.SUBMIT },
-      { affiliateId, pinfl, fullName: affiliateFullName(profile), document },
+      { affiliateId, pinflSealed, fullName, document },
     ).catch((error: unknown) => {
-      // aniq rad (4xx) — ariza yo‘q, ko‘chirilgan fayl ham qolmasin. Natija noma’lum bo‘lsa (vaqt tugadi) tegilmaydi.
-      if (document && error instanceof HttpException && error.getStatus() < 500)
+      // aniq rad — ariza yo‘q, ko‘chirilgan fayl ham qolmasin. Natija noma’lum bo‘lsa (500, 504) tegilmaydi.
+      if (document && rejected(error))
         void sendRpc(
           this.files,
           { cmd: AFFILIATE_DOCUMENT_RPC.REMOVE },
@@ -236,8 +268,9 @@ export class AffiliateSelfEmployedController {
         actorId: affiliateId,
         action: 'self-employed.submit',
         entityType: 'SelfEmployed',
-        entityId: affiliateId,
+        entityId: id,
         meta: {
+          affiliateId,
           pinflLast4: info.pinflLast4,
           document: !!document,
           ip: ip ?? null,
@@ -248,4 +281,18 @@ export class AffiliateSelfEmployedController {
     );
     return info;
   }
+}
+
+/** JShShIR va hujjat — faqat sotuvchining o‘zi; superadmin «nomidan ko‘rish» rejimida emas (C6.5). */
+function ownOnly(user: JwtUser): void {
+  if (user.impersonatedBy)
+    throw new ForbiddenException(
+      'Impersonation rejimida JShShIR va hujjat ochilmaydi va yuborilmaydi',
+    );
+}
+
+function rejected(error: unknown): boolean {
+  if (!(error instanceof HttpException)) return false;
+  const status = error.getStatus();
+  return status < 500 || status === 503;
 }

@@ -3,7 +3,6 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
@@ -18,6 +17,8 @@ import { PrivateDocumentContentType } from './wholesaler-cabinet.dto';
  */
 export const SELF_EMPLOYED_RPC = {
   CURRENT: 'finance.self-employed.current',
+  /** Yuborish mumkinmi — fayl ko‘chirilishidan oldin. */
+  CHECK: 'finance.self-employed.check',
   SUBMIT: 'finance.self-employed.submit',
   /** Ism-familiya o‘zgardi — tasdiqlangan yoki tekshirilayotgan maqom qayta tekshiruvga. */
   RENAME: 'finance.self-employed.rename',
@@ -40,8 +41,6 @@ export const AFFILIATE_DOCUMENT_RPC = {
 
 /** Platforma faqat shu faoliyat turidagi maqomni qabul qiladi (TZ 8: o‘zini o‘zi band qilganlar ro‘yxati, 34-band). */
 export const SELF_EMPLOYED_ACTIVITY = 'SMM va internet-marketing';
-/** JShShIR — 14 raqam (davlat standarti; TZ da yozilmagan [taklif]). */
-export const PINFL = /^\d{14}$/;
 
 export enum SelfEmployedStatus {
   NOT_SUBMITTED = 'NOT_SUBMITTED',
@@ -85,8 +84,9 @@ export enum SelfEmployedSource {
   MANUAL = 'MANUAL',
 }
 
-const trim = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.trim() : value;
+/** Bo‘sh izoh — berilmagan. */
+const trimOrUndefined = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() || undefined : value;
 
 /** Sotuvchi ko‘radigan maqom (FE-04 `SelfEmployedInfo`) — to‘liq JShShIR yo‘q. */
 export class SelfEmployedInfoDto {
@@ -173,6 +173,15 @@ export class SelfEmployedDocumentDto {
   @ApiProperty({ example: 'maqom-malumotnoma.pdf' }) name: string;
 }
 
+/** Ichki: moliya ro‘yxatidagi holat — SUPERSEDED: ism o‘zgarib, o‘rniga yangi ariza ochilgan (faqat tarixda). */
+export enum SelfEmployedApplicationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+  REVOKED = 'REVOKED',
+  SUPERSEDED = 'SUPERSEDED',
+}
+
 /** Ichki: file-service → gateway → finance. */
 export interface AffiliateDocumentFile {
   objectKey: string;
@@ -184,9 +193,22 @@ export interface AffiliateDocumentFile {
 /** Ichki: gateway → finance. */
 export interface SubmitSelfEmployedInput {
   affiliateId: string;
-  pinfl: string;
+  /** Shifrlangan JShShIR (`sealPinfl`) — navbatda ochiq raqam yo‘q. */
+  pinflSealed: string;
   fullName: string;
   document: AffiliateDocumentFile | null;
+}
+
+/** Ichki: finance → gateway (auditda ariza ID si). */
+export interface SubmitSelfEmployedResult {
+  id: string;
+  info: SelfEmployedInfoDto;
+}
+
+/** Ichki: finance → gateway. */
+export interface RenameSelfEmployedResult {
+  recheck: boolean;
+  info: SelfEmployedInfoDto;
 }
 
 export class SelfEmployedListQueryDto {
@@ -230,7 +252,12 @@ export class SelfEmployedApplicationDto {
   @ApiProperty({ example: '77' }) affiliateId: string;
   @ApiProperty({ example: 'Sevara Yusupova', description: 'Yuborilgandagi' })
   fullName: string;
-  @ApiProperty({ enum: SelfEmployedStatus }) status: SelfEmployedStatus;
+  @ApiProperty({
+    enum: SelfEmployedApplicationStatus,
+    description:
+      'SUPERSEDED — ism o‘zgargan, o‘rniga yangi ariza (ro‘yxatda chiqmaydi)',
+  })
+  status: SelfEmployedApplicationStatus;
   @ApiProperty({ enum: SelfEmployedSource }) source: SelfEmployedSource;
   @ApiProperty({ type: String, nullable: true, example: '3365' })
   pinflLast4: string | null;
@@ -300,10 +327,9 @@ export class RejectSelfEmployedDto {
     example: 'Hujjatda boshqa faoliyat turi.',
     description: 'Sotuvchiga ko‘rinadi',
   })
+  @Transform(trimOrUndefined)
   @IsOptional()
-  @Transform(trim)
   @IsString()
-  @IsNotEmpty()
   @MaxLength(500)
   comment?: string;
 }

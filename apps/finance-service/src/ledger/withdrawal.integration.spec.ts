@@ -146,7 +146,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
   }, 300_000);
 
   beforeEach(async () => {
-    await ds.query(`TRUNCATE finance.settlement_dispute, finance.wholesaler_settlement_item, finance.wholesaler_settlement, finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
+    await ds.query(`TRUNCATE finance.settlement_dispute, finance.wholesaler_settlement_item, finance.wholesaler_settlement, finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile, finance.self_employed_application,
       finance.ledger_entry, finance.journal, finance.remittance_item, finance.elchi_remittance,
       finance.balance_check, finance.processed_event, finance.event_failure, finance.fee_hold`);
     await ds.query(`DELETE FROM finance.account WHERE owner_id <> ''`);
@@ -191,7 +191,11 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
       withdrawable: 0,
       blockReason: WithdrawalBlockReason.DAILY_LIMIT,
     });
-    await svc.approve({ id: req.id, approverId: '7' });
+    await svc.approve({
+      id: req.id,
+      approverId: '7',
+      currentFullName: 'Sotuvchi',
+    });
     const paid = await svc.markPaid({ id: req.id, paidBy: '7' });
     expect(paid).toMatchObject({
       status: WithdrawalStatus.PAID,
@@ -285,7 +289,11 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     ).rejects.toMatchObject({ status: 400 });
     await svc.reject({ id: first.id, rejectedBy: '7', reason: 'Tekshiruv' });
     const second = await svc.create({ affiliateId: '42', amount: 100_000 });
-    await svc.approve({ id: second.id, approverId: '7' });
+    await svc.approve({
+      id: second.id,
+      approverId: '7',
+      currentFullName: 'Sotuvchi',
+    });
     await svc.markPaid({ id: second.id, paidBy: '7' });
     await expect(
       svc.create({ affiliateId: '42', amount: 100_000 }),
@@ -301,9 +309,15 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     await selfEmployed();
     const req = await svc.create({ affiliateId: '42', amount: 6_000_000 });
     expect(req.requiredApprovals).toBe(2);
-    expect((await svc.approve({ id: req.id, approverId: '7' })).status).toBe(
-      WithdrawalStatus.REQUESTED,
-    );
+    expect(
+      (
+        await svc.approve({
+          id: req.id,
+          approverId: '7',
+          currentFullName: 'Sotuvchi',
+        })
+      ).status,
+    ).toBe(WithdrawalStatus.REQUESTED);
     await expect(
       svc.markPaid({ id: req.id, paidBy: '7' }),
     ).rejects.toMatchObject({
@@ -311,11 +325,17 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
       response: { errorCode: 'INVALID_STATE' },
     });
     await expect(
-      svc.approve({ id: req.id, approverId: '7' }),
+      svc.approve({ id: req.id, approverId: '7', currentFullName: 'Sotuvchi' }),
     ).rejects.toMatchObject({ status: 409 });
-    expect((await svc.approve({ id: req.id, approverId: '8' })).status).toBe(
-      WithdrawalStatus.APPROVED,
-    );
+    expect(
+      (
+        await svc.approve({
+          id: req.id,
+          approverId: '8',
+          currentFullName: 'Sotuvchi',
+        })
+      ).status,
+    ).toBe(WithdrawalStatus.APPROVED);
     expect((await svc.markPaid({ id: req.id, paidBy: '8' })).status).toBe(
       WithdrawalStatus.PAID,
     );
@@ -342,7 +362,11 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     ).rejects.toMatchObject({ status: 400 });
     await selfEmployed();
     const req = await svc.create({ affiliateId: '42', amount: 100_000 });
-    await svc.approve({ id: req.id, approverId: '7' });
+    await svc.approve({
+      id: req.id,
+      approverId: '7',
+      currentFullName: 'Sotuvchi',
+    });
     await selfEmployed('42', false);
     await expect(
       svc.markPaid({ id: req.id, paidBy: '7' }),
@@ -363,7 +387,11 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
       svc.create({ affiliateId: '42', amount: 300_001 }),
     ).rejects.toMatchObject({ status: 400 });
     const req = await svc.create({ affiliateId: '42', amount: 300_000 });
-    await svc.approve({ id: req.id, approverId: '7' });
+    await svc.approve({
+      id: req.id,
+      approverId: '7',
+      currentFullName: 'Sotuvchi',
+    });
     // Yetkazilgandan keyin qaytarish: mavjud balans 0 ga tushadi
     await ledger.onOrderReturned({
       eventId: 'ret-1',
@@ -413,7 +441,11 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     await selfEmployed('43');
     const a = await svc.create({ affiliateId: '42', amount: 100_000 });
     await svc.create({ affiliateId: '43', amount: 100_000 });
-    await svc.approve({ id: a.id, approverId: '7' });
+    await svc.approve({
+      id: a.id,
+      approverId: '7',
+      currentFullName: 'Sotuvchi',
+    });
     const mine = await svc.listMine({ affiliateId: '42', query: {} });
     expect(mine).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
     expect(mine.items[0].affiliateId).toBe('42');
@@ -436,7 +468,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     ])
       await expect(svc.create(bad)).rejects.toMatchObject({ status: 400 });
     await expect(
-      svc.approve({ id: '999', approverId: '7' }),
+      svc.approve({ id: '999', approverId: '7', currentFullName: 'Sotuvchi' }),
     ).rejects.toMatchObject({
       status: 404,
     });
@@ -445,24 +477,53 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it('BE-25: maqom shu paytda bekor qilinayotgan bo‘lsa «To‘landi» kutadi va to‘lamaydi', async () => {
+  it('BE-25: maqom bekor qilinsa yoki ism o‘zgarsa so‘rov tasdiqlanmaydi (pul shundan keyin o‘tkaziladi)', async () => {
+    const approve = (id: string, currentFullName: string) =>
+      svc.approve({ id, approverId: '7', currentFullName });
+    await fund('78', 200_000);
+    await selfEmployed('78');
+    const { id } = await svc.create({ affiliateId: '78', amount: 100_000 });
+    await expect(approve(id, 'Boshqa Ism')).rejects.toMatchObject({
+      response: { errorCode: 'NAME_CHANGED' },
+    });
+    await selfEmployed('78', false);
+    await expect(approve(id, 'Sotuvchi')).rejects.toMatchObject({
+      status: 400,
+    });
+    // darvoza ochiq, lekin tasdiqlangan qator yo‘q (eski versiya qo‘ygan) — ham yo‘q
+    await ds.query(
+      `UPDATE finance.affiliate_payout_profile SET self_employed = true WHERE affiliate_id = '78'`,
+    );
+    await expect(approve(id, 'Sotuvchi')).rejects.toMatchObject({
+      status: 400,
+    });
+    await selfEmployed('78');
+    await approve(id, ' Sotuvchi ');
+    expect((await svc.one({ id })).status).toBe(WithdrawalStatus.APPROVED);
+    await expectBalanced();
+  });
+
+  it('BE-25: bekor qilish va «To‘landi» bir vaqtda — bekor qilingandan keyin to‘lov o‘tmaydi', async () => {
     await fund('77', 200_000);
     await selfEmployed('77');
     const { id } = await svc.create({ affiliateId: '77', amount: 100_000 });
-    await svc.approve({ id, approverId: '7' });
+    await svc.approve({ id, approverId: '7', currentFullName: 'Sotuvchi' });
     const holder = new Client({ connectionString: url });
     await holder.connect();
     await holder.query('BEGIN');
     await holder.query(
-      `UPDATE finance.affiliate_payout_profile SET self_employed = false WHERE affiliate_id = '77'`,
+      `SELECT pg_advisory_xact_lock(2303, hashtext('finance-withdrawal:77'))`,
     );
+    const revoked = selfEmployed('77', false);
+    await new Promise((r) => setTimeout(r, 150));
     const paid = svc
       .markPaid({ id, paidBy: '8' })
       .then(() => 'to‘landi')
       .catch((e: { status?: number }) => e.status);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 150));
     await holder.query('COMMIT');
     await holder.end();
+    await revoked;
     expect(await paid).toBe(400);
     await expectBalanced();
   });

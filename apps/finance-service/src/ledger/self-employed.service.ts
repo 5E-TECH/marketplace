@@ -6,21 +6,22 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   AffiliateDocumentFile,
   AffiliateSelfEmployedDto,
-  decryptSecret,
-  encryptSecret,
   ErrorCode,
   moneyFromDb,
   normalizeFullName,
-  PINFL,
+  openPinfl,
+  pinflHash,
+  pinflKey,
+  RenameSelfEmployedResult,
   SELF_EMPLOYED_ACTIVITY,
   SELF_EMPLOYED_REASON_TEXT,
   SELF_EMPLOYED_REVIEW_REASONS,
   SelfEmployedApplicationDto,
+  SelfEmployedApplicationStatus,
   SelfEmployedCountsDto,
   SelfEmployedDecisionInput,
   SelfEmployedDetailDto,
@@ -31,17 +32,14 @@ import {
   SelfEmployedSource,
   SelfEmployedStatus,
   SubmitSelfEmployedInput,
+  SubmitSelfEmployedResult,
 } from '@app/common';
-import { affiliatePayoutLock, validId } from './withdrawal.service';
-
-/** Bazadagi holat: profilda ko‘rinadiganlar va «o‘rniga yangi tekshiruv ochilgan». */
-type RowStatus =
-  Exclude<SelfEmployedStatus, SelfEmployedStatus.NOT_SUBMITTED> | 'SUPERSEDED';
+import { affiliatePayoutLock, selfEmployedGate, validId } from './payout-gate';
 
 interface Row {
   id: string;
   affiliateId: string;
-  status: RowStatus;
+  status: SelfEmployedApplicationStatus;
   source: SelfEmployedSource;
   fullName: string;
   pinflCipher: string | null;
@@ -67,7 +65,7 @@ const COLUMNS = `a.id::text, a.affiliate_id AS "affiliateId", a.status, a.source
 const LATEST = `SELECT DISTINCT ON (affiliate_id) * FROM finance.self_employed_application
                  ORDER BY affiliate_id, id DESC`;
 const SYSTEM = 'system';
-const MIN_KEY_LENGTH = 32;
+const ROW = SelfEmployedApplicationStatus;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
@@ -95,33 +93,34 @@ export class SelfEmployedService {
     return toInfo(await this.latest(this.db.manager, affiliateId));
   }
 
-  async submit(input: SubmitSelfEmployedInput): Promise<SelfEmployedInfoDto> {
+  /** Yuborish mumkinmi: hujjat doimiy joyga ko‘chirilishidan oldin (bekorga nusxa qolmasin). */
+  async check(input: {
+    affiliateId: string;
+    fullName: string;
+  }): Promise<{ ok: true }> {
     const affiliateId = validId(input?.affiliateId, 'affiliateId');
-    const pinfl = String(input?.pinfl ?? '');
-    // raqam xabarda va logda qaytarilmaydi
-    if (!PINFL.test(pinfl))
-      throw new BadRequestException({
-        message: 'JShShIR 14 ta raqamdan iborat',
-        errorCode: ErrorCode.PINFL_INVALID,
-      });
-    const fullName = normalizeFullName(input?.fullName);
-    if (!fullName)
-      throw new BadRequestException({
-        message: 'Avval profilda ism va familiyani kiriting',
-        errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
-      });
+    requireName(input?.fullName);
+    pinflKey(this.config);
+    mustBeFree(await this.latest(this.db.manager, affiliateId));
+    return { ok: true };
+  }
+
+  async submit(
+    input: SubmitSelfEmployedInput,
+  ): Promise<SubmitSelfEmployedResult> {
+    const affiliateId = validId(input?.affiliateId, 'affiliateId');
+    const key = pinflKey(this.config);
+    const pinfl = openPinfl(String(input?.pinflSealed ?? ''), key);
+    // gateway shaklni tekshirgan; ochilmasa — servislarda kalit har xil (raqam xabarda ham, logda ham yo‘q)
+    if (!pinfl)
+      throw new ServiceUnavailableException(
+        'JShShIR ochilmadi — SELF_EMPLOYED_SECRET_KEY servislarda bir xil emas',
+      );
+    const fullName = requireName(input?.fullName);
     const document = validDocument(input?.document, affiliateId);
-    const key = this.key();
     const row = await this.db.transaction(async (m) => {
       await affiliatePayoutLock(m, affiliateId);
-      const last = await this.latest(m, affiliateId);
-      if (last?.status === SelfEmployedStatus.PENDING)
-        throw state('Ma’lumot hozir tekshirilmoqda', ErrorCode.ALREADY_PENDING);
-      if (last?.status === SelfEmployedStatus.VERIFIED)
-        throw state(
-          'Maqom allaqachon tasdiqlangan',
-          ErrorCode.ALREADY_VERIFIED,
-        );
+      mustBeFree(await this.latest(m, affiliateId));
       const [{ id }] = (await m.query(
         `INSERT INTO finance.self_employed_application
            (affiliate_id, status, source, full_name, pinfl_cipher, pinfl_last4, pinfl_hash,
@@ -131,9 +130,9 @@ export class SelfEmployedService {
         [
           affiliateId,
           fullName,
-          encryptSecret(pinfl, key),
+          input.pinflSealed,
           pinfl.slice(-4),
-          this.hash(pinfl, key),
+          pinflHash(pinfl, key),
           document?.objectKey ?? null,
           document?.fileName ?? null,
           document?.contentType ?? null,
@@ -142,7 +141,7 @@ export class SelfEmployedService {
       )) as Array<{ id: string }>;
       return this.byId(m, id);
     });
-    return toInfo(row);
+    return { id: row.id, info: toInfo(row) };
   }
 
   /**
@@ -152,46 +151,61 @@ export class SelfEmployedService {
   async rename(input: {
     affiliateId: string;
     fullName: string;
-  }): Promise<{ recheck: boolean }> {
+  }): Promise<RenameSelfEmployedResult> {
     const affiliateId = validId(input?.affiliateId, 'affiliateId');
-    const fullName = normalizeFullName(input?.fullName);
-    if (!fullName) throw new BadRequestException('Ism va familiya majburiy');
+    const fullName = requireName(input?.fullName);
     return this.db.transaction(async (m) => {
       await affiliatePayoutLock(m, affiliateId);
       const last = await this.latest(m, affiliateId);
-      const open =
-        last?.status === SelfEmployedStatus.PENDING ||
-        last?.status === SelfEmployedStatus.VERIFIED;
-      if (!last || !open || last.fullName === fullName)
-        return { recheck: false };
-      if (!last.pinflCipher) {
-        // arizasiz (qo‘lda) tasdiqlangan — tekshiradigan JShShIR yo‘q, sotuvchi o‘zi yuboradi
-        await m.query(
-          `UPDATE finance.self_employed_application
-              SET status = 'REVOKED', reason = $2, comment = NULL, decided_at = now(), decided_by = $3, updated_at = now()
-            WHERE id = $1`,
-          [last.id, SelfEmployedReason.NAME_CHANGED, SYSTEM],
-        );
-      } else {
-        await m.query(
-          `UPDATE finance.self_employed_application SET status = 'SUPERSEDED', updated_at = now() WHERE id = $1`,
-          [last.id],
-        );
-        // navbatdagi ariza joyini yo‘qotmaydi; tasdiqlangani — yangi yuborilgan vaqt bilan
-        await m.query(
-          `INSERT INTO finance.self_employed_application
-             (affiliate_id, status, source, full_name, pinfl_cipher, pinfl_last4, pinfl_hash,
-              document_key, document_name, document_type, document_size, submitted_at)
-           SELECT affiliate_id, 'PENDING', 'NAME_CHANGE', $2, pinfl_cipher, pinfl_last4, pinfl_hash,
-                  document_key, document_name, document_type, document_size,
-                  CASE WHEN $3 THEN submitted_at ELSE now() END
-             FROM finance.self_employed_application WHERE id = $1`,
-          [last.id, fullName, last.status === SelfEmployedStatus.PENDING],
-        );
-      }
-      await this.setGate(m, affiliateId, false, SYSTEM);
-      return { recheck: true };
+      const recheck = await this.recheck(m, affiliateId, last, fullName);
+      return {
+        recheck,
+        info: toInfo(recheck ? await this.latest(m, affiliateId) : last),
+      };
     });
+  }
+
+  private async recheck(
+    m: EntityManager,
+    affiliateId: string,
+    last: Row | null,
+    fullName: string,
+  ): Promise<boolean> {
+    const open = last?.status === ROW.PENDING || last?.status === ROW.VERIFIED;
+    if (last && open && last.fullName === fullName) return false;
+    if (!last || !open) {
+      // arizasiz ochiq qolgan darvoza (masalan, eski versiya qo‘ygan) — yangi ism tekshirilmagan
+      if (!(await selfEmployedGate(m, affiliateId))) return false;
+      await this.setGate(m, affiliateId, false, SYSTEM);
+      return true;
+    }
+    if (!last.pinflCipher) {
+      // arizasiz (qo‘lda) tasdiqlangan — tekshiradigan JShShIR yo‘q, sotuvchi o‘zi yuboradi
+      await m.query(
+        `UPDATE finance.self_employed_application
+            SET status = 'REVOKED', reason = $2, comment = NULL, decided_at = now(), decided_by = $3, updated_at = now()
+          WHERE id = $1`,
+        [last.id, SelfEmployedReason.NAME_CHANGED, SYSTEM],
+      );
+    } else {
+      await m.query(
+        `UPDATE finance.self_employed_application SET status = 'SUPERSEDED', updated_at = now() WHERE id = $1`,
+        [last.id],
+      );
+      // navbatdagi ariza joyini yo‘qotmaydi; tasdiqlangani — yangi yuborilgan vaqt bilan
+      await m.query(
+        `INSERT INTO finance.self_employed_application
+           (affiliate_id, status, source, full_name, pinfl_cipher, pinfl_last4, pinfl_hash,
+            document_key, document_name, document_type, document_size, submitted_at)
+         SELECT affiliate_id, 'PENDING', 'NAME_CHANGE', $2, pinfl_cipher, pinfl_last4, pinfl_hash,
+                document_key, document_name, document_type, document_size,
+                CASE WHEN $3 THEN submitted_at ELSE now() END
+           FROM finance.self_employed_application WHERE id = $1`,
+        [last.id, fullName, last.status === ROW.PENDING],
+      );
+    }
+    await this.setGate(m, affiliateId, false, SYSTEM);
+    return true;
   }
 
   /** Sotuvchining o‘z hujjati (amaldagi arizadagi). */
@@ -244,15 +258,15 @@ export class SelfEmployedService {
     );
   }
 
-  /** To‘liq JShShIR — faqat amaldagi arizaniki (gateway avval auditga yozadi). */
-  async reveal(input: { id: string }): Promise<{ pinfl: string }> {
+  /** To‘liq JShShIR (shifrlangan — gateway ochadi) — faqat amaldagi arizaniki; gateway avval auditga yozadi. */
+  async reveal(input: { id: string }): Promise<{ pinflSealed: string }> {
     const m = this.db.manager;
     const row = await this.byId(m, validId(input?.id, 'id'));
     if ((await this.latest(m, row.affiliateId))?.id !== row.id)
       throw state('Ariza eskirgan — sotuvchining yangi arizasini oching');
     if (!row.pinflCipher)
       throw new NotFoundException('Arizada JShShIR yo‘q (qo‘lda belgilangan)');
-    return { pinfl: decryptSecret(row.pinflCipher, this.key()) };
+    return { pinflSealed: row.pinflCipher };
   }
 
   async approve(
@@ -260,7 +274,7 @@ export class SelfEmployedService {
   ): Promise<SelfEmployedDetailDto> {
     const reviewer = validId(input?.reviewerId, 'reviewerId');
     return this.decide(input, async (m, row) => {
-      mustBe(row, SelfEmployedStatus.PENDING);
+      mustBe(row, ROW.PENDING);
       const currentName = normalizeFullName(input.currentFullName);
       if (currentName !== row.fullName)
         throw state(
@@ -281,13 +295,13 @@ export class SelfEmployedService {
   async reject(
     input: SelfEmployedDecisionInput,
   ): Promise<SelfEmployedDetailDto> {
-    return this.close(input, SelfEmployedStatus.PENDING, 'REJECTED');
+    return this.close(input, ROW.PENDING, ROW.REJECTED);
   }
 
   async revoke(
     input: SelfEmployedDecisionInput,
   ): Promise<SelfEmployedDetailDto> {
-    return this.close(input, SelfEmployedStatus.VERIFIED, 'REVOKED');
+    return this.close(input, ROW.VERIFIED, ROW.REVOKED);
   }
 
   /** BE-23: moliya arizasiz qo‘lda belgilaydi. Ochiq ariza bo‘lsa — arizaning o‘zi tasdiqlanadi. */
@@ -305,19 +319,34 @@ export class SelfEmployedService {
       await affiliatePayoutLock(m, affiliateId);
       const last = await this.latest(m, affiliateId);
       if (input.selfEmployed) {
-        if (last?.status === SelfEmployedStatus.PENDING)
+        const fullName = normalizeFullName(input.fullName);
+        if (last?.status === ROW.PENDING)
           throw state(
             'Sotuvchining arizasi tekshirilmoqda — arizani tasdiqlang',
             ErrorCode.ALREADY_PENDING,
           );
-        if (last?.status !== SelfEmployedStatus.VERIFIED)
+        if (last?.status !== ROW.VERIFIED)
           await m.query(
             `INSERT INTO finance.self_employed_application
                (affiliate_id, status, source, full_name, verified_at, verified_by, decided_at, decided_by)
              VALUES ($1, 'VERIFIED', 'MANUAL', $2, now(), $3, now(), $3)`,
-            [affiliateId, normalizeFullName(input.fullName), updatedBy],
+            [affiliateId, fullName, updatedBy],
           );
-      } else if (last?.status === SelfEmployedStatus.VERIFIED) {
+        else if (last.fullName !== fullName) {
+          // arizali tasdiq ismi qo‘lda almashtirilmaydi — ism o‘zgarishi qayta tekshiruv ochadi
+          if (last.source !== SelfEmployedSource.MANUAL)
+            throw state(
+              'Profildagi ism tasdiqlangan ismdan farq qiladi — arizani qayta tekshiring',
+              ErrorCode.NAME_CHANGED,
+            );
+          await m.query(
+            `UPDATE finance.self_employed_application
+                SET full_name = $2, verified_at = now(), verified_by = $3, decided_at = now(), decided_by = $3, updated_at = now()
+              WHERE id = $1`,
+            [last.id, fullName, updatedBy],
+          );
+        }
+      } else if (last?.status === ROW.VERIFIED) {
         await m.query(
           `UPDATE finance.self_employed_application
               SET status = 'REVOKED', reason = NULL, comment = NULL, decided_at = now(), decided_by = $2, updated_at = now()
@@ -333,8 +362,8 @@ export class SelfEmployedService {
 
   private close(
     input: SelfEmployedDecisionInput,
-    from: SelfEmployedStatus.PENDING | SelfEmployedStatus.VERIFIED,
-    to: 'REJECTED' | 'REVOKED',
+    from: SelfEmployedApplicationStatus,
+    to: SelfEmployedApplicationStatus,
   ): Promise<SelfEmployedDetailDto> {
     const reviewer = validId(input?.reviewerId, 'reviewerId');
     const reason = input?.reason;
@@ -433,28 +462,30 @@ export class SelfEmployedService {
     if (!row) throw new NotFoundException('Ariza topilmadi');
     return row;
   }
-
-  /** JShShIR kaliti faqat shu servisda; berilmasa yangi ariza qabul qilinmaydi (ochiq saqlanmaydi). */
-  private key(): string {
-    const key = this.config.get<string>('SELF_EMPLOYED_SECRET_KEY')?.trim();
-    if (!key || key.length < MIN_KEY_LENGTH)
-      throw new ServiceUnavailableException(
-        'SELF_EMPLOYED_SECRET_KEY sozlanmagan — JShShIR qabul qilinmaydi',
-      );
-    return key;
-  }
-
-  private hash(pinfl: string, key: string): string {
-    return createHmac('sha256', `elchi:pinfl-hash:v1:${key}`)
-      .update(pinfl)
-      .digest('hex');
-  }
 }
 
-function mustBe(row: Row, expected: SelfEmployedStatus): void {
+/** Ochiq ariza yoki amaldagi tasdiq yo‘q — yangisini yuborish mumkin. */
+function mustBeFree(last: Row | null): void {
+  if (last?.status === ROW.PENDING)
+    throw state('Ma’lumot hozir tekshirilmoqda', ErrorCode.ALREADY_PENDING);
+  if (last?.status === ROW.VERIFIED)
+    throw state('Maqom allaqachon tasdiqlangan', ErrorCode.ALREADY_VERIFIED);
+}
+
+function requireName(value: unknown): string {
+  const fullName = normalizeFullName(value);
+  if (!fullName)
+    throw new BadRequestException({
+      message: 'Avval profilda ism va familiyani kiriting',
+      errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
+    });
+  return fullName;
+}
+
+function mustBe(row: Row, expected: SelfEmployedApplicationStatus): void {
   if (row.status !== expected)
     throw state(
-      row.status === 'SUPERSEDED'
+      row.status === ROW.SUPERSEDED
         ? 'Ariza eskirgan — sotuvchi ismini o‘zgartirgan, yangi arizasi navbatda'
         : `Ariza ${row.status} holatida`,
     );
@@ -516,7 +547,8 @@ function toInfo(row: Row | null): SelfEmployedInfoDto {
       documentName: null,
     };
   return {
-    status: row.status as SelfEmployedStatus,
+    // sotuvchining oxirgi qatori hech qachon SUPERSEDED emas (shu tranzaksiyada yangisi ochiladi)
+    status: row.status as unknown as SelfEmployedStatus,
     pinflLast4: row.pinflLast4,
     activity: SELF_EMPLOYED_ACTIVITY,
     submittedAt: iso(row.submittedAt),
@@ -532,7 +564,7 @@ function toApplication(row: Row): SelfEmployedApplicationDto {
     id: row.id,
     affiliateId: row.affiliateId,
     fullName: row.fullName,
-    status: row.status as SelfEmployedStatus,
+    status: row.status,
     source: row.source,
     pinflLast4: row.pinflLast4,
     activity: SELF_EMPLOYED_ACTIVITY,

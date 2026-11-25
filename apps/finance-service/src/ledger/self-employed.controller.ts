@@ -20,6 +20,11 @@ export class SelfEmployedController {
     return this.selfEmployed.current(input);
   }
 
+  @MessagePattern({ cmd: SELF_EMPLOYED_RPC.CHECK })
+  check(@Payload() input: { affiliateId: string; fullName: string }) {
+    return this.selfEmployed.check(input);
+  }
+
   @MessagePattern({ cmd: SELF_EMPLOYED_RPC.SUBMIT })
   submit(@Payload() input: SubmitSelfEmployedInput) {
     return this.selfEmployed.submit(input);

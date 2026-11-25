@@ -42,6 +42,15 @@ esac
   exit 1
 }
 
+# BE-25: sotuvchi JShShIR kaliti ixtiyoriy (bo'sh — ariza qabul qilinmaydi), lekin qisqa bo'lsa servislar ishga tushmaydi.
+self_employed_key=$(sed -n 's/^SELF_EMPLOYED_SECRET_KEY=//p' "$env_file" | tail -n 1)
+if [ -z "$self_employed_key" ]; then
+  printf 'Ogohlantirish: SELF_EMPLOYED_SECRET_KEY yo‘q — sotuvchilar JShShIR yubora olmaydi\n' >&2
+elif [ "${#self_employed_key}" -lt 32 ]; then
+  printf 'SELF_EMPLOYED_SECRET_KEY kamida 32 belgi bo‘lishi kerak\n' >&2
+  exit 1
+fi
+
 # BE-36: servis DB rollari. Bitta DB_USERNAME_<SXEMA> berilsa — hamma 10 servisning roli va paroli kerak, boshqa
 # nom (xato yozilgan kalit) bo'lmasin: aks holda servis ishga tushmaydi (typeorm.util dbCredentials).
 if grep -Eq '^DB_USERNAME_[A-Z_]+=.+' "$env_file"; then

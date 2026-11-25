@@ -102,6 +102,7 @@ export * from './auth/auth-cookies';
 // Xavfsizlik yordamchilari
 export * from './security/hmac.util';
 export * from './security/crypto.util';
+export * from './security/pinfl.util';
 export * from './security/totp.util';
 export * from './security/ssrf.util';
 export * from './security/redact-url';
