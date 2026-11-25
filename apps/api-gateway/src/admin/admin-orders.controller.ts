@@ -1,20 +1,28 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Ip,
+  NotFoundException,
   Param,
   Post,
   Query,
   Res,
+  ServiceUnavailableException,
   StreamableFile,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ClientProxy } from '@nestjs/microservices';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -33,13 +41,30 @@ import {
   CurrentUser,
   JwtUser,
   AuthErrorResponseDto,
+  ElchiRefreshDto,
+  ElchiResendDto,
+  ExportAcceptedDto,
+  LabelReprintDto,
+  OrderCommentDto,
+  OrderDisputeClosedDto,
+  OrderDisputeDto,
+  OrderExportRequestDto,
+  OrderReasonDto,
   Role,
   Roles,
   RmqClient,
   sendRpc,
   ShippingLabelsBatchDto,
 } from '@app/common';
+import { CsvChunk, csvStream } from '../exports/csv-stream';
+import { ExportLinkService } from '../exports/export-link.service';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { LabelDocument, labelPdf } from '../orders/label-pdf';
+import {
+  OrderDetailRpc,
+  orderViewer,
+  withLeadContext,
+} from '../orders/order-view';
 import {
   ADMIN_ORDER_EXAMPLE,
   ADMIN_ORDERS_PAGE_EXAMPLE,
@@ -56,6 +81,8 @@ export class AdminOrdersController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
+    private readonly exports: ExportLinkService,
   ) {}
 
   @Get('admin/orders')
@@ -73,11 +100,105 @@ export class AdminOrdersController {
   })
   @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  list(@Query() query: AdminOrdersQueryDto) {
+  list(@Query() query: AdminOrdersQueryDto, @CurrentUser() user: JwtUser) {
     return sendRpc(
       this.checkout,
       { cmd: 'checkout.admin.orders-list' },
-      { query },
+      { query, viewer: orderViewer(user) },
+    );
+  }
+
+  @Post('admin/orders/export')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'CSV eksport so‘rovi (faqat admin)',
+    description:
+      'Auditga yoziladi: kim, filtr, ustunlar, qatorlar soni. Fayl `file` havolasidan yuklab olinadi (shu admin, vaqtli). Telefon — oxirgi 4 raqam; `FULL` — 403 (ega qarori kutilmoqda).',
+  })
+  @ApiAcceptedResponse({ type: ExportAcceptedDto })
+  @ApiForbiddenResponse({ description: 'To‘liq raqam eksporti yopiq' })
+  async export(
+    @Body() dto: OrderExportRequestDto,
+    @CurrentUser() user: JwtUser,
+    @Ip() ip: string,
+  ): Promise<ExportAcceptedDto> {
+    if (dto.phone === 'FULL')
+      throw new ForbiddenException(
+        'To‘liq telefon raqami eksporti yopiq: ega qarori kutilmoqda',
+      );
+    const filters = { ...dto.filters };
+    const until = new Date().toISOString();
+    const { rows } = await sendRpc<{ rows: number }>(
+      this.checkout,
+      { cmd: 'checkout.admin.orders-export-count' },
+      { filters, until },
+    );
+    try {
+      await sendRpc(
+        this.identity,
+        { cmd: 'identity.audit.log' },
+        {
+          actorId: user.sub,
+          action: 'order.export',
+          entityType: 'SalesOrder',
+          entityId: null,
+          meta: {
+            filters,
+            columns: dto.columns,
+            phone: 'LAST4',
+            rows,
+            ip: ip || null,
+          },
+        },
+      );
+    } catch {
+      throw new ServiceUnavailableException(
+        'Audit yozilmadi — eksport hozir ochilmaydi, qayta urinib ko‘ring',
+      );
+    }
+    const { id, expiresAt } = this.exports.sign({
+      kind: 'orders',
+      userId: String(user.sub),
+      filters,
+      columns: dto.columns,
+      until,
+    });
+    return { id, rows, file: `/api/v1/admin/orders/exports/${id}`, expiresAt };
+  }
+
+  @Get('admin/orders/exports/:id')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Eksport fayli (CSV, UTF-8 BOM, «;»)' })
+  @ApiProduces('text/csv')
+  @ApiOkResponse({
+    content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiNotFoundResponse({
+    description: 'Havola buzilgan, muddati o‘tgan yoki boshqa adminniki',
+  })
+  async exportFile(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+  ): Promise<StreamableFile> {
+    const ticket = this.exports.verify(id, 'orders', String(user.sub));
+    if (!ticket)
+      throw new NotFoundException('Eksport topilmadi yoki muddati o‘tgan');
+    return csvStream(
+      `buyurtmalar_${ticket.until.slice(0, 10)}.csv`,
+      (afterId) =>
+        sendRpc<CsvChunk>(
+          this.checkout,
+          { cmd: 'checkout.admin.orders-export-chunk' },
+          {
+            filters: ticket.filters,
+            columns: ticket.columns,
+            until: ticket.until,
+            afterId,
+          },
+        ),
     );
   }
 
@@ -94,12 +215,146 @@ export class AdminOrdersController {
   })
   @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
   @ApiForbiddenResponse({ type: AuthErrorResponseDto })
-  get(@Param('id') id: string) {
-    return sendRpc(
+  async get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    const order = await sendRpc<OrderDetailRpc>(
       this.checkout,
       { cmd: 'checkout.admin.order-get' },
+      { orderId: id, viewer: orderViewer(user) },
+    );
+    return withLeadContext(this.lead, order, user);
+  }
+
+  @Post('admin/orders/:id/label/reprints')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Yorliqni qayta chop etish sababi',
+    description:
+      'PDF — `GET admin/orders/{id}/label`. Audit: kim, qachon, sabab.',
+  })
+  @ApiCreatedResponse({ type: LabelReprintDto })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  async reprint(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Body() dto: OrderReasonDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<LabelReprintDto> {
+    const result = await sendRpc<LabelReprintDto>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-label-reprint' },
+      { orderId: id, actorId: admin.sub, reason: dto.reason },
+    );
+    this.audit(admin.sub, 'order.label.reprint', id, ip, dto);
+    return result;
+  }
+
+  @Post('admin/orders/:id/dispute')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Buyurtmani «Nizoli» deb belgilash',
+    description:
+      'TEL-6: nizoli buyurtmaning qo‘ng‘iroq yozuvi 1 yil saqlanadi (`keepUntil`). Provayderdagi muddat — EQ-02 dan keyin.',
+  })
+  @ApiCreatedResponse({ type: OrderDisputeDto })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiConflictResponse({ description: 'INVALID_STATE — nizo allaqachon ochiq' })
+  async dispute(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Body() dto: OrderReasonDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<OrderDisputeDto> {
+    const result = await sendRpc<OrderDisputeDto>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-dispute' },
+      { orderId: id, actorId: admin.sub, reason: dto.reason },
+    );
+    this.audit(admin.sub, 'order.dispute.open', id, ip, dto);
+    return result;
+  }
+
+  @Post('admin/orders/:id/dispute/close')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Nizoni yopish' })
+  @ApiOkResponse({ type: OrderDisputeClosedDto })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiConflictResponse({ description: 'INVALID_STATE — ochiq nizo yo‘q' })
+  async closeDispute(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Body() dto: OrderCommentDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<OrderDisputeClosedDto> {
+    const result = await sendRpc<OrderDisputeClosedDto>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-dispute-close' },
+      { orderId: id, actorId: admin.sub, comment: dto?.comment },
+    );
+    this.audit(admin.sub, 'order.dispute.close', id, ip, dto ?? {});
+    return result;
+  }
+
+  @Post('admin/orders/:id/elchi/resend')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Posilkani Elchi’ga qayta yuborish',
+    description:
+      'Faqat posilka so‘rovi rad etilgan (`FAILED`) va topshirilmagan buyurtma. Vaqtinchalik xatolarda qayta urinish avtomatik (BE-20).',
+  })
+  @ApiAcceptedResponse({ type: ElchiResendDto })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiConflictResponse({
+    description: 'INVALID_STATE — posilka rad etilmagan yoki topshirilgan',
+  })
+  async resend(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<ElchiResendDto> {
+    const result = await sendRpc<ElchiResendDto>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-elchi-resend' },
       { orderId: id },
     );
+    this.audit(admin.sub, 'order.elchi.resend', id, ip, {});
+    return result;
+  }
+
+  @Post('admin/orders/:id/elchi/refresh')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Elchi’dan posilka holatini so‘rash',
+    description:
+      'Posilka Elchi’da bo‘lsa (webhook kelmagan). Holat faqat oldinga; pul holatlari qo‘llanmaydi (webhook va kunlik tekshiruv).',
+  })
+  @ApiAcceptedResponse({ type: ElchiRefreshDto })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiConflictResponse({
+    description: 'INVALID_STATE — posilka hozir Elchi’da emas',
+  })
+  async refreshElchi(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<ElchiRefreshDto> {
+    const result = await sendRpc<ElchiRefreshDto>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-elchi-refresh' },
+      { orderId: id },
+    );
+    this.audit(admin.sub, 'order.elchi.refresh', id, ip, {
+      elchiStatus: result.elchiStatus,
+      applied: result.applied,
+    });
+    return result;
   }
 
   @Get('admin/orders/:id/label')

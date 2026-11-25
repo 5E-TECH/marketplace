@@ -46,6 +46,188 @@ interface LabelLookupCache {
   districts: Map<string, Promise<Map<string, string>>>;
 }
 
+/** `GET /admin/orders` filtrlari (BE-18, BE-25). */
+export interface AdminOrderListQuery {
+  status?: string;
+  source?: string;
+  paymentMethod?: string;
+  shopId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  productId?: string;
+  affiliateId?: string;
+  regionSoato?: string;
+  whereDeliver?: string;
+  confirmedById?: string;
+  withCounts?: boolean;
+  sort?: string;
+  page?: number;
+  limit?: number;
+  /** Faqat lid buyurtmalari (operator va nazoratchi ko‘rinishi). */
+  leadOnly?: boolean;
+}
+
+/** Posilka, birinchi tovar, holat oxirgi o‘zgarishi va yig‘ish vazifasi — har buyurtmaga bittadan qator. */
+const ADMIN_ORDER_JOINS = `
+  LEFT JOIN LATERAL (
+    SELECT i.product_id::text AS product_id, i.product_name, i.quantity, i.base_price, i.recommended_price, i.approved_price,
+           i.markup, i.affiliate_fee, i.call_center_fee, i.hidden_delivery, i.platform_service,
+           COUNT(*) OVER ()::int AS lines
+      FROM checkout.sales_order_item i JOIN checkout.parcel x ON x.id = i.sales_order_seller_id
+     WHERE x.sales_order_id = so.id ORDER BY i.id LIMIT 1) li ON true
+  LEFT JOIN LATERAL (
+    SELECT x.elchi_shipment_id::text AS track, x.elchi_state, x.handover_act_id::text AS act_id
+      FROM checkout.parcel x WHERE x.sales_order_id = so.id
+     ORDER BY (x.elchi_shipment_id IS NULL), x.id LIMIT 1) pa ON true
+  LEFT JOIN LATERAL (
+    SELECT h.created_at, h.actor_id::text AS actor_id FROM checkout.order_status_history h
+     WHERE h.order_id = so.id AND h.accepted AND h.to_status = so.status
+     ORDER BY h.id DESC LIMIT 1) st ON true
+  LEFT JOIN checkout.fulfillment_task ft ON ft.order_id = so.id`;
+
+const ADMIN_ORDER_COLUMNS = `so.id, so.buyer_name AS "buyerName", so.status, so.payment_method AS "paymentMethod",
+  so.total_amount AS "totalAmount", so.delivery_fee AS "deliveryFee", so.created_at AS "createdAt",
+  so.source, so.lead_id::text AS "leadId", so.affiliate_id::text AS "affiliateId", so.stream_id::text AS "streamId",
+  so.customer_phone AS "customerPhone", so.region_soato AS "regionSoato", so.district_soato AS "districtSoato",
+  so.where_deliver AS "whereDeliver", so.confirmed_by::text AS "confirmedById",
+  (SELECT COUNT(*)::int FROM checkout.sales_order_seller s WHERE s.sales_order_id = so.id) AS "sellersCount",
+  (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
+    WHERE s.sales_order_id = so.id AND s.elchi_shipment_id IS NOT NULL) AS "shipmentsCount",
+  li.product_id AS "productId", li.product_name AS "productName", li.quantity, li.lines,
+  li.base_price::text AS "basePrice", li.recommended_price::text AS "recommendedPrice",
+  li.approved_price::text AS "approvedPrice", li.markup::text AS markup, li.affiliate_fee::text AS "affiliateFee",
+  li.call_center_fee::text AS "callCenterFee", li.hidden_delivery::text AS "hiddenDelivery",
+  li.platform_service::text AS "platformService",
+  pa.track AS "trackNumber", pa.elchi_state AS "elchiState", pa.act_id AS "actId",
+  COALESCE(st.created_at, so.created_at) AS "statusAt", st.actor_id AS "statusActorId",
+  ft.pick_date::text AS "pickDate", ft.picked_by::text AS "pickedBy"`;
+
+/** «L-1276», «1276» — buyurtma yoki lid raqami, Elchi treki; boshqasi — ism. */
+const orderNumberOf = (text: string): string | null => {
+  const match = /^(?:l-?)?([1-9]\d{0,17})$/i.exec(text.trim());
+  return match ? match[1] : null;
+};
+
+/** Ro‘yxat shartlari. Sana — Toshkent kuni (`dateTo` kuni ham kiradi). */
+function adminOrderWhere(query: AdminOrderListQuery): {
+  where: string;
+  params: unknown[];
+} {
+  const params: unknown[] = [];
+  const conditions: string[] = ['1 = 1'];
+  const add = (value: unknown, condition: (param: string) => string) => {
+    params.push(value);
+    conditions.push(condition(`$${params.length}`));
+  };
+  if (query.leadOnly) conditions.push('so.source IS NOT NULL');
+  if (query.status) add(query.status, (p) => `so.status = ${p}`);
+  if (query.source) add(query.source, (p) => `so.source = ${p}`);
+  if (query.paymentMethod)
+    add(query.paymentMethod, (p) => `so.payment_method = ${p}`);
+  if (query.shopId)
+    add(
+      query.shopId,
+      (p) => `EXISTS (SELECT 1 FROM checkout.sales_order_seller x
+                 WHERE x.sales_order_id = so.id AND x.shop_id = ${p})`,
+    );
+  if (query.dateFrom)
+    add(
+      query.dateFrom,
+      (p) =>
+        `so.created_at >= (${p}::date)::timestamp AT TIME ZONE 'Asia/Tashkent'`,
+    );
+  if (query.dateTo)
+    add(
+      query.dateTo,
+      (p) =>
+        `so.created_at < (${p}::date + 1)::timestamp AT TIME ZONE 'Asia/Tashkent'`,
+    );
+  if (query.affiliateId)
+    add(query.affiliateId, (p) => `so.affiliate_id = ${p}::bigint`);
+  if (query.regionSoato)
+    add(query.regionSoato, (p) => `so.region_soato = ${p}`);
+  if (query.whereDeliver)
+    add(query.whereDeliver, (p) => `so.where_deliver = ${p}`);
+  if (query.confirmedById)
+    add(query.confirmedById, (p) => `so.confirmed_by = ${p}::bigint`);
+  if (query.productId)
+    add(
+      query.productId,
+      (p) => `EXISTS (SELECT 1 FROM checkout.sales_order_item i
+                 JOIN checkout.parcel x ON x.id = i.sales_order_seller_id
+                WHERE x.sales_order_id = so.id AND i.product_id = ${p}::bigint)`,
+    );
+  const text = query.search?.trim();
+  if (text) {
+    params.push(`%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    const like = `so.buyer_name ILIKE $${params.length}`;
+    const number = orderNumberOf(text);
+    if (number) {
+      params.push(number);
+      const n = `$${params.length}::bigint`;
+      conditions.push(
+        `(${like} OR so.id = ${n} OR so.lead_id = ${n} OR EXISTS (SELECT 1 FROM checkout.parcel x
+            WHERE x.sales_order_id = so.id AND x.elchi_shipment_id = ${n}))`,
+      );
+    } else conditions.push(`(${like})`);
+  }
+  return { where: conditions.join(' AND '), params };
+}
+
+function adminOrderRow(r: Record<string, unknown>) {
+  return {
+    id: String(r.id),
+    buyerName: (r.buyerName as string | null) ?? null,
+    status: r.status as string,
+    paymentMethod: r.paymentMethod,
+    totalAmount: Number(r.totalAmount),
+    deliveryFee: Number(r.deliveryFee),
+    sellersCount: Number(r.sellersCount),
+    // Yorliq faqat posilkasi bor sub-buyurtma uchun chiqadi — admin
+    // jadvali shunga qarab chop etish belgisini o'chiradi (C1.45).
+    shipmentsCount: Number(r.shipmentsCount ?? 0),
+    createdAt: r.createdAt,
+    // BE-18: liddan buyurtma — manba, lid, sotuvchi; ro‘yxatda telefon niqoblangan (FE-26)
+    source: (r.source as string | null) ?? null,
+    leadId: (r.leadId as string | null) ?? null,
+    affiliateId: (r.affiliateId as string | null) ?? null,
+    phoneMasked: r.customerPhone ? maskPhone(String(r.customerPhone)) : null,
+    // BE-25 (FE-26)
+    streamId: (r.streamId as string | null) ?? null,
+    regionSoato: (r.regionSoato as string | null) ?? null,
+    districtSoato: (r.districtSoato as string | null) ?? null,
+    whereDeliver: (r.whereDeliver as string | null) ?? null,
+    confirmedById: (r.confirmedById as string | null) ?? null,
+    productId: (r.productId as string | null) ?? null,
+    productName: (r.productName as string | null) ?? null,
+    quantity: r.quantity == null ? null : Number(r.quantity),
+    /** Buyurtmadagi tovar qatorlari soni (saytdan ko‘p tovarli buyurtma). */
+    linesCount: Number(r.lines ?? 0),
+    trackNumber: (r.trackNumber as string | null) ?? null,
+    elchiState: (r.elchiState as string | null) ?? null,
+    actId: (r.actId as string | null) ?? null,
+    statusAt: r.statusAt ? new Date(r.statusAt as string).toISOString() : null,
+    statusActorId: (r.statusActorId as string | null) ?? null,
+    pickDate: (r.pickDate as string | null) ?? null,
+    pickedBy: (r.pickedBy as string | null) ?? null,
+    priceSnapshot:
+      r.approvedPrice == null
+        ? null
+        : {
+            basePrice: Number(r.basePrice),
+            recommendedPrice: Number(r.recommendedPrice),
+            approvedPrice: Number(r.approvedPrice),
+            markup: Number(r.markup),
+            affiliateFee: Number(r.affiliateFee),
+            callCenterFee: Number(r.callCenterFee),
+            hiddenDelivery: Number(r.hiddenDelivery),
+            platformService: Number(r.platformService),
+          },
+  };
+}
+export type AdminOrderRow = ReturnType<typeof adminOrderRow>;
+
 /** Ro‘yxatda telefon — oxirgi 4 ta raqam (lead-service `maskPhone` bilan bir xil; ega qarori 2026-11-23). */
 export const maskPhone = (p: string) => `****${p.slice(-4)}`;
 
@@ -148,51 +330,10 @@ export class SellerOrdersService {
    * Filtr: status / to'lov usuli / do'kon (sub-order bor bo'lsa) / sana. Faqat
    * o'qish. Do'kon filtri EXISTS orqali (bitta order ko'p do'konli bo'lishi mumkin).
    */
-  async adminListOrders(query: {
-    status?: string;
-    source?: string;
-    paymentMethod?: string;
-    shopId?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    page?: number;
-    limit?: number;
-  }) {
+  async adminListOrders(query: AdminOrderListQuery) {
     const page = Math.max(1, Number(query?.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query?.limit ?? 20)));
-
-    const params: unknown[] = [];
-    const conditions: string[] = ['1 = 1'];
-    if (query?.status) {
-      params.push(query.status);
-      conditions.push(`so.status = $${params.length}`);
-    }
-    if (query?.source) {
-      params.push(query.source);
-      conditions.push(`so.source = $${params.length}`);
-    }
-    if (query?.paymentMethod) {
-      params.push(query.paymentMethod);
-      conditions.push(`so.payment_method = $${params.length}`);
-    }
-    if (query?.shopId) {
-      params.push(query.shopId);
-      conditions.push(
-        `EXISTS (SELECT 1 FROM checkout.sales_order_seller x
-                 WHERE x.sales_order_id = so.id AND x.shop_id = $${params.length})`,
-      );
-    }
-    if (query?.dateFrom) {
-      params.push(query.dateFrom);
-      conditions.push(`so.created_at >= $${params.length}::date`);
-    }
-    if (query?.dateTo) {
-      params.push(query.dateTo);
-      conditions.push(
-        `so.created_at < ($${params.length}::date + INTERVAL '1 day')`,
-      );
-    }
-    const where = conditions.join(' AND ');
+    const { where, params } = adminOrderWhere(query ?? {});
 
     const countRows = await this.dataSource.query(
       `SELECT COUNT(*)::int AS total FROM checkout.sales_order so WHERE ${where}`,
@@ -200,56 +341,83 @@ export class SellerOrdersService {
     );
     const total = Number(countRows[0]?.total ?? 0);
 
+    const direction = query?.sort === 'statusAt' ? 'ASC' : 'DESC';
+    const order = query?.sort
+      ? `"statusAt" ${direction}, so.id ${direction}`
+      : 'so.created_at DESC, so.id DESC';
     const listParams = [...params, limit, (page - 1) * limit];
-    const rows = await this.dataSource.query(
-      `SELECT so.id,
-              so.buyer_name AS "buyerName",
-              so.status,
-              so.payment_method AS "paymentMethod",
-              so.total_amount AS "totalAmount",
-              so.delivery_fee AS "deliveryFee",
-              so.created_at AS "createdAt",
-              so.source, so.lead_id::text AS "leadId",
-              so.affiliate_id::text AS "affiliateId",
-              so.customer_phone AS "customerPhone",
-              (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
-                 WHERE s.sales_order_id = so.id) AS "sellersCount",
-              (SELECT COUNT(*)::int FROM checkout.sales_order_seller s
-                 WHERE s.sales_order_id = so.id
-                   AND s.elchi_shipment_id IS NOT NULL) AS "shipmentsCount"
-         FROM checkout.sales_order so
+    const rows = (await this.dataSource.query(
+      `SELECT ${ADMIN_ORDER_COLUMNS}
+         FROM checkout.sales_order so ${ADMIN_ORDER_JOINS}
         WHERE ${where}
-        ORDER BY so.created_at DESC
+        ORDER BY ${order}
         LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
       listParams,
-    );
+    )) as Array<Record<string, unknown>>;
+
+    let counts: Record<string, number> | undefined;
+    if (query?.withCounts) {
+      const all = adminOrderWhere({ ...query, status: undefined });
+      const byStatus = (await this.dataSource.query(
+        `SELECT so.status, COUNT(*)::int AS n FROM checkout.sales_order so WHERE ${all.where} GROUP BY so.status`,
+        all.params,
+      )) as Array<{ status: string; n: number }>;
+      counts = Object.fromEntries(byStatus.map((r) => [r.status, Number(r.n)]));
+      counts.ALL = Object.values(counts).reduce((sum, n) => sum + n, 0);
+    }
 
     return {
-      items: rows.map((r: Record<string, unknown>) => ({
-        id: String(r.id),
-        buyerName: (r.buyerName as string) ?? null,
-        status: r.status,
-        paymentMethod: r.paymentMethod,
-        totalAmount: Number(r.totalAmount),
-        deliveryFee: Number(r.deliveryFee),
-        sellersCount: Number(r.sellersCount),
-        // Yorliq faqat posilkasi bor sub-buyurtma uchun chiqadi — admin
-        // jadvali shunga qarab chop etish belgisini o'chiradi (C1.45).
-        shipmentsCount: Number(r.shipmentsCount ?? 0),
-        createdAt: r.createdAt,
-        // BE-18: liddan buyurtma — manba, lid, sotuvchi; ro‘yxatda telefon niqoblangan (FE-26)
-        source: (r.source as string) ?? null,
-        leadId: (r.leadId as string) ?? null,
-        affiliateId: (r.affiliateId as string) ?? null,
-        phoneMasked: r.customerPhone
-          ? maskPhone(String(r.customerPhone))
-          : null,
-      })),
+      items: rows.map(adminOrderRow),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+      ...(counts ? { counts } : {}),
     };
+  }
+
+  /** CSV bo‘lagi uchun qatorlar (BE-25): kalit — buyurtma ID si, yangisidan eskisiga. */
+  async adminOrderChunk(
+    query: AdminOrderListQuery,
+    until: Date,
+    afterId: string | null,
+    limit: number,
+  ) {
+    const { where, params } = adminOrderWhere(query ?? {});
+    const rows = (await this.dataSource.query(
+      `SELECT ${ADMIN_ORDER_COLUMNS}
+         FROM checkout.sales_order so ${ADMIN_ORDER_JOINS}
+        WHERE ${where} AND so.created_at <= $${params.length + 1}
+          AND ($${params.length + 2}::bigint IS NULL OR so.id < $${params.length + 2}::bigint)
+        ORDER BY so.id DESC LIMIT $${params.length + 3}`,
+      [...params, until, afterId, limit],
+    )) as Array<Record<string, unknown>>;
+    return rows.map(adminOrderRow);
+  }
+
+  async adminOrderCount(query: AdminOrderListQuery, until: Date) {
+    const { where, params } = adminOrderWhere(query ?? {});
+    const [row] = (await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total FROM checkout.sales_order so WHERE ${where} AND so.created_at <= $${params.length + 1}`,
+      [...params, until],
+    )) as Array<{ total: number }>;
+    return Number(row?.total ?? 0);
+  }
+
+  /** Filtr variantlari: berilgan shartdagi buyurtmalarda uchragan mahsulotlar (operator «Mahsulot» filtri). */
+  async adminOrderProducts(
+    query: AdminOrderListQuery,
+  ): Promise<Array<{ id: string; name: string }>> {
+    const { where, params } = adminOrderWhere(query ?? {});
+    return (await this.dataSource.query(
+      `SELECT DISTINCT ON (i.product_id) i.product_id::text AS id, i.product_name AS name
+         FROM checkout.sales_order so
+         JOIN checkout.parcel x ON x.sales_order_id = so.id
+         JOIN checkout.sales_order_item i ON i.sales_order_seller_id = x.id
+        WHERE ${where}
+        ORDER BY i.product_id, i.id DESC`,
+      params,
+    )) as Array<{ id: string; name: string }>;
   }
 
   /**

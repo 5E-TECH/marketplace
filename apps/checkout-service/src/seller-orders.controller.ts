@@ -130,29 +130,6 @@ export class SellerOrdersController {
     return this.orders.adminStats();
   }
 
-  @MessagePattern({ cmd: 'checkout.admin.orders-list' })
-  adminListOrders(
-    @Payload()
-    data: {
-      query?: {
-        status?: string;
-        paymentMethod?: string;
-        shopId?: string;
-        dateFrom?: string;
-        dateTo?: string;
-        page?: number;
-        limit?: number;
-      };
-    },
-  ) {
-    return this.orders.adminListOrders(data?.query ?? {});
-  }
-
-  @MessagePattern({ cmd: 'checkout.admin.order-get' })
-  adminGetOrder(@Payload() data: { orderId: string }) {
-    return this.orders.adminGetOrder(String(data.orderId));
-  }
-
   @MessagePattern({ cmd: 'checkout.admin.order-cancel' })
   async adminCancelOrder(
     @Payload()

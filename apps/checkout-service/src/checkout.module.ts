@@ -11,6 +11,7 @@ import {
   ensureSchema,
   shouldRunMigrations,
   RmqClient,
+  UserNamesClient,
   RmqQueue,
   ServiceHealthModule,
   rmqOptions,
@@ -18,6 +19,8 @@ import {
 } from '@app/common';
 import { SellerOrdersController } from './seller-orders.controller';
 import { SellerOrdersService } from './seller-orders.service';
+import { AdminOrdersRpcController } from './admin-orders.controller';
+import { AdminOrdersService } from './admin-orders.service';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
 import { CheckoutController } from './checkout.controller';
@@ -125,6 +128,7 @@ import {
     TypeOrmModule.forFeature([OutboxEvent]),
   ],
   controllers: [
+    AdminOrdersRpcController,
     SellerOrdersController,
     CartController,
     CheckoutController,
@@ -136,6 +140,8 @@ import {
   ],
   providers: [
     WarehouseReturnsService,
+    AdminOrdersService,
+    UserNamesClient,
     SellerOrdersService,
     CartService,
     CheckoutService,
