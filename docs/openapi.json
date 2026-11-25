@@ -2809,7 +2809,7 @@
     },
     "/api/v1/admin/orders/{id}/sms/resend": {
       "post": {
-        "description": "O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. Audit: kim, qaysi shablon. Jurnal — buyurtma kartasidagi `sms`.",
+        "description": "O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. SMS navbatga qo‘yiladi (`PENDING`), natija — buyurtma kartasidagi `sms` jurnalida. Audit: kim, qaysi shablon.",
         "operationId": "AdminOrdersController_resendSms",
         "parameters": [
           {
@@ -2843,13 +2843,10 @@
             }
           },
           "404": {
-            "description": "Bu SMS hali yuborilmagan"
+            "description": "Buyurtma topilmadi yoki bu SMS hali yuborilmagan"
           },
           "409": {
-            "description": "INVALID_STATE — SMS hali navbatda"
-          },
-          "503": {
-            "description": "SMS xizmati sozlanmagan"
+            "description": "INVALID_STATE — SMS hali navbatda, buyurtma bekor qilingan yoki SMS xizmati sozlanmagan"
           }
         },
         "security": [
@@ -9039,13 +9036,13 @@
             }
           },
           "400": {
-            "description": "FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas"
+            "description": "FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas; bitta so‘rovda 3 tadan ko‘p fayl"
           },
           "404": {
             "description": "Buyurtma topilmadi"
           },
           "409": {
-            "description": "INVALID_STATE — ochiq so‘rov yo‘q yoki 3 tadan oshadi"
+            "description": "INVALID_STATE — ochiq so‘rov yo‘q yoki avvalgilari bilan 3 tadan oshadi"
           },
           "413": {
             "description": "FILE_TOO_LARGE — 5 MB dan katta"

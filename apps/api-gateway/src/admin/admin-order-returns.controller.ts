@@ -33,6 +33,7 @@ import {
   RETURN_PHOTO_MAX,
   RETURN_PHOTO_MAX_BYTES,
   RETURN_PHOTO_RPC,
+  RPC_TIMEOUT_MS,
   ReturnPhotosResultDto,
   ReturnRequestDetailsDto,
   RmqClient,
@@ -123,14 +124,16 @@ export class AdminOrderReturnsController {
   })
   @ApiCreatedResponse({ type: ReturnPhotosResultDto })
   @ApiBadRequestResponse({
-    description: 'FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas',
+    description:
+      'FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas; bitta so‘rovda 3 tadan ko‘p fayl',
   })
   @ApiPayloadTooLargeResponse({
     description: 'FILE_TOO_LARGE — 5 MB dan katta',
   })
   @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
   @ApiConflictResponse({
-    description: 'INVALID_STATE — ochiq so‘rov yo‘q yoki 3 tadan oshadi',
+    description:
+      'INVALID_STATE — ochiq so‘rov yo‘q yoki avvalgilari bilan 3 tadan oshadi',
   })
   @UseInterceptors(
     PhotoTooLargeInterceptor,
@@ -159,6 +162,7 @@ export class AdminOrderReturnsController {
       { orderId, count: chosen.length },
     );
     const stored: StoredReturnPhoto[] = [];
+    let adding = false;
     let result: ReturnPhotosResultDto;
     try {
       for (const file of chosen)
@@ -170,41 +174,59 @@ export class AdminOrderReturnsController {
             new RmqRecordBuilder({
               returnId,
               base64: file.buffer.toString('base64'),
+              deadline: Date.now() + RPC_TIMEOUT_MS,
             })
               .setOptions({ persistent: false })
               .build(),
           ),
         );
+      adding = true;
       result = await sendRpc<ReturnPhotosResultDto>(
         this.checkout,
         { cmd: RETURN_PHOTO_RPC.ADD },
         { orderId, returnId, files: stored, actorId: user.sub },
       );
     } catch (error) {
-      await this.discard(stored, error);
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      // ADD javobi kelmagan (5xx) — so‘rovga yozilgan bo‘lishi mumkin: rasmga tegilmaydi, audit qoladi
+      if (adding && status >= 500)
+        this.auditPhotos(user.sub, returnId, {
+          orderId,
+          count: stored.length,
+          unknown: true,
+          ip,
+        });
+      else await this.discard(stored);
       throw error;
     }
+    this.auditPhotos(user.sub, returnId, {
+      orderId,
+      count: stored.length,
+      ip,
+    });
+    return result;
+  }
+
+  private auditPhotos(
+    actorId: string,
+    returnId: string,
+    meta: { orderId: string; count: number; ip: string; unknown?: true },
+  ): void {
     void sendRpc(
       this.identity,
       { cmd: 'identity.audit.log' },
       {
-        actorId: user.sub,
+        actorId,
         action: 'return.photos.add',
         entityType: 'ReturnRequest',
         entityId: returnId,
-        meta: { orderId, count: stored.length, ip: ip || null },
+        meta: { ...meta, ip: meta.ip || null },
       },
     ).catch(() => undefined);
-    return result;
   }
 
-  /** So‘rovga yozilmagan rasmlar qolmasin; javob kelmagan (5xx) bo‘lsa yozilgan bo‘lishi mumkin — tegilmaydi. */
-  private async discard(
-    stored: StoredReturnPhoto[],
-    error: unknown,
-  ): Promise<void> {
-    const status = error instanceof HttpException ? error.getStatus() : 500;
-    if (status >= 500) return;
+  /** So‘rovga yozilmagan rasmlar qolmasin. */
+  private async discard(stored: StoredReturnPhoto[]): Promise<void> {
     await Promise.allSettled(
       stored.map((file) =>
         sendRpc(

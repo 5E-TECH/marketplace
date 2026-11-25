@@ -4,6 +4,7 @@ import { Client } from 'minio';
 import { randomUUID } from 'node:crypto';
 import {
   CREATIVE_FOLDER,
+  ErrorCode,
   PRODUCT_IMAGE_MAX_BYTES,
   PUBLIC_MEDIA_FOLDERS,
   UploadFileCommand,
@@ -73,9 +74,10 @@ export class FileServiceService implements OnModuleInit {
       throw new BadRequestException('Fayl hajmi noto‘g‘ri');
     }
     if (!this.matchesSignature(buffer, command.mimeType)) {
-      throw new BadRequestException(
-        'Fayl tarkibi ko‘rsatilgan formatga mos emas',
-      );
+      throw new BadRequestException({
+        message: 'Fayl tarkibi ko‘rsatilgan formatga mos emas',
+        errorCode: ErrorCode.FILE_TYPE_INVALID,
+      });
     }
 
     const folder = command.folder ?? 'products';

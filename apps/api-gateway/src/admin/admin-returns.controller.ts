@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Query,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -102,7 +103,24 @@ export class AdminReturnsController {
       { cmd: RETURN_PHOTO_RPC.GET },
       { photoId, returnId: id },
     );
-    this.audit(admin.sub, 'return.photo.view', id, ip, { photoId: photo.id });
+    // mijozning shaxsiy ma’lumoti: audit yozilmasa havola berilmaydi (qo‘ng‘iroq yozuvi va eksport kabi)
+    try {
+      await sendRpc(
+        this.identity,
+        { cmd: 'identity.audit.log' },
+        {
+          actorId: admin.sub,
+          action: 'return.photo.view',
+          entityType: 'ReturnRequest',
+          entityId: id,
+          meta: { photoId: photo.id, ip: ip || null },
+        },
+      );
+    } catch {
+      throw new ServiceUnavailableException(
+        'Audit yozilmadi — rasm hozir ochilmaydi, qayta urinib ko‘ring',
+      );
+    }
     return this.links.sign({ t: 'return-photo', id: photo.id });
   }
 

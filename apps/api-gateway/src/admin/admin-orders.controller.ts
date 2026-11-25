@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -29,7 +30,6 @@ import {
   ApiOperation,
   ApiProduces,
   ApiResponse,
-  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -45,8 +45,10 @@ import {
   AuthErrorResponseDto,
   ElchiRefreshDto,
   ElchiResendDto,
+  ErrorCode,
   ExportAcceptedDto,
   LabelReprintDto,
+  LeadOrderStatus,
   ORDER_SMS_RPC,
   OrderCommentDto,
   OrderDisputeClosedDto,
@@ -247,18 +249,33 @@ export class AdminOrdersController {
   @ApiOperation({
     summary: 'Mijozga avtomatik SMS ni qo‘lda qayta yuborish (FE-26)',
     description:
-      'O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. Audit: kim, qaysi shablon. Jurnal — buyurtma kartasidagi `sms`.',
+      'O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. SMS navbatga qo‘yiladi (`PENDING`), natija — buyurtma kartasidagi `sms` jurnalida. Audit: kim, qaysi shablon.',
   })
   @ApiOkResponse({ type: OrderSmsDto })
-  @ApiNotFoundResponse({ description: 'Bu SMS hali yuborilmagan' })
-  @ApiConflictResponse({ description: 'INVALID_STATE — SMS hali navbatda' })
-  @ApiServiceUnavailableResponse({ description: 'SMS xizmati sozlanmagan' })
+  @ApiNotFoundResponse({
+    description: 'Buyurtma topilmadi yoki bu SMS hali yuborilmagan',
+  })
+  @ApiConflictResponse({
+    description:
+      'INVALID_STATE — SMS hali navbatda, buyurtma bekor qilingan yoki SMS xizmati sozlanmagan',
+  })
   async resendSms(
     @Param('id', ParseLeadIdPipe) id: string,
     @Body() dto: OrderSmsResendRequestDto,
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ): Promise<OrderSmsDto> {
+    const order = await sendRpc<{ status: string }>(
+      this.checkout,
+      { cmd: 'checkout.admin.order-brief' },
+      { orderId: id },
+    );
+    // bekor qilingan buyurtmaga «tasdiqlandi» ketmasin [taklif]
+    if (order.status === LeadOrderStatus.CANCELLED)
+      throw new ConflictException({
+        message: 'Buyurtma bekor qilingan — SMS qayta yuborilmaydi',
+        errorCode: ErrorCode.INVALID_STATE,
+      });
     const result = await sendRpc<OrderSmsDto>(
       this.notifications,
       { cmd: ORDER_SMS_RPC.RESEND },

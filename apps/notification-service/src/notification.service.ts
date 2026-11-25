@@ -75,6 +75,55 @@ export class NotificationService {
     return this.ensureDeliveries(notification, input);
   }
 
+  /** Kanal shu muhitda sozlanganmi (masalan `SMS_WEBHOOK_URL`). */
+  channelConfigured(channel: NotificationChannel): boolean {
+    return !!this.adapters
+      .find((adapter) => adapter.channel === channel)
+      ?.isConfigured();
+  }
+
+  /**
+   * BE-25: xabar va yetkazish qatorlari bitta qisqa tranzaksiyada; yuborish fonda (chaqiruvchi provayderni kutmaydi,
+   * jarayon to‘xtasa — qayta urinish ishi 60 s dan keyin oladi). Kalit band bo‘lsa — null: boshqa so‘rov yaratgan.
+   */
+  async enqueue(
+    input: CreateNotificationInput & { dedupeKey: string },
+  ): Promise<Notification | null> {
+    let saved: {
+      notification: Notification;
+      deliveries: NotificationDelivery[];
+    };
+    try {
+      saved = await this.notifications.manager.transaction(async (manager) => {
+        const notification = await manager.save(
+          manager.create(Notification, {
+            userId: input.recipient.userId ?? null,
+            dedupeKey: input.dedupeKey,
+            type: input.type,
+            title: input.title,
+            body: input.body,
+            data: input.data ?? {},
+            isRead: false,
+            readAt: null,
+          }),
+        );
+        const deliveries = await manager.save(
+          this.pendingDeliveries(notification, input.recipient),
+        );
+        return { notification, deliveries };
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505') return null;
+      throw error;
+    }
+    void Promise.allSettled(
+      saved.deliveries.map((delivery) =>
+        this.attemptDelivery(delivery, saved.notification),
+      ),
+    );
+    return saved.notification;
+  }
+
   /** Xabarning yetkazish qatorlari (bo‘lmasa yaratiladi) va darhol birinchi urinish. */
   private async ensureDeliveries(
     notification: Notification,
@@ -86,24 +135,7 @@ export class NotificationService {
       });
       if (existing > 0) return notification;
     }
-    const channels = input.recipient.channels ?? [
-      NotificationChannel.EMAIL,
-      NotificationChannel.TELEGRAM,
-      NotificationChannel.SMS,
-    ];
-    const pending = channels.map((channel) =>
-      this.deliveries.create({
-        notificationId: notification.id,
-        channel,
-        recipient: this.recipientFor(input.recipient, channel),
-        status: DeliveryStatus.PENDING,
-        attempts: 0,
-        // BE-24: darhol shu yerda yuboriladi; qayta urinish ishi (30 s) yo‘ldagi so‘rovni ikkinchi marta olmasin
-        nextRetryAt: new Date(Date.now() + 60_000),
-        lastError: null,
-        sentAt: null,
-      }),
-    );
+    const pending = this.pendingDeliveries(notification, input.recipient);
     let savedDeliveries: NotificationDelivery[] = [];
     try {
       savedDeliveries = pending.length
@@ -120,6 +152,30 @@ export class NotificationService {
       ),
     );
     return notification;
+  }
+
+  private pendingDeliveries(
+    notification: Notification,
+    recipient: NotificationRecipient,
+  ): NotificationDelivery[] {
+    const channels = recipient.channels ?? [
+      NotificationChannel.EMAIL,
+      NotificationChannel.TELEGRAM,
+      NotificationChannel.SMS,
+    ];
+    return channels.map((channel) =>
+      this.deliveries.create({
+        notificationId: notification.id,
+        channel,
+        recipient: this.recipientFor(recipient, channel),
+        status: DeliveryStatus.PENDING,
+        attempts: 0,
+        // BE-24: darhol shu yerda yuboriladi; qayta urinish ishi (30 s) yo‘ldagi so‘rovni ikkinchi marta olmasin
+        nextRetryAt: new Date(Date.now() + 60_000),
+        lastError: null,
+        sentAt: null,
+      }),
+    );
   }
 
   async findAll(userId: string, query: NotificationsQueryDto) {

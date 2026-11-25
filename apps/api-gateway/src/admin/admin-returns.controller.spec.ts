@@ -1,4 +1,4 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { Role, ROLES_KEY } from '@app/common';
 import { ConfigService } from '@nestjs/config';
 import { SignedLinkService } from '../wholesaler-cabinet/signed-link';
@@ -90,5 +90,15 @@ describe('AdminReturnsController (C4.2)', () => {
       { cmd: 'identity.audit.log' },
       expect.objectContaining({ action: 'return.photo.view', entityId: '3' }),
     );
+    // audit yozilmasa — havola yo‘q
+    audit.mockReturnValueOnce(throwError(() => new Error('identity')) as never);
+    await expect(
+      controller.photoLink(
+        '3',
+        '9',
+        { sub: '1', role: Role.ADMIN } as never,
+        '',
+      ),
+    ).rejects.toMatchObject({ status: 503 });
   });
 });

@@ -336,6 +336,8 @@ export class PrivateFileService {
   async storeReturnPhoto(input: {
     returnId: string;
     base64: string;
+    /** Chaqiruvchi shu vaqtgacha kutadi (epoch ms) — kechikkan yuklama egasiz qolmasin. */
+    deadline: number;
   }): Promise<StoredReturnPhoto> {
     const returnId = String(input?.returnId ?? '');
     if (!ID.test(returnId))
@@ -357,14 +359,29 @@ export class PrivateFileService {
         message: 'Faqat JPG, PNG yoki WEBP rasm',
         errorCode: ErrorCode.FILE_TYPE_INVALID,
       });
+    const late = () => {
+      if (!(Date.now() < Number(input?.deadline)))
+        throw new ServiceUnavailableException(
+          'Rasm kech keldi — qayta yuklang',
+        );
+    };
+    late();
     const objectKey = `${RETURN_PHOTO_FOLDER}/${returnId}/${randomUUID()}${PHOTO_EXTENSIONS[contentType]}`;
-    await this.client
-      .putObject(this.bucket, objectKey, body, body.length, {
+    try {
+      await this.client.putObject(this.bucket, objectKey, body, body.length, {
         'Content-Type': contentType,
-      })
-      .catch((error) => {
-        throw this.unavailable('saqlash', error);
       });
+    } catch (error) {
+      // javob yo‘qolib, fayl yozilgan bo‘lishi mumkin
+      await this.removeQuietly(objectKey);
+      throw this.unavailable('saqlash', error);
+    }
+    try {
+      late();
+    } catch (error) {
+      await this.removeQuietly(objectKey);
+      throw error;
+    }
     return { objectKey, contentType, size: body.length };
   }
 

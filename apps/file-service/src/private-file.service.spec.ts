@@ -222,6 +222,7 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
     const stored = await svc.storeReturnPhoto({
       returnId: '3',
       base64: webp.toString('base64'),
+      deadline: Date.now() + 5_000,
     });
     expect(stored).toMatchObject({ contentType: 'image/webp', size: 16 });
     expect(stored.objectKey).toMatch(
@@ -231,6 +232,7 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
       svc.storeReturnPhoto({
         returnId: '3',
         base64: Buffer.from('<html>').toString('base64'),
+        deadline: Date.now() + 5_000,
       }),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ errorCode: 'FILE_TYPE_INVALID' }),
@@ -239,13 +241,40 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
       svc.storeReturnPhoto({
         returnId: '3',
         base64: Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64'),
+        deadline: Date.now() + 5_000,
       }),
     ).rejects.toMatchObject({ status: 413 });
     await expect(
-      svc.storeReturnPhoto({ returnId: '../1', base64: 'AA==' }),
+      svc.storeReturnPhoto({
+        returnId: '../1',
+        base64: 'AA==',
+        deadline: Date.now() + 5_000,
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    await svc.removeReturnPhoto({ objectKey: stored.objectKey });
+    // chaqiruvchi kutishni to‘xtatgan: navbatda kechikkani yozilmaydi, yozilayotganda kechikkani o‘chiriladi
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64');
+    client.putObject.mockClear();
+    await expect(
+      svc.storeReturnPhoto({
+        returnId: '3',
+        base64: jpg,
+        deadline: Date.now() - 1,
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(client.putObject).not.toHaveBeenCalled();
+    client.putObject.mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(() => resolve(undefined), 30)),
+    );
+    await expect(
+      svc.storeReturnPhoto({
+        returnId: '3',
+        base64: jpg,
+        deadline: Date.now() + 10,
+      }),
+    ).rejects.toMatchObject({ status: 503 });
     expect(client.removeObject).toHaveBeenCalledTimes(1);
+    await svc.removeReturnPhoto({ objectKey: stored.objectKey });
+    expect(client.removeObject).toHaveBeenCalledTimes(2);
     for (const objectKey of [
       'private/wholesaler/15/0f0e8f3a-1b2c-4d5e-8f90-a1b2c3d4e5f6.pdf',
       'products/1.jpg',

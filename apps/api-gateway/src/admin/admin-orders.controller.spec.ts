@@ -488,7 +488,13 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
     const notifications = jest.fn(() =>
       of({ template: 'order_confirmed', state: 'SENT' }),
     );
-    const controller = makeController(jest.fn(), identity, down, notifications);
+    const order = { id: '42', status: 'CONFIRMED' };
+    const controller = makeController(
+      jest.fn(() => of(order)),
+      identity,
+      down,
+      notifications,
+    );
     await controller.resendSms(
       '42',
       { template: 'Buyurtma tasdiqlandi' },
@@ -507,5 +513,16 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
         meta: expect.objectContaining({ template: 'order_confirmed' }),
       }),
     );
+    notifications.mockClear();
+    order.status = 'CANCELLED';
+    await expect(
+      controller.resendSms(
+        '42',
+        { template: 'order_confirmed' },
+        user(Role.ADMIN),
+        '',
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(notifications).not.toHaveBeenCalled();
   });
 });

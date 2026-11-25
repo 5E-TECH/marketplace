@@ -82,6 +82,20 @@ describe('AdminOrderReturnsController: rasmlar', () => {
     );
   });
 
+  it('ikkinchi rasm saqlanmasa (503) — birinchisi ham o‘chiriladi, so‘rovga yozilmaydi', async () => {
+    const { controller, checkout, files } = setup(() => of({}));
+    let stores = 0;
+    files.mockImplementation(((pattern: { cmd: string }) =>
+      pattern.cmd === 'file.return-photo.store' && ++stores === 2
+        ? throwError(() => new HttpException('x', 503))
+        : of({ objectKey: 'private/returns/3/1.jpg' })) as never);
+    await expect(
+      controller.photos('42', [upload(), upload()], admin, ''),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(removed(files)).toHaveLength(1);
+    expect(checkout).toHaveBeenCalledTimes(1);
+  });
+
   it('rasmsiz — 400; yozish rad etilsa (409) — saqlangan rasmlar o‘chiriladi; javob noma’lum (504) — tegilmaydi', async () => {
     const rejected = (status: number) => () =>
       throwError(() => new HttpException('x', status));
@@ -102,5 +116,11 @@ describe('AdminOrderReturnsController: rasmlar', () => {
       unknown.controller.photos('42', [upload()], admin, ''),
     ).rejects.toBeDefined();
     expect(removed(unknown.files)).toHaveLength(0);
+    expect(unknown.audit).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        meta: expect.objectContaining({ unknown: true, count: 1 }),
+      }),
+    );
   });
 });

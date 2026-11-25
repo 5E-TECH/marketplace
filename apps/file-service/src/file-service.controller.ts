@@ -102,7 +102,9 @@ export class FileServiceController {
 
   /** BE-25 (FE-26): qaytarish so‘roviga mijoz rasmi (yopiq). */
   @MessagePattern({ cmd: RETURN_PHOTO_RPC.STORE })
-  storeReturnPhoto(@Payload() data: { returnId: string; base64: string }) {
+  storeReturnPhoto(
+    @Payload() data: { returnId: string; base64: string; deadline: number },
+  ) {
     return this.privateFiles.storeReturnPhoto(data);
   }
 

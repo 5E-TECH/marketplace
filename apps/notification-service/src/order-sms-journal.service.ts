@@ -2,7 +2,6 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -33,10 +32,10 @@ interface SmsRow {
   title: string;
   body: string;
   data: Record<string, unknown>;
-  dedupeKey: string | null;
   createdAt: Date;
   status: DeliveryStatus | null;
   sentAt: Date | null;
+  updatedAt: Date | null;
   phone: string | null;
 }
 
@@ -56,23 +55,9 @@ export class OrderSmsJournalService {
     return this.view(await this.rows(this.id(orderId)));
   }
 
+  /** Navbatga qo‘yadi va darhol qaytadi (yuborish fonda) — provayder sekin bo‘lsa ham admin javobni kutmaydi. */
   async resend(input: ResendInput): Promise<OrderSmsDto> {
     const orderId = this.id(input?.orderId);
-    // ikki admin bir vaqtda bossa — bitta SMS: ikkinchisi 409 (qulf tranzaksiya oxirida bo‘shaydi)
-    return this.repository.manager.transaction(async (manager) => {
-      const [{ locked }] = (await manager.query(
-        `SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0)) AS locked`,
-        [`order-sms:${orderId}`],
-      )) as Array<{ locked: boolean }>;
-      if (!locked) throw this.busy('Bu SMS hozir yuborilmoqda');
-      return this.send(orderId, input);
-    });
-  }
-
-  private async send(
-    orderId: string,
-    input: ResendInput,
-  ): Promise<OrderSmsDto> {
     const rows = await this.rows(orderId);
     const wanted = String(input.template ?? '').trim();
     const journal = this.view(rows);
@@ -83,10 +68,12 @@ export class OrderSmsJournalService {
     const original = same[0];
     if (!original?.phone)
       throw new NotFoundException('Bu SMS mijozga hali yuborilmagan');
-    if (same.some((row) => stateOf(row.status) === 'PENDING'))
+    if (same.some((row) => stateOf(row) === 'PENDING'))
       throw this.busy('Bu SMS hali yuborish navbatida');
+    if (!this.notifications.channelConfigured(NotificationChannel.SMS))
+      throw this.busy('SMS xizmati sozlanmagan');
     const count = same.length;
-    const notification = await this.notifications.create({
+    const queued = await this.notifications.enqueue({
       recipient: {
         userId: null,
         phone: original.phone,
@@ -102,14 +89,18 @@ export class OrderSmsJournalService {
       },
       dedupeKey: `order:${orderId}:${original.type}:resend:${count}`,
     });
-    const sent = this.view(await this.rows(orderId)).filter(
-      (item) => item.template === type,
-    )[count];
-    if (!sent || sent.state === 'FAILED')
-      throw new ServiceUnavailableException(
-        `SMS yuborilmadi — SMS xizmati sozlanmagan (xabar #${notification.id})`,
-      );
-    return sent;
+    // ikki admin bir vaqtda bosdi — bitta SMS (kalit noyob)
+    if (!queued) throw this.busy('Bu SMS hozir yuborilmoqda');
+    return this.view([
+      ...same,
+      {
+        ...original,
+        createdAt: queued.createdAt,
+        status: DeliveryStatus.PENDING,
+        sentAt: null,
+        updatedAt: queued.createdAt,
+      },
+    ])[count];
   }
 
   private busy(message: string) {
@@ -122,8 +113,8 @@ export class OrderSmsJournalService {
   /** Eskisi birinchi. SMS yetkazish qatori yo‘q xabar ham ko‘rinadi (yuborilmagan). */
   private rows(orderId: string): Promise<SmsRow[]> {
     return this.repository.query(
-      `SELECT n.type, n.title, n.body, n.data, n.dedupe_key AS "dedupeKey", n.created_at AS "createdAt",
-              d.status, d.sent_at AS "sentAt", d.recipient AS phone
+      `SELECT n.type, n.title, n.body, n.data, n.created_at AS "createdAt",
+              d.status, d.sent_at AS "sentAt", d.updated_at AS "updatedAt", d.recipient AS phone
          FROM notification.notification n
          LEFT JOIN notification.notification_delivery d
            ON d.notification_id = n.id AND d.channel = 'sms'
@@ -138,7 +129,7 @@ export class OrderSmsJournalService {
     return rows.map((row) => {
       const n = seen.get(row.type) ?? 0;
       seen.set(row.type, n + 1);
-      const state = stateOf(row.status);
+      const state = stateOf(row);
       const at = row.sentAt ?? row.createdAt;
       return {
         template: row.type,
@@ -166,13 +157,20 @@ export class OrderSmsJournalService {
   }
 }
 
-function stateOf(status: DeliveryStatus | null): OrderSmsState {
-  if (status === DeliveryStatus.SENT) return 'SENT';
+/** Yetkazish shu vaqtdan ko‘p PROCESSING da — jarayon o‘rtada to‘xtagan (SMS so‘rovi 10 s bilan cheklangan). */
+const STUCK_MS = 10 * 60_000;
+
+function stateOf(row: Pick<SmsRow, 'status' | 'updatedAt'>): OrderSmsState {
+  if (row.status === DeliveryStatus.SENT) return 'SENT';
   if (
-    status === DeliveryStatus.PENDING ||
-    status === DeliveryStatus.PROCESSING ||
-    status === DeliveryStatus.RETRY
+    row.status === DeliveryStatus.PENDING ||
+    row.status === DeliveryStatus.RETRY
   )
     return 'PENDING';
+  if (row.status === DeliveryStatus.PROCESSING)
+    return row.updatedAt &&
+      Date.now() - new Date(row.updatedAt).getTime() > STUCK_MS
+      ? 'FAILED'
+      : 'PENDING';
   return 'FAILED';
 }
