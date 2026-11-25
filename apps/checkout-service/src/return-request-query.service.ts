@@ -19,6 +19,7 @@ import {
   moneyOrNull,
 } from '@app/common';
 import { catalogDisplayLookup } from './catalog-display.util';
+import { returnPhotos } from './return-photo.service';
 
 /** Kim ko'ryapti: xaridor faqat o'zinikini, sotuvchi faqat o'z do'koninikini. */
 export interface ReturnViewerScope {
@@ -133,7 +134,11 @@ export class ReturnRequestQueryService {
         ORDER BY id`,
       [id],
     )) as ReturnRequestHistoryDto[];
-    return { ...request, history };
+    return {
+      ...request,
+      history,
+      photos: await returnPhotos(this.dataSource, id),
+    };
   }
 
   private async withItems(

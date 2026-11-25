@@ -18,6 +18,37 @@ export class UploadProductImageDto {
   isCover: boolean = false;
 }
 
+/** Mahsulot rasmi chegarasi (FE-25 §9; BE-08 kreativ rasmi bilan bir xil). */
+export const PRODUCT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const PRODUCT_IMAGE_TYPES: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
+/** `POST admin/products/media`, `POST wholesaler/products/media` (FE-25 §9, FE-23). */
+export class ProductMediaDto {
+  @ApiProperty({
+    example:
+      'http://localhost:9000/marketplace-media/products/1722250000000-uuid.jpg',
+    description:
+      'Mahsulotning `images` / `imageUrl` maydoniga shu URL yuboriladi',
+  })
+  url: string;
+
+  @ApiProperty({ enum: ['IMAGE'], example: 'IMAGE' })
+  type: 'IMAGE';
+
+  @ApiProperty({ example: 'quloqchin-1.jpg' })
+  fileName: string;
+
+  @ApiProperty({ example: 'image/jpeg' })
+  contentType: string;
+
+  @ApiProperty({ example: 245678 })
+  size: number;
+}
+
 export class UploadedFileDto {
   @ApiProperty({ example: 'products/1722250000000-uuid.jpg' })
   objectName: string;

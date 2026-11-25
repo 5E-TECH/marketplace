@@ -10,6 +10,7 @@ describe('ReturnRequestsController (C4.2)', () => {
       refunds as never,
       queries as never,
       { isStaffRequest: jest.fn(async () => false) } as never,
+      {} as never,
     );
     return { controller, returns, refunds, queries };
   }
@@ -58,6 +59,7 @@ describe('ReturnRequestsController (C4.2)', () => {
       refunds as never,
       { list: jest.fn(), get: jest.fn() } as never,
       { isStaffRequest: jest.fn(async () => true) } as never,
+      {} as never,
     );
     await expect(
       controller.adminRefund({

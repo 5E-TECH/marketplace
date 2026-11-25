@@ -4,6 +4,7 @@ import {
   AFFILIATE_DOCUMENT_RPC,
   CREATIVE_RPC,
   CreativeType,
+  RETURN_PHOTO_RPC,
   RpcHttpExceptionFilter,
   UploadFileCommand,
   WHOLESALER_CABINET_RPC,
@@ -97,6 +98,17 @@ export class FileServiceController {
     },
   ) {
     return this.privateFiles.commitAffiliateDocument(data);
+  }
+
+  /** BE-25 (FE-26): qaytarish so‘roviga mijoz rasmi (yopiq). */
+  @MessagePattern({ cmd: RETURN_PHOTO_RPC.STORE })
+  storeReturnPhoto(@Payload() data: { returnId: string; base64: string }) {
+    return this.privateFiles.storeReturnPhoto(data);
+  }
+
+  @MessagePattern({ cmd: RETURN_PHOTO_RPC.REMOVE })
+  removeReturnPhoto(@Payload() data: { objectKey: string }) {
+    return this.privateFiles.removeReturnPhoto(data);
   }
 
   @MessagePattern({ cmd: AFFILIATE_DOCUMENT_RPC.REMOVE })

@@ -136,6 +136,7 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
     );
     orders = new OrderSmsController(
       notifications,
+      {} as never,
       { send: () => of({ ok: true, districtName: 'Qo‘qon shahri' }) } as never,
       { send: () => of({ id: '42', phone: '+998907776655' }) } as never,
     );

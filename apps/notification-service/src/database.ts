@@ -2,6 +2,7 @@ import type { DatabaseDefinition } from '@app/common';
 import { CreateNotificationTables1722686400000 } from './migrations/1722686400000-create-notification-tables';
 import { CreateTemplatesAndBroadcasts1727136000000 } from './migrations/1727136000000-create-templates-and-broadcasts';
 import { CustomerSms1797811200000 } from './migrations/1797811200000-customer-sms';
+import { OrderSmsIndex1799020800000 } from './migrations/1799020800000-order-sms-index';
 import { Notification } from './entities/notification.entity';
 import { NotificationDelivery } from './entities/notification-delivery.entity';
 import { NotificationTemplate } from './entities/notification-template.entity';
@@ -23,5 +24,6 @@ export const NOTIFICATION_DB: DatabaseDefinition = {
     CreateNotificationTables1722686400000,
     CreateTemplatesAndBroadcasts1727136000000,
     CustomerSms1797811200000,
+    OrderSmsIndex1799020800000,
   ],
 };

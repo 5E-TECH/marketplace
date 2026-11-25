@@ -100,6 +100,7 @@ describe('Omborchi ko‘rinishi: optoviklar va mahsulotlar', () => {
     const controller = new AdminProductsController(
       { send } as never,
       {} as never,
+      {} as never,
     );
     const query = { shopId: '15', page: 1, limit: 100 } as never;
     const view = await controller.list(query, user(Role.WAREHOUSE));

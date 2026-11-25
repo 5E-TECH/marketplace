@@ -29,9 +29,11 @@ import {
   ApiOperation,
   ApiProduces,
   ApiResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   AdminOrdersQueryDto,
   AdminOrderActionDto,
@@ -45,11 +47,14 @@ import {
   ElchiResendDto,
   ExportAcceptedDto,
   LabelReprintDto,
+  ORDER_SMS_RPC,
   OrderCommentDto,
   OrderDisputeClosedDto,
   OrderDisputeDto,
   OrderExportRequestDto,
   OrderReasonDto,
+  OrderSmsDto,
+  OrderSmsResendRequestDto,
   Role,
   Roles,
   RmqClient,
@@ -64,6 +69,7 @@ import {
   OrderDetailRpc,
   orderViewer,
   withLeadContext,
+  withSmsJournal,
 } from '../orders/order-view';
 import {
   ADMIN_ORDER_EXAMPLE,
@@ -82,6 +88,8 @@ export class AdminOrdersController {
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
+    @Inject(RmqClient.NOTIFICATION)
+    private readonly notifications: ClientProxy,
     private readonly exports: ExportLinkService,
   ) {}
 
@@ -224,7 +232,43 @@ export class AdminOrdersController {
       { cmd: 'checkout.admin.order-get' },
       { orderId: id, viewer: orderViewer(user) },
     );
-    return withLeadContext(this.lead, order, user);
+    return withSmsJournal(
+      this.notifications,
+      id,
+      await withLeadContext(this.lead, order, user),
+    );
+  }
+
+  @Post('admin/orders/:id/sms/resend')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Mijozga avtomatik SMS ni qo‘lda qayta yuborish (FE-26)',
+    description:
+      'O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. Audit: kim, qaysi shablon. Jurnal — buyurtma kartasidagi `sms`.',
+  })
+  @ApiOkResponse({ type: OrderSmsDto })
+  @ApiNotFoundResponse({ description: 'Bu SMS hali yuborilmagan' })
+  @ApiConflictResponse({ description: 'INVALID_STATE — SMS hali navbatda' })
+  @ApiServiceUnavailableResponse({ description: 'SMS xizmati sozlanmagan' })
+  async resendSms(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Body() dto: OrderSmsResendRequestDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<OrderSmsDto> {
+    const result = await sendRpc<OrderSmsDto>(
+      this.notifications,
+      { cmd: ORDER_SMS_RPC.RESEND },
+      { orderId: id, template: dto.template, actorId: admin.sub },
+    );
+    this.audit(admin.sub, 'order.sms.resend', id, ip, {
+      template: result.template,
+      state: result.state,
+    });
+    return result;
   }
 
   @Post('admin/orders/:id/label/reprints')

@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { PrivateFileService, signatureMatches } from './private-file.service';
+import {
+  photoType,
+  PrivateFileService,
+  signatureMatches,
+} from './private-file.service';
 
 const config = {
   getOrThrow: (key: string) =>
@@ -199,5 +203,55 @@ describe('BE-30 yopiq hujjatlar (file-service)', () => {
         svc.get({ objectKey: `private-uploads/affiliate/77/${ID36}.pdf` }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+  });
+
+  it('BE-25 qaytarish rasmi: tur bosh baytlardan, 5 MB, yopiq kalit; boshqa kalit o‘chirilmaydi', async () => {
+    const webp = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.alloc(4),
+      Buffer.from('WEBPVP8 '),
+    ]);
+    expect(photoType(webp)).toBe('image/webp');
+    expect(photoType(Buffer.from('%PDF-1.7 hujjat'))).toBeNull();
+    const svc = new PrivateFileService(config as never);
+    const client = {
+      putObject: jest.fn(async () => undefined),
+      removeObject: jest.fn(async () => undefined),
+    };
+    (svc as unknown as { client: unknown }).client = client;
+    const stored = await svc.storeReturnPhoto({
+      returnId: '3',
+      base64: webp.toString('base64'),
+    });
+    expect(stored).toMatchObject({ contentType: 'image/webp', size: 16 });
+    expect(stored.objectKey).toMatch(
+      /^private\/returns\/3\/[0-9a-f-]{36}\.webp$/,
+    );
+    await expect(
+      svc.storeReturnPhoto({
+        returnId: '3',
+        base64: Buffer.from('<html>').toString('base64'),
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ errorCode: 'FILE_TYPE_INVALID' }),
+    });
+    await expect(
+      svc.storeReturnPhoto({
+        returnId: '3',
+        base64: Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64'),
+      }),
+    ).rejects.toMatchObject({ status: 413 });
+    await expect(
+      svc.storeReturnPhoto({ returnId: '../1', base64: 'AA==' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await svc.removeReturnPhoto({ objectKey: stored.objectKey });
+    expect(client.removeObject).toHaveBeenCalledTimes(1);
+    for (const objectKey of [
+      'private/wholesaler/15/0f0e8f3a-1b2c-4d5e-8f90-a1b2c3d4e5f6.pdf',
+      'products/1.jpg',
+    ])
+      await expect(svc.removeReturnPhoto({ objectKey })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
   });
 });

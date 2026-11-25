@@ -18,6 +18,7 @@ import { StaffReturnRequest1798243200000 } from './migrations/1798243200000-staf
 import { ElchiWebhookResult1796601600000 } from './migrations/1796601600000-elchi-webhook-result';
 import { OrderItemFiscal1797120000000 } from './migrations/1797120000000-order-item-fiscal';
 import { OrderDisputeLabel1798934400000 } from './migrations/1798934400000-order-dispute-label';
+import { ReturnPhoto1799020800000 } from './migrations/1799020800000-return-photo';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { OutboxEvent } from '@app/common';
@@ -49,5 +50,6 @@ export const CHECKOUT_DB: DatabaseDefinition = {
     ElchiWebhookResult1796601600000,
     OrderItemFiscal1797120000000,
     OrderDisputeLabel1798934400000,
+    ReturnPhoto1799020800000,
   ],
 };

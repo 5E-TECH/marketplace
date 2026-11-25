@@ -280,10 +280,11 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
     }
   });
 
-  it('migratsiya qaytariladi va qayta o‘tadi', async () => {
-    await db.undoLastMigration();
+  it('migratsiyalar qaytariladi va qayta o‘tadi', async () => {
+    await db.undoLastMigration(); // return_photo
+    await db.undoLastMigration(); // order_dispute, label_reprint
     const tables = (await db.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'checkout' AND table_name IN ('order_dispute','label_reprint')`,
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'checkout' AND table_name IN ('order_dispute','label_reprint','return_photo')`,
     )) as unknown[];
     expect(tables).toEqual([]);
     await db.runMigrations();
@@ -567,8 +568,21 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
     expect(await service().get(id, ADMIN, NOW)).toMatchObject({
       statusDetail: 'Otabek N.',
       picking: { by: 'Otabek N.', from: '2027-01-14T09:36:00.000Z', to: null },
-      returnRequest: { by: 'Nodira K.', reason: 'Rangi boshqa keldi' },
+      returnRequest: {
+        by: 'Nodira K.',
+        reason: 'Rangi boshqa keldi',
+        status: 'SUBMITTED',
+        photos: [],
+      },
     });
+    // mijoz rasmi faqat admin kartasida
+    const supervisor = await service().get(
+      id,
+      { kind: 'SUPERVISOR', userId: '61' },
+      NOW,
+    );
+    expect(supervisor).toHaveProperty('returnRequest.status', 'SUBMITTED');
+    expect(supervisor).not.toHaveProperty('returnRequest.photos');
   });
 
   it('qisqacha (lid kartasi uchun) tashqi nomlarsiz', async () => {

@@ -4,12 +4,15 @@ import { Client } from 'minio';
 import { randomUUID } from 'node:crypto';
 import {
   CREATIVE_FOLDER,
+  PRODUCT_IMAGE_MAX_BYTES,
   PUBLIC_MEDIA_FOLDERS,
   UploadFileCommand,
   UploadedFileDto,
 } from '@app/common';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+/** Mahsulot rasmi — BE-08 kreativ rasmi bilan bir xil chegara. */
+const MAX_PRODUCT_IMAGE_SIZE = PRODUCT_IMAGE_MAX_BYTES;
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -57,8 +60,14 @@ export class FileServiceService implements OnModuleInit {
     if (buffer.length === 0) {
       throw new BadRequestException('Fayl bo‘sh bo‘lishi mumkin emas');
     }
-    if (buffer.length > MAX_IMAGE_SIZE) {
-      throw new BadRequestException('Fayl hajmi 5 MB dan oshmasligi kerak');
+    const maxSize =
+      (command.folder ?? 'products') === 'products'
+        ? MAX_PRODUCT_IMAGE_SIZE
+        : MAX_IMAGE_SIZE;
+    if (buffer.length > maxSize) {
+      throw new BadRequestException(
+        `Fayl hajmi ${maxSize / 1024 / 1024} MB dan oshmasligi kerak`,
+      );
     }
     if (command.size !== buffer.length) {
       throw new BadRequestException('Fayl hajmi noto‘g‘ri');

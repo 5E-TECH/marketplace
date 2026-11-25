@@ -10,6 +10,7 @@ import { Broadcast } from './entities/broadcast.entity';
 import { NOTIFICATION_DB } from './database';
 import { NotificationService } from './notification.service';
 import { OrderSmsController } from './order-sms.controller';
+import { OrderSmsJournalService } from './order-sms-journal.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const NOTIFICATION_SCHEMA_TEST_LOCK = 2_304_024;
@@ -97,6 +98,7 @@ describeWithPostgres('BE-24 SMS (PostgreSQL)', () => {
     );
     controller = new OrderSmsController(
       notifications,
+      new OrderSmsJournalService(ds.getRepository(Notification), notifications),
       { send: () => of({ ok: true, districtName: 'Qo‘qon shahri' }) } as never,
       { send: () => of({ id: '42', phone: '+998907776655' }) } as never,
     );
@@ -213,6 +215,7 @@ describeWithPostgres('BE-24 SMS (PostgreSQL)', () => {
     };
     const down = new OrderSmsController(
       notifications,
+      {} as never,
       { send: () => of({ ok: false }) } as never,
       {
         send: () => throwError(() => ({ status: 500, message: 'timeout' })),
@@ -223,6 +226,7 @@ describeWithPostgres('BE-24 SMS (PostgreSQL)', () => {
     });
     const missing = new OrderSmsController(
       notifications,
+      {} as never,
       { send: () => of({ ok: false }) } as never,
       {
         send: () => throwError(() => ({ status: 404, message: 'yo‘q' })),
@@ -230,5 +234,91 @@ describeWithPostgres('BE-24 SMS (PostgreSQL)', () => {
     );
     await expect(missing.onWithdrawalPaid(paid)).resolves.toBeUndefined();
     expect(sms.send).not.toHaveBeenCalled();
+  });
+
+  describe('BE-25 (FE-26): SMS jurnali va qayta yuborish', () => {
+    const resend = (template: string) =>
+      controller.resend({ orderId: '1284', template, actorId: '7' });
+
+    it('jurnal: yuborilgani vaqti bilan, boshqa buyurtma va kabinet xabari aralashmaydi', async () => {
+      await controller.onOrderStatus(event(LeadOrderStatus.CONFIRMED));
+      await controller.onOrderStatus(
+        event(LeadOrderStatus.CONFIRMED, {
+          orderId: '1285',
+          affiliateId: '42',
+        } as never),
+      );
+      const journal = await controller.list({ orderId: '1284' });
+      expect(journal).toEqual([
+        {
+          template: 'order_confirmed',
+          title: 'Buyurtma tasdiqlandi',
+          at: expect.any(String),
+          detail: null,
+          state: 'SENT',
+        },
+      ]);
+    });
+
+    it('shablon kodi yoki jurnaldagi sarlavha bilan: o‘sha matn va raqam; sarlavhalar takrorlanmaydi', async () => {
+      await controller.onOrderStatus(event(LeadOrderStatus.CONFIRMED));
+      const first = sms.send.mock.calls[0][0] as { body: string };
+      await expect(resend('Buyurtma tasdiqlandi')).resolves.toMatchObject({
+        template: 'order_confirmed',
+        title: 'Buyurtma tasdiqlandi — qayta yuborildi',
+        state: 'SENT',
+      });
+      await expect(
+        resend('Buyurtma tasdiqlandi — qayta yuborildi'),
+      ).resolves.toMatchObject({
+        title: 'Buyurtma tasdiqlandi — qayta yuborildi (2)',
+      });
+      await expect(resend('order_confirmed')).resolves.toMatchObject({
+        title: 'Buyurtma tasdiqlandi — qayta yuborildi (3)',
+      });
+      expect(sms.send).toHaveBeenCalledTimes(4);
+      for (const [message] of sms.send.mock.calls)
+        expect(message).toMatchObject({
+          recipient: '+998901234567',
+          body: first.body,
+        });
+      const rows = (await ds.query(
+        `SELECT data->>'resentBy' AS by FROM notification.notification ORDER BY id`,
+      )) as Array<{ by: string | null }>;
+      expect(rows.map((row) => row.by)).toEqual([null, '7', '7', '7']);
+    });
+
+    it('yuborilmagan shablon — 404; navbatda turgani — 409; provayder sozlanmagan — 503', async () => {
+      await controller.onOrderStatus(event(LeadOrderStatus.CONFIRMED));
+      await expect(resend('order_in_transit')).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(resend('boshqa')).rejects.toMatchObject({ status: 404 });
+
+      sms.send.mockRejectedValueOnce(new Error('provayder'));
+      await expect(resend('order_confirmed')).resolves.toMatchObject({
+        state: 'PENDING',
+        detail: 'yuborish navbatida',
+      });
+      await expect(resend('order_confirmed')).rejects.toMatchObject({
+        status: 409,
+      });
+      await ds.query(
+        `UPDATE notification.notification_delivery SET status = 'SENT', sent_at = now()`,
+      );
+      sms.isConfigured = () => false;
+      await expect(resend('order_confirmed')).rejects.toMatchObject({
+        status: 503,
+      });
+    });
+
+    it('bir vaqtda ikki admin — bitta SMS', async () => {
+      await controller.onOrderStatus(event(LeadOrderStatus.CONFIRMED));
+      await Promise.allSettled([
+        resend('order_confirmed'),
+        resend('order_confirmed'),
+      ]);
+      expect(sms.send).toHaveBeenCalledTimes(2);
+    });
   });
 });

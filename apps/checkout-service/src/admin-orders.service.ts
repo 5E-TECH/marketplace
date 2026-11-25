@@ -48,6 +48,7 @@ import {
   maskPhone,
   SellerOrdersService,
 } from './seller-orders.service';
+import { returnPhotos } from './return-photo.service';
 
 const ID = /^[1-9]\d{0,18}$/;
 /** Nomlar — ko‘rinish ma’lumoti: javob bo‘lmasa ro‘yxat kod yoki bo‘sh nom bilan ochiladi [taklif]. */
@@ -300,8 +301,14 @@ export class AdminOrdersService {
             refresh: boolean;
           }>
         >,
-        this.one<{ at: Date; by: string | null; reason: string }>(
-          `SELECT created_at AS at, created_by::text AS by,
+        this.one<{
+          id: string;
+          status: string;
+          at: Date;
+          by: string | null;
+          reason: string;
+        }>(
+          `SELECT id::text, status, created_at AS at, created_by::text AS by,
                   COALESCE(NULLIF(btrim(comment), ''), reason) AS reason
              FROM checkout.return_request
             WHERE sales_order_id = $1 ORDER BY id DESC LIMIT 1`,
@@ -314,6 +321,11 @@ export class AdminOrdersService {
           [id],
         ),
       ]);
+    // rasm — mijozning shaxsiy ma’lumoti: operatorga berilmaydi
+    const photos =
+      returnRequest && viewer.kind === 'ADMIN'
+        ? await returnPhotos(this.dataSource, returnRequest.id)
+        : [];
     const history = lead.statusHistory as Array<{
       toStatus: string;
       accepted: boolean;
@@ -489,9 +501,12 @@ export class AdminOrdersService {
           : null,
       returnRequest: returnRequest
         ? {
+            id: returnRequest.id,
+            status: returnRequest.status,
             at: new Date(returnRequest.at).toISOString(),
             by: returnRequest.by ? nameOf(returnRequest.by) : null,
             reason: returnRequest.reason,
+            ...(viewer.kind === 'ADMIN' ? { photos } : {}),
           }
         : null,
       dispute:

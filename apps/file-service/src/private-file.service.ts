@@ -19,7 +19,9 @@ import {
   PrivateDocumentContentType,
   PrivateFileVerified,
   PrivateUploadPolicyResultDto,
+  RETURN_PHOTO_MAX_BYTES,
   SelfEmployedDocumentDto,
+  StoredReturnPhoto,
 } from '@app/common';
 
 /** Yopiq yuklamalar papkasi — tasdiqlanmagani 1 kunda o‘chadi (lifecycle — CreativeFileService). */
@@ -40,7 +42,17 @@ const UPLOAD_KEY = new RegExp(
 export const AFFILIATE_FOLDER = 'private/affiliate';
 /** Hali yuborilmagan ma’lumotnoma — 1 kunda o‘chadi (`private-uploads` lifecycle). */
 export const AFFILIATE_UPLOAD_FOLDER = `${PRIVATE_UPLOAD_FOLDER}/affiliate`;
-const FINAL_KEY = new RegExp(
+/** BE-25 (FE-26): qaytarish so‘roviga mijoz rasmlari — yopiq. */
+export const RETURN_PHOTO_FOLDER = 'private/returns';
+const RETURN_PHOTO_KEY = new RegExp(
+  `^${RETURN_PHOTO_FOLDER}/\\d{1,19}/[0-9a-f-]{36}\\.(?:jpg|png|webp)$`,
+);
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+const DOCUMENT_KEY = new RegExp(
   `^(?:${PRIVATE_FOLDER}|${AFFILIATE_FOLDER})/\\d{1,19}/[0-9a-f-]{36}\\.(?:pdf|jpg|png)$`,
 );
 const DOCUMENT_ID = /^[0-9a-f-]{36}\.(?:pdf|jpg|png)$/;
@@ -179,12 +191,12 @@ export class PrivateFileService {
     return { objectKey: finalKey, contentType, size: upload.size };
   }
 
-  /** Yopiq hujjat (faqat `private/wholesaler/…` va `private/affiliate/…`) — base64; gateway imzoni yoki egasini tekshirgandan keyin chaqiradi. */
+  /** Yopiq hujjat (faqat `private/wholesaler/…`, `private/affiliate/…` va `private/returns/…`) — base64; gateway imzoni yoki egasini tekshirgandan keyin chaqiradi. */
   async get(input: {
     objectKey: string;
   }): Promise<{ contentType: string; size: number; base64: string }> {
     const objectKey = String(input?.objectKey ?? '');
-    if (!FINAL_KEY.test(objectKey))
+    if (!DOCUMENT_KEY.test(objectKey) && !RETURN_PHOTO_KEY.test(objectKey))
       throw new BadRequestException('Fayl kaliti noto‘g‘ri');
     const stat = await this.statOrNull(objectKey);
     if (!stat) throw new NotFoundException('Fayl topilmadi');
@@ -310,9 +322,58 @@ export class PrivateFileService {
     const affiliateId = this.affiliateId(input?.affiliateId);
     const objectKey = String(input?.objectKey ?? '');
     if (
-      !FINAL_KEY.test(objectKey) ||
+      !DOCUMENT_KEY.test(objectKey) ||
       !objectKey.startsWith(`${AFFILIATE_FOLDER}/${affiliateId}/`)
     )
+      throw new BadRequestException('Fayl kaliti noto‘g‘ri');
+    await this.removeQuietly(objectKey);
+    return { removed: true };
+  }
+
+  // ------------------------------------------------------------------ qaytarish rasmlari (BE-25 8-tur)
+
+  /** Rasm turi bosh baytlardan (JPEG, PNG, WEBP); nomi saqlanmaydi. */
+  async storeReturnPhoto(input: {
+    returnId: string;
+    base64: string;
+  }): Promise<StoredReturnPhoto> {
+    const returnId = String(input?.returnId ?? '');
+    if (!ID.test(returnId))
+      throw new BadRequestException('Qaytarish so‘rovi ID si noto‘g‘ri');
+    const body = Buffer.from(String(input?.base64 ?? ''), 'base64');
+    if (!body.length)
+      throw new BadRequestException({
+        message: 'Rasm tanlanmagan',
+        errorCode: ErrorCode.FILE_REQUIRED,
+      });
+    if (body.length > RETURN_PHOTO_MAX_BYTES)
+      throw new PayloadTooLargeException({
+        message: 'Rasm 5 MB dan katta',
+        errorCode: ErrorCode.FILE_TOO_LARGE,
+      });
+    const contentType = photoType(body.subarray(0, 16));
+    if (!contentType)
+      throw new BadRequestException({
+        message: 'Faqat JPG, PNG yoki WEBP rasm',
+        errorCode: ErrorCode.FILE_TYPE_INVALID,
+      });
+    const objectKey = `${RETURN_PHOTO_FOLDER}/${returnId}/${randomUUID()}${PHOTO_EXTENSIONS[contentType]}`;
+    await this.client
+      .putObject(this.bucket, objectKey, body, body.length, {
+        'Content-Type': contentType,
+      })
+      .catch((error) => {
+        throw this.unavailable('saqlash', error);
+      });
+    return { objectKey, contentType, size: body.length };
+  }
+
+  /** So‘rovga yozilmay qolgan rasm qolmasin. */
+  async removeReturnPhoto(input: {
+    objectKey: string;
+  }): Promise<{ removed: boolean }> {
+    const objectKey = String(input?.objectKey ?? '');
+    if (!RETURN_PHOTO_KEY.test(objectKey))
       throw new BadRequestException('Fayl kaliti noto‘g‘ri');
     await this.removeQuietly(objectKey);
     return { removed: true };
@@ -384,6 +445,17 @@ export class PrivateFileService {
       );
     }
   }
+}
+
+/** JPEG, PNG yoki WEBP — bosh baytlardan; boshqa — null. */
+export function photoType(head: Buffer): string | null {
+  if (signatureMatches(head, 'image/jpeg')) return 'image/jpeg';
+  if (signatureMatches(head, 'image/png')) return 'image/png';
+  return head.length >= 12 &&
+    head.toString('ascii', 0, 4) === 'RIFF' &&
+    head.toString('ascii', 8, 12) === 'WEBP'
+    ? 'image/webp'
+    : null;
 }
 
 /** PDF — `%PDF-`, JPEG — FF D8 FF, PNG — imzosi. */

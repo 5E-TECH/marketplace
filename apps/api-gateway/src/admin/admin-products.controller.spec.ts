@@ -6,13 +6,16 @@ describe('AdminProductsController (C4.5)', () => {
   const setup = () => {
     const catalog = jest.fn(() => of({ id: '10' }));
     const identity = jest.fn(() => of({}));
+    const files = jest.fn();
     return {
       controller: new AdminProductsController(
         { send: catalog } as never,
         { send: identity } as never,
+        { send: files } as never,
       ),
       catalog,
       identity,
+      files,
     };
   };
 
@@ -21,6 +24,35 @@ describe('AdminProductsController (C4.5)', () => {
       Role.ADMIN,
       Role.SUPERADMIN,
     ]);
+  });
+
+  it('media: rasm ochiq `products` papkasiga, URL qaytadi; bo‘sh fayl — 400 FILE_REQUIRED', async () => {
+    const { controller, files } = setup();
+    files.mockReturnValue(
+      of({ url: 'https://m/products/1.jpg', mimeType: 'image/jpeg', size: 3 }),
+    );
+    await expect(
+      controller.media({
+        originalname: Buffer.from('Қулоқчин.jpg', 'utf8').toString('latin1'),
+        mimetype: 'image/jpeg',
+        size: 3,
+        buffer: Buffer.from([0xff, 0xd8, 0xff]),
+      } as never),
+    ).resolves.toEqual({
+      url: 'https://m/products/1.jpg',
+      type: 'IMAGE',
+      fileName: 'Қулоқчин.jpg',
+      contentType: 'image/jpeg',
+      size: 3,
+    });
+    expect(files).toHaveBeenCalledWith(
+      { cmd: 'file.upload' },
+      expect.objectContaining({ folder: 'products', size: 3 }),
+    );
+    await expect(controller.media(undefined)).rejects.toMatchObject({
+      status: 400,
+      response: expect.objectContaining({ errorCode: 'FILE_REQUIRED' }),
+    });
   });
 
   it('list filterlarni catalog servisiga uzatadi', async () => {

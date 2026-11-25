@@ -26,6 +26,7 @@ import {
   AuthErrorResponseDto,
   CurrentUser,
   JwtUser,
+  RETURN_PHOTO_RPC,
   ReturnApproveDto,
   ReturnRejectDto,
   ReturnRequestDetailsDto,
@@ -34,7 +35,10 @@ import {
   Role,
   Roles,
   sendRpc,
+  SignedLinkDto,
 } from '@app/common';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { SignedLinkService } from '../wholesaler-cabinet/signed-link';
 
 /**
  * C4.2 — admin: barcha qaytarish so'rovlari, nizo yechish (sotuvchi qarorini
@@ -47,6 +51,7 @@ export class AdminReturnsController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    private readonly links: SignedLinkService,
   ) {}
 
   @Get()
@@ -76,6 +81,29 @@ export class AdminReturnsController {
       { cmd: 'checkout.admin.return-get' },
       { returnId: id },
     );
+  }
+
+  @Post(':id/photos/:photoId/link')
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Mijoz rasmiga imzolangan havola (10 daqiqa)',
+    description: 'Auditga yoziladi: kim, qaysi so‘rov, qaysi rasm.',
+  })
+  @ApiResponse({ status: 201, type: SignedLinkDto })
+  @ApiNotFoundResponse({ description: 'So‘rov yoki rasm topilmadi' })
+  async photoLink(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Param('photoId', ParseLeadIdPipe) photoId: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ): Promise<SignedLinkDto> {
+    const photo = await sendRpc<{ id: string }>(
+      this.checkout,
+      { cmd: RETURN_PHOTO_RPC.GET },
+      { photoId, returnId: id },
+    );
+    this.audit(admin.sub, 'return.photo.view', id, ip, { photoId: photo.id });
+    return this.links.sign({ t: 'return-photo', id: photo.id });
   }
 
   @Post(':id/approve')
