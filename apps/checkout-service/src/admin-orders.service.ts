@@ -620,11 +620,15 @@ export class AdminOrdersService {
     );
     const item = result.items.find((i) => i.shipmentId === row.shipmentId);
     if (!item)
-      throw new ServiceUnavailableException(
-        result.notFound.includes(row.shipmentId)
+      return {
+        orderId: id,
+        elchiStatus: null,
+        status: row.status,
+        applied: false,
+        detail: result.notFound.includes(row.shipmentId)
           ? 'Elchi bu posilkani topmadi'
-          : `Elchi javob bermadi: ${result.failed[0]?.error ?? 'noma’lum xato'}`,
-      );
+          : 'Elchi javob bermadi — keyinroq urinib ko‘ring',
+      };
     const raw = item.status.trim().toLowerCase();
     const status = ELCHI_STATUS_ALIASES[raw];
     if (!status || !REFRESHABLE.has(status))

@@ -55,13 +55,15 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
       of(
         pattern.cmd === ELCHI_CHECK_RPC.SHIPMENTS_STATUS
           ? {
-              items: data.shipmentIds!.map((shipmentId) => ({
-                shipmentId,
-                status: elchiStatus,
-                marketPaidAmount: 0,
-                extraCost: 0,
-              })),
-              notFound: [],
+              items: elchiStatus
+                ? data.shipmentIds!.map((shipmentId) => ({
+                    shipmentId,
+                    status: elchiStatus,
+                    marketPaidAmount: 0,
+                    extraCost: 0,
+                  }))
+                : [],
+              notFound: elchiStatus ? [] : data.shipmentIds!,
               failed: [],
             }
           : [
@@ -731,6 +733,13 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
           applied: false,
         });
       }
+      elchiStatus = '';
+      expect(await service().refreshFromElchi(id, NOW)).toMatchObject({
+        elchiStatus: null,
+        status: LeadOrderStatus.HANDED_TO_ELCHI,
+        applied: false,
+        detail: 'Elchi bu posilkani topmadi',
+      });
       const packed = await addOrder({ status: 'PACKED' });
       await expect(
         service().refreshFromElchi(packed, NOW),
