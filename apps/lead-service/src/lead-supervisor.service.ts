@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import {
   CatalogOfferSnapshot,
   isLeadBigintId,
@@ -46,6 +46,23 @@ const QUEUE_SQL = `
          AND (l.operator_id IS NULL OR l.next_attempt_at <= $2))
        OR (l.status = 'NEW' AND (l.next_attempt_at IS NULL OR l.next_attempt_at <= $1))
      )`;
+
+/** Berilgan lidlarning umumiy navbatdagi o‘rni (BE-25, FE-26): navbatda bo‘lmagan lid natijada yo‘q. */
+export async function queuePositions(
+  manager: EntityManager,
+  leadIds: string[],
+  now: Date,
+): Promise<Map<string, number>> {
+  if (!leadIds.length) return new Map();
+  const grace = new Date(
+    now.getTime() - QUEUE_RULES.callbackGraceMinutes * MINUTE,
+  );
+  const rows = (await manager.query(
+    `SELECT q.id::text AS id, q.pos::int AS pos FROM (${QUEUE_SQL}) q WHERE q.id = ANY($3::bigint[])`,
+    [now, grace, leadIds],
+  )) as Array<{ id: string; pos: number }>;
+  return new Map(rows.map((r) => [r.id, r.pos]));
+}
 
 /**
  * Nazoratchi paneli (OPR-8; BE-35): qizil ro‘yxat va lidni boshqa operatorga o‘tkazish.
@@ -150,6 +167,8 @@ export class LeadSupervisorService {
    *   bron 5 ta chegaraga kiradi [taklif, dizayn «1/5 → 2/5»], chegara to‘lgan bo‘lsa — 409 (6-qoida);
    * - navbatdagi, qayta qo‘ng‘iroqdagi va boshqa operator bron qilgan lid o‘tkaziladi; yopilgan, tekshiruvdagi
    *   va dublikat lid — 409;
+   * - mijoz aytgan vaqti hali kelmagan qo‘ng‘iroq (4, 8-qoidalar) ham o‘tkaziladi: holati va vaqti saqlanadi, egasi va
+   *   eslatmasi yangi operatorda, bron chegarasiga kirmaydi (dizayn admin-lidlar «O‘tkazish — 2 ta lid»; FE-26);
    * - lid tarixiga kim, qachon, kimdan kimga va sabab yoziladi.
    * Qulf tartibi `takeNext` bilan bir xil: operator qulfi → lid qatori.
    */
@@ -201,38 +220,40 @@ export class LeadSupervisorService {
               : 'Bu lidni o‘tkazib bo‘lmaydi: navbatda yoki operatorda emas',
           errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE,
         });
-      // Mijoz aytgan vaqti hali kelmagan qo‘ng‘iroq egasida qoladi (4, 8-qoidalar): o‘tkazilsa egasi va eslatmasi yo‘qolardi
-      if (
+      const from = lead.status;
+      const fromOperator = lead.operatorId;
+      const scheduled =
         lead.status === LeadStatus.CALLBACK &&
         lead.operatorId !== null &&
         lead.nextAttemptAt !== null &&
-        lead.nextAttemptAt.getTime() > now.getTime()
-      )
-        throw new ConflictException({
-          message:
-            'Rejalashtirilgan qo‘ng‘iroq vaqti hali kelmagan — lid operatorida qoladi',
-          errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE,
+        lead.nextAttemptAt.getTime() > now.getTime();
+      if (scheduled) {
+        if (fromOperator === target)
+          throw new ConflictException({
+            message: 'Lid allaqachon shu operatorda',
+            errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE,
+          });
+        lead.operatorId = target;
+        lead.callbackRemindedAt = null; // 8-qoida eslatmasi yangi operatorga ham boradi
+      } else {
+        const active = await leads.count({
+          where: {
+            operatorId: target,
+            status: LeadStatus.BOOKED,
+            bookedFromCallback: false,
+            isDeleted: false,
+          },
         });
-      const active = await leads.count({
-        where: {
-          operatorId: target,
-          status: LeadStatus.BOOKED,
-          bookedFromCallback: false,
-          isDeleted: false,
-        },
-      });
-      if (active >= QUEUE_RULES.maxNewBookings)
-        throw new ConflictException({
-          message: `Operatorda ${QUEUE_RULES.maxNewBookings} ta bron bor — boshqasini tanlang`,
-          errorCode: LeadErrorCode.BOOKING_LIMIT_REACHED,
-        });
-
-      const from = lead.status;
-      const fromOperator = lead.operatorId;
-      lead.status = LeadStatus.BOOKED;
-      lead.operatorId = target;
-      lead.bookedUntil = bookingUntil(now);
-      lead.bookedFromCallback = false;
+        if (active >= QUEUE_RULES.maxNewBookings)
+          throw new ConflictException({
+            message: `Operatorda ${QUEUE_RULES.maxNewBookings} ta bron bor — boshqasini tanlang`,
+            errorCode: LeadErrorCode.BOOKING_LIMIT_REACHED,
+          });
+        lead.status = LeadStatus.BOOKED;
+        lead.operatorId = target;
+        lead.bookedUntil = bookingUntil(now);
+        lead.bookedFromCallback = false;
+      }
       await leads.save(lead);
       const history = m.getRepository(LeadHistory);
       const row = await history.save(

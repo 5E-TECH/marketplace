@@ -65,6 +65,7 @@ export * from './dto/lead-affiliate.dto';
 export * from './dto/lead-operator.dto';
 export * from './dto/lead-events.dto';
 export * from './dto/lead-fraud.dto';
+export * from './dto/lead-admin.dto';
 export * from './dto/lead-attempt-call.dto';
 export * from './dto/lead-telephony.dto';
 export * from './dto/affiliate-income.dto';
@@ -111,6 +112,7 @@ export * from './security/redact-url';
 export * from './messaging/reliable-rmq.server';
 export * from './messaging/rmq.util';
 export * from './messaging/rpc.util';
+export * from './identity/user-names.client';
 export * from './health/service-health.module';
 
 // Idempotency / Outbox / Activity-log

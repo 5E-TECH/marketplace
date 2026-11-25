@@ -354,6 +354,11 @@ export class LeadQueueService {
       this.userNames && states.length
         ? await this.userNames.resolve(states.map((s) => s.operatorId))
         : (id: string) => `#${id}`;
+    const ids = states.map((s) => s.operatorId);
+    const [scheduled, activity] = await Promise.all([
+      this.scheduledCalls(ids),
+      ids.length ? this.calls?.activity(ids) : undefined,
+    ]);
     const operators = await Promise.all(
       states.map(async (s) => ({
         operatorId: s.operatorId,
@@ -363,9 +368,27 @@ export class LeadQueueService {
           this.db.manager,
           s.operatorId,
         ),
+        maxBookings: QUEUE_RULES.maxNewBookings,
+        scheduledCalls: scheduled.get(s.operatorId) ?? 0,
+        activity: activity?.get(s.operatorId) ?? null,
       })),
     );
     return { newLeads, dueCallbacks, booked, operators };
+  }
+
+  /** Mijoz aytgan vaqtdagi (egasi bor) qo‘ng‘iroqlar soni — operator bo‘yicha (BE-25, FE-26). */
+  private async scheduledCalls(
+    operatorIds: string[],
+  ): Promise<Map<string, number>> {
+    if (!operatorIds.length) return new Map();
+    const rows = (await this.db.query(
+      `SELECT operator_id::text AS id, count(*)::int AS n FROM lead.lead
+        WHERE status = 'CALLBACK' AND operator_id = ANY($1::bigint[])
+          AND is_deleted = false AND review_reason IS NULL AND merged_into_id IS NULL
+        GROUP BY operator_id`,
+      [operatorIds],
+    )) as Array<{ id: string; n: number }>;
+    return new Map(rows.map((r) => [r.id, r.n]));
   }
 
   /**

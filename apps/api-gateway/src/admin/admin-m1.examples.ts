@@ -19,13 +19,29 @@ export const ADMIN_ORDERS_PAGE_EXAMPLE = {
       source: 'LANDING',
       leadId: '7001',
       affiliateId: '77',
-      phoneMasked: '+998 90 *** ** 67',
+      phoneMasked: '****4567',
+      // BE-25 (FE-26)
+      regionName: 'Toshkent shahri',
+      districtName: 'Yunusobod tumani',
+      whereDeliver: 'ADDRESS',
+      productId: '501',
+      productName: 'Simsiz quloqchinlar',
+      quantity: 1,
+      linesCount: 1,
+      streamCode: 'k7m2qa',
+      affiliateName: 'Jasur T.',
+      statusAt: '2026-12-01T09:14:00.000Z',
+      statusDetail: 'ertangi to‘lqin',
+      trackNumber: '880113',
+      elchiState: 'CREATED',
+      confirmedBy: { name: 'Dilnoza R.', at: '2026-12-01T09:14:00.000Z' },
     },
   ],
   total: 1,
   page: 1,
   limit: 20,
   totalPages: 1,
+  counts: { ALL: 1, CONFIRMED: 1 },
 };
 
 export const ADMIN_ORDER_EXAMPLE = {
@@ -100,11 +116,99 @@ export const ADMIN_ORDER_EXAMPLE = {
         actorType: 'SYSTEM',
         actorId: null,
         actorRole: null,
+        actorName: 'Tizim',
         reason: null,
         createdAt: '2026-12-01T09:14:00.000Z',
       },
     ],
   },
+  // BE-25 (FE-26)
+  phoneMasked: '****4567',
+  statusAt: '2026-12-01T09:14:00.000Z',
+  statusDetail: 'ertangi to‘lqin',
+  shipDate: '2026-12-02',
+  customer: {
+    regionName: 'Toshkent shahri',
+    districtName: 'Yunusobod tumani',
+    addressLine: 'Yunusobod tumani, 4-mavze, 12-uy',
+    addressConfirmedBy: {
+      name: 'Dilnoza R.',
+      at: '2026-12-01T09:12:30.000Z',
+    },
+    consentAt: '2026-12-01T09:02:00.000Z',
+    original: {
+      regionName: 'Toshkent shahri',
+      districtName: 'Yunusobod tumani',
+      addressLine: '4-mavze',
+      whereDeliver: 'ADDRESS',
+    },
+    addressEditedBy: { name: 'Dilnoza R.', at: '2026-12-01T09:12:00.000Z' },
+  },
+  stream: {
+    code: 'k7m2qa',
+    affiliateName: 'Jasur T.',
+    affiliateId: '77',
+    sub1: 'fb-reels-1',
+    leadCreatedAt: '2026-12-01T09:02:00.000Z',
+  },
+  confirmedByActor: { name: 'Dilnoza R.', at: '2026-12-01T09:14:00.000Z' },
+  parcel: {
+    track: '880113',
+    state: 'CREATED',
+    error: null,
+    act: null,
+    label: { printedAt: '2026-12-01T10:40:00.000Z', by: 'Nodira K.', count: 1 },
+    lastWebhookAt: null,
+  },
+  elchiEvents: [],
+  picking: {
+    by: null,
+    wave: '2026-12-02',
+    from: null,
+    to: null,
+    scanned: 0,
+    total: 1,
+    barcode: 'SQ-501',
+    cell: null,
+    reservedAt: '2026-12-01T09:14:00.000Z',
+    releasedAt: null,
+  },
+  cancel: null,
+  returnRequest: null,
+  dispute: null,
+  postbacks: [],
+};
+
+/** `GET /operator/orders` (BE-25, FE-26): admin ro‘yxati, sotuvchi va sahifasiz. */
+export const OPERATOR_ORDERS_PAGE_EXAMPLE = {
+  ...ADMIN_ORDERS_PAGE_EXAMPLE,
+  items: ADMIN_ORDERS_PAGE_EXAMPLE.items.map((item) => ({
+    ...item,
+    affiliateId: null,
+    affiliateName: null,
+    streamCode: null,
+  })),
+  facets: { products: [{ id: '501', name: 'Simsiz quloqchinlar' }] },
+};
+
+/** `GET /operator/orders/{id}`: telefon, narx tarkibi, sotuvchi va sahifa yo‘q. */
+export const OPERATOR_ORDER_EXAMPLE = {
+  ...ADMIN_ORDER_EXAMPLE,
+  sellerOrders: ADMIN_ORDER_EXAMPLE.sellerOrders.map((seller) => ({
+    ...seller,
+    shopId: null,
+    items: seller.items.map((item) => ({ ...item, priceSnapshot: null })),
+  })),
+  lead: {
+    ...ADMIN_ORDER_EXAMPLE.lead,
+    customerPhone: null,
+    affiliateId: null,
+    streamId: null,
+    wholesalerId: null,
+    deliveryCost: null,
+    deliveryEmbedded: null,
+  },
+  stream: null,
 };
 
 const PRODUCT_SHOP_EXAMPLE = {

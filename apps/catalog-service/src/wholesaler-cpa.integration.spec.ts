@@ -205,6 +205,8 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
         bankName: WHOLESALER.bankName,
         bankAccount: '20208000900123456001',
         bankMfo: '01158',
+        contractNumber: WHOLESALER.contractNumber,
+        contractDate: WHOLESALER.contractDate,
       },
     ]);
     expect(plain).not.toHaveProperty('contractNumber');

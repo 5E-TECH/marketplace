@@ -326,8 +326,9 @@ export class SiteOrderService {
         ]);
         if (decision.kind === 'REOPEN_AND_MERGE') {
           const from = root.status;
+          const wasSpam = root.reviewReason !== null;
           root.status = LeadStatus.NEW;
-          if (heldForReview) root.reviewReason = LeadReviewReason.IP_RATE;
+          root.reviewReason = heldForReview ? LeadReviewReason.IP_RATE : null;
           root.attempts = 0;
           root.nextAttemptAt = now;
           root.expiresAt = contactDeadline(now);
@@ -339,7 +340,9 @@ export class SiteOrderService {
               leadId: root.id,
               fromStatus: from,
               toStatus: LeadStatus.NEW,
-              note: 'Qayta ochildi: mijoz saytdan yana buyurtma berdi (10-qoida)',
+              note: wasSpam
+                ? 'Qayta ochildi: mijoz saytdan yana buyurtma berdi (10-qoida); avval spam deb yopilgan edi'
+                : 'Qayta ochildi: mijoz saytdan yana buyurtma berdi (10-qoida)',
             }),
           );
         }

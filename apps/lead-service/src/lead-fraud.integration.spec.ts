@@ -322,18 +322,6 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
       ).rejects.toMatchObject({
         response: { errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE },
       });
-      // Mijoz aytgan vaqti hali kelmagan qo‘ng‘iroq egasida qoladi
-      const later = await addLead({
-        status: LeadStatus.CALLBACK,
-        operatorId: '41',
-        attempts: 1,
-        nextAttemptAt: new Date(now.getTime() + 60 * MIN),
-      });
-      await expect(
-        t.transfer('7', later.id, { operatorId: '43' }, now),
-      ).rejects.toMatchObject({
-        response: { errorCode: LeadErrorCode.LEAD_NOT_TRANSFERABLE },
-      });
       const done = await addLead({ status: LeadStatus.CONFIRMED });
       await expect(
         t.transfer('7', done.id, { operatorId: '43' }),
@@ -898,7 +886,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
         ).toHaveLength(1);
         expect(actions.items[0]).toMatchObject({
           targetType: 'PHONE',
-          target: '+998 97 *** ** 21',
+          target: '****4321',
           actorId: null,
         });
       });

@@ -410,9 +410,11 @@ export class LeadIntakeService {
       ]);
       if (decision.kind === 'REOPEN_AND_MERGE') {
         const from = root.status;
+        const wasSpam = root.reviewReason !== null;
         root.status = LeadStatus.NEW;
-        // Tekshiruvga tushgan ariza qayta ochilgan lidni ham navbatdan ushlab turadi.
-        if (heldForReview) root.reviewReason = LeadReviewReason.IP_RATE;
+        // Tekshiruvga tushgan ariza qayta ochilgan lidni ham navbatdan ushlab turadi; oddiy ariza esa avval spam deb
+        // yopilgan lidni ham navbatga qaytaradi (belgi qolsa lid hech qachon operatorga tushmasdi).
+        root.reviewReason = heldForReview ? LeadReviewReason.IP_RATE : null;
         root.attempts = 0;
         root.nextAttemptAt = now;
         root.expiresAt = contactDeadline(now);
@@ -424,9 +426,20 @@ export class LeadIntakeService {
             leadId: root.id,
             fromStatus: from,
             toStatus: LeadStatus.NEW,
-            note: 'Qayta ochildi: mijoz yana ariza qoldirdi (10-qoida)',
+            note: wasSpam
+              ? 'Qayta ochildi: mijoz yana ariza qoldirdi (10-qoida); avval spam deb yopilgan edi'
+              : 'Qayta ochildi: mijoz yana ariza qoldirdi (10-qoida)',
           }),
         );
+        // tekshiruvda ushlangan lidga «lid» hodisasi yozilmagan edi; takrori yozilmaydi (lid + hodisa unikal)
+        if (!heldForReview && wasSpam) {
+          await this.postback?.enqueue(
+            manager,
+            root,
+            AffiliatePostbackEvent.LEAD,
+          );
+          await this.capi?.enqueueLead(manager, root);
+        }
       }
       resultLead = merged;
       target = root;

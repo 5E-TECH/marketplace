@@ -215,4 +215,8 @@ export interface WholesalerPaymentDetails {
   bankName: string | null;
   bankAccount: string | null;
   bankMfo: string | null;
+  /** Komissiya shartnomasi — to‘lov maqsadi matnida. */
+  contractNumber: string | null;
+  /** YYYY-MM-DD */
+  contractDate: string | null;
 }

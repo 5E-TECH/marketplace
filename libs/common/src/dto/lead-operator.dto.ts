@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -76,6 +77,10 @@ export enum LeadErrorCode {
   LEAD_NOT_REJECTED = 'LEAD_NOT_REJECTED',
   /** Shu raqam va mahsulotda faol lid bor — ikkinchisi ochilmaydi (LID-4) — 409 (BE-35). */
   ACTIVE_LEAD_EXISTS = 'ACTIVE_LEAD_EXISTS',
+  /** Bo‘shatish: lid hech kimning bronida emas — 409 (BE-25, FE-26). */
+  LEAD_NOT_BOOKED = 'LEAD_NOT_BOOKED',
+  /** Bo‘shatish: operator hozir mijoz bilan gaplashmoqda — 409 (BE-25, FE-26). */
+  LEAD_CALL_ACTIVE = 'LEAD_CALL_ACTIVE',
   /** Firibgarlik hodisasi allaqachon yopilgan — 409 (BE-35). */
   FRAUD_INCIDENT_CLOSED = 'FRAUD_INCIDENT_CLOSED',
   /** Chora hodisaga mos emas (masalan, sahifasiz hodisada «sahifani to‘xtatish») — 400 (BE-35). */
@@ -337,7 +342,7 @@ export class LeadCardDto {
   @ApiProperty({ example: 'Aziza' }) customerName: string;
 
   @ApiProperty({
-    example: '+998 90 *** ** 67',
+    example: '****4567',
     description: 'Operatorga to‘liq raqam ko‘rsatilishi EQ-02 qaroriga bog‘liq',
   })
   phoneMasked: string;
@@ -596,6 +601,35 @@ export class OperatorStateDto {
   callEnabled: boolean;
 }
 
+/** Operator hozir nima qilmoqda (BE-25, FE-26 o‘tkazish oynasi): telefoniya holatidan. */
+export enum OperatorActivityKind {
+  CONNECTING = 'CONNECTING',
+  RINGING = 'RINGING',
+  IN_CALL = 'IN_CALL',
+  /** Qo‘ng‘iroq tugagan, natija hali kiritilmagan. */
+  WRAP_UP = 'WRAP_UP',
+  IDLE = 'IDLE',
+}
+
+export class OperatorActivityDto {
+  @ApiProperty({
+    enum: OperatorActivityKind,
+    example: OperatorActivityKind.IN_CALL,
+  })
+  kind: OperatorActivityKind;
+
+  @ApiProperty({ example: '1246', nullable: true, type: String })
+  leadId: string | null;
+
+  @ApiProperty({
+    example: '2027-01-14T09:35:48.000Z',
+    nullable: true,
+    type: String,
+    description: 'Shu bosqich qachondan beri',
+  })
+  since: string | null;
+}
+
 export class OperatorQueueOperatorDto {
   @ApiProperty({ example: '41' }) operatorId: string;
   @ApiProperty({ example: 'Dilnoza R.' }) name: string;
@@ -603,6 +637,23 @@ export class OperatorQueueOperatorDto {
   state: OperatorWorkState;
 
   @ApiProperty({ example: 2 }) activeBookings: number;
+
+  @ApiProperty({ example: 5, description: 'Bron chegarasi (6-qoida)' })
+  maxBookings: number;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Mijoz aytgan vaqtdagi qo‘ng‘iroqlar (operatorda qoladi, bron chegarasiga kirmaydi)',
+  })
+  scheduledCalls: number;
+
+  @ApiProperty({
+    type: OperatorActivityDto,
+    nullable: true,
+    description: 'Telefoniya ulanmagan bo‘lsa — null',
+  })
+  activity: OperatorActivityDto | null;
 }
 
 /**
@@ -659,22 +710,53 @@ export class OperatorStatsDto {
   firstCallMedianMinutes: number | null;
 }
 
-/** GET /admin/leads filtri (BE-42, FE-26). */
-export class AdminLeadsQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number;
+/**
+ * Holat yorliqlari (BE-25, FE-26): «Ishda» — Yangi, Bronda, Qayta qo‘ng‘iroq (tekshiruvdagilarsiz); «Yopilgan» —
+ * Yaroqsiz, Dublikat, Aloqa bo‘lmadi; «Tekshiruvda» — navbatga tushmagan arizalar (BE-12), faqat admin.
+ */
+export enum AdminLeadTab {
+  ALL = 'ALL',
+  ACTIVE = 'ACTIVE',
+  CONFIRMED = 'CONFIRMED',
+  REJECTED = 'REJECTED',
+  CLOSED = 'CLOSED',
+  REVIEW = 'REVIEW',
+}
 
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
+export enum AdminLeadSort {
+  CREATED_ASC = 'createdAt',
+  CREATED_DESC = '-createdAt',
+  PRICE_ASC = 'price',
+  PRICE_DESC = '-price',
+  ATTEMPTS_ASC = 'attempts',
+  ATTEMPTS_DESC = '-attempts',
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** GET /admin/leads filtri (BE-42, FE-26); CSV eksport ham shu filtr bilan. */
+export class AdminLeadFilterDto {
+  @ApiPropertyOptional({ enum: AdminLeadTab })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number;
+  @IsEnum(AdminLeadTab)
+  tab?: AdminLeadTab;
+
+  @ApiPropertyOptional({
+    example: 'L-1284',
+    maxLength: 100,
+    description:
+      'Lid raqami («L-1284» yoki 1284), mijoz ismi yoki sahifa kodi. Telefon bo‘yicha qidiruv yo‘q (134-savol)',
+  })
+  @IsOptional()
+  @Transform(trimLeadText)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: LeadSource })
+  @IsOptional()
+  @IsEnum(LeadSource)
+  source?: LeadSource;
 
   @ApiPropertyOptional({ enum: LeadStatus })
   @IsOptional()
@@ -696,15 +778,45 @@ export class AdminLeadsQueryDto {
   @IsLeadBigintId('operatorId')
   operatorId?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-01' })
+  @ApiPropertyOptional({ example: '2026-12-01', description: 'Toshkent kuni' })
   @IsOptional()
-  @IsDateString()
+  @Matches(DAY, { message: 'from YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString({ strict: true })
   from?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-31' })
+  @ApiPropertyOptional({
+    example: '2026-12-31',
+    description: 'Toshkent kuni, shu kun ham kiradi',
+  })
   @IsOptional()
-  @IsDateString()
+  @Matches(DAY, { message: 'to YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString({ strict: true })
   to?: string;
+}
+
+export class AdminLeadsQueryDto extends AdminLeadFilterDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    enum: AdminLeadSort,
+    default: AdminLeadSort.CREATED_DESC,
+  })
+  @IsOptional()
+  @IsEnum(AdminLeadSort)
+  sort?: AdminLeadSort;
 }
 
 export class AdminLeadListItemDto {
@@ -717,7 +829,7 @@ export class AdminLeadListItemDto {
   source: LeadSource;
 
   @ApiProperty({ example: 'Aziza' }) customerName: string;
-  @ApiProperty({ example: '+998 90 *** ** 67' }) phoneMasked: string;
+  @ApiProperty({ example: '****4567' }) phoneMasked: string;
   @ApiProperty({ example: 'Simsiz quloqchinlar' }) productName: string;
 
   @ApiProperty({ example: 'Jasur T.', nullable: true, type: String })
@@ -728,10 +840,134 @@ export class AdminLeadListItemDto {
 
   @ApiProperty({ example: null, nullable: true, type: String })
   orderId: string | null;
+
+  // ── BE-25 (FE-26) ──
+  @ApiProperty({ example: '501' }) productId: string;
+
+  @ApiProperty({
+    example: 'Toshkent shahri',
+    nullable: true,
+    type: String,
+    description: 'Viloyat; manzilsiz API lidi yoki geo javob bermadi — null',
+  })
+  regionName: string | null;
+
+  @ApiProperty({ example: 'k7m2qa', nullable: true, type: String })
+  streamCode: string | null;
+
+  @ApiProperty({ example: 262000, description: 'Sahifadagi narx, so‘m' })
+  salePrice: number;
+
+  @ApiProperty({ example: 2 }) attemptsCount: number;
+
+  @ApiProperty({ example: '41', nullable: true, type: String })
+  operatorId: string | null;
+
+  @ApiProperty({
+    enum: LeadRejectReason,
+    example: null,
+    nullable: true,
+  })
+  rejectReason: LeadRejectReason | null;
+
+  @ApiProperty({
+    example: 'Qimmat',
+    nullable: true,
+    type: String,
+    description:
+      'Yopilgan lid sababi: rad sababi, «→ L-1163 · asosiy lid», «6 urinish · 13.01, 10:01»',
+  })
+  closedNote: string | null;
+
+  @ApiProperty({
+    example: '2027-01-14T08:02:00.000Z',
+    nullable: true,
+    type: String,
+    description: 'Faqat «Rad etildi» holatida',
+  })
+  rejectedAt: string | null;
+
+  @ApiProperty({
+    example: '2027-01-14T10:20:00.000Z',
+    nullable: true,
+    type: String,
+    description: 'Mijoz aytgan qayta qo‘ng‘iroq vaqti',
+  })
+  callbackAt: string | null;
+
+  @ApiProperty({
+    example: 8,
+    nullable: true,
+    type: Number,
+    description: 'Umumiy navbatdagi o‘rni (7-qoida); navbatda emas — null',
+  })
+  queuePosition: number | null;
+
+  @ApiProperty({
+    example: '2027-01-14T09:38:00.000Z',
+    description: 'Holat oxirgi o‘zgargan vaqt (o‘zgarmagan — kelgan vaqti)',
+  })
+  statusAt: string;
+
+  @ApiProperty({
+    example: false,
+    description: 'Tekshiruvda — navbatga tushmagan (BE-12)',
+  })
+  inReview: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'IP: faqat admin va faqat tekshiruvdagi arizada',
+  })
+  ip: string | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'Qurilma: faqat admin va faqat tekshiruvdagi arizada',
+  })
+  device: string | null;
+}
+
+/**
+ * Yorliqlardagi sonlar: filtrlar bo‘yicha, `tab` va `status` siz. «Hammasi» ga tekshiruvdagi arizalar kirmaydi
+ * (dizayn p-a6: ALL = ACTIVE + CONFIRMED + REJECTED + CLOSED).
+ */
+export class AdminLeadCountsDto {
+  @ApiProperty({ example: 128 }) ALL: number;
+  @ApiProperty({ example: 42 }) ACTIVE: number;
+  @ApiProperty({ example: 51 }) CONFIRMED: number;
+  @ApiProperty({ example: 19 }) REJECTED: number;
+  @ApiProperty({ example: 9 }) CLOSED: number;
+
+  @ApiPropertyOptional({ example: 7, description: 'Faqat admin' })
+  REVIEW?: number;
+}
+
+/** «7 ta ariza tekshiruvda — navbatga tushmagan» banneri: eng ko‘p ariza turgan sahifa. */
+export class AdminLeadReviewBannerDto {
+  @ApiProperty({ example: 7, description: 'Shu sahifadagi arizalar' })
+  count: number;
+  @ApiProperty({ example: 'k7m2qa' }) streamCode: string;
+  @ApiProperty({ example: 'Jasur T.' }) affiliateName: string;
+  @ApiProperty({ example: '2027-01-14T09:20:00.000Z' }) from: string;
+  @ApiProperty({ example: '2027-01-14T09:29:00.000Z' }) to: string;
 }
 
 export class AdminLeadsPageDto {
   @ApiProperty({ type: [AdminLeadListItemDto] }) items: AdminLeadListItemDto[];
+  @ApiProperty({ type: AdminLeadCountsDto }) counts: AdminLeadCountsDto;
+
+  @ApiProperty({
+    type: AdminLeadReviewBannerDto,
+    nullable: true,
+    description: 'Faqat admin; tekshiruvda sahifadan kelgan ariza yo‘q — null',
+  })
+  review: AdminLeadReviewBannerDto | null;
+
   @ApiProperty({ example: 42 }) total: number;
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
