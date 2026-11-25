@@ -17,6 +17,7 @@ import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
 import {
+  bankCell,
   paymentPurpose,
   SettlementService,
   SKIPPED_NO_WINDOW,
@@ -39,6 +40,8 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   let svc: SettlementService;
   // BE-33: oluvchi rekvizitlari katalogdan; `noDetails` dagilar — rekvizitsiz
   const noDetails = new Set<string>();
+  const noBankName = new Set<string>();
+  const noContract = new Set<string>();
   const catalog = {
     send: jest.fn((_pattern: unknown, data: { ids: string[] }) =>
       of(
@@ -46,10 +49,10 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
           id,
           name: `Optovik ${id} MCHJ`,
           tin: noDetails.has(id) ? null : '301234567',
-          bankName: 'Ipoteka bank',
+          bankName: noBankName.has(id) ? null : 'Ipoteka bank',
           bankAccount: noDetails.has(id) ? null : '20208000900123456789',
           bankMfo: '00450',
-          contractNumber: id === '15' ? null : 'K-12',
+          contractNumber: noContract.has(id) ? null : 'K-12',
           contractDate: '2026-12-01',
         })),
       ),
@@ -254,7 +257,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     );
     // to‘lov tafsiloti: shartnoma raqami va sanasi, davr, akt
     expect(csv).toMatch(
-      /;K-12-sonli 01\.12\.2026 sanadagi komissiya shartnomasi bo‘yicha 04\.01\.2027–10\.01\.2027 davrda sotilgan tovarlar uchun, akt AS-\d{6}\r\n/,
+      /;K-12-sonli 01\.12\.2026 sanadagi komissiya shartnomasi bo‘yicha sotilgan tovarlar uchun, akt AS-\d{6}, 04\.01\.2027–10\.01\.2027\r\n/,
     );
     expect(csv).not.toContain('Optovik #');
   });
@@ -266,6 +269,14 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     const [{ wholesalerId }] = (await ds.query(
       `SELECT wholesaler_id AS "wholesalerId" FROM finance.wholesaler_settlement`,
     )) as Array<{ wholesalerId: string }>;
+    // STIR va hisob, faqat bank nomi, faqat shartnoma — har biri alohida to‘sadi
+    for (const set of [noBankName, noContract]) {
+      set.add(String(wholesalerId));
+      await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
+        'rekvizitlari to‘liq emas',
+      );
+      set.clear();
+    }
     noDetails.add(String(wholesalerId));
     try {
       await expect(svc.bankFile({ periodEnd: '2027-01-10' })).rejects.toThrow(
@@ -316,7 +327,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         '12',
       );
     const tail =
-      '04.01.2027–10.01.2027 davrda sotilgan tovarlar uchun, akt AS-000012';
+      'sotilgan tovarlar uchun, akt AS-000012, 04.01.2027–10.01.2027';
     expect(p(null, null)).toBe(tail);
     expect(p('  ', '2026-12-01')).toBe(tail);
     expect(p('K-12', null)).toBe(
@@ -325,6 +336,16 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
     expect(p('K-12', '2026-12-01')).toBe(
       `K-12-sonli 01.12.2026 sanadagi komissiya shartnomasi bo‘yicha ${tail}`,
     );
+  });
+
+  it('BE-33: bank fayli katagi — bitta hujjat bitta qator, formula ochilmaydi', () => {
+    expect(bankCell('Optovik\r\nMCHJ\t1')).toBe('Optovik MCHJ 1');
+    expect(bankCell('=HYPERLINK("http://x")')).toBe(
+      '"HYPERLINK(""http://x"")"',
+    );
+    expect(bankCell(' +@-Bank')).toBe('Bank');
+    expect(bankCell('A;B')).toBe('"A;B"');
+    expect(bankCell('20208000900123456789')).toBe('20208000900123456789');
   });
 
   it('xatoli buyurtma (ochiq event_failure) aktga kirmaydi; hodisa keyin muvaffaqiyatli ishlansa — kiradi', async () => {
