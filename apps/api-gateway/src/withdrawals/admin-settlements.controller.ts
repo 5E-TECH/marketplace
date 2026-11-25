@@ -84,7 +84,7 @@ export class AdminSettlementsController {
     summary:
       'Bank to‘lov topshiriqnomasi fayli (davrning to‘lovga tayyor aktlari)',
     description:
-      'Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olish o‘sha faylni beradi. Format bank tanlangach aniqlanadi; hozir 11 ustunli CSV, rekvizitlar BE-07 dan keyin (BE-33 TC3).',
+      'Davrning tayyor aktlari muzlatiladi: qaytgan tovar chiqadi, oldingi qaytarishlar qarzi ushlanadi, summa saqlanadi; qayta yuklab olishda summa o‘zgarmaydi (rekvizitlar va sana — joriy). Format bank tanlangach aniqlanadi (BE-33 TC3); hozir 16 ustunli CSV — to‘lov topshiriqnomasining majburiy rekvizitlari. To‘lovchi yoki optovik rekviziti yetishmasa — 409, qaysi biri ekani xabarda.',
   })
   @ApiProduces('text/csv')
   @ApiOkResponse({
@@ -143,7 +143,7 @@ export class AdminSettlementsController {
   @ApiOperation({
     summary: 'Hisob-kitob sozlamalarini o‘zgartirish (superadmin) [taklif]',
     description:
-      'Berilgan maydonlar tarixga yoziladi (kim, qachon); berilmagani o‘zgarmaydi. Bank fayli to‘lovchi hisob raqami, MFO va to‘lov maqsadi kodisiz chiqmaydi (409).',
+      'Berilgan maydonlar tarixga yoziladi (kim, qachon); berilmagani o‘zgarmaydi. Bank fayli to‘lovchining nomi, STIR i, hisob raqami, bank nomi, MFO si va to‘lov maqsadi kodisiz chiqmaydi (409).',
   })
   @ApiOkResponse({ type: SettlementSettingsDto })
   updateSettings(

@@ -83,9 +83,9 @@ const fmt = (n: number) =>
 
 /**
  * Bank to‘lov topshiriqnomasi fayli — format almashtiriladigan (bank tanlanmagan, TZ T7 «to‘lov topshiriqnomasi
- * fayli» — T02:166). Hozirgisi: dizayn `hujjat-bank-fayli` dagi 11 ustunli CSV (UTF-8 BOM, «;») [taklif — bank
- * tasdiqlaydi]. Oluvchi (optovik) rekvizitlari katalogdan (BE-07); to‘lovchi (platforma) rekvizitlari va to‘lov
- * maqsadi kodi — EQ-05 dan keyin, hozir bo‘sh.
+ * fayli» — T02:166). Hozirgisi: CSV (UTF-8 BOM, «;») [taklif — bank tasdiqlaydi]. Ustunlar — to‘lov topshiriqnomasining
+ * majburiy rekvizitlari (Markaziy bank Nizomi, ro‘yxat raqami 3229, 13-band; summani so‘z bilan va imzoni bank tizimi
+ * qo‘yadi). Oluvchi (optovik) rekvizitlari va shartnoma katalogdan (BE-07); to‘lovchi — sozlamadan (EQ-05).
  */
 export interface BankFileFormat {
   build(
@@ -99,27 +99,68 @@ export interface BankFileFormat {
         name: string;
         tin: string;
         account: string;
+        bankName: string;
         mfo: string;
       };
       /** To‘lovchi (platforma) — EQ-05 sozlamasi. */
-      payer: { account: string; mfo: string };
+      payer: {
+        name: string;
+        tin: string;
+        account: string;
+        bankName: string;
+        mfo: string;
+      };
       purposeCode: string;
     }>,
   ): SettlementFile;
 }
 
+/**
+ * To‘lov maqsadi matni: shartnoma raqami va sanasi (2026-05-26 dan to‘lov tafsilotida), akt va uning davri. Davr — akt
+ * davri, sotuv davri emas: qaytarish muddati o‘tgan oldingi sotuvlar ham aktga kiradi. Sanalar KK.OO.YYYY.
+ */
+export function paymentPurpose(
+  payee: Pick<WholesalerPaymentDetails, 'contractNumber' | 'contractDate'>,
+  periodStart: string,
+  periodEnd: string,
+  actId: string,
+): string {
+  const day = (iso: string) => iso.split('-').reverse().join('.');
+  const contract = payee.contractNumber?.trim()
+    ? `${payee.contractNumber.trim()}-sonli${payee.contractDate ? ` ${day(payee.contractDate)} sanadagi` : ''} komissiya shartnomasi bo‘yicha `
+    : '';
+  return `${contract}sotilgan tovarlar uchun, akt ${actNumber(actId)}, ${day(periodStart)}–${day(periodEnd)}`;
+}
+
+/**
+ * Bank fayli katagi: bitta hujjat — bitta qator (qator ko‘chishi va boshqaruv belgilari bo‘sh joyga), formula bo‘lib
+ * ochilmasin (nom va bank nomini optovik o‘zi yozadi) — boshidagi = + - @ olib tashlanadi: bank faylida `'` belgisi
+ * rekvizitni buzardi.
+ */
+export const bankCell = (value: string): string => {
+  const v = value
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .replace(/^[=+\-@\s]+/, '');
+  return /[;"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+
 export const csvBankFile: BankFileFormat = {
   build(rows) {
-    const esc = (v: string) =>
-      /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const header = [
+      'Hujjat',
       'Hujjat raqami',
       'Sana',
+      'To‘lovchi',
+      'To‘lovchi STIR',
       'To‘lovchi h/r',
+      'To‘lovchi banki',
       'To‘lovchi MFO',
       'Oluvchi',
       'Oluvchi STIR',
       'Oluvchi h/r',
+      'Oluvchi banki',
       'Oluvchi MFO',
       'Summa',
       'To‘lov maqsadi kodi',
@@ -127,19 +168,24 @@ export const csvBankFile: BankFileFormat = {
     ];
     const lines = rows.map((r) =>
       [
+        'To‘lov topshiriqnomasi',
         r.number,
         r.date,
+        r.payer.name,
+        r.payer.tin,
         r.payer.account,
+        r.payer.bankName,
         r.payer.mfo,
         r.recipient.name,
         r.recipient.tin,
         r.recipient.account,
+        r.recipient.bankName,
         r.recipient.mfo,
         String(r.amount),
         r.purposeCode,
         r.purpose,
       ]
-        .map(esc)
+        .map(bankCell)
         .join(';'),
     );
     const csv = '﻿' + [header.join(';'), ...lines].join('\r\n') + '\r\n';
@@ -246,6 +292,7 @@ export class SettlementService {
       payerTin: value('payer_tin'),
       payerAccount: value('payer_account'),
       payerMfo: value('payer_mfo'),
+      payerBankName: value('payer_bank_name'),
       paymentPurposeCode: value('payment_purpose_code'),
     };
   }
@@ -270,6 +317,7 @@ export class SettlementService {
       ['payer_tin', dto.payerTin],
       ['payer_account', dto.payerAccount],
       ['payer_mfo', dto.payerMfo],
+      ['payer_bank_name', dto.payerBankName?.trim()],
       ['payment_purpose_code', dto.paymentPurposeCode],
     ];
     for (const [key, value] of text)
@@ -561,7 +609,7 @@ export class SettlementService {
 
   /**
    * Bank fayli (TC3): davrning tayyor aktlari muzlatiladi, faylda — muzlatilgan summalar (oldin muzlatilganlari ham,
-   * shuning uchun qayta yuklab olish o‘sha faylni beradi). 0 so‘mlik akt kirmaydi.
+   * shuning uchun qayta yuklab olishda summa o‘zgarmaydi; rekvizitlar, shartnoma va sana — joriy). 0 so‘mlik akt kirmaydi.
    * Ishga tushirish qulfi ostida: fayl olingach `run` davrga yangi akt qo‘sha olmaydi (davr yopiq).
    */
   async bankFile(input: { periodEnd: string }): Promise<SettlementFile> {
@@ -569,14 +617,21 @@ export class SettlementService {
     let payees = new Map<string, WholesalerPaymentDetails>();
     // To‘lovchi rekvizitlarisiz fayl bankda qabul qilinmaydi (EQ-05) — muzlatishdan oldin
     const settings = await this.settings();
-    if (
-      !settings.payerAccount ||
-      !settings.payerMfo ||
-      !settings.paymentPurposeCode
+    const missing = (
+      [
+        ['nomi', settings.payerName],
+        ['STIR', settings.payerTin],
+        ['hisob raqami', settings.payerAccount],
+        ['bank nomi', settings.payerBankName],
+        ['MFO', settings.payerMfo],
+        ['to‘lov maqsadi kodi', settings.paymentPurposeCode],
+      ] as Array<[string, string | null]>
     )
+      .filter(([, value]) => !value)
+      .map(([label]) => label);
+    if (missing.length)
       throw new ConflictException({
-        message:
-          'To‘lovchi (platforma) rekvizitlari sozlanmagan: hisob raqami, MFO va to‘lov maqsadi kodi (Moliya → Sozlamalar, EQ-05)',
+        message: `To‘lovchi (platforma) rekvizitlari sozlanmagan: ${missing.join(', ')} (Moliya → Sozlamalar, EQ-05)`,
         errorCode: ErrorCode.INVALID_STATE,
       });
     const rows = await this.db.transaction(async (m) => {
@@ -610,15 +665,19 @@ export class SettlementService {
           date: today,
           wholesalerId: r.wholesalerId,
           amount: moneyFromDb(r.exportedTotal),
-          purpose: `${r.periodStart}–${r.periodEnd} davr uchun sotilgan tovarlar, akt ${actNumber(r.id)}`,
+          purpose: paymentPurpose(payee, r.periodStart, r.periodEnd, r.id),
           recipient: {
             name: payee.name,
             tin: payee.tin!,
             account: payee.bankAccount!,
+            bankName: payee.bankName!,
             mfo: payee.bankMfo!,
           },
           payer: {
+            name: settings.payerName!,
+            tin: settings.payerTin!,
             account: settings.payerAccount!,
+            bankName: settings.payerBankName!,
             mfo: settings.payerMfo!,
           },
           purposeCode: settings.paymentPurposeCode!,
@@ -628,7 +687,7 @@ export class SettlementService {
   }
 
   /**
-   * Oluvchi rekvizitlari (BE-07 katalogi). STIR, hisob raqami yoki MFO bo‘lmasa — 409: qaysi optovikda yetishmasligi
+   * Oluvchi rekvizitlari (BE-07 katalogi). STIR, hisob raqami, bank nomi, MFO yoki shartnoma bo‘lmasa — 409: qaysi optovikda yetishmasligi
    * aytiladi (admin «Optoviklar» sahifasida to‘ldiradi). Katalog javob bermasa — 503.
    */
   private async payees(
@@ -646,12 +705,18 @@ export class SettlementService {
     const missing = ids.filter((id) => {
       const p = byId.get(String(id));
       return (
-        !p || !p.tin?.trim() || !p.bankAccount?.trim() || !p.bankMfo?.trim()
+        !p ||
+        !p.tin?.trim() ||
+        !p.bankAccount?.trim() ||
+        !p.bankName?.trim() ||
+        !p.bankMfo?.trim() ||
+        !p.contractNumber?.trim() ||
+        !p.contractDate
       );
     });
     if (missing.length)
       throw new ConflictException({
-        message: `Optovik rekvizitlari to‘liq emas (STIR, hisob raqami, MFO): ${missing
+        message: `Optovik rekvizitlari to‘liq emas (STIR, hisob raqami, bank nomi, MFO, shartnoma raqami va sanasi): ${missing
           .map((id) => byId.get(String(id))?.name ?? `#${id}`)
           .join(', ')}`,
         errorCode: ErrorCode.INVALID_STATE,

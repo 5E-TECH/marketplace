@@ -146,6 +146,8 @@ export class WholesalerService {
       bankName: shop.bankName,
       bankAccount: shop.bankAccount,
       bankMfo: shop.bankMfo,
+      contractNumber: shop.contractNumber,
+      contractDate: shop.contractDate,
     }));
   }
 

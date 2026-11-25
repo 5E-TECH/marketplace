@@ -75,6 +75,14 @@ export class SettlementSettingsDto {
   @ApiProperty({
     nullable: true,
     type: String,
+    example: 'Ipoteka bank',
+    description: 'To‘lovchi bankining nomi (bank faylida)',
+  })
+  payerBankName: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
     example: '00668',
     description: 'To‘lov maqsadi kodi',
   })
@@ -113,6 +121,16 @@ export class UpdateSettlementSettingsDto {
   @IsOptional()
   @Matches(/^\d{5}$/, { message: 'MFO 5 raqam bo‘lishi kerak' })
   payerMfo?: string;
+
+  @ApiPropertyOptional({
+    example: 'Ipoteka bank',
+    description: 'To‘lovchi bankining nomi',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  payerBankName?: string;
 
   @ApiPropertyOptional({
     example: '00668',
