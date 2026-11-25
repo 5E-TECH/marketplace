@@ -8,7 +8,6 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   AdminWithdrawalQueryDto,
   AffiliateBalanceDto,
-  AffiliateSelfEmployedDto,
   ErrorCode,
   MAX_MONEY,
   moneyFromDb,
@@ -19,14 +18,17 @@ import {
   WithdrawalStatus,
 } from '@app/common';
 import { Line, LedgerService } from './ledger.service';
+import {
+  affiliatePayoutLock,
+  assertPayable,
+  selfEmployedGate,
+  validId,
+} from './payout-gate';
 
-const ID = /^\d{1,19}$/;
 /** Ushlanadigan soliq — 1% (BE-23 kartasi; TZ 8-bo‘lim). */
 export const WITHDRAWAL_TAX_PERCENT = 1;
 /** Bundan katta so‘rov — ikki xil xodim tasdig‘i (MOL-5: «5 mln dan katta»). */
 export const TWO_APPROVALS_ABOVE = 5_000_000;
-/** Pul yechish qulfi kalit sinfi [taklif]: 2101/2102 lead, 2201 cron, 2301/2302 ledger, 6303 payment band. */
-const WITHDRAWAL_LOCK_CLASS = 2303;
 const OPEN: WithdrawalStatus[] = [
   WithdrawalStatus.REQUESTED,
   WithdrawalStatus.APPROVED,
@@ -47,12 +49,6 @@ const rule = (message: string) =>
   });
 const state = (message: string) =>
   new ConflictException({ message, errorCode: ErrorCode.INVALID_STATE });
-
-function validId(value: unknown, field: string): string {
-  const s = String(value ?? '');
-  if (!ID.test(s)) throw new BadRequestException(`${field} noto‘g‘ri`);
-  return s;
-}
 
 interface RequestRow {
   id: string;
@@ -114,10 +110,6 @@ export class WithdrawalService {
         WHERE affiliate_id = $1 AND status <> 'REJECTED'`,
       [affiliateId, OPEN],
     )) as Array<{ reserved: string; today: boolean }>;
-    const [profile] = (await m.query(
-      `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1`,
-      [affiliateId],
-    )) as Array<{ selfEmployed: boolean }>;
     const available = moneyFromDb(acc?.available);
     const reserved = moneyFromDb(res.reserved);
     return {
@@ -125,7 +117,7 @@ export class WithdrawalService {
       available,
       reserved,
       withdrawable: Math.max(0, available - reserved),
-      selfEmployed: profile?.selfEmployed ?? false,
+      selfEmployed: await selfEmployedGate(m, affiliateId),
       todayRequested: res.today === true,
     };
   }
@@ -170,10 +162,7 @@ export class WithdrawalService {
     )
       throw new BadRequestException('amount: butun so‘m bo‘lishi kerak');
     const id = await this.db.transaction(async (m) => {
-      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        WITHDRAWAL_LOCK_CLASS,
-        `finance-withdrawal:${affiliateId}`,
-      ]);
+      await affiliatePayoutLock(m, affiliateId);
       const min = await this.minAmount(m);
       if (amount < min)
         throw rule(`Eng kam so‘rov — ${min} so‘m (so‘ralgani ${amount})`);
@@ -270,18 +259,24 @@ export class WithdrawalService {
 
   /**
    * Tasdiq (MOL-5). 5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi;
-   * bir xodim ikkinchi marta tasdiqlay olmaydi (TC4).
+   * bir xodim ikkinchi marta tasdiqlay olmaydi (TC4). Pul shundan keyin o‘tkaziladi — maqom va ism shu yerda
+   * tekshiriladi (BE-25 5-tur).
    */
   async approve(input: {
     id: string;
     approverId: string;
+    /** Sotuvchining hozirgi ism-familiyasi (identity). */
+    currentFullName: string;
   }): Promise<WithdrawalDto> {
     const id = validId(input?.id, 'id');
     const approverId = validId(input?.approverId, 'approverId');
     await this.db.transaction(async (m) => {
+      const head = await this.head(m, id);
+      await affiliatePayoutLock(m, head.affiliateId);
       const row = await this.lockRow(m, id);
       if (row.status !== WithdrawalStatus.REQUESTED)
         throw state(`So‘rov ${row.status} holatida — tasdiqlab bo‘lmaydi`);
+      await assertPayable(m, row.affiliateId, input.currentFullName);
       const inserted = (await m.query(
         `INSERT INTO finance.withdrawal_approval (request_id, approver_id) VALUES ($1, $2)
          ON CONFLICT DO NOTHING RETURNING request_id`,
@@ -341,15 +336,8 @@ export class WithdrawalService {
     const id = validId(input?.id, 'id');
     const paidBy = validId(input?.paidBy, 'paidBy');
     await this.db.transaction(async (m) => {
-      const [head] = (await m.query(
-        `SELECT affiliate_id AS "affiliateId" FROM finance.withdrawal_request WHERE id = $1`,
-        [id],
-      )) as Array<{ affiliateId: string }>;
-      if (!head) throw new NotFoundException('So‘rov topilmadi');
-      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        WITHDRAWAL_LOCK_CLASS,
-        `finance-withdrawal:${head.affiliateId}`,
-      ]);
+      const head = await this.head(m, id);
+      await affiliatePayoutLock(m, head.affiliateId);
       const row = await this.lockRow(m, id);
       if (row.status === WithdrawalStatus.PAID) return; // takror bosildi
       if (row.status !== WithdrawalStatus.APPROVED)
@@ -362,11 +350,7 @@ export class WithdrawalService {
       )) as Array<{ n: number }>;
       if (n < row.requiredApprovals)
         throw state(`Tasdiqlar yetmaydi: ${n}/${row.requiredApprovals}`);
-      const [profile] = (await m.query(
-        `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1`,
-        [row.affiliateId],
-      )) as Array<{ selfEmployed: boolean }>;
-      if (!profile?.selfEmployed)
+      if (!(await selfEmployedGate(m, row.affiliateId)))
         throw rule(
           'O‘zini o‘zi band qilganlik maqomi tasdiqlanmagan — to‘lov qilinmaydi (T01:471)',
         );
@@ -440,26 +424,21 @@ export class WithdrawalService {
     return this.get(this.db.manager, id);
   }
 
-  /** O‘zini o‘zi band qilganlik belgisi — moliya qo‘lda (T01:471; BE-06 maydonlari kelguncha) [taklif]. */
-  async setSelfEmployed(input: {
-    affiliateId: string;
-    selfEmployed: boolean;
-    updatedBy: string;
-  }): Promise<AffiliateSelfEmployedDto> {
-    const affiliateId = validId(input?.affiliateId, 'affiliateId');
-    const updatedBy = validId(input?.updatedBy, 'updatedBy');
-    if (typeof input?.selfEmployed !== 'boolean')
-      throw new BadRequestException('selfEmployed: true yoki false');
-    const [row] = (await this.db.query(
-      `INSERT INTO finance.affiliate_payout_profile (affiliate_id, self_employed, updated_by)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (affiliate_id) DO UPDATE
-         SET self_employed = EXCLUDED.self_employed, updated_by = EXCLUDED.updated_by, updated_at = now()
-       RETURNING affiliate_id AS "affiliateId", self_employed AS "selfEmployed",
-                 updated_by AS "updatedBy", updated_at AS "updatedAt"`,
-      [affiliateId, input.selfEmployed, updatedBy],
-    )) as AffiliateSelfEmployedDto[];
-    return row;
+  /** Bitta so‘rov (gateway tasdiqdan oldin sotuvchini biladi). */
+  async one(input: { id: string }): Promise<WithdrawalDto> {
+    return this.get(this.db.manager, validId(input?.id, 'id'));
+  }
+
+  private async head(
+    m: EntityManager,
+    id: string,
+  ): Promise<{ affiliateId: string }> {
+    const [head] = (await m.query(
+      `SELECT affiliate_id AS "affiliateId" FROM finance.withdrawal_request WHERE id = $1`,
+      [id],
+    )) as Array<{ affiliateId: string }>;
+    if (!head) throw new NotFoundException('So‘rov topilmadi');
+    return head;
   }
 
   private async lockRow(m: EntityManager, id: string): Promise<RequestRow> {

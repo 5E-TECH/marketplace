@@ -13,6 +13,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { SelfEmployedInfoDto } from './self-employed.dto';
 
 /**
  * BE-06 (TZ 6.1 SOT-1, FE-04 taklifi `docs/api-taklif/fe-04-sotuvchi.md`): sotuvchi SMS kod bilan ro‘yxatdan
@@ -201,16 +202,6 @@ export class AffiliateAgreementDto {
   current: boolean;
 }
 
-export class AffiliateProfileSelfEmployedDto {
-  @ApiProperty({
-    example: 'NOT_SUBMITTED',
-    enum: ['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED', 'REVOKED'],
-    description:
-      'Hozir moliya qo‘yadigan belgi (BE-23): VERIFIED yoki NOT_SUBMITTED',
-  })
-  status: string;
-}
-
 export class AffiliateProfileDto {
   @ApiProperty({ example: '1001' }) id: string;
   @ApiProperty({ example: '' }) firstName: string;
@@ -231,8 +222,12 @@ export class AffiliateProfileDto {
       'Joriy e’lon qilingan, lekin hali qabul qilinmagan versiyalar — qayta qabul kerak',
   })
   pendingAgreements: Array<{ type: LegalDocumentType; version: string }>;
-  @ApiProperty({ type: AffiliateProfileSelfEmployedDto, required: false })
-  selfEmployed?: AffiliateProfileSelfEmployedDto;
+  @ApiProperty({
+    type: SelfEmployedInfoDto,
+    required: false,
+    description: 'Moliya javob bermasa — yo‘q',
+  })
+  selfEmployed?: SelfEmployedInfoDto;
   @ApiProperty({
     example: null,
     nullable: true,

@@ -1,6 +1,7 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  AFFILIATE_DOCUMENT_RPC,
   CREATIVE_RPC,
   CreativeType,
   RpcHttpExceptionFilter,
@@ -71,5 +72,37 @@ export class FileServiceController {
   @MessagePattern({ cmd: WHOLESALER_CABINET_RPC.PRIVATE_GET })
   privateGet(@Payload() data: { objectKey: string }) {
     return this.privateFiles.get(data);
+  }
+
+  /** BE-25 5-tur: sotuvchining maqom ma’lumotnomasi (yopiq). */
+  @MessagePattern({ cmd: AFFILIATE_DOCUMENT_RPC.STORE })
+  storeAffiliateDocument(
+    @Payload()
+    data: {
+      affiliateId: string;
+      fileName: string;
+      base64: string;
+    },
+  ) {
+    return this.privateFiles.storeAffiliateDocument(data);
+  }
+
+  @MessagePattern({ cmd: AFFILIATE_DOCUMENT_RPC.COMMIT })
+  commitAffiliateDocument(
+    @Payload()
+    data: {
+      affiliateId: string;
+      documentId: string;
+      deadline: number;
+    },
+  ) {
+    return this.privateFiles.commitAffiliateDocument(data);
+  }
+
+  @MessagePattern({ cmd: AFFILIATE_DOCUMENT_RPC.REMOVE })
+  removeAffiliateDocument(
+    @Payload() data: { affiliateId: string; objectKey: string },
+  ) {
+    return this.privateFiles.removeAffiliateDocument(data);
   }
 }

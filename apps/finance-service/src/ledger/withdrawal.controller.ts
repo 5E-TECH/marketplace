@@ -6,13 +6,17 @@ import {
   RpcHttpExceptionFilter,
   WithdrawalQueryDto,
 } from '@app/common';
+import { SelfEmployedService } from './self-employed.service';
 import { WithdrawalService } from './withdrawal.service';
 
 /** BE-23: pul yechish so‘rovlari (sotuvchi kabineti va moliya). */
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class WithdrawalController {
-  constructor(private readonly withdrawals: WithdrawalService) {}
+  constructor(
+    private readonly withdrawals: WithdrawalService,
+    private readonly selfEmployed: SelfEmployedService,
+  ) {}
 
   @MessagePattern({ cmd: FINANCE_WITHDRAWAL_RPC.BALANCE })
   balance(@Payload() input: { affiliateId: string }) {
@@ -36,8 +40,20 @@ export class WithdrawalController {
     return this.withdrawals.adminList(input);
   }
 
+  @MessagePattern({ cmd: FINANCE_WITHDRAWAL_RPC.GET })
+  one(@Payload() input: { id: string }) {
+    return this.withdrawals.one(input);
+  }
+
   @MessagePattern({ cmd: FINANCE_WITHDRAWAL_RPC.APPROVE })
-  approve(@Payload() input: { id: string; approverId: string }) {
+  approve(
+    @Payload()
+    input: {
+      id: string;
+      approverId: string;
+      currentFullName: string;
+    },
+  ) {
     return this.withdrawals.approve(input);
   }
 
@@ -58,8 +74,9 @@ export class WithdrawalController {
       affiliateId: string;
       selfEmployed: boolean;
       updatedBy: string;
+      fullName?: string;
     },
   ) {
-    return this.withdrawals.setSelfEmployed(input);
+    return this.selfEmployed.setManually(input);
   }
 }

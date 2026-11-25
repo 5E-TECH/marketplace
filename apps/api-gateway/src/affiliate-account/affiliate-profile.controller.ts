@@ -21,21 +21,24 @@ import {
 import {
   AcceptAgreementDto,
   AFFILIATE_AUTH_RPC,
+  affiliateFullName,
   AffiliateProfileDto,
   AuthErrorResponseDto,
   CurrentUser,
-  FINANCE_WITHDRAWAL_RPC,
   JwtUser,
   Role,
   Roles,
+  RenameSelfEmployedResult,
   RmqClient,
+  SELF_EMPLOYED_RPC,
+  SelfEmployedInfoDto,
   UpdateAffiliateProfileDto,
   sendRpc,
 } from '@app/common';
 
 /**
  * BE-06 (SOT-1, FE-04): sotuvchi profili — ism-familiya, ro‘yxat sanasi, qabul qilingan oferta va rozilik
- * versiyalari; yangi versiyani qabul qilish. O‘zini o‘zi band qilganlik belgisi — moliyadan (BE-23).
+ * versiyalari; yangi versiyani qabul qilish. O‘zini o‘zi band qilganlik maqomi — moliyadan (BE-25 5-tur).
  */
 @ApiTags('affiliate')
 @ApiBearerAuth()
@@ -64,19 +67,49 @@ export class AffiliateProfileController {
   }
 
   @Patch('profile')
-  @ApiOperation({ summary: 'Ism va familiya (soliq hisoboti uchun)' })
+  @ApiOperation({
+    summary: 'Ism va familiya (soliq hisoboti uchun)',
+    description:
+      'Ism o‘zgarsa tasdiqlangan yoki tekshirilayotgan maqom qayta tekshiruvga tushadi (PENDING), pul yechish yopiladi.',
+  })
   @ApiOkResponse({ type: AffiliateProfileDto })
   @ApiBadRequestResponse({ type: AuthErrorResponseDto })
   async update(
     @CurrentUser() user: JwtUser,
     @Body() dto: UpdateAffiliateProfileDto,
+    @Ip() ip: string,
   ): Promise<AffiliateProfileDto> {
+    // ism o‘zgarsa tasdiqlangan maqom AVVAL qayta tekshiruvga (pul yechish yopiladi), keyin ism yangilanadi:
+    // yangi ism bilan eski tasdiq hech qachon birga turmasin. Moliya javob bermasa — ism ham o‘zgarmaydi.
+    const { recheck, info } = await sendRpc<RenameSelfEmployedResult>(
+      this.finance,
+      { cmd: SELF_EMPLOYED_RPC.RENAME },
+      { affiliateId: user.sub, fullName: affiliateFullName(dto) },
+    );
+    if (recheck)
+      void sendRpc(
+        this.identity,
+        { cmd: 'identity.audit.log' },
+        {
+          actorId: user.sub,
+          action: 'self-employed.recheck',
+          entityType: 'User',
+          entityId: user.sub,
+          meta: {
+            status: info.status,
+            impersonatedBy: user.impersonatedBy ?? null,
+            ip: ip ?? null,
+          },
+        },
+      ).catch((e: Error) =>
+        this.logger.warn(`Qayta tekshiruv auditga yozilmadi: ${e.message}`),
+      );
     const profile = await sendRpc<AffiliateProfileDto>(
       this.identity,
       { cmd: AFFILIATE_AUTH_RPC.PROFILE_UPDATE },
       { userId: user.sub, dto },
     );
-    return this.withSelfEmployed(user.sub, profile);
+    return { ...profile, selfEmployed: info, card: null };
   }
 
   @Post('agreements')
@@ -108,18 +141,12 @@ export class AffiliateProfileController {
     profile: AffiliateProfileDto,
   ): Promise<AffiliateProfileDto> {
     try {
-      const balance = await sendRpc<{ selfEmployed: boolean }>(
+      const selfEmployed = await sendRpc<SelfEmployedInfoDto>(
         this.finance,
-        { cmd: FINANCE_WITHDRAWAL_RPC.BALANCE },
+        { cmd: SELF_EMPLOYED_RPC.CURRENT },
         { affiliateId },
       );
-      return {
-        ...profile,
-        selfEmployed: {
-          status: balance?.selfEmployed ? 'VERIFIED' : 'NOT_SUBMITTED',
-        },
-        card: null,
-      };
+      return { ...profile, selfEmployed, card: null };
     } catch (error) {
       this.logger.warn(`Maqom olinmadi: ${(error as Error).message}`);
       return { ...profile, card: null };

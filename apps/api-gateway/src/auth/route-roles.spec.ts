@@ -240,6 +240,14 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /admin/finance/withdrawals/:id/paid',
     'POST /admin/finance/withdrawals/:id/reject',
     'PUT /admin/finance/affiliates/:id/self-employed',
+    // BE-25 5-tur: JShShIR arizalari — ko‘rish ADMIN ham; raqam, hujjat va qaror — moliya
+    'GET /admin/finance/self-employed',
+    'GET /admin/finance/self-employed/:id',
+    'GET /admin/finance/self-employed/:id/document',
+    'POST /admin/finance/self-employed/:id/approve',
+    'POST /admin/finance/self-employed/:id/reject',
+    'POST /admin/finance/self-employed/:id/reveal',
+    'POST /admin/finance/self-employed/:id/revoke',
   ],
 };
 

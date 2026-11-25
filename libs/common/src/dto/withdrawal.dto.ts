@@ -40,6 +40,7 @@ export const FINANCE_WITHDRAWAL_RPC = {
   CREATE: 'finance.withdrawal.create',
   LIST_MINE: 'finance.withdrawal.list-mine',
   ADMIN_LIST: 'finance.withdrawal.admin-list',
+  GET: 'finance.withdrawal.get',
   APPROVE: 'finance.withdrawal.approve',
   REJECT: 'finance.withdrawal.reject',
   PAID: 'finance.withdrawal.paid',

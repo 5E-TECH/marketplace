@@ -19,6 +19,8 @@ import { FinanceService } from './finance.service';
 import { SellerFinanceService } from './seller-finance.service';
 import { WithdrawalController } from './ledger/withdrawal.controller';
 import { WithdrawalService } from './ledger/withdrawal.service';
+import { SelfEmployedController } from './ledger/self-employed.controller';
+import { SelfEmployedService } from './ledger/self-employed.service';
 import { SettlementController } from './ledger/settlement.controller';
 import { FinanceSettingsController } from './ledger/finance-settings.controller';
 import { FinanceSettingsService } from './ledger/finance-settings.service';
@@ -95,6 +97,7 @@ import { ElchiCheckService } from './ledger/elchi-check.service';
     FinanceController,
     LedgerController,
     WithdrawalController,
+    SelfEmployedController,
     SettlementController,
     ReconciliationController,
     SettlementResponseController,
@@ -108,6 +111,7 @@ import { ElchiCheckService } from './ledger/elchi-check.service';
     BalanceCheckService,
     CodDailyCheckService,
     WithdrawalService,
+    SelfEmployedService,
     SettlementService,
     WholesalerBalanceService,
     PlatformMetricsService,

@@ -1,10 +1,12 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
+  Ip,
   Param,
   Post,
   Put,
@@ -25,6 +27,7 @@ import {
   AdminWithdrawalQueryDto,
   AffiliateSelfEmployedDto,
   CurrentUser,
+  ErrorCode,
   FINANCE_WITHDRAWAL_RPC,
   RejectWithdrawalDto,
   RmqClient,
@@ -36,6 +39,7 @@ import {
   WithdrawalPageDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { currentFullName, recheckOnNameChange } from './name-recheck';
 
 /**
  * Moliya: pul yechish so‘rovlari (BE-23; MOL-5, FE-20). Tasdiq, rad va «To‘landi» — moliya xodimi (T01:170);
@@ -49,6 +53,7 @@ export class AdminWithdrawalsController {
 
   constructor(
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     // BE-24: «Pul o‘tkazildi» SMS i sotuvchiga
     @Optional()
     @Inject(RmqClient.NOTIFICATION)
@@ -73,21 +78,34 @@ export class AdminWithdrawalsController {
   @ApiOperation({
     summary: 'Tasdiqlash',
     description:
-      '5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi.',
+      '5 mln dan katta so‘rov ikki xil xodim tasdig‘idan keyin «Tasdiqlandi» bo‘ladi; bir xodim ikki marta tasdiqlay olmaydi. Maqomi tasdiqlanmagan sotuvchi — 400.',
   })
   @ApiOkResponse({ type: WithdrawalDto })
   @ApiNotFoundResponse({ description: 'So‘rov topilmadi' })
   @ApiConflictResponse({
-    description: 'INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan',
+    description:
+      'INVALID_STATE: holat mos emas yoki shu xodim tasdiqlagan; NAME_CHANGED: ism tasdiqlangandan farq qiladi — maqom qayta tekshiruvda',
   })
-  approve(
+  async approve(
     @Param('id', ParseLeadIdPipe) id: string,
     @CurrentUser('sub') approverId: string,
   ): Promise<WithdrawalDto> {
-    return sendRpc(
+    // pul shundan keyin o‘tkaziladi — maqom tasdiqlangan ism bilan hali mos ekani shu yerda tekshiriladi (BE-25 5-tur)
+    const { affiliateId } = await sendRpc<WithdrawalDto>(
       this.finance,
-      { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
-      { id, approverId },
+      { cmd: FINANCE_WITHDRAWAL_RPC.GET },
+      { id },
+    );
+    const fullName = await currentFullName(this.identity, affiliateId);
+    return recheckOnNameChange(
+      { finance: this.finance, identity: this.identity },
+      { affiliateId, fullName, actorId: approverId },
+      () =>
+        sendRpc<WithdrawalDto>(
+          this.finance,
+          { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
+          { id, approverId, currentFullName: fullName },
+        ),
     );
   }
 
@@ -157,19 +175,49 @@ export class AdminWithdrawalsController {
   @Put('affiliates/:id/self-employed')
   @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
-    summary: 'O‘zini o‘zi band qilganlik belgisi (moliya tekshirgach qo‘lda)',
-    description: 'Belgisiz sotuvchining so‘rovi rad etiladi (T01:471).',
+    summary: 'O‘zini o‘zi band qilganlik belgisi — arizasiz, qo‘lda',
+    description:
+      'Belgisiz sotuvchining so‘rovi rad etiladi (T01:471). Sotuvchi ariza yuborgan bo‘lsa — `admin/finance/self-employed` da tasdiqlanadi (bu yerda 409 ALREADY_PENDING).',
   })
   @ApiOkResponse({ type: AffiliateSelfEmployedDto })
-  setSelfEmployed(
+  async setSelfEmployed(
     @Param('id', ParseLeadIdPipe) affiliateId: string,
     @CurrentUser('sub') updatedBy: string,
     @Body() dto: SetSelfEmployedDto,
+    @Ip() ip: string,
   ): Promise<AffiliateSelfEmployedDto> {
-    return sendRpc(
-      this.finance,
-      { cmd: FINANCE_WITHDRAWAL_RPC.SELF_EMPLOYED_SET },
-      { affiliateId, selfEmployed: dto.selfEmployed, updatedBy },
+    // qo‘lda tasdiq ham ism bilan bog‘lanadi: ism o‘zgarsa qayta tekshiriladi (BE-25 5-tur)
+    const fullName = dto.selfEmployed
+      ? await currentFullName(this.identity, affiliateId)
+      : '';
+    if (dto.selfEmployed && !fullName)
+      throw new ConflictException({
+        message: 'Sotuvchi profilida ism va familiya yo‘q',
+        errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
+      });
+    const result = await recheckOnNameChange(
+      { finance: this.finance, identity: this.identity },
+      { affiliateId, fullName, actorId: updatedBy },
+      () =>
+        sendRpc<AffiliateSelfEmployedDto>(
+          this.finance,
+          { cmd: FINANCE_WITHDRAWAL_RPC.SELF_EMPLOYED_SET },
+          { affiliateId, selfEmployed: dto.selfEmployed, updatedBy, fullName },
+        ),
     );
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId: updatedBy,
+        action: 'self-employed.manual',
+        entityType: 'User',
+        entityId: affiliateId,
+        meta: { affiliateId, selfEmployed: dto.selfEmployed, ip: ip ?? null },
+      },
+    ).catch((error: Error) =>
+      this.logger.warn(`Qo‘lda belgi auditga yozilmadi: ${error.message}`),
+    );
+    return result;
   }
 }
