@@ -23,6 +23,36 @@
 	encode zstd gzip
 	import security_headers
 
+	# BE-26: Swagger tashqaridan doim yopiq — `SWAGGER_ENABLED=on` bo'lsa ham.
+	# /api/docs* — UI, JS/CSS fayllari (swagger-ui-init.js ichida butun API
+	# sxemasi bor), /api/docs-json va /api/docs-yaml. Caddy path matcheri
+	# katta-kichik harfni farqlamaydi: /API/DOCS ham yopiladi (Express ham
+	# farqlamaydi). Ichki tarmoqda Swagger kerak bo'lsa — api-gateway:3000 ga
+	# to'g'ridan-to'g'ri (C4.6-RUNBOOK, BE-26).
+	handle /api/docs* {
+		respond 404
+	}
+
+	# So'rov qatoridagi yo'l "/" bilan boshlanmasa (masalan
+	# `GET http:http://x/api/docs-json`), Caddy uni bo'sh yo'l deb ko'radi va
+	# yuqoridagi qoida ishlamaydi, Express esa /api/docs-json deb o'qib
+	# Swagger'ni beradi. Bunday so'rovlar backendga o'tkazilmaydi.
+	@non_origin_form not path /*
+	handle @non_origin_form {
+		respond 400
+	}
+
+	# Yo'li "//" bilan boshlanadigan yoki "#" li so'rov (masalan
+	# `GET //a@x/api/docs-json?#`): Caddy yo'lni tozalab `/a@x/api/docs-json` deb
+	# ko'radi va /api/docs* qoidasi ishlamaydi, Express (parseurl → url.parse) esa
+	# `//a@x` ni login@host deb tashlab, Swagger'ni beradi. Haqiqiy klient bunday
+	# so'rov yubormaydi. Tekshiruv tozalanmagan yo'l va so'rov qatori bo'yicha —
+	# `path` matcheri yo'lni oldin tozalaydi, shuning uchun bu yerda yaramaydi.
+	@ambiguous_target expression `{http.request.uri.path}.startsWith("//") || {http.request.uri}.contains("#")`
+	handle @ambiguous_target {
+		respond 400
+	}
+
 	handle_path /media/* {
 		reverse_proxy minio:9000
 	}
