@@ -82,7 +82,11 @@ export class SellerShopDto {
   @ApiProperty({ enum: ShopStatus, example: ShopStatus.PENDING })
   status: ShopStatus;
 
-  @ApiProperty({ example: 'Maishiy texnika do‘koni', nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'Maishiy texnika do‘koni',
+    nullable: true,
+  })
   description: string | null;
 
   @ApiProperty({ example: null, nullable: true, type: String })
@@ -91,16 +95,16 @@ export class SellerShopDto {
   @ApiProperty({ example: null, nullable: true, type: String })
   bannerUrl: string | null;
 
-  @ApiProperty({ example: '+998901234567', nullable: true })
+  @ApiProperty({ type: String, example: '+998901234567', nullable: true })
   phone: string | null;
 
-  @ApiProperty({ example: '1', nullable: true })
+  @ApiProperty({ type: String, example: '1', nullable: true })
   regionId: string | null;
 
-  @ApiProperty({ example: '10', nullable: true })
+  @ApiProperty({ type: String, example: '10', nullable: true })
   districtId: string | null;
 
-  @ApiProperty({ example: 'Toshkent shahri', nullable: true })
+  @ApiProperty({ type: String, example: 'Toshkent shahri', nullable: true })
   address: string | null;
 
   @ApiProperty({ example: 0 })
@@ -198,7 +202,7 @@ export class SellerOrderItemDto {
   @ApiProperty({ example: '12' })
   salesOrderId: string;
 
-  @ApiProperty({ example: 'Ali Valiyev', nullable: true })
+  @ApiProperty({ type: String, example: 'Ali Valiyev', nullable: true })
   buyerName: string | null;
 
   @ApiProperty({ example: 450000 })
@@ -213,10 +217,14 @@ export class SellerOrderItemDto {
   @ApiProperty({ enum: SalesOrderSellerStatus })
   status: SalesOrderSellerStatus;
 
-  @ApiProperty({ example: '987', nullable: true })
+  @ApiProperty({ type: String, example: '987', nullable: true })
   elchiShipmentId: string | null;
 
-  @ApiProperty({ example: 'https://elchi.uz/track/987', nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'https://elchi.uz/track/987',
+    nullable: true,
+  })
   trackingUrl: string | null;
 
   @ApiProperty({ example: 2 })

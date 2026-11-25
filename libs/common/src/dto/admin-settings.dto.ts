@@ -29,7 +29,7 @@ export class UpdateAdminSettingsDto {
 }
 
 export class AdminSettingsDto extends UpdateAdminSettingsDto {
-  @ApiProperty({ example: '17' })
+  @ApiProperty({ nullable: true, type: String, example: '17' })
   updatedBy: string | null;
 
   @ApiProperty({ example: '2026-09-08T12:00:00.000Z' })

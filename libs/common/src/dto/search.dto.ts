@@ -67,10 +67,16 @@ export class SearchProductItemDto {
   @ApiProperty({ example: '12' }) productId: string;
   @ApiProperty({ example: 'iphone-16-pro' }) slug: string;
   @ApiProperty({ example: 'iPhone 16 Pro' }) title: string;
-  @ApiProperty({ example: '7', nullable: true }) categoryId: string | null;
+  @ApiProperty({ type: String, example: '7', nullable: true }) categoryId:
+    string | null;
   @ApiProperty({ example: 14999000 }) price: number;
-  @ApiProperty({ example: null, nullable: true }) imageUrl: string | null;
-  @ApiProperty({ example: { brand: 'Apple' } })
+  @ApiProperty({ type: String, example: null, nullable: true }) imageUrl:
+    string | null;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    example: { brand: 'Apple' },
+  })
   attributes: Record<string, unknown>;
   @ApiProperty({ example: 0.42 }) relevance: number;
 }
@@ -83,8 +89,10 @@ export class SearchFacetDto {
     ],
   })
   categories: Array<{ categoryId: string; count: number }>;
-  @ApiProperty({ example: 100000, nullable: true }) minPrice: number | null;
-  @ApiProperty({ example: 15000000, nullable: true }) maxPrice: number | null;
+  @ApiProperty({ type: Number, example: 100000, nullable: true }) minPrice:
+    number | null;
+  @ApiProperty({ type: Number, example: 15000000, nullable: true }) maxPrice:
+    number | null;
 }
 
 export class SearchProductsPageDto {

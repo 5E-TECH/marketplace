@@ -35,13 +35,18 @@ export class StorefrontAttributeDto {
 export class StorefrontProductDto {
   @ApiProperty({ example: '12' }) id: string;
   @ApiProperty({ example: 'Simsiz quloqchin X1' }) name: string;
-  @ApiProperty({ example: 'Shovqinni pasaytiradi', nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'Shovqinni pasaytiradi',
+    nullable: true,
+  })
   subtitle: string | null;
-  @ApiProperty({ example: 'Batareya 30 soat…', nullable: true })
+  @ApiProperty({ type: String, example: 'Batareya 30 soat…', nullable: true })
   description: string | null;
   @ApiProperty({ example: ['https://elchimarket.uz/media/p/12-1.webp'] })
   images: string[];
-  @ApiProperty({ example: null, nullable: true }) videoUrl: string | null;
+  @ApiProperty({ type: String, example: null, nullable: true }) videoUrl:
+    string | null;
   @ApiProperty({ type: StorefrontCategoryRefDto, nullable: true })
   category: StorefrontCategoryRefDto | null;
   @ApiProperty({ type: [StorefrontAttributeDto] })
@@ -58,6 +63,7 @@ export class StorefrontProductDto {
   @ApiProperty({ example: 35000, description: 'Eshikkacha yetkazish, so‘m' })
   deliveryToAddress: number;
   @ApiProperty({
+    type: Boolean,
     example: true,
     nullable: true,
     description: 'Omborda bor; null — ombor javob bermadi (noma’lum)',
@@ -323,7 +329,8 @@ export class StorefrontCartLineDto {
   @ApiProperty({ example: '31' }) id: string;
   @ApiProperty({ example: '12' }) productId: string;
   @ApiProperty({ example: 'Simsiz quloqchin X1' }) productName: string;
-  @ApiProperty({ example: null, nullable: true }) imageUrl: string | null;
+  @ApiProperty({ type: String, example: null, nullable: true }) imageUrl:
+    string | null;
   @ApiProperty({ example: 1 }) quantity: number;
   @ApiProperty({
     example: 249000,

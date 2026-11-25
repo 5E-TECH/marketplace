@@ -50,12 +50,13 @@ export class AdminStockQueryDto extends StockQueryDto {
 /** Katalog ma'lumoti (nom/SKU) — katalog javob bermasa yoki variant o'chirilgan bo'lsa null. */
 class AdminVariantInfoDto {
   @ApiProperty({ example: '88' }) variantId: string;
-  @ApiProperty({ example: '12', nullable: true }) productId: string | null;
-  @ApiProperty({ example: 'iPhone 16 Pro', nullable: true })
+  @ApiProperty({ type: String, example: '12', nullable: true }) productId:
+    string | null;
+  @ApiProperty({ type: String, example: 'iPhone 16 Pro', nullable: true })
   productName: string | null;
-  @ApiProperty({ example: 'Qora / 256 GB', nullable: true })
+  @ApiProperty({ type: String, example: 'Qora / 256 GB', nullable: true })
   variantName: string | null;
-  @ApiProperty({ example: 'IPHONE-16-BLACK-256', nullable: true })
+  @ApiProperty({ type: String, example: 'IPHONE-16-BLACK-256', nullable: true })
   sku: string | null;
   @ApiProperty({
     example: false,
@@ -272,10 +273,10 @@ export class AdminStockMovementItemDto extends AdminVariantInfoDto {
   @ApiProperty() quantity: number;
   @ApiProperty() onHandAfter: number;
   @ApiProperty() reservedAfter: number;
-  @ApiProperty({ nullable: true }) referenceType: string | null;
-  @ApiProperty({ nullable: true }) referenceId: string | null;
-  @ApiProperty({ nullable: true }) reason: string | null;
-  @ApiProperty({ nullable: true }) actorId: string | null;
+  @ApiProperty({ type: String, nullable: true }) referenceType: string | null;
+  @ApiProperty({ type: String, nullable: true }) referenceId: string | null;
+  @ApiProperty({ type: String, nullable: true }) reason: string | null;
+  @ApiProperty({ type: String, nullable: true }) actorId: string | null;
   @ApiProperty() createdAt: Date;
 }
 

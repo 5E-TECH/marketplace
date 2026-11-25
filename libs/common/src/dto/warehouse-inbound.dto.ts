@@ -309,18 +309,22 @@ export class InboundShipmentItemDto {
   productName: string;
   @ApiProperty({ example: '901' }) variantId: string;
   @ApiProperty({ example: 'VIT-D3-60' }) sku: string;
-  @ApiPropertyOptional({ nullable: true, example: '4780012345678' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '4780012345678',
+  })
   barcode: string | null;
   @ApiProperty({ example: 100 }) declaredQty: number;
-  @ApiPropertyOptional({ nullable: true, example: 98 })
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 98 })
   receivedQty: number | null;
-  @ApiPropertyOptional({ nullable: true, example: 2 })
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 2 })
   defectiveQty: number | null;
-  @ApiPropertyOptional({ nullable: true, example: 'P-2026-11' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'P-2026-11' })
   batch: string | null;
-  @ApiPropertyOptional({ nullable: true, example: '2027-06-30' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: '2027-06-30' })
   expiryDate: string | null;
-  @ApiPropertyOptional({ nullable: true, example: 'B-02-1' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'B-02-1' })
   cell: string | null;
   @ApiPropertyOptional({
     nullable: true,
@@ -349,7 +353,11 @@ export class InboundShipmentDto {
   })
   status: InboundShipmentStatus;
   @ApiProperty({ example: '2026-12-01' }) expectedAt: string;
-  @ApiPropertyOptional({ nullable: true, example: 'Haftalik postavka' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Haftalik postavka',
+  })
   note: string | null;
   @ApiProperty({ example: '3' }) declaredBy: string;
   @ApiPropertyOptional({ nullable: true, type: String, example: 'Nodira K.' })
@@ -361,13 +369,22 @@ export class InboundShipmentDto {
     description: 'Kiritgan odam roli: optovik, omborchi, admin yoki superadmin',
   })
   declaredByRole?: Role | null;
-  @ApiPropertyOptional({ nullable: true, example: '5' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: '5' })
   receivedBy: string | null;
   @ApiPropertyOptional({ nullable: true, type: String, example: 'Jasur T.' })
   receivedByName?: string | null;
-  @ApiPropertyOptional({ nullable: true, example: '2026-12-01T06:40:00.000Z' })
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    example: '2026-12-01T06:40:00.000Z',
+  })
   receivedAt: Date | null;
-  @ApiPropertyOptional({ nullable: true, example: '2 dona qadog‘i yirtilgan' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '2 dona qadog‘i yirtilgan',
+  })
   receiveComment: string | null;
   @ApiProperty({ type: [InboundShipmentItemDto] })
   items: InboundShipmentItemDto[];
@@ -380,6 +397,8 @@ export class InboundShipmentPageDto {
   @ApiProperty({ example: 1 }) page: number;
   @ApiProperty({ example: 20 }) limit: number;
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'number' },
     example: { DECLARED: 3, IN_TRANSIT: 1, RECEIVED: 12, DISCREPANCY: 2 },
     description:
       'BE-25: holatlar soni — `status` dan boshqa filtrlar bo‘yicha (yorliqlar)',
@@ -393,7 +412,7 @@ export class StockLotDto {
   @ApiProperty({ example: 'VIT-D3-60' }) sku: string;
   @ApiProperty({ example: 'Vitamin D3 2000 IU, 60 kapsula' })
   productName: string;
-  @ApiPropertyOptional({ nullable: true, example: 'P-2026-11' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'P-2026-11' })
   batch: string | null;
   @ApiProperty({ example: '2027-06-30' }) expiryDate: string;
   @ApiProperty({
@@ -457,7 +476,7 @@ export class GradeReturnDto {
 
 export class ReturnInspectionDto {
   @ApiProperty({ example: '1284' }) orderId: string;
-  @ApiPropertyOptional({ nullable: true, example: '1190' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: '1190' })
   parcelId: string | null;
   @ApiProperty({
     type: 'array',
@@ -472,7 +491,11 @@ export class ReturnInspectionDto {
     example: [{ variantId: '901', sellable: 1, defective: 1 }],
   })
   items: Array<{ variantId: string; sellable: number; defective: number }>;
-  @ApiPropertyOptional({ nullable: true, example: 'Qadog‘i ezilgan' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Qadog‘i ezilgan',
+  })
   comment: string | null;
   @ApiProperty({ example: '5' }) inspectedBy: string;
   @ApiProperty({ example: '2026-12-08T09:30:00.000Z' }) inspectedAt: Date;

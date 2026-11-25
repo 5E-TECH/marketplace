@@ -268,6 +268,8 @@ export class FraudIncidentDto {
   operatorId: string | null;
 
   @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
     example: { leads: 64, valid: 34, invalid: 24, duplicate: 6, confirmed: 7 },
     description: 'Dalil: tizim hisoblagan raqamlar yoki admin yozgan izoh',
   })
@@ -379,7 +381,8 @@ export class FraudActionDto {
   @ApiProperty({ example: '51 lid, yaroqli 55% (28 / 51) — chegara 60%' })
   reason: string;
 
-  @ApiProperty({ example: {} }) evidence: Record<string, unknown>;
+  @ApiProperty({ type: 'object', additionalProperties: true, example: {} })
+  evidence: Record<string, unknown>;
   @ApiProperty({
     example: '7',
     nullable: true,

@@ -17,12 +17,13 @@ export class CreateCategoryDto {
   @MaxLength(255)
   name: string;
 
-  @ApiPropertyOptional({ example: '1', nullable: true })
+  @ApiPropertyOptional({ type: String, example: '1', nullable: true })
   @IsOptional()
   @Matches(/^\d+$/, { message: "parentId musbat son bo'lishi kerak" })
   parentId?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     example: 'https://cdn.example.com/categories/phones.svg',
     nullable: true,
   })

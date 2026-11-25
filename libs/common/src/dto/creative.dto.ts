@@ -83,6 +83,8 @@ export class CreativeUploadPolicyDto {
   url: string;
 
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'string' },
     description:
       'Formaga shu maydonlar (o‘zgartirmasdan) va oxirida `file` qo‘shiladi',
     example: { key: 'creatives/12/…mp4', 'Content-Type': 'video/mp4' },

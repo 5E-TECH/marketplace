@@ -110,6 +110,7 @@ export class PricePolicyDto {
   comment?: string;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 29688,
     nullable: true,
     description: 'K, sotilish 70% (2 xonagacha kasr)',
@@ -122,6 +123,7 @@ export class PricePolicyDto {
   kSale70?: number | null;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 15232,
     nullable: true,
     description: 'K, sotilish 100% (2 xonagacha kasr)',
@@ -133,12 +135,17 @@ export class PricePolicyDto {
   @Max(MAX_MONEY)
   kSale100?: number | null;
 
-  @ApiPropertyOptional({ example: 9000, nullable: true, description: 'M' })
+  @ApiPropertyOptional({
+    type: Number,
+    example: 9000,
+    nullable: true,
+    description: 'M',
+  })
   @IsOptional()
   @apply(...money())
   targetMargin?: number | null;
 
-  @ApiPropertyOptional({ example: 0.04, nullable: true })
+  @ApiPropertyOptional({ type: Number, example: 0.04, nullable: true })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
@@ -146,7 +153,7 @@ export class PricePolicyDto {
   @Max(0.5)
   taxRate?: number | null;
 
-  @ApiPropertyOptional({ example: 0.0185, nullable: true })
+  @ApiPropertyOptional({ type: Number, example: 0.0185, nullable: true })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
@@ -154,12 +161,12 @@ export class PricePolicyDto {
   @Max(0.5)
   paymentRate?: number | null;
 
-  @ApiPropertyOptional({ example: 12000, nullable: true })
+  @ApiPropertyOptional({ type: Number, example: 12000, nullable: true })
   @IsOptional()
   @apply(...money())
   callCenterFee?: number | null;
 
-  @ApiPropertyOptional({ example: 1.29, nullable: true })
+  @ApiPropertyOptional({ type: Number, example: 1.29, nullable: true })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 3 })
@@ -168,6 +175,7 @@ export class PricePolicyDto {
   affiliateCoef?: number | null;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 50420,
     nullable: true,
     description: 'Sotuvchining reklama xarajati',
@@ -177,6 +185,7 @@ export class PricePolicyDto {
   adCost?: number | null;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 10,
     nullable: true,
     description: 'Ustama chegarasi, %',
@@ -194,6 +203,7 @@ export class PricePolicyDto {
   deliveryMode?: DeliveryDisplayMode | null;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 30000,
     nullable: true,
     description: 'Ko‘rinadigan yetkazish, markazgacha',
@@ -203,6 +213,7 @@ export class PricePolicyDto {
   visibleCenter?: number | null;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 50000,
     nullable: true,
     description: 'Ko‘rinadigan yetkazish, eshikkacha',

@@ -19,38 +19,57 @@ export class CreateProductVariantDto {
   @MaxLength(100)
   sku: string;
 
-  @ApiPropertyOptional({ example: 'Qora-256 Gb', nullable: true })
+  @ApiPropertyOptional({ type: String, example: 'Qora-256 Gb', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   name?: string | null;
 
-  @ApiPropertyOptional({ example: { color: 'Qora', storage: '256 Gb' } })
+  @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
+    example: { color: 'Qora', storage: '256 Gb' },
+  })
   @IsOptional()
   @IsObject()
   attributes?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ example: 16000000, minimum: 0, nullable: true })
+  @ApiPropertyOptional({
+    type: Number,
+    example: 16000000,
+    minimum: 0,
+    nullable: true,
+  })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
   @Max(MAX_MONEY)
   @Min(0)
   price?: number | null;
 
-  @ApiPropertyOptional({ example: 17000000, minimum: 0, nullable: true })
+  @ApiPropertyOptional({
+    type: Number,
+    example: 17000000,
+    minimum: 0,
+    nullable: true,
+  })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
   @Max(MAX_MONEY)
   @Min(0)
   oldPrice?: number | null;
 
-  @ApiPropertyOptional({ example: '4780012345678', nullable: true })
+  @ApiPropertyOptional({
+    type: String,
+    example: '4780012345678',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   barcode?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     example: 'https://cdn.example.com/products/iphone-black.jpg',
     nullable: true,
   })
@@ -79,22 +98,27 @@ export class ProductVariantDto {
   @ApiProperty({ example: 'IPHONE-16-BLACK-256' })
   sku: string;
 
-  @ApiProperty({ example: 'Qora-256 Gb', nullable: true })
+  @ApiProperty({ type: String, example: 'Qora-256 Gb', nullable: true })
   name: string | null;
 
-  @ApiProperty({ example: { color: 'Qora', storage: '256 Gb' } })
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    example: { color: 'Qora', storage: '256 Gb' },
+  })
   attributes: Record<string, unknown>;
 
-  @ApiProperty({ example: 16000000, nullable: true })
+  @ApiProperty({ type: Number, example: 16000000, nullable: true })
   price: number | null;
 
-  @ApiProperty({ example: 17000000, nullable: true })
+  @ApiProperty({ type: Number, example: 17000000, nullable: true })
   oldPrice: number | null;
 
-  @ApiProperty({ example: '4780012345678', nullable: true })
+  @ApiProperty({ type: String, example: '4780012345678', nullable: true })
   barcode: string | null;
 
   @ApiProperty({
+    type: String,
     example: 'https://cdn.example.com/products/iphone-black.jpg',
     nullable: true,
   })

@@ -61,10 +61,12 @@ export class CartItemDto {
 }
 
 export class CartDto {
-  @ApiProperty({ example: '5', nullable: true }) id: string | null;
-  @ApiProperty({ example: '9', nullable: true }) customerId: string | null;
-  @ApiProperty({ example: 'browser-session', nullable: true }) sessionId:
+  @ApiProperty({ type: String, example: '5', nullable: true }) id:
     string | null;
+  @ApiProperty({ type: String, example: '9', nullable: true }) customerId:
+    string | null;
+  @ApiProperty({ type: String, example: 'browser-session', nullable: true })
+  sessionId: string | null;
   @ApiProperty({ type: [CartItemDto] }) items: CartItemDto[];
   @ApiProperty({ example: 250000 }) totalAmount: number;
   @ApiProperty({ example: 2 }) totalQuantity: number;

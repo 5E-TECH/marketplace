@@ -40,7 +40,7 @@ export class NotificationDto {
   @ApiProperty({ example: false })
   isRead: boolean;
 
-  @ApiProperty({ example: {}, type: Object })
+  @ApiProperty({ example: {}, type: 'object', additionalProperties: true })
   data: Record<string, unknown>;
 
   @ApiProperty({ format: 'date-time' })
