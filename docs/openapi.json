@@ -15842,12 +15842,12 @@
             "example": "Mobil telefonlar"
           },
           "parentId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
           "iconUrl": {
-            "type": "object",
+            "type": "string",
             "example": "https://cdn.example.com/categories/phones.svg",
             "nullable": true
           },
@@ -15949,12 +15949,12 @@
             "example": "Mobil telefonlar"
           },
           "parentId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
           "iconUrl": {
-            "type": "object",
+            "type": "string",
             "example": "https://cdn.example.com/categories/phones.svg",
             "nullable": true
           },
@@ -16033,12 +16033,12 @@
             "example": "Simsiz quloqchin X1"
           },
           "subtitle": {
-            "type": "object",
+            "type": "string",
             "example": "Shovqinni pasaytiradi",
             "nullable": true
           },
           "description": {
-            "type": "object",
+            "type": "string",
             "example": "Batareya 30 soat…",
             "nullable": true
           },
@@ -16052,7 +16052,7 @@
             }
           },
           "videoUrl": {
-            "type": "object",
+            "type": "string",
             "example": null,
             "nullable": true
           },
@@ -16092,7 +16092,7 @@
             "description": "Eshikkacha yetkazish, so‘m"
           },
           "inStock": {
-            "type": "object",
+            "type": "boolean",
             "example": true,
             "nullable": true,
             "description": "Omborda bor; null — ombor javob bermadi (noma’lum)"
@@ -16160,12 +16160,12 @@
             "example": "Simsiz quloqchin X1"
           },
           "subtitle": {
-            "type": "object",
+            "type": "string",
             "example": "Shovqinni pasaytiradi",
             "nullable": true
           },
           "description": {
-            "type": "object",
+            "type": "string",
             "example": "Batareya 30 soat…",
             "nullable": true
           },
@@ -16179,7 +16179,7 @@
             }
           },
           "videoUrl": {
-            "type": "object",
+            "type": "string",
             "example": null,
             "nullable": true
           },
@@ -16219,7 +16219,7 @@
             "description": "Eshikkacha yetkazish, so‘m"
           },
           "inStock": {
-            "type": "object",
+            "type": "boolean",
             "example": true,
             "nullable": true,
             "description": "Omborda bor; null — ombor javob bermadi (noma’lum)"
@@ -16298,7 +16298,7 @@
             "example": "Simsiz quloqchin X1"
           },
           "imageUrl": {
-            "type": "object",
+            "type": "string",
             "example": null,
             "nullable": true
           },
@@ -16518,7 +16518,8 @@
           },
           "data": {
             "type": "object",
-            "example": {}
+            "example": {},
+            "additionalProperties": true
           },
           "createdAt": {
             "format": "date-time",
@@ -17442,7 +17443,8 @@
             "example": "55"
           },
           "shipmentId": {
-            "type": "object",
+            "type": "string",
+            "nullable": true,
             "example": "1251134"
           },
           "elchiStatus": {
@@ -17512,7 +17514,9 @@
             "type": "string"
           },
           "alertedAt": {
-            "type": "object",
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
             "description": "Moliya va nazoratchiga xabar yuborilgan vaqt"
           }
         },
@@ -17644,13 +17648,14 @@
             "example": "iPhone 16 Pro"
           },
           "categoryId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
           "description": {
-            "type": "object",
-            "example": "Titanium, 256 GB"
+            "type": "string",
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -17664,7 +17669,7 @@
             "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
           },
           "affiliateFee": {
-            "type": "object",
+            "type": "number",
             "example": 65000,
             "minimum": 0,
             "nullable": true,
@@ -17695,13 +17700,14 @@
             "description": "Balandlik, mm"
           },
           "oldPrice": {
-            "type": "object",
+            "type": "number",
             "example": 15999000,
             "minimum": 0,
             "nullable": true
           },
           "imageUrl": {
-            "type": "object",
+            "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
@@ -17717,6 +17723,7 @@
           },
           "attributes": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "brand": "Apple",
               "storage": "256 GB"
@@ -17777,7 +17784,7 @@
             "nullable": true
           },
           "categoryId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
@@ -17790,7 +17797,7 @@
             "example": "iphone-16-pro"
           },
           "description": {
-            "type": "object",
+            "type": "string",
             "example": "Titanium, 256 GB",
             "nullable": true
           },
@@ -17799,12 +17806,12 @@
             "example": 14999000
           },
           "oldPrice": {
-            "type": "object",
+            "type": "number",
             "example": 15999000,
             "nullable": true
           },
           "imageUrl": {
-            "type": "object",
+            "type": "string",
             "example": null,
             "nullable": true
           },
@@ -17816,6 +17823,7 @@
           },
           "attributes": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "brand": "Apple"
             }
@@ -17987,13 +17995,14 @@
             "example": "iPhone 16 Pro"
           },
           "categoryId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
           "description": {
-            "type": "object",
-            "example": "Titanium, 256 GB"
+            "type": "string",
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -18007,7 +18016,7 @@
             "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
           },
           "affiliateFee": {
-            "type": "object",
+            "type": "number",
             "example": 65000,
             "minimum": 0,
             "nullable": true,
@@ -18038,13 +18047,14 @@
             "description": "Balandlik, mm"
           },
           "oldPrice": {
-            "type": "object",
+            "type": "number",
             "example": 15999000,
             "minimum": 0,
             "nullable": true
           },
           "imageUrl": {
-            "type": "object",
+            "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
@@ -18060,6 +18070,7 @@
           },
           "attributes": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "brand": "Apple",
               "storage": "256 GB"
@@ -18151,6 +18162,9 @@
           },
           "fields": {
             "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
             "description": "Formaga shu maydonlar (o‘zgartirmasdan) va oxirida `file` qo‘shiladi",
             "example": {
               "key": "creatives/12/…mp4",
@@ -18662,13 +18676,13 @@
             "nullable": true
           },
           "visibleCenter": {
-            "type": "object",
+            "type": "number",
             "example": 30000,
             "nullable": true,
             "description": "Ko‘rinadigan yetkazish, markazgacha"
           },
           "visibleAddress": {
-            "type": "object",
+            "type": "number",
             "example": 50000,
             "nullable": true,
             "description": "Ko‘rinadigan yetkazish, eshikkacha"
@@ -18684,51 +18698,51 @@
             "description": "BE-27: izoh — kim so‘radi va sabab; faqat auditga yoziladi"
           },
           "kSale70": {
-            "type": "object",
+            "type": "number",
             "example": 29688,
             "nullable": true,
             "description": "K, sotilish 70% (2 xonagacha kasr)"
           },
           "kSale100": {
-            "type": "object",
+            "type": "number",
             "example": 15232,
             "nullable": true,
             "description": "K, sotilish 100% (2 xonagacha kasr)"
           },
           "targetMargin": {
-            "type": "object",
+            "type": "number",
             "example": 9000,
             "nullable": true,
             "description": "M"
           },
           "taxRate": {
-            "type": "object",
+            "type": "number",
             "example": 0.04,
             "nullable": true
           },
           "paymentRate": {
-            "type": "object",
+            "type": "number",
             "example": 0.0185,
             "nullable": true
           },
           "callCenterFee": {
-            "type": "object",
+            "type": "number",
             "example": 12000,
             "nullable": true
           },
           "affiliateCoef": {
-            "type": "object",
+            "type": "number",
             "example": 1.29,
             "nullable": true
           },
           "adCost": {
-            "type": "object",
+            "type": "number",
             "example": 50420,
             "nullable": true,
             "description": "Sotuvchining reklama xarajati"
           },
           "markupCapPercent": {
-            "type": "object",
+            "type": "number",
             "example": 10,
             "nullable": true,
             "description": "Ustama chegarasi, %"
@@ -18743,13 +18757,13 @@
             "nullable": true
           },
           "visibleCenter": {
-            "type": "object",
+            "type": "number",
             "example": 30000,
             "nullable": true,
             "description": "Ko‘rinadigan yetkazish, markazgacha"
           },
           "visibleAddress": {
-            "type": "object",
+            "type": "number",
             "example": 50000,
             "nullable": true,
             "description": "Ko‘rinadigan yetkazish, eshikkacha"
@@ -18810,6 +18824,9 @@
           },
           "variables": {
             "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
             "example": {
               "shopName": "Do‘kon nomi"
             },
@@ -19306,7 +19323,8 @@
             "description": "Bo'sh yoki +998XXXXXXXXX"
           },
           "updatedBy": {
-            "type": "object",
+            "type": "string",
+            "nullable": true,
             "example": "17"
           },
           "updatedAt": {
@@ -19871,7 +19889,7 @@
             "example": "VIT-D3-60"
           },
           "barcode": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "4780012345678"
           },
@@ -19880,27 +19898,27 @@
             "example": 100
           },
           "receivedQty": {
-            "type": "object",
+            "type": "number",
             "nullable": true,
             "example": 98
           },
           "defectiveQty": {
-            "type": "object",
+            "type": "number",
             "nullable": true,
             "example": 2
           },
           "batch": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "P-2026-11"
           },
           "expiryDate": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "2027-06-30"
           },
           "cell": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "B-02-1"
           },
@@ -19955,7 +19973,7 @@
             "example": "2026-12-01"
           },
           "note": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "Haftalik postavka"
           },
@@ -19985,7 +20003,7 @@
             "description": "Kiritgan odam roli: optovik, omborchi, admin yoki superadmin"
           },
           "receivedBy": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "5"
           },
@@ -19995,12 +20013,13 @@
             "example": "Jasur T."
           },
           "receivedAt": {
-            "type": "object",
+            "type": "string",
+            "format": "date-time",
             "nullable": true,
             "example": "2026-12-01T06:40:00.000Z"
           },
           "receiveComment": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "2 dona qadog‘i yirtilgan"
           },
@@ -20050,6 +20069,9 @@
           },
           "counts": {
             "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
             "example": {
               "DECLARED": 3,
               "IN_TRANSIT": 1,
@@ -20145,7 +20167,7 @@
             "example": "Vitamin D3 2000 IU, 60 kapsula"
           },
           "batch": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "P-2026-11"
           },
@@ -20205,22 +20227,22 @@
             "example": "88"
           },
           "productId": {
-            "type": "object",
+            "type": "string",
             "example": "12",
             "nullable": true
           },
           "productName": {
-            "type": "object",
+            "type": "string",
             "example": "iPhone 16 Pro",
             "nullable": true
           },
           "variantName": {
-            "type": "object",
+            "type": "string",
             "example": "Qora / 256 GB",
             "nullable": true
           },
           "sku": {
-            "type": "object",
+            "type": "string",
             "example": "IPHONE-16-BLACK-256",
             "nullable": true
           },
@@ -20376,22 +20398,22 @@
             "example": "88"
           },
           "productId": {
-            "type": "object",
+            "type": "string",
             "example": "12",
             "nullable": true
           },
           "productName": {
-            "type": "object",
+            "type": "string",
             "example": "iPhone 16 Pro",
             "nullable": true
           },
           "variantName": {
-            "type": "object",
+            "type": "string",
             "example": "Qora / 256 GB",
             "nullable": true
           },
           "sku": {
-            "type": "object",
+            "type": "string",
             "example": "IPHONE-16-BLACK-256",
             "nullable": true
           },
@@ -20442,19 +20464,19 @@
             "type": "number"
           },
           "referenceType": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "referenceId": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "reason": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "actorId": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "createdAt": {
@@ -21102,6 +21124,9 @@
           },
           "rejectReasons": {
             "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
             "example": {
               "TOO_EXPENSIVE": 40,
               "NOT_NEEDED": 22
@@ -23284,7 +23309,7 @@
             "example": "1.1"
           },
           "effectiveAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-12-01T00:00:00+05:00",
             "nullable": true,
             "description": "Kuchga kirish vaqti; berilmasa — darhol (e’lon paytidan)"
@@ -23432,6 +23457,9 @@
           },
           "byStatus": {
             "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
             "example": {
               "ALL": 7,
               "PENDING_REVIEW": 1,
@@ -24863,6 +24891,61 @@
           "defective"
         ]
       },
+      "WholesalerStockTotalsDto": {
+        "type": "object",
+        "properties": {
+          "onHand": {
+            "type": "number",
+            "example": 120,
+            "description": "Omborda (jismonan)"
+          },
+          "reserved": {
+            "type": "number",
+            "example": 8,
+            "description": "Bandda"
+          },
+          "available": {
+            "type": "number",
+            "example": 110,
+            "description": "Sotuvda bor (omborda − band − muddati sabab to‘silgan)"
+          },
+          "inTransit": {
+            "type": "number",
+            "example": 50,
+            "description": "Yo‘lda — e’lon qilingan, hali qabul qilinmagan postavka"
+          },
+          "outForDelivery": {
+            "type": "number",
+            "example": 6,
+            "description": "Mijozga yo‘lda — Elchi’ga topshirilgan, taqdiri hali aniq emas (yetkazilmagan yoki qaytib kelmoqda): topshirilgan − sotilgan − qaytgan (sotiladigan va brak) [taklif]"
+          },
+          "sold": {
+            "type": "number",
+            "example": 34,
+            "description": "Sotilgan — yetkazilgan va teskari yozilmagan dona, moliya hisobidan: pul (ushlab turilgan, to‘lanadigan, to‘langan) shu sotuvlardan"
+          },
+          "returned": {
+            "type": "number",
+            "example": 3,
+            "description": "Qaytgan (saralangan)"
+          },
+          "defective": {
+            "type": "number",
+            "example": 2,
+            "description": "Brak (qabulda va qaytgan saralashda)"
+          }
+        },
+        "required": [
+          "onHand",
+          "reserved",
+          "available",
+          "inTransit",
+          "outForDelivery",
+          "sold",
+          "returned",
+          "defective"
+        ]
+      },
       "WholesalerMoneyDto": {
         "type": "object",
         "properties": {
@@ -24898,7 +24981,7 @@
             }
           },
           "stockTotals": {
-            "type": "object"
+            "$ref": "#/components/schemas/WholesalerStockTotalsDto"
           },
           "money": {
             "$ref": "#/components/schemas/WholesalerMoneyDto"
@@ -24968,7 +25051,10 @@
             "type": "string"
           },
           "fields": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "objectKey": {
             "type": "string",
@@ -25081,13 +25167,14 @@
             "example": "iPhone 16 Pro"
           },
           "categoryId": {
-            "type": "object",
+            "type": "string",
             "example": "1",
             "nullable": true
           },
           "description": {
-            "type": "object",
-            "example": "Titanium, 256 GB"
+            "type": "string",
+            "example": "Titanium, 256 GB",
+            "nullable": true
           },
           "price": {
             "type": "number",
@@ -25101,7 +25188,7 @@
             "description": "Optovikning bazaviy narxi (B), butun so‘m (OPT-2, TZ 2.1)"
           },
           "affiliateFee": {
-            "type": "object",
+            "type": "number",
             "example": 65000,
             "minimum": 0,
             "nullable": true,
@@ -25132,13 +25219,14 @@
             "description": "Balandlik, mm"
           },
           "oldPrice": {
-            "type": "object",
+            "type": "number",
             "example": 15999000,
             "minimum": 0,
             "nullable": true
           },
           "imageUrl": {
-            "type": "object",
+            "type": "string",
+            "nullable": true,
             "example": "https://cdn.example.com/iphone.jpg",
             "description": "Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)"
           },
@@ -25154,6 +25242,7 @@
           },
           "attributes": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "brand": "Apple",
               "storage": "256 GB"
@@ -26245,6 +26334,9 @@
           },
           "deliveryFee": {
             "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
             "example": {
               "CENTER": 30000,
               "ADDRESS": 50000
@@ -27071,7 +27163,7 @@
             "example": "1284"
           },
           "parcelId": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "1190"
           },
@@ -27100,7 +27192,7 @@
             ]
           },
           "comment": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "Qadog‘i ezilgan"
           },
@@ -27596,6 +27688,7 @@
           },
           "evidence": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "leads": 64,
               "valid": 34,
@@ -27758,6 +27851,7 @@
           },
           "evidence": {
             "type": "object",
+            "additionalProperties": true,
             "example": {}
           },
           "actorId": {
@@ -27840,6 +27934,7 @@
           },
           "evidence": {
             "type": "object",
+            "additionalProperties": true,
             "example": {
               "leads": 64,
               "valid": 34,

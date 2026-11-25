@@ -41,7 +41,7 @@ export class CodDailyCheckMismatchDto {
   @ApiProperty({ example: '55' })
   orderId: string;
 
-  @ApiPropertyOptional({ example: '1251134' })
+  @ApiPropertyOptional({ nullable: true, type: String, example: '1251134' })
   shipmentId: string | null;
 
   @ApiProperty({ example: 'paid' })
@@ -86,6 +86,9 @@ export class CodDailyCheckDto {
   computedAt: Date;
 
   @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    nullable: true,
     description: 'Moliya va nazoratchiga xabar yuborilgan vaqt',
   })
   alertedAt: Date | null;

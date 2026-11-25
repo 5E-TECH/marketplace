@@ -22,9 +22,10 @@ export class FavoritesQueryDto {
 
 export class FavoriteDto {
   @ApiProperty({ example: '12' }) id: string;
-  @ApiProperty({ example: '42', nullable: true }) userId: string | null;
-  @ApiProperty({ example: 'guest-session-uuid', nullable: true }) sessionId:
+  @ApiProperty({ type: String, example: '42', nullable: true }) userId:
     string | null;
+  @ApiProperty({ type: String, example: 'guest-session-uuid', nullable: true })
+  sessionId: string | null;
   @ApiProperty({ example: '85' }) productId: string;
   // eski sevimlilar (gateway yo‘li BE-18 da yopilgan) — eski mahsulot shakli
   @ApiProperty({ type: ProductDto }) product: ProductDto;

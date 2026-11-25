@@ -786,6 +786,8 @@ export class OperatorLeadProductDto {
   salePrice: number;
 
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'number' },
     example: { CENTER: 30000, ADDRESS: 50000 },
     nullable: true,
     description:

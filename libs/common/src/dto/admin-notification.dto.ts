@@ -62,6 +62,8 @@ export class NotificationTemplateDto {
   @ApiProperty({ example: 'Admin do‘konni tasdiqlaganda sotuvchiga' })
   description: string;
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'string' },
     example: { shopName: 'Do‘kon nomi' },
     description: 'Shablonda ishlatish mumkin bo‘lgan o‘zgaruvchilar',
   })

@@ -163,6 +163,7 @@ export class PublishLegalDocumentDto {
   version: string;
 
   @ApiPropertyOptional({
+    type: String,
     example: '2026-12-01T00:00:00+05:00',
     nullable: true,
     description: 'Kuchga kirish vaqti; berilmasa — darhol (e’lon paytidan)',

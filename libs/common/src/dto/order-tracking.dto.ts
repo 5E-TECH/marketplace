@@ -49,8 +49,8 @@ export class BuyerOrderListItemProductDto {
   @ApiProperty({ example: 'Mahsulot' }) name: string;
   @ApiProperty({ example: 1 }) quantity: number;
   @ApiProperty({ example: 100000 }) unitPrice: number;
-  @ApiPropertyOptional({ example: null, nullable: true }) imageUrl:
-    string | null;
+  @ApiPropertyOptional({ type: String, example: null, nullable: true })
+  imageUrl: string | null;
   @ApiProperty({
     enum: SalesOrderSellerStatus,
     example: SalesOrderSellerStatus.DELIVERED,
@@ -64,7 +64,11 @@ export class BuyerOrderListItemProductDto {
 
 export class BuyerOrderListItemDto {
   @ApiProperty({ example: '42' }) orderId: string;
-  @ApiProperty({ example: '2026-09-15T10:00:00.000Z' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-15T10:00:00.000Z',
+  })
   createdAt: Date | string;
   @ApiProperty({ example: 'CONFIRMED' }) orderStatus: string;
   @ApiProperty({ enum: ['online', 'cod'], example: 'cod' })
@@ -114,10 +118,18 @@ export class BuyerShipmentTrackingDto {
   @ApiProperty({ example: 'OUT_FOR_DELIVERY' })
   shipmentStatus: string;
 
-  @ApiPropertyOptional({ example: 'https://elchi.uz/track/7', nullable: true })
+  @ApiPropertyOptional({
+    type: String,
+    example: 'https://elchi.uz/track/7',
+    nullable: true,
+  })
   trackingUrl: string | null;
 
-  @ApiProperty({ example: '2026-09-14T10:30:00.000Z' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-14T10:30:00.000Z',
+  })
   updatedAt: Date | string;
 }
 
@@ -157,6 +169,8 @@ export class BuyerOrderTrackingDto {
   orderStatus: string;
 
   @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
     example: '2026-09-16T12:00:00.000Z',
     nullable: true,
     description:
@@ -164,7 +178,11 @@ export class BuyerOrderTrackingDto {
   })
   estimatedDeliveryAt: Date | string | null;
 
-  @ApiProperty({ example: '2026-09-14T10:30:00.000Z' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-14T10:30:00.000Z',
+  })
   updatedAt: Date | string;
 
   @ApiPropertyOptional({
@@ -193,9 +211,10 @@ export class BuyerOrderShopDto {
   @ApiProperty({ example: 450000 }) subtotal: number;
   @ApiProperty({ example: 25000 }) deliveryFee: number;
   @ApiProperty({ example: 'ON_THE_ROAD' }) status: string;
-  @ApiPropertyOptional({ example: '987', nullable: true })
+  @ApiPropertyOptional({ type: String, example: '987', nullable: true })
   elchiShipmentId: string | null;
   @ApiPropertyOptional({
+    type: String,
     example: 'https://elchi.uz/track/987',
     nullable: true,
   })
@@ -205,17 +224,29 @@ export class BuyerOrderShopDto {
 
 export class BuyerOrderDetailsDto {
   @ApiProperty({ example: '42' }) id: string;
-  @ApiPropertyOptional({ example: 'Ali', nullable: true }) buyerName:
-    string | null;
+  @ApiPropertyOptional({ type: String, example: 'Ali', nullable: true })
+  buyerName: string | null;
   @ApiProperty({ example: 'CONFIRMED' }) status: string;
   @ApiProperty({ example: 'cod' }) paymentMethod: string;
   @ApiProperty({ example: 475000 }) totalAmount: number;
   @ApiProperty({ example: 25000 }) deliveryFee: number;
-  @ApiPropertyOptional({ example: 'Toshkent, Amir Temur 1', nullable: true })
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Toshkent, Amir Temur 1',
+    nullable: true,
+  })
   deliveryAddress: string | null;
-  @ApiProperty({ example: '2026-09-14T10:00:00.000Z' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-14T10:00:00.000Z',
+  })
   createdAt: Date | string;
-  @ApiProperty({ example: '2026-09-14T10:30:00.000Z' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-14T10:30:00.000Z',
+  })
   updatedAt: Date | string;
   @ApiProperty({ type: [BuyerOrderShopDto] }) sellerOrders: BuyerOrderShopDto[];
 }

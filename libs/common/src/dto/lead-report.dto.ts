@@ -91,6 +91,8 @@ export class VariantReportRowDto {
   targetReached: boolean | null;
 
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'number' },
     example: { TOO_EXPENSIVE: 40, NOT_NEEDED: 22 },
     description: 'Rad sabablari',
   })

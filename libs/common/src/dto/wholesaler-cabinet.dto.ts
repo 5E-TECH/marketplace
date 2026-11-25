@@ -212,7 +212,8 @@ export class PrivateUploadPolicyDto {
 
 export class PrivateUploadPolicyResultDto {
   @ApiProperty() url: string;
-  @ApiProperty({ type: Object }) fields: Record<string, string>;
+  @ApiProperty({ type: 'object', additionalProperties: { type: 'string' } })
+  fields: Record<string, string>;
   @ApiProperty({ example: 'private-uploads/15/1f0c….pdf' }) objectKey: string;
   @ApiProperty() expiresAt: string;
   @ApiProperty() maxSize: number;
@@ -339,6 +340,13 @@ export type WholesalerStockTotals = Omit<
   'productId' | 'productName' | 'variantId' | 'sku'
 >;
 
+export class WholesalerStockTotalsDto extends OmitType(WholesalerStockRowDto, [
+  'productId',
+  'productName',
+  'variantId',
+  'sku',
+] as const) {}
+
 export class WholesalerMoneyDto {
   @ApiProperty({
     example: 1_250_000,
@@ -354,7 +362,8 @@ export class WholesalerMoneyDto {
 export class WholesalerDashboardDto {
   @ApiProperty({ type: [WholesalerStockRowDto] })
   stock: WholesalerStockRowDto[];
-  @ApiProperty({ type: Object }) stockTotals: WholesalerStockTotals;
+  @ApiProperty({ type: WholesalerStockTotalsDto })
+  stockTotals: WholesalerStockTotals;
   @ApiProperty({ type: WholesalerMoneyDto }) money: WholesalerMoneyDto;
 }
 

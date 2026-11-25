@@ -34,12 +34,16 @@ export class CreateProductDto {
   @MaxLength(255)
   name: string;
 
-  @ApiPropertyOptional({ example: '1', nullable: true })
+  @ApiPropertyOptional({ type: String, example: '1', nullable: true })
   @IsOptional()
   @Matches(/^\d+$/, { message: "categoryId musbat son bo'lishi kerak" })
   categoryId?: string | null;
 
-  @ApiPropertyOptional({ example: 'Titanium, 256 GB' })
+  @ApiPropertyOptional({
+    type: String,
+    example: 'Titanium, 256 GB',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   description?: string | null;
@@ -63,6 +67,7 @@ export class CreateProductDto {
   basePrice: number;
 
   @ApiPropertyOptional({
+    type: Number,
     example: 65000,
     minimum: 0,
     nullable: true,
@@ -103,7 +108,12 @@ export class CreateProductDto {
   @Max(MAX_DIMENSION)
   heightMm: number;
 
-  @ApiPropertyOptional({ example: 15999000, minimum: 0, nullable: true })
+  @ApiPropertyOptional({
+    type: Number,
+    example: 15999000,
+    minimum: 0,
+    nullable: true,
+  })
   @IsOptional()
   @IsInt() // BE-01: pul — butun so‘m
   @Max(MAX_MONEY)
@@ -111,6 +121,8 @@ export class CreateProductDto {
   oldPrice?: number | null;
 
   @ApiPropertyOptional({
+    type: String,
+    nullable: true,
     example: 'https://cdn.example.com/iphone.jpg',
     description:
       'Asosiy rasm URL (yoki images massivida kamida bitta rasm bo‘lishi shart)',
@@ -136,6 +148,8 @@ export class CreateProductDto {
   images?: string[];
 
   @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
     example: { brand: 'Apple', storage: '256 GB' },
   })
   @IsOptional()
@@ -273,16 +287,23 @@ export class ProductDto {
   @ApiProperty({ example: '5' }) shopId: string;
   @ApiProperty({ example: '42', nullable: true, type: String })
   ownerUserId: string | null;
-  @ApiProperty({ example: '1', nullable: true }) categoryId: string | null;
+  @ApiProperty({ type: String, example: '1', nullable: true }) categoryId:
+    string | null;
   @ApiProperty({ example: 'iPhone 16 Pro' }) name: string;
   @ApiProperty({ example: 'iphone-16-pro' }) slug: string;
-  @ApiProperty({ example: 'Titanium, 256 GB', nullable: true })
+  @ApiProperty({ type: String, example: 'Titanium, 256 GB', nullable: true })
   description: string | null;
   @ApiProperty({ example: 14999000 }) price: number;
-  @ApiProperty({ example: 15999000, nullable: true }) oldPrice: number | null;
-  @ApiProperty({ example: null, nullable: true }) imageUrl: string | null;
+  @ApiProperty({ type: Number, example: 15999000, nullable: true }) oldPrice:
+    number | null;
+  @ApiProperty({ type: String, example: null, nullable: true }) imageUrl:
+    string | null;
   @ApiProperty({ type: [String] }) images: string[];
-  @ApiProperty({ example: { brand: 'Apple' } })
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    example: { brand: 'Apple' },
+  })
   attributes: Record<string, unknown>;
   @ApiProperty({ example: false }) hasVariants: boolean;
   @ApiProperty({ enum: ProductStatus }) status: ProductStatus;
@@ -388,6 +409,8 @@ export class ModerationSummaryDto {
   pricesPending: number;
 
   @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'number' },
     example: {
       ALL: 7,
       PENDING_REVIEW: 1,

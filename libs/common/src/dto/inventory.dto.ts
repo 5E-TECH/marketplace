@@ -24,6 +24,7 @@ export class CreateWarehouseDto {
   name: string;
 
   @ApiPropertyOptional({
+    type: String,
     example: '12',
     nullable: true,
     description: 'Viloyat yoki hudud IDsi',
@@ -33,6 +34,7 @@ export class CreateWarehouseDto {
   regionId?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     example: '140',
     nullable: true,
     description: 'Tuman IDsi',
@@ -42,6 +44,7 @@ export class CreateWarehouseDto {
   districtId?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     example: 'Toshkent shahri, Chilonzor tumani',
     nullable: true,
     description: 'Omborning to‘liq manzili',
@@ -72,13 +75,14 @@ export class WarehouseDto {
   @ApiProperty({ example: 'Asosiy ombor' })
   name: string;
 
-  @ApiProperty({ example: '12', nullable: true })
+  @ApiProperty({ type: String, example: '12', nullable: true })
   regionId: string | null;
 
-  @ApiProperty({ example: '140', nullable: true })
+  @ApiProperty({ type: String, example: '140', nullable: true })
   districtId: string | null;
 
   @ApiProperty({
+    type: String,
     example: 'Toshkent shahri, Chilonzor tumani',
     nullable: true,
   })
@@ -153,7 +157,7 @@ export class StockItemDto {
   @ApiProperty({ example: 'iPhone 16 Pro' })
   productName: string;
 
-  @ApiProperty({ example: 'Qora / 256 GB', nullable: true })
+  @ApiProperty({ type: String, example: 'Qora / 256 GB', nullable: true })
   variantName: string | null;
 
   @ApiProperty({ example: 'IPHONE-16-BLACK-256' })
