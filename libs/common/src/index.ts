@@ -65,6 +65,7 @@ export * from './dto/lead-affiliate.dto';
 export * from './dto/lead-operator.dto';
 export * from './dto/lead-events.dto';
 export * from './dto/lead-fraud.dto';
+export * from './dto/lead-admin.dto';
 export * from './dto/lead-attempt-call.dto';
 export * from './dto/lead-telephony.dto';
 export * from './dto/affiliate-income.dto';

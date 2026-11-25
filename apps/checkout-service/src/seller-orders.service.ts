@@ -46,9 +46,8 @@ interface LabelLookupCache {
   districts: Map<string, Promise<Map<string, string>>>;
 }
 
-/** Ro‘yxatda telefon: «+998 90 *** ** 67» (lead-service `maskPhone` bilan bir xil). */
-export const maskPhone = (p: string) =>
-  `+998 ${p.slice(4, 6)} *** ** ${p.slice(-2)}`;
+/** Ro‘yxatda telefon — oxirgi 4 ta raqam (lead-service `maskPhone` bilan bir xil; ega qarori 2026-11-23). */
+export const maskPhone = (p: string) => `****${p.slice(-4)}`;
 
 /**
  * Eski do‘kon buyurtmasi (sales_order_seller): yangi holat → qaysi holatlardan o‘tish mumkin (BE-18, T9-8) [taklif].

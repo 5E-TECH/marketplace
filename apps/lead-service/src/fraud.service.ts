@@ -124,6 +124,27 @@ export class FraudService {
       });
   }
 
+  /** LID-5: tekshiruvdagi ariza bo‘yicha admin qarori choralar tarixida (hodisa o‘zi alohida yopiladi). */
+  async onReviewDecision(
+    m: EntityManager,
+    lead: Pick<Lead, 'id' | 'ip' | 'affiliateId'>,
+    action: FraudActionType.REVIEW_QUEUE | FraudActionType.REVIEW_SPAM,
+    actorId: string,
+    reason: string,
+  ): Promise<void> {
+    await this.record(m, {
+      incidentId: null,
+      action,
+      rule: FraudRule.SPAM_IP,
+      targetType: 'LEAD',
+      targetId: lead.id,
+      affiliateId: lead.affiliateId,
+      actorId,
+      reason,
+      evidence: { leadId: lead.id, ip: lead.ip },
+    });
+  }
+
   /**
    * Qora ro‘yxat (TZ 7: bir raqam 2 marta rad etgan). Chorasi EQ-04 javobida: «yetkazish puli oldindan» onlayn
    * to‘lovsiz bo‘lmaydi (BE-34). Hozir [taklif]: lid kartasida belgi va choralar tarixida bir marta yozuv.

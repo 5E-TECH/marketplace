@@ -156,6 +156,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/:id/call',
     'GET /admin/finance/cod-reconciliation',
     'GET /admin/leads',
+    'GET /admin/leads/filter-options',
     'GET /admin/leads/:id',
     'GET /admin/orders',
     'GET /admin/orders/:id',

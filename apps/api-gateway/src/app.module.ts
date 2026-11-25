@@ -70,6 +70,7 @@ import { OperatorCallsController } from './leads/operator-calls.controller';
 import { AdminOperatorPhoneController } from './calls/admin-operator-phone.controller';
 import { CallRecordingsController } from './calls/call-recordings.controller';
 import { CallsController } from './calls/calls.controller';
+import { ExportLinkService } from './exports/export-link.service';
 import { RecordingLinkService } from './calls/recording-link';
 import { TelephonyWebhookController } from './webhooks/telephony-webhook.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
@@ -239,6 +240,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     AppService,
     ReadinessService,
     SignedLinkService, // BE-30: yopiq hujjatlarga imzolangan havola
+    ExportLinkService, // BE-25 (FE-26): CSV eksport chiptasi
     RecordingLinkService, // BE-15: qo‘ng‘iroq yozuviga imzolangan havola
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).

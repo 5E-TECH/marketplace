@@ -10,6 +10,7 @@ import {
   Matches,
   MaxLength,
   ValidateBy,
+  ValidationOptions,
 } from 'class-validator';
 import { CheckoutDeliveryDestination } from './cart.dto';
 import { DeliveryDisplayMode } from '../pricing/price-calculator';
@@ -85,14 +86,20 @@ export function isLeadBigintId(value: unknown): value is string {
 }
 
 /** DTO maydoni uchun: noto‘g‘ri ID 400 bo‘ladi, bazaga yetib 500 bermaydi. */
-export function IsLeadBigintId(field: string): PropertyDecorator {
-  return ValidateBy({
-    name: 'isLeadBigintId',
-    validator: {
-      validate: (value) => isLeadBigintId(value),
-      defaultMessage: () => `${field} musbat son bo‘lishi kerak`,
+export function IsLeadBigintId(
+  field: string,
+  options?: ValidationOptions,
+): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'isLeadBigintId',
+      validator: {
+        validate: (value) => isLeadBigintId(value),
+        defaultMessage: () => `${field} musbat son bo‘lishi kerak`,
+      },
     },
-  });
+    options,
+  );
 }
 /** Bo‘shliqdan iborat qiymat «bo‘sh» hisoblanadi (namuna: product.dto.ts HideProductDto). */
 export const trimLeadText = ({ value }: { value: unknown }) =>
