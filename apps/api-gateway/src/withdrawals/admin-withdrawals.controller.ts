@@ -97,12 +97,15 @@ export class AdminWithdrawalsController {
       { id },
     );
     const fullName = await currentFullName(this.identity, affiliateId);
-    return recheckOnNameChange(this.finance, affiliateId, fullName, () =>
-      sendRpc<WithdrawalDto>(
-        this.finance,
-        { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
-        { id, approverId, currentFullName: fullName },
-      ),
+    return recheckOnNameChange(
+      { finance: this.finance, identity: this.identity },
+      { affiliateId, fullName, actorId: approverId },
+      () =>
+        sendRpc<WithdrawalDto>(
+          this.finance,
+          { cmd: FINANCE_WITHDRAWAL_RPC.APPROVE },
+          { id, approverId, currentFullName: fullName },
+        ),
     );
   }
 
@@ -193,9 +196,8 @@ export class AdminWithdrawalsController {
         errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
       });
     const result = await recheckOnNameChange(
-      this.finance,
-      affiliateId,
-      fullName,
+      { finance: this.finance, identity: this.identity },
+      { affiliateId, fullName, actorId: updatedBy },
       () =>
         sendRpc<AffiliateSelfEmployedDto>(
           this.finance,

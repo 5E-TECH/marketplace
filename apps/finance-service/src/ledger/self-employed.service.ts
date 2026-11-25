@@ -319,7 +319,8 @@ export class SelfEmployedService {
       await affiliatePayoutLock(m, affiliateId);
       const last = await this.latest(m, affiliateId);
       if (input.selfEmployed) {
-        const fullName = normalizeFullName(input.fullName);
+        // ismsiz belgi ism tekshiruvini chetlab o‘tardi (assertPayable bo‘sh ismni tekshirmaydi)
+        const fullName = requireName(input.fullName);
         if (last?.status === ROW.PENDING)
           throw state(
             'Sotuvchining arizasi tekshirilmoqda — arizani tasdiqlang',

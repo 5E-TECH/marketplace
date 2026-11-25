@@ -147,6 +147,13 @@ test('BE-25: JShShIR kaliti — yo‘q bo‘lsa ogohlantirish, qisqa bo‘lsa xa
     SELF_EMPLOYED_SECRET_KEY: 'qisqa',
   });
   assert.notEqual(short.status, 0);
+  const quoted = await run(t, {
+    ...validEnv,
+    SELF_EMPLOYED_SECRET_KEY: `"${'k'.repeat(31)}"`,
+  });
+  assert.notEqual(quoted.status, 0);
+  const empty = await run(t, { ...validEnv, SELF_EMPLOYED_SECRET_KEY: '""' });
+  assert.equal(empty.status, 0, empty.stderr);
   const ok = await run(t, {
     ...validEnv,
     SELF_EMPLOYED_SECRET_KEY: 'k'.repeat(32),

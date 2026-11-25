@@ -43,7 +43,8 @@ esac
 }
 
 # BE-25: sotuvchi JShShIR kaliti ixtiyoriy (bo'sh — ariza qabul qilinmaydi), lekin qisqa bo'lsa servislar ishga tushmaydi.
-self_employed_key=$(sed -n 's/^SELF_EMPLOYED_SECRET_KEY=//p' "$env_file" | tail -n 1)
+# qo'shtirnoqlar hisobga olinmaydi (compose ularni olib tashlaydi)
+self_employed_key=$(sed -n 's/^SELF_EMPLOYED_SECRET_KEY=//p' "$env_file" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
 if [ -z "$self_employed_key" ]; then
   printf 'Ogohlantirish: SELF_EMPLOYED_SECRET_KEY yo‘q — sotuvchilar JShShIR yubora olmaydi\n' >&2
 elif [ "${#self_employed_key}" -lt 32 ]; then

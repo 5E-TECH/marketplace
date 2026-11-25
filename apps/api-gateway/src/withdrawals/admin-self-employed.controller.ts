@@ -165,9 +165,8 @@ export class AdminSelfEmployedController {
     const { affiliateId } = await this.get(id);
     const fullName = await currentFullName(this.identity, affiliateId);
     const result = await recheckOnNameChange(
-      this.finance,
-      affiliateId,
-      fullName,
+      { finance: this.finance, identity: this.identity },
+      { affiliateId, fullName, actorId: user.sub },
       () =>
         sendRpc<SelfEmployedDetailDto>(
           this.finance,

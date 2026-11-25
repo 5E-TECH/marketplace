@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
 import { decryptSecret, encryptSecret } from './crypto.util';
@@ -6,6 +6,7 @@ import { decryptSecret, encryptSecret } from './crypto.util';
 /** JShShIR — 14 raqam (davlat standarti; TZ da yozilmagan [taklif]). */
 export const PINFL = /^\d{14}$/;
 const MIN_KEY_LENGTH = 32;
+const logger = new Logger('Pinfl');
 
 /**
  * BE-25 5-tur: JShShIR servislararo ham, bazada ham faqat shifrlangan (gateway shifrlaydi, finance ochib tekshiradi) —
@@ -13,10 +14,15 @@ const MIN_KEY_LENGTH = 32;
  */
 export function pinflKey(config: ConfigService): string {
   const key = config.get<string>('SELF_EMPLOYED_SECRET_KEY')?.trim();
-  if (!key || key.length < MIN_KEY_LENGTH)
-    throw new ServiceUnavailableException(
+  if (!key || key.length < MIN_KEY_LENGTH) {
+    // sababi faqat logda — mijozga sozlama nomi chiqmaydi
+    logger.error(
       'SELF_EMPLOYED_SECRET_KEY sozlanmagan — JShShIR qabul qilinmaydi',
     );
+    throw new ServiceUnavailableException(
+      'JShShIR hozir qabul qilinmaydi — birozdan so‘ng qayta urinib ko‘ring',
+    );
+  }
   return key;
 }
 

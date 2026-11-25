@@ -409,7 +409,16 @@ describePostgres('BE-25 5-tur JShShIR arizasi (PostgreSQL)', () => {
         updatedBy: '7',
         fullName,
       });
-    await set(a, '');
+    // eski belgidan ko‘chgan qator: ismi noma’lum
+    await ds.query(
+      `INSERT INTO finance.self_employed_application
+         (affiliate_id, status, source, full_name, verified_at, verified_by, decided_at, decided_by)
+       VALUES ($1, 'VERIFIED', 'MANUAL', '', now(), '7', now(), '7')`,
+      [a],
+    );
+    await expect(set(a, ' ')).rejects.toMatchObject({
+      response: { errorCode: ErrorCode.PROFILE_NAME_REQUIRED },
+    });
     await set(a, 'Anvar J');
     expect((await svc.get({ id: await last(a) })).fullName).toBe('Anvar J');
     expect(

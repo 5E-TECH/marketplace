@@ -319,6 +319,7 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
         },
         'finance.self-employed.reveal': { pinflSealed: sealPinfl(PINFL, KEY) },
         'finance.self-employed.document': FILE,
+        'finance.self-employed.rename': { recheck: true, info: INFO },
         'identity.affiliate.profile.get': {
           firstName: 'Sevara',
           lastName: 'Yusupova',
@@ -400,9 +401,18 @@ describe('BE-25 5-tur: moliya tekshiruvi (gateway)', () => {
     await expect(c.approve('12', finance7, '')).rejects.toMatchObject({
       response: { errorCode: 'NAME_CHANGED' },
     });
-    expect(calls.at(-1)).toEqual([
-      'finance.self-employed.rename',
-      { affiliateId: '77', fullName: 'Sevara Yusupova' },
+    expect(calls.slice(-2)).toEqual([
+      [
+        'finance.self-employed.rename',
+        { affiliateId: '77', fullName: 'Sevara Yusupova' },
+      ],
+      [
+        'identity.audit.log',
+        expect.objectContaining({
+          actorId: '7',
+          action: 'self-employed.recheck',
+        }),
+      ],
     ]);
     const other = make({
       'finance.self-employed.approve': new ConflictException('x'),

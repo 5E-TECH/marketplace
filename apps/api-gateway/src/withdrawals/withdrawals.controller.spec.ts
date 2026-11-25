@@ -1,4 +1,4 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { Role, ROLES_KEY } from '@app/common';
 import { AdminWithdrawalsController } from './admin-withdrawals.controller';
 import { AffiliateWithdrawalsController } from './affiliate-withdrawals.controller';
@@ -78,6 +78,46 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     for (const m of ['approve', 'reject', 'paid', 'setSelfEmployed'] as const)
       expect(roles(m)).toEqual([Role.FINANCE, Role.SUPERADMIN]);
     expect(roles('list')).toEqual([Role.ADMIN, Role.FINANCE, Role.SUPERADMIN]);
+  });
+
+  it('BE-25: ism tasdiqlangandan farq qilsa — pul yechish va qo‘lda belgi 409, maqom qayta tekshiruvga, auditda', async () => {
+    for (const [status, text, act] of [
+      ['PENDING', 'qayta tekshiruvga', 'approve'],
+      ['REVOKED', 'JShShIR ni yuborishi', 'set'],
+    ] as const) {
+      const cmds: string[] = [];
+      const client = {
+        send: jest.fn(({ cmd }: { cmd: string }) => {
+          cmds.push(cmd);
+          if (cmd.endsWith('.approve') || cmd.endsWith('self-employed.set'))
+            return throwError(() => ({
+              statusCode: 409,
+              message: 'x',
+              errorCode: 'NAME_CHANGED',
+            }));
+          if (cmd.endsWith('.rename'))
+            return of({ recheck: true, info: { status } });
+          return of({ affiliateId: '42', firstName: 'Jasur', lastName: 'T' });
+        }),
+      } as never;
+      const c = new AdminWithdrawalsController(client, client);
+      const error = await (
+        act === 'approve'
+          ? c.approve('12', '7')
+          : c.setSelfEmployed('42', '7', { selfEmployed: true }, '')
+      ).catch((e: unknown) => e);
+      expect(error).toMatchObject({
+        status: 409,
+        response: {
+          errorCode: 'NAME_CHANGED',
+          message: expect.stringContaining(text),
+        },
+      });
+      expect(cmds.slice(-2)).toEqual([
+        'finance.self-employed.rename',
+        'identity.audit.log',
+      ]);
+    }
   });
 
   it('BE-24 TC4: «To‘landi» dan keyin notification ga finance.withdrawal.paid (sotuvchiga SMS)', async () => {
