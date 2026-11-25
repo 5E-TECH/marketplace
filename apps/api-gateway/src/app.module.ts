@@ -48,6 +48,8 @@ import { AffiliateStreamsController } from './leads/affiliate-streams.controller
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
 import { AffiliateProfileController } from './affiliate-account/affiliate-profile.controller';
+import { AffiliateSelfEmployedController } from './affiliate-account/affiliate-self-employed.controller';
+import { AdminSelfEmployedController } from './withdrawals/admin-self-employed.controller';
 import { LegalDocumentsController } from './affiliate-account/legal-documents.controller';
 import { AdminFinanceSettingsController } from './withdrawals/admin-finance-settings.controller';
 import { AdminModerationController } from './admin/admin-moderation.controller';
@@ -198,6 +200,8 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     AdminWithdrawalsController,
     // BE-06
     AffiliateProfileController,
+    AffiliateSelfEmployedController,
+    AdminSelfEmployedController,
     LegalDocumentsController,
     // BE-27
     AdminFinanceSettingsController,

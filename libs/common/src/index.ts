@@ -69,6 +69,7 @@ export * from './dto/lead-attempt-call.dto';
 export * from './dto/lead-telephony.dto';
 export * from './dto/affiliate-income.dto';
 export * from './dto/withdrawal.dto';
+export * from './dto/self-employed.dto';
 export * from './dto/finance-settings.dto';
 export * from './dto/ops.dto';
 export * from './dto/wholesaler-settlement.dto';

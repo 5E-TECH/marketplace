@@ -9658,7 +9658,7 @@
     },
     "/api/v1/admin/finance/affiliates/{id}/self-employed": {
       "put": {
-        "description": "Belgisiz sotuvchining so‘rovi rad etiladi (T01:471).",
+        "description": "Belgisiz sotuvchining so‘rovi rad etiladi (T01:471). Sotuvchi ariza yuborgan bo‘lsa — `admin/finance/self-employed` da tasdiqlanadi (bu yerda 409 ALREADY_PENDING).",
         "operationId": "AdminWithdrawalsController_setSelfEmployed",
         "parameters": [
           {
@@ -9697,7 +9697,7 @@
             "bearer": []
           }
         ],
-        "summary": "O‘zini o‘zi band qilganlik belgisi (moliya tekshirgach qo‘lda)",
+        "summary": "O‘zini o‘zi band qilganlik belgisi — arizasiz, qo‘lda",
         "tags": [
           "admin-finance"
         ]
@@ -9750,6 +9750,7 @@
         ]
       },
       "patch": {
+        "description": "Ism o‘zgarsa tasdiqlangan yoki tekshirilayotgan maqom qayta tekshiruvga tushadi (PENDING), pul yechish yopiladi.",
         "operationId": "AffiliateProfileController_update",
         "parameters": [],
         "requestBody": {
@@ -9839,6 +9840,480 @@
         "summary": "Ofertaning (yoki rozilikning) yangi versiyasini qabul qilish — versiya va vaqt saqlanadi",
         "tags": [
           "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/self-employed/document": {
+      "post": {
+        "description": "Fayl yopiq joyga tushadi va 1 kun ichida ariza bilan yuborilmasa o‘chadi. `documentId` faqat shu sotuvchiga ishlaydi.",
+        "operationId": "AffiliateSelfEmployedController_uploadDocument",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedDocumentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "FILE_REQUIRED — fayl yo‘q; FILE_TYPE_INVALID — tur yoki tarkib mos emas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "FILE_TOO_LARGE — 10 MB dan katta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Maqom ma’lumotnomasini oldindan yuklash (PDF, JPG, PNG, 10 MB gacha)",
+        "tags": [
+          "affiliate"
+        ]
+      },
+      "get": {
+        "operationId": "AffiliateSelfEmployedController_document",
+        "parameters": [],
+        "responses": {
+          "404": {
+            "description": "Hujjat yuklanmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O‘z ma’lumotnomam (oxirgi arizadagi fayl)",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/self-employed": {
+      "post": {
+        "description": "Ma’lumotnoma ixtiyoriy. Moliya tasdiqlamaguncha pul yechish yopiq. Profilda ism va familiya bo‘lishi shart.",
+        "operationId": "AffiliateSelfEmployedController_submit",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitSelfEmployedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedInfoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PINFL_INVALID, DOCUMENT_NOT_FOUND, PROFILE_NAME_REQUIRED — profilda ism yo‘q",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ALREADY_PENDING — tekshirilmoqda; ALREADY_VERIFIED — tasdiqlangan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "JShShIR va ma’lumotnomani tekshiruvga yuborish",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed": {
+      "get": {
+        "operationId": "AdminSelfEmployedController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Berilmasa — hammasi",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "VERIFIED",
+                "REJECTED",
+                "REVOKED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedPageDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "JShShIR arizalari: har sotuvchining oxirgisi, tekshiriladiganlari eskisi tepada; holatlar soni bilan",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}": {
+      "get": {
+        "operationId": "AdminSelfEmployedController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ariza topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ariza: mavjud pul (tasdiqni kutayotgan to‘lov) va shu JShShIR bilan boshqa sotuvchilar",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}/reveal": {
+      "post": {
+        "operationId": "AdminSelfEmployedController_reveal",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinflDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ariza yoki JShShIR yo‘q"
+          },
+          "409": {
+            "description": "Ariza eskirgan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "To‘liq JShShIR (soliq ro‘yxatida tekshirish uchun) — auditga yoziladi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}/document": {
+      "get": {
+        "operationId": "AdminSelfEmployedController_document",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Ariza yoki hujjat yo‘q"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Arizadagi ma’lumotnoma — auditga yoziladi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}/approve": {
+      "post": {
+        "operationId": "AdminSelfEmployedController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedDetailDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ariza tekshiruvda emas yoki eskirgan; NAME_CHANGED — profildagi ism arizadagidan farq qiladi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Maqomni tasdiqlash — pul yechish ochiladi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}/reject": {
+      "post": {
+        "operationId": "AdminSelfEmployedController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectSelfEmployedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedDetailDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ariza tekshiruvda emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rad etish — sabab majburiy, sabab va izoh sotuvchiga ko‘rinadi",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/finance/self-employed/{id}/revoke": {
+      "post": {
+        "operationId": "AdminSelfEmployedController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeSelfEmployedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfEmployedDetailDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Maqom tasdiqlangan emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tasdiqlangan maqomni bekor qilish — pul yechish yopiladi",
+        "tags": [
+          "admin-finance"
         ]
       }
     },
@@ -23093,12 +23568,11 @@
           "current"
         ]
       },
-      "AffiliateProfileSelfEmployedDto": {
+      "SelfEmployedInfoDto": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "example": "NOT_SUBMITTED",
             "enum": [
               "NOT_SUBMITTED",
               "PENDING",
@@ -23106,11 +23580,59 @@
               "REJECTED",
               "REVOKED"
             ],
-            "description": "Hozir moliya qo‘yadigan belgi (BE-23): VERIFIED yoki NOT_SUBMITTED"
+            "example": "PENDING"
+          },
+          "pinflLast4": {
+            "type": "string",
+            "nullable": true,
+            "example": "4018"
+          },
+          "activity": {
+            "type": "string",
+            "nullable": true,
+            "example": "SMM va internet-marketing",
+            "description": "Faoliyat turi (TZ 8, 34-band); yuborilmagan bo‘lsa — null"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-25T12:05:00.000Z"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null,
+            "description": "Tasdiqlangan, rad etilgan yoki bekor qilingan vaqt"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Rad yoki bekor qilish sababi (matn)"
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Tekshiruvchi izohi"
+          },
+          "documentName": {
+            "type": "string",
+            "nullable": true,
+            "example": "maqom-malumotnoma.pdf"
           }
         },
         "required": [
-          "status"
+          "status",
+          "pinflLast4",
+          "activity",
+          "submittedAt",
+          "checkedAt",
+          "reason",
+          "comment",
+          "documentName"
         ]
       },
       "AffiliateProfileDto": {
@@ -23161,7 +23683,12 @@
             }
           },
           "selfEmployed": {
-            "$ref": "#/components/schemas/AffiliateProfileSelfEmployedDto"
+            "description": "Moliya javob bermasa — yo‘q",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SelfEmployedInfoDto"
+              }
+            ]
           },
           "card": {
             "type": "object",
@@ -23217,6 +23744,386 @@
         "required": [
           "type",
           "version"
+        ]
+      },
+      "SelfEmployedDocumentDto": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "example": "0f0e8f3a-1b2c-4d5e-8f90-a1b2c3d4e5f6.pdf"
+          },
+          "name": {
+            "type": "string",
+            "example": "maqom-malumotnoma.pdf"
+          }
+        },
+        "required": [
+          "documentId",
+          "name"
+        ]
+      },
+      "SubmitSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "pinfl": {
+            "type": "string",
+            "example": "30101195600018",
+            "description": "JShShIR, 14 raqam (PINFL_INVALID). Shifrlangan saqlanadi, javoblarda faqat oxirgi 4 raqam"
+          },
+          "documentId": {
+            "type": "string",
+            "example": "0f0e8f3a-1b2c-4d5e-8f90-a1b2c3d4e5f6.pdf",
+            "description": "Oldindan yuklangan ma’lumotnoma (`POST affiliate/self-employed/document`); ixtiyoriy"
+          }
+        },
+        "required": [
+          "pinfl"
+        ]
+      },
+      "SelfEmployedApplicationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "affiliateId": {
+            "type": "string",
+            "example": "77"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Sevara Yusupova",
+            "description": "Yuborilgandagi"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_SUBMITTED",
+              "PENDING",
+              "VERIFIED",
+              "REJECTED",
+              "REVOKED"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "SELLER",
+              "NAME_CHANGE",
+              "MANUAL"
+            ]
+          },
+          "pinflLast4": {
+            "type": "string",
+            "nullable": true,
+            "example": "3365"
+          },
+          "activity": {
+            "type": "string",
+            "example": "SMM va internet-marketing"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "checkedBy": {
+            "type": "string",
+            "nullable": true,
+            "example": "15"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PINFL_NOT_FOUND",
+              "STATUS_INACTIVE",
+              "ACTIVITY_MISMATCH",
+              "DOCUMENT_UNREADABLE",
+              "NAME_MISMATCH",
+              "NAME_CHANGED"
+            ],
+            "nullable": true,
+            "example": null
+          },
+          "reasonText": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "documentName": {
+            "type": "string",
+            "nullable": true,
+            "example": "maqom-malumotnoma.pdf"
+          }
+        },
+        "required": [
+          "id",
+          "affiliateId",
+          "fullName",
+          "status",
+          "source",
+          "pinflLast4",
+          "activity",
+          "submittedAt",
+          "checkedAt",
+          "checkedBy",
+          "reason",
+          "reasonText",
+          "comment",
+          "documentName"
+        ]
+      },
+      "SelfEmployedCountsDto": {
+        "type": "object",
+        "properties": {
+          "PENDING": {
+            "type": "number",
+            "example": 4
+          },
+          "VERIFIED": {
+            "type": "number",
+            "example": 12
+          },
+          "REJECTED": {
+            "type": "number",
+            "example": 1
+          },
+          "REVOKED": {
+            "type": "number",
+            "example": 0
+          }
+        },
+        "required": [
+          "PENDING",
+          "VERIFIED",
+          "REJECTED",
+          "REVOKED"
+        ]
+      },
+      "SelfEmployedPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SelfEmployedApplicationDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 4
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "counts": {
+            "$ref": "#/components/schemas/SelfEmployedCountsDto"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "counts"
+        ]
+      },
+      "SelfEmployedDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "affiliateId": {
+            "type": "string",
+            "example": "77"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Sevara Yusupova",
+            "description": "Yuborilgandagi"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_SUBMITTED",
+              "PENDING",
+              "VERIFIED",
+              "REJECTED",
+              "REVOKED"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "SELLER",
+              "NAME_CHANGE",
+              "MANUAL"
+            ]
+          },
+          "pinflLast4": {
+            "type": "string",
+            "nullable": true,
+            "example": "3365"
+          },
+          "activity": {
+            "type": "string",
+            "example": "SMM va internet-marketing"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "checkedBy": {
+            "type": "string",
+            "nullable": true,
+            "example": "15"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PINFL_NOT_FOUND",
+              "STATUS_INACTIVE",
+              "ACTIVITY_MISMATCH",
+              "DOCUMENT_UNREADABLE",
+              "NAME_MISMATCH",
+              "NAME_CHANGED"
+            ],
+            "nullable": true,
+            "example": null
+          },
+          "reasonText": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "documentName": {
+            "type": "string",
+            "nullable": true,
+            "example": "maqom-malumotnoma.pdf"
+          },
+          "current": {
+            "type": "boolean",
+            "example": true,
+            "description": "Shu sotuvchining oxirgi arizasimi (eskirganini tasdiqlab bo‘lmaydi)"
+          },
+          "available": {
+            "type": "number",
+            "example": 130000,
+            "description": "Mavjud pul, so‘m — tasdiqni kutayotgan to‘lov"
+          },
+          "samePinflAffiliateIds": {
+            "example": [],
+            "description": "Shu JShShIR bilan tekshirilayotgan yoki tasdiqlangan boshqa sotuvchilar [taklif — faqat ogohlantirish]",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "affiliateId",
+          "fullName",
+          "status",
+          "source",
+          "pinflLast4",
+          "activity",
+          "submittedAt",
+          "checkedAt",
+          "checkedBy",
+          "reason",
+          "reasonText",
+          "comment",
+          "documentName",
+          "current",
+          "available",
+          "samePinflAffiliateIds"
+        ]
+      },
+      "PinflDto": {
+        "type": "object",
+        "properties": {
+          "pinfl": {
+            "type": "string",
+            "example": "30101195600018"
+          }
+        },
+        "required": [
+          "pinfl"
+        ]
+      },
+      "RejectSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PINFL_NOT_FOUND",
+              "STATUS_INACTIVE",
+              "ACTIVITY_MISMATCH",
+              "DOCUMENT_UNREADABLE",
+              "NAME_MISMATCH"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "example": "Hujjatda boshqa faoliyat turi.",
+            "description": "Sotuvchiga ko‘rinadi"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "RevokeSelfEmployedDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PINFL_NOT_FOUND",
+              "STATUS_INACTIVE",
+              "ACTIVITY_MISMATCH",
+              "DOCUMENT_UNREADABLE",
+              "NAME_MISMATCH"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "example": "Hujjatda boshqa faoliyat turi.",
+            "description": "Sotuvchiga ko‘rinadi"
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "LegalSummaryItemDto": {
