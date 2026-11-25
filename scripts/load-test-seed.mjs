@@ -23,8 +23,8 @@ import {
   ipFor,
   isLocalUrl,
   NAME_PREFIX,
-  timedRequest,
-} from './load-test.mjs';
+} from './load-test/common.mjs';
+import { timedRequest } from './load-test/measure.mjs';
 
 class SeedError extends Error {}
 

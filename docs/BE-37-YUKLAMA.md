@@ -12,7 +12,8 @@ BE-37 TC2 (pentest topilmalari) bu hujjatga kirmaydi — tashqi pentest EQ-15 ga
 | `scripts/load-test.mjs leads` | `POST /api/v1/leads` — BE-37 TC1, QA-04 TC1 |
 | `scripts/load-test.mjs operators` | 20 operator navbat bilan ishlaydi — QA-04 TC2, TC4 |
 | `scripts/load-test-seed.mjs` | sinov uchun mahsulot, narx, qoldiq va sotuvchi sahifasi (stream) |
-| `scripts/tests/load-test.test.mjs` | vositaning o‘z testlari (`npm run test:ops`) |
+| `scripts/load-test/` | `load-test.mjs` modullari: `measure.mjs` — o‘lchov yadrosi (so‘rov vaqti, ochiq sikl, xulosa); `common.mjs` — telefon/IP/lid tanasi, sarlavhalar, token, to‘xtash; `preflight.mjs` — XFF va sahifa tekshiruvi; `leads.mjs`, `operators.mjs`, `operator-setup.mjs` — senariylar |
+| `scripts/tests/load-test-*.test.mjs` | vositaning o‘z testlari (`npm run test:ops`): `core` — o‘lchov va token, `leads` — TC1 va CLI himoyasi, `operators` — TC2/TC4; soxta server — `load-test-harness.mjs` |
 
 Tashqi paket yo‘q (Node 22 `fetch`); seed — `pg`. Ikkalasi ham faqat lokal stendga (`localhost:3000`, seed uchun
 baza ham `localhost`) ishlaydi: boshqa har qanday manzilda — **boshqa lokal port, ya’ni ssh tunnel ham** —
@@ -206,7 +207,7 @@ Bazadagi tekshiruv:
 - `AUTH_TOKENS_IN_BODY=false` (prod) rejimidagi ikkinchi gateway orqali ham tekshirildi: seed va 20 operator × 15 s —
   token `accessToken` cookie’sidan olindi, preflight o‘tdi, oxirida hammasi `OFFLINE`.
 
-Avtomat testlar: `scripts/tests/load-test.test.mjs` (27 ta, `npm run test:ops`) — p95 hisobi va `overload` ning
+Avtomat testlar: `scripts/tests/load-test-*.test.mjs` (32 ta, `npm run test:ops`) — p95 hisobi va `overload` ning
 p50/tezlikka kirmasligi, ochiq sikl tezligi (rejadan erta yubormaslik), kechikish rejalashtirilgan vaqtdan, timeout
 va tarmoq xatosi, tana yoki cookie’dagi token, noyob telefon/IP, DTO maydonlari, xato turlari va chiqish kodi, javob
 tanasi va parol chiqmasligi, localhost himoyasi, XFF tekshiruvi, yuklama mahsuloti va hisobot fayli tekshiruvi,
