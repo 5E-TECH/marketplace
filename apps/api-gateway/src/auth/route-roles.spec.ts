@@ -139,6 +139,9 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/:id/quote',
     'POST /operator/leads/:id/result',
     'POST /operator/leads/next',
+    // BE-25 (FE-26): operator o‘zi tasdiqlagan buyurtmalar
+    'GET /operator/orders',
+    'GET /operator/orders/:id',
     'POST /operator/orders/:id/cancel',
     'PUT /operator/state',
     // BE-44: mijoz qo‘ng‘iroq qilsa — qaytarish so‘rovini kiritadi

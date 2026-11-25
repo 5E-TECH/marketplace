@@ -308,7 +308,7 @@ export class AdminLeadsController {
             status: string;
             createdAt: string;
             totalAmount: number;
-          }>({ cmd: 'checkout.admin.order-get' }, { orderId })
+          }>({ cmd: 'checkout.admin.order-brief' }, { orderId })
           .pipe(timeout(ORDER_TIMEOUT_MS)),
       );
       return {
