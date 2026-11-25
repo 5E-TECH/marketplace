@@ -106,6 +106,18 @@ const CSV_HEADER: Record<LeadExportColumn, string> = {
   [LeadExportColumn.SUBS]: 'Sub',
 };
 
+/** Bir so‘rovdagi ID lar: faqat to‘g‘ri bigint, eksport bo‘lagidan ko‘p emas. */
+const idList = (ids: unknown): string[] =>
+  (Array.isArray(ids) ? ids : [])
+    .map(String)
+    .filter(isLeadBigintId)
+    .slice(0, EXPORT_CHUNK);
+
+const allSubs = (
+  r: Pick<Lead, 'sub1' | 'sub2' | 'sub3' | 'sub4' | 'sub5'>,
+): string =>
+  [r.sub1 ? `sub1=${r.sub1}` : null, subsText(r)].filter(Boolean).join(' · ');
+
 interface StatusChange {
   leadId: string;
   toStatus: LeadStatus;
@@ -688,10 +700,7 @@ export class LeadAdminService {
       [LeadExportColumn.ATTEMPTS]: (r) => String(r.attempts),
       [LeadExportColumn.STATUS]: (r) => STATUS_LABELS[r.status] ?? r.status,
       [LeadExportColumn.CREATED_AT]: (r) => fullTime(r.createdAt),
-      [LeadExportColumn.SUBS]: (r) =>
-        [r.sub1 ? `sub1=${r.sub1}` : null, subsText(r)]
-          .filter(Boolean)
-          .join(' · '),
+      [LeadExportColumn.SUBS]: allSubs,
     };
     const line = (values: string[]) => values.map(csvCell).join(';');
     return {
@@ -702,6 +711,29 @@ export class LeadAdminService {
       nextAfterId:
         rows.length === EXPORT_CHUNK ? rows[rows.length - 1].id : null,
     };
+  }
+
+  /** Sahifa kodlari: id → kod (checkout buyurtmalar ro‘yxati). */
+  async streamCodesOf(ids: string[]): Promise<Record<string, string>> {
+    return Object.fromEntries(await this.streamCodes(idList(ids)));
+  }
+
+  /** Lid sub lari: lid ID → «sub1=… · sub2=…» (checkout CSV). */
+  async subsOf(ids: string[]): Promise<Record<string, string>> {
+    const rows = await this.leads.find({
+      where: { id: In(idList(ids)) },
+      select: {
+        id: true,
+        sub1: true,
+        sub2: true,
+        sub3: true,
+        sub4: true,
+        sub5: true,
+      },
+    });
+    return Object.fromEntries(
+      rows.map((r) => [r.id, allSubs(r)] as const).filter(([, text]) => !!text),
+    );
   }
 
   /** Hamma filtr, yorliq va holatdan tashqari (yorliqdagi sonlar shularsiz sanaladi). */

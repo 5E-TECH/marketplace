@@ -58,6 +58,18 @@ export class LeadAdminController {
   exportChunk(@Payload() input: LeadExportChunkInput) {
     return this.admin.exportChunk(input);
   }
+
+  /** checkout: buyurtmalar ro‘yxatidagi sahifa kodi. */
+  @MessagePattern({ cmd: 'lead.stream.codes' })
+  streamCodes(@Payload() input: { ids?: string[] }) {
+    return this.admin.streamCodesOf(input?.ids ?? []);
+  }
+
+  /** checkout: buyurtmalar CSV sidagi sub (faqat admin eksporti). */
+  @MessagePattern({ cmd: 'lead.subs' })
+  subs(@Payload() input: { ids?: string[] }) {
+    return this.admin.subsOf(input?.ids ?? []);
+  }
 }
 
 /** Ko‘ruvchi berilmasa — eng kam huquq (nazoratchi ko‘rinishi). */
