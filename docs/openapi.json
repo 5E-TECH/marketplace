@@ -25024,6 +25024,12 @@
             "nullable": true,
             "example": "00450"
           },
+          "payerBankName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Ipoteka bank",
+            "description": "To‘lovchi bankining nomi (bank faylida)"
+          },
           "paymentPurposeCode": {
             "type": "string",
             "nullable": true,
@@ -25037,6 +25043,7 @@
           "payerTin",
           "payerAccount",
           "payerMfo",
+          "payerBankName",
           "paymentPurposeCode"
         ]
       },
@@ -25066,6 +25073,11 @@
             "type": "string",
             "example": "00450",
             "description": "MFO, 5 raqam"
+          },
+          "payerBankName": {
+            "type": "string",
+            "example": "Ipoteka bank",
+            "description": "To‘lovchi bankining nomi"
           },
           "paymentPurposeCode": {
             "type": "string",
