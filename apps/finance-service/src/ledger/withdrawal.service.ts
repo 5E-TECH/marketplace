@@ -8,7 +8,6 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   AdminWithdrawalQueryDto,
   AffiliateBalanceDto,
-  AffiliateSelfEmployedDto,
   ErrorCode,
   MAX_MONEY,
   moneyFromDb,
@@ -35,6 +34,17 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const TODAY = `(now() AT TIME ZONE 'Asia/Tashkent')::date`;
 
+/** Sotuvchining pul yechish qulfi — so‘rov yaratish va maqom qarori (BE-25 5-tur) ketma-ket. */
+export async function affiliatePayoutLock(
+  m: EntityManager,
+  affiliateId: string,
+): Promise<void> {
+  await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+    WITHDRAWAL_LOCK_CLASS,
+    `finance-withdrawal:${affiliateId}`,
+  ]);
+}
+
 /** 1% soliq, butun so‘m, yuqoriga yaxlitlab — soliq kam ushlanmasin [taklif; EQ-10 buxgalter]. */
 export function withdrawalTax(amount: number): number {
   return Math.ceil((amount * WITHDRAWAL_TAX_PERCENT) / 100);
@@ -48,7 +58,7 @@ const rule = (message: string) =>
 const state = (message: string) =>
   new ConflictException({ message, errorCode: ErrorCode.INVALID_STATE });
 
-function validId(value: unknown, field: string): string {
+export function validId(value: unknown, field: string): string {
   const s = String(value ?? '');
   if (!ID.test(s)) throw new BadRequestException(`${field} noto‘g‘ri`);
   return s;
@@ -170,10 +180,7 @@ export class WithdrawalService {
     )
       throw new BadRequestException('amount: butun so‘m bo‘lishi kerak');
     const id = await this.db.transaction(async (m) => {
-      await m.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        WITHDRAWAL_LOCK_CLASS,
-        `finance-withdrawal:${affiliateId}`,
-      ]);
+      await affiliatePayoutLock(m, affiliateId);
       const min = await this.minAmount(m);
       if (amount < min)
         throw rule(`Eng kam so‘rov — ${min} so‘m (so‘ralgani ${amount})`);
@@ -363,7 +370,8 @@ export class WithdrawalService {
       if (n < row.requiredApprovals)
         throw state(`Tasdiqlar yetmaydi: ${n}/${row.requiredApprovals}`);
       const [profile] = (await m.query(
-        `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1`,
+        // maqom shu paytda bekor qilinayotgan bo‘lsa — kutiladi
+        `SELECT self_employed AS "selfEmployed" FROM finance.affiliate_payout_profile WHERE affiliate_id = $1 FOR SHARE`,
         [row.affiliateId],
       )) as Array<{ selfEmployed: boolean }>;
       if (!profile?.selfEmployed)
@@ -438,28 +446,6 @@ export class WithdrawalService {
       );
     });
     return this.get(this.db.manager, id);
-  }
-
-  /** O‘zini o‘zi band qilganlik belgisi — moliya qo‘lda (T01:471; BE-06 maydonlari kelguncha) [taklif]. */
-  async setSelfEmployed(input: {
-    affiliateId: string;
-    selfEmployed: boolean;
-    updatedBy: string;
-  }): Promise<AffiliateSelfEmployedDto> {
-    const affiliateId = validId(input?.affiliateId, 'affiliateId');
-    const updatedBy = validId(input?.updatedBy, 'updatedBy');
-    if (typeof input?.selfEmployed !== 'boolean')
-      throw new BadRequestException('selfEmployed: true yoki false');
-    const [row] = (await this.db.query(
-      `INSERT INTO finance.affiliate_payout_profile (affiliate_id, self_employed, updated_by)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (affiliate_id) DO UPDATE
-         SET self_employed = EXCLUDED.self_employed, updated_by = EXCLUDED.updated_by, updated_at = now()
-       RETURNING affiliate_id AS "affiliateId", self_employed AS "selfEmployed",
-                 updated_by AS "updatedBy", updated_at AS "updatedAt"`,
-      [affiliateId, input.selfEmployed, updatedBy],
-    )) as AffiliateSelfEmployedDto[];
-    return row;
   }
 
   private async lockRow(m: EntityManager, id: string): Promise<RequestRow> {

@@ -31,7 +31,10 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
 
   it('moliya: xodim ID si tokendan; tasdiq, rad, «To‘landi» va maqom — FINANCE va SUPERADMIN (BE-05)', async () => {
     const { send, client } = make();
-    const c = new AdminWithdrawalsController(client);
+    const identity = {
+      send: jest.fn(() => of({ firstName: 'Jasur', lastName: ' Tursunov ' })),
+    };
+    const c = new AdminWithdrawalsController(client, identity as never);
     await c.approve('12', '7');
     expect(send).toHaveBeenLastCalledWith(
       { cmd: 'finance.withdrawal.approve' },
@@ -50,8 +53,19 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     await c.setSelfEmployed('42', '7', { selfEmployed: true });
     expect(send).toHaveBeenLastCalledWith(
       { cmd: 'finance.affiliate.self-employed.set' },
-      { affiliateId: '42', selfEmployed: true, updatedBy: '7' },
+      {
+        affiliateId: '42',
+        selfEmployed: true,
+        updatedBy: '7',
+        fullName: 'Jasur Tursunov',
+      },
     );
+    identity.send.mockReturnValueOnce(of({ firstName: '', lastName: '' }));
+    await expect(
+      c.setSelfEmployed('42', '7', { selfEmployed: true }),
+    ).rejects.toMatchObject({
+      response: { errorCode: 'PROFILE_NAME_REQUIRED' },
+    });
     const roles = (m: keyof AdminWithdrawalsController) =>
       Reflect.getMetadata(ROLES_KEY, AdminWithdrawalsController.prototype[m]);
     for (const m of ['approve', 'reject', 'paid', 'setSelfEmployed'] as const)
@@ -71,6 +85,7 @@ describe('BE-23: pul yechish endpointlari finance-service ga', () => {
     const notification = { emit: jest.fn(() => of(undefined)) };
     const c = new AdminWithdrawalsController(
       finance as never,
+      {} as never,
       notification as never,
     );
     await expect(c.paid('5', '7')).resolves.toEqual(dto);

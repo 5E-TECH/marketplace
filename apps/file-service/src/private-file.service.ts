@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,11 +12,14 @@ import { Client, CopyConditions } from 'minio';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
+  AffiliateDocumentFile,
+  ErrorCode,
   PRIVATE_DOCUMENT_MAX_BYTES,
   PRIVATE_DOCUMENT_TYPES,
   PrivateDocumentContentType,
   PrivateFileVerified,
   PrivateUploadPolicyResultDto,
+  SelfEmployedDocumentDto,
 } from '@app/common';
 
 /** Yopiq yuklamalar papkasi — tasdiqlanmagani 1 kunda o‘chadi (lifecycle — CreativeFileService). */
@@ -32,9 +36,16 @@ const EXTENSIONS: Record<PrivateDocumentContentType, string> = {
 const UPLOAD_KEY = new RegExp(
   `^${PRIVATE_UPLOAD_FOLDER}/(\\d{1,19})/([0-9a-f-]{36})\\.(pdf|jpg|png)$`,
 );
+/** BE-25 5-tur: sotuvchining maqom ma’lumotnomasi (yuborilgan) — optovik hujjatlari bilan bir xil yopiq. */
+export const AFFILIATE_FOLDER = 'private/affiliate';
+/** Hali yuborilmagan ma’lumotnoma — 1 kunda o‘chadi (`private-uploads` lifecycle). */
+export const AFFILIATE_UPLOAD_FOLDER = `${PRIVATE_UPLOAD_FOLDER}/affiliate`;
 const FINAL_KEY = new RegExp(
-  `^${PRIVATE_FOLDER}/\\d{1,19}/[0-9a-f-]{36}\\.(?:pdf|jpg|png)$`,
+  `^(?:${PRIVATE_FOLDER}|${AFFILIATE_FOLDER})/\\d{1,19}/[0-9a-f-]{36}\\.(?:pdf|jpg|png)$`,
 );
+const DOCUMENT_ID = /^[0-9a-f-]{36}\.(?:pdf|jpg|png)$/;
+/** Fayl nomi MinIO metama’lumotida — header faqat ASCII, shuning uchun base64url. */
+const NAME_META = 'elchi-name';
 
 interface ObjectStat {
   size: number;
@@ -168,7 +179,7 @@ export class PrivateFileService {
     return { objectKey: finalKey, contentType, size: upload.size };
   }
 
-  /** Yopiq hujjat (faqat `private/wholesaler/…`) — base64; gateway imzoni tekshirgandan keyin chaqiradi. */
+  /** Yopiq hujjat (faqat `private/wholesaler/…` va `private/affiliate/…`) — base64; gateway imzoni yoki egasini tekshirgandan keyin chaqiradi. */
   async get(input: {
     objectKey: string;
   }): Promise<{ contentType: string; size: number; base64: string }> {
@@ -190,6 +201,127 @@ export class PrivateFileService {
       size: body.length,
       base64: body.toString('base64'),
     };
+  }
+
+  // ------------------------------------------------------------------ sotuvchi ma’lumotnomasi (BE-25 5-tur)
+
+  /** Tanlangan fayl vaqtinchalik yopiq joyga; tur bosh baytlardan tekshiriladi. `documentId` faqat egasiga ishlaydi. */
+  async storeAffiliateDocument(input: {
+    affiliateId: string;
+    contentType: string;
+    fileName: string;
+    base64: string;
+  }): Promise<SelfEmployedDocumentDto> {
+    const affiliateId = this.affiliateId(input?.affiliateId);
+    const contentType = String(input?.contentType ?? '')
+      .trim()
+      .toLowerCase() as PrivateDocumentContentType;
+    const body = Buffer.from(String(input?.base64 ?? ''), 'base64');
+    if (!body.length)
+      throw new BadRequestException({
+        message: 'Faylni tanlang',
+        errorCode: ErrorCode.FILE_REQUIRED,
+      });
+    if (body.length > PRIVATE_DOCUMENT_MAX_BYTES)
+      throw new PayloadTooLargeException({
+        message: 'Fayl 10 MB dan katta',
+        errorCode: ErrorCode.FILE_TOO_LARGE,
+      });
+    if (
+      !PRIVATE_DOCUMENT_TYPES.includes(contentType) ||
+      !signatureMatches(body.subarray(0, 16), contentType)
+    )
+      throw new BadRequestException({
+        message: 'Faqat PDF, JPG yoki PNG',
+        errorCode: ErrorCode.FILE_TYPE_INVALID,
+      });
+    const name = documentName(input?.fileName, EXTENSIONS[contentType]);
+    const documentId = `${randomUUID()}${EXTENSIONS[contentType]}`;
+    await this.client
+      .putObject(
+        this.bucket,
+        `${AFFILIATE_UPLOAD_FOLDER}/${affiliateId}/${documentId}`,
+        body,
+        body.length,
+        {
+          'Content-Type': contentType,
+          [`X-Amz-Meta-${NAME_META}`]: Buffer.from(name, 'utf8').toString(
+            'base64url',
+          ),
+        },
+      )
+      .catch((error) => {
+        throw this.unavailable('saqlash', error);
+      });
+    return { documentId, name };
+  }
+
+  /**
+   * Yuborilgan arizaning ma’lumotnomasi doimiy yopiq joyga ko‘chiriladi. Har chaqiriq — yangi kalit: muvaffaqiyatsiz
+   * yuborishning nusxasi o‘chirilsa, boshqa arizaning fayliga tegilmaydi. Vaqtinchalik nusxa lifecycle bilan o‘chadi.
+   */
+  async commitAffiliateDocument(input: {
+    affiliateId: string;
+    documentId: string;
+  }): Promise<AffiliateDocumentFile> {
+    const affiliateId = this.affiliateId(input?.affiliateId);
+    const documentId = String(input?.documentId ?? '');
+    const missing = () =>
+      new BadRequestException({
+        message: 'Hujjat topilmadi — qayta yuklang',
+        errorCode: ErrorCode.DOCUMENT_NOT_FOUND,
+      });
+    if (!DOCUMENT_ID.test(documentId)) throw missing();
+    const uploadKey = `${AFFILIATE_UPLOAD_FOLDER}/${affiliateId}/${documentId}`;
+    const upload = await this.statOrNull(uploadKey);
+    if (!upload) throw missing();
+    const objectKey = `${AFFILIATE_FOLDER}/${affiliateId}/${randomUUID()}${documentId.slice(36)}`;
+    const conditions = new CopyConditions();
+    conditions.setMatchETag(upload.etag);
+    try {
+      await this.client.copyObject(
+        this.bucket,
+        objectKey,
+        `/${this.bucket}/${uploadKey}`,
+        conditions,
+      );
+    } catch (error) {
+      if (isMissing(error) || errorCode(error) === 'PreconditionFailed')
+        throw missing();
+      throw this.unavailable('ko‘chirish', error);
+    }
+    return {
+      objectKey,
+      fileName:
+        Buffer.from(
+          String(upload.metaData?.[NAME_META] ?? ''),
+          'base64url',
+        ).toString('utf8') || `hujjat${documentId.slice(36)}`,
+      contentType: mimeTypeOf(upload),
+      size: upload.size,
+    };
+  }
+
+  /** Ariza yaratilmadi — ko‘chirilgan nusxa qolmasin. Faqat sotuvchi papkasi. */
+  async removeAffiliateDocument(input: {
+    affiliateId: string;
+    objectKey: string;
+  }): Promise<{ removed: boolean }> {
+    const affiliateId = this.affiliateId(input?.affiliateId);
+    const objectKey = String(input?.objectKey ?? '');
+    if (
+      !FINAL_KEY.test(objectKey) ||
+      !objectKey.startsWith(`${AFFILIATE_FOLDER}/${affiliateId}/`)
+    )
+      throw new BadRequestException('Fayl kaliti noto‘g‘ri');
+    await this.removeQuietly(objectKey);
+    return { removed: true };
+  }
+
+  private affiliateId(value: unknown): string {
+    const id = String(value ?? '');
+    if (!ID.test(id)) throw new BadRequestException('Sotuvchi ID si noto‘g‘ri');
+    return id;
   }
 
   private async alreadyCopied(finalKey: string): Promise<PrivateFileVerified> {
@@ -280,6 +412,19 @@ function mimeTypeOf(stat: ObjectStat): PrivateDocumentContentType {
   return String(
     stat.metaData?.['content-type'] ?? stat.metaData?.['Content-Type'] ?? '',
   ).toLowerCase() as PrivateDocumentContentType;
+}
+
+/** Yo‘l va boshqaruv belgilarisiz, tekshirilgan turning kengaytmasi bilan («x.html» → «x.pdf»). */
+export function documentName(value: unknown, extension: string): string {
+  const base = String(value ?? '')
+    .split(/[\\/]/)
+    .pop()!
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f"]/g, '')
+    .replace(/\.[^.]*$/, '')
+    .trim()
+    .slice(0, 150);
+  return `${base || 'hujjat'}${extension}`;
 }
 
 function errorCode(error: unknown): string | undefined {

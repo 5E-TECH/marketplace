@@ -11,10 +11,12 @@ import { CreateWholesalerSettlement1795737600000 } from '../migrations/179573760
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
+import { CreateSelfEmployed1798761600000 } from '../migrations/1798761600000-create-self-employed';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
+import { SelfEmployedService } from './self-employed.service';
 import { withdrawalTax, WithdrawalService } from './withdrawal.service';
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
@@ -90,7 +92,14 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     expect(result.ok).toBe(true);
   };
   const selfEmployed = (affiliateId = '42', value = true) =>
-    svc.setSelfEmployed({ affiliateId, selfEmployed: value, updatedBy: '7' });
+    new SelfEmployedService(ds, {
+      get: () => undefined,
+    } as never).setManually({
+      affiliateId,
+      selfEmployed: value,
+      updatedBy: '7',
+      fullName: 'Sotuvchi',
+    });
   const count = async (sql: string, p: unknown[] = []) =>
     Number((await ds.query(sql, p))[0].n);
 
@@ -125,6 +134,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
         CreateFeeHold1795824000000,
         AddRemittanceResolution1796860800000,
         CreateSettlementResponse1796947200000,
+        CreateSelfEmployed1798761600000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -433,5 +443,27 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
     await expect(
       svc.reject({ id: '999', rejectedBy: '7', reason: '' }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('BE-25: maqom shu paytda bekor qilinayotgan bo‘lsa «To‘landi» kutadi va to‘lamaydi', async () => {
+    await fund('77', 200_000);
+    await selfEmployed('77');
+    const { id } = await svc.create({ affiliateId: '77', amount: 100_000 });
+    await svc.approve({ id, approverId: '7' });
+    const holder = new Client({ connectionString: url });
+    await holder.connect();
+    await holder.query('BEGIN');
+    await holder.query(
+      `UPDATE finance.affiliate_payout_profile SET self_employed = false WHERE affiliate_id = '77'`,
+    );
+    const paid = svc
+      .markPaid({ id, paidBy: '8' })
+      .then(() => 'to‘landi')
+      .catch((e: { status?: number }) => e.status);
+    await new Promise((r) => setTimeout(r, 200));
+    await holder.query('COMMIT');
+    await holder.end();
+    expect(await paid).toBe(400);
+    await expectBalanced();
   });
 });

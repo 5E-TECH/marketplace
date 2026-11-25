@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -23,8 +24,12 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminWithdrawalQueryDto,
+  AFFILIATE_AUTH_RPC,
+  affiliateFullName,
+  AffiliateProfileDto,
   AffiliateSelfEmployedDto,
   CurrentUser,
+  ErrorCode,
   FINANCE_WITHDRAWAL_RPC,
   RejectWithdrawalDto,
   RmqClient,
@@ -49,6 +54,7 @@ export class AdminWithdrawalsController {
 
   constructor(
     @Inject(RmqClient.FINANCE) private readonly finance: ClientProxy,
+    @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     // BE-24: «Pul o‘tkazildi» SMS i sotuvchiga
     @Optional()
     @Inject(RmqClient.NOTIFICATION)
@@ -157,19 +163,35 @@ export class AdminWithdrawalsController {
   @Put('affiliates/:id/self-employed')
   @Roles(Role.FINANCE, Role.SUPERADMIN)
   @ApiOperation({
-    summary: 'O‘zini o‘zi band qilganlik belgisi (moliya tekshirgach qo‘lda)',
-    description: 'Belgisiz sotuvchining so‘rovi rad etiladi (T01:471).',
+    summary: 'O‘zini o‘zi band qilganlik belgisi — arizasiz, qo‘lda',
+    description:
+      'Belgisiz sotuvchining so‘rovi rad etiladi (T01:471). Sotuvchi ariza yuborgan bo‘lsa — `admin/finance/self-employed` da tasdiqlanadi (bu yerda 409 ALREADY_PENDING).',
   })
   @ApiOkResponse({ type: AffiliateSelfEmployedDto })
-  setSelfEmployed(
+  async setSelfEmployed(
     @Param('id', ParseLeadIdPipe) affiliateId: string,
     @CurrentUser('sub') updatedBy: string,
     @Body() dto: SetSelfEmployedDto,
   ): Promise<AffiliateSelfEmployedDto> {
+    // qo‘lda tasdiq ham ism bilan bog‘lanadi: ism o‘zgarsa qayta tekshiriladi (BE-25 5-tur)
+    const fullName = dto.selfEmployed
+      ? affiliateFullName(
+          await sendRpc<AffiliateProfileDto>(
+            this.identity,
+            { cmd: AFFILIATE_AUTH_RPC.PROFILE_GET },
+            { userId: affiliateId },
+          ),
+        )
+      : '';
+    if (dto.selfEmployed && !fullName)
+      throw new ConflictException({
+        message: 'Sotuvchi profilida ism va familiya yo‘q',
+        errorCode: ErrorCode.PROFILE_NAME_REQUIRED,
+      });
     return sendRpc(
       this.finance,
       { cmd: FINANCE_WITHDRAWAL_RPC.SELF_EMPLOYED_SET },
-      { affiliateId, selfEmployed: dto.selfEmployed, updatedBy },
+      { affiliateId, selfEmployed: dto.selfEmployed, updatedBy, fullName },
     );
   }
 }
