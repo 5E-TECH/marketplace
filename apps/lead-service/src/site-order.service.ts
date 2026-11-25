@@ -327,7 +327,7 @@ export class SiteOrderService {
         if (decision.kind === 'REOPEN_AND_MERGE') {
           const from = root.status;
           root.status = LeadStatus.NEW;
-          if (heldForReview) root.reviewReason = LeadReviewReason.IP_RATE;
+          root.reviewReason = heldForReview ? LeadReviewReason.IP_RATE : null;
           root.attempts = 0;
           root.nextAttemptAt = now;
           root.expiresAt = contactDeadline(now);

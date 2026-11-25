@@ -190,6 +190,10 @@ export enum FraudActionType {
   REVOKE_BONUS = 'REVOKE_BONUS',
   /** Tizim: bir IP dan ko‘p ariza — lidlar tekshiruvga olindi (BE-12). */
   REVIEW_HOLD = 'REVIEW_HOLD',
+  /** Admin qarori: tekshiruvdagi ariza navbatga qo‘yildi (LID-5). */
+  REVIEW_QUEUE = 'REVIEW_QUEUE',
+  /** Admin qarori: tekshiruvdagi ariza spam deb yopildi (LID-5). */
+  REVIEW_SPAM = 'REVIEW_SPAM',
   /** Tizim: raqam qora ro‘yxatga qo‘shildi. */
   BLACKLIST = 'BLACKLIST',
   /** «Asossiz» — hodisa chorasiz yopildi. */
@@ -371,7 +375,7 @@ export class FraudActionDto {
 
   @ApiProperty({
     example: '9',
-    description: 'Telefon — niqoblangan (+998 90 *** ** 67)',
+    description: 'Telefon — niqoblangan (****4567)',
   })
   target: string;
 

@@ -1179,6 +1179,15 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         status: LeadStatus.NEW,
         reviewReason: LeadReviewReason.IP_RATE,
       });
+      // LID-5: keyin spam deb yopilsa ham, oddiy manzildan kelgan ariza lidni navbatga qaytaradi — lid yo‘qolmaydi
+      await db.query(`UPDATE lead.lead SET status = 'INVALID' WHERE id = $1`, [
+        root.leadId,
+      ]);
+      await submit('aaaaaa', { phone: '+998903200000' }, '198.51.100.3');
+      expect(await lead(root.leadId)).toMatchObject({
+        status: LeadStatus.NEW,
+        reviewReason: null,
+      });
     });
 
     it('LID-4: faol lid 30 kundan eski bo‘lsa ham ikkinchi faol lid ochilmaydi', async () => {
@@ -1673,7 +1682,7 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       await online('41');
       await queue().takeNext('41');
       const card = await cards().forOperator('41', l.id);
-      expect(card.phoneMasked).toMatch(/^\+998 90 \*\*\* \*\* \d{2}$/);
+      expect(card.phoneMasked).toMatch(/^\*{4}\d{4}$/);
       expect(JSON.stringify(card)).not.toContain('variant');
       expect(card.price).toMatchObject({
         unitPrice: 189000,
@@ -2079,11 +2088,9 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
       );
       const all = await admin().list({});
       expect(all.total).toBe(4);
-      expect(
-        all.items.every((i) =>
-          /^\+998 90 \*\*\* \*\* \d{2}$/.test(i.phoneMasked),
-        ),
-      ).toBe(true);
+      expect(all.items.every((i) => /^\*{4}\d{4}$/.test(i.phoneMasked))).toBe(
+        true,
+      );
       expect(JSON.stringify(all)).not.toContain('+998901110001');
       expect((await admin().list({ status: LeadStatus.REJECTED })).total).toBe(
         1,

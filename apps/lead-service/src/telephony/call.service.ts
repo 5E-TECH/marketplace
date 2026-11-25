@@ -26,6 +26,8 @@ import {
   LeadCallDto,
   LeadOutcome,
   LeadStatus,
+  OperatorActivityDto,
+  OperatorActivityKind,
   OperatorPhoneDto,
   OperatorPhoneKind,
   RECORDING_ALL_ROLES,
@@ -54,6 +56,11 @@ const PHONE_INDEX = 'uq_lead_operator_phone_value';
 const START_MAX_AGE_MS = 10_000;
 /** Tugamagan va tugatish so‘ralmagan qo‘ng‘iroq; bir kundan eskisi — hodisasi yo‘qolgan. */
 export const ACTIVE_CALL = `ended_at IS NULL AND hangup_requested_at IS NULL AND requested_at > now() - interval '1 day'`;
+const ACTIVE_CALL_OF = (alias: string) =>
+  ACTIVE_CALL.replace(
+    /\b(ended_at|hangup_requested_at|requested_at)\b/g,
+    `${alias}.$1`,
+  );
 /** Mijozgacha yetgan qo‘ng‘iroq natijasi — TEL-4 dalili. */
 const REACHED: ReadonlySet<CallEndReason> = new Set([
   CallEndReason.ANSWERED,
@@ -472,6 +479,84 @@ export class CallService {
         },
       ]),
     );
+  }
+
+  /**
+   * Operatorlar hozir nima qilmoqda (BE-25, FE-26 o‘tkazish oynasi). Tugamagan qo‘ng‘iroq — bosqichi; shu bronda qo‘ng‘iroq
+   * tugagan, natija hali kiritilmagan — WRAP_UP; aks holda IDLE. Telefoniya ulanmagan — null (noma’lum).
+   */
+  async activity(
+    operatorIds: string[],
+  ): Promise<Map<string, OperatorActivityDto> | null> {
+    if (!this.provider.isConfigured()) return null;
+    const rows = (await this.db.query(
+      `SELECT DISTINCT ON (c.operator_id) c.operator_id::text AS "operatorId", c.lead_id::text AS "leadId", c.status,
+              c.requested_at AS "requestedAt", c.answered_at AS "answeredAt", c.ended_at AS "endedAt",
+              (${ACTIVE_CALL_OF('c')}) AS active
+         FROM lead.call c
+         LEFT JOIN lead.lead l ON l.id = c.lead_id
+        WHERE c.operator_id = ANY($1::bigint[])
+          AND ((${ACTIVE_CALL_OF('c')})
+               OR (c.ended_at IS NOT NULL AND c.attempt_id IS NULL AND l.status = 'BOOKED'
+                   AND l.operator_id = c.operator_id
+                   AND c.requested_at >= l.booked_until - make_interval(mins => $2::int)))
+        ORDER BY c.operator_id, active DESC, c.id DESC`,
+      [operatorIds, QUEUE_RULES.bookingMinutes],
+    )) as Array<{
+      operatorId: string;
+      leadId: string;
+      status: CallStatus;
+      requestedAt: Date;
+      answeredAt: Date | null;
+      endedAt: Date | null;
+      active: boolean;
+    }>;
+    const result = new Map<string, OperatorActivityDto>(
+      operatorIds.map((id) => [
+        id,
+        { kind: OperatorActivityKind.IDLE, leadId: null, since: null },
+      ]),
+    );
+    for (const row of rows) {
+      const kind = !row.active
+        ? OperatorActivityKind.WRAP_UP
+        : row.status === CallStatus.CONNECTED
+          ? OperatorActivityKind.IN_CALL
+          : row.status === CallStatus.RINGING_CUSTOMER
+            ? OperatorActivityKind.RINGING
+            : OperatorActivityKind.CONNECTING;
+      const since =
+        kind === OperatorActivityKind.WRAP_UP
+          ? row.endedAt
+          : kind === OperatorActivityKind.IN_CALL
+            ? row.answeredAt
+            : row.requestedAt;
+      result.set(row.operatorId, {
+        kind,
+        leadId: row.leadId,
+        since: since ? new Date(since).toISOString() : null,
+      });
+    }
+    return result;
+  }
+
+  /** Lid bo‘yicha tugamagan qo‘ng‘iroq (shu operatorning): bronni bo‘shatish va kartadagi «suhbatda» uchun. */
+  async activeFor(
+    leadId: string,
+    operatorId: string,
+    manager: EntityManager = this.db.manager,
+  ): Promise<{ startedAt: Date; answeredAt: Date | null } | null> {
+    const [row] = (await manager.query(
+      `SELECT requested_at AS "startedAt", answered_at AS "answeredAt" FROM lead.call
+        WHERE lead_id = $1 AND operator_id = $2 AND ${ACTIVE_CALL} ORDER BY id DESC LIMIT 1`,
+      [leadId, operatorId],
+    )) as Array<{ startedAt: Date; answeredAt: Date | null }>;
+    return row
+      ? {
+          startedAt: new Date(row.startedAt),
+          answeredAt: row.answeredAt ? new Date(row.answeredAt) : null,
+        }
+      : null;
   }
 
   // ------------------------------------------------------------------ ro‘yxat va yozuv

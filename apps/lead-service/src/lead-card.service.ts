@@ -58,9 +58,8 @@ const CHANGE_FIELD: Record<string, LeadHistoryChangeDto['field']> = {
 const GEO_TIMEOUT_MS = 1_500;
 const PREVIOUS_LIMIT = 10;
 
-/** Operatorga ko‘rinadigan raqam: «+998 90 *** ** 67» (EQ-02 javobiga qadar niqoblangan). */
-export const maskPhone = (p: string) =>
-  `+998 ${p.slice(4, 6)} *** ** ${p.slice(-2)}`;
+/** Ko‘rinadigan raqam — oxirgi 4 ta raqam: «****4567» (ega qarori 2026-11-23, DZ-11). */
+export const maskPhone = (p: string) => `****${p.slice(-4)}`;
 
 /**
  * Lid kartasi (OPR-2, BE-13; mijoz tarixi BE-42): mahsulot, narx obyekti, suhbat skripti, manzil «formadan»,
@@ -312,7 +311,7 @@ export class LeadCardService {
   }
 
   /** Viloyat va tuman nomlari SOATO bo‘yicha; geo keshi javob bermasa — bo‘sh (kod ko‘rsatiladi). */
-  private async geoNames(): Promise<Map<string, string>> {
+  async geoNames(): Promise<Map<string, string>> {
     const names = new Map<string, string>();
     try {
       const tree = await firstValueFrom(

@@ -885,7 +885,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     expect(page.items.length).toBeGreaterThan(0);
     expect(page.items.every((item) => item.source === 'LANDING')).toBe(true);
     expect(page.items[0]).toMatchObject({
-      phoneMasked: '+998 90 *** ** 67',
+      phoneMasked: '****4567',
     });
     expect(JSON.stringify(page)).not.toContain('+998901234567');
 

@@ -19,7 +19,7 @@ export const ADMIN_ORDERS_PAGE_EXAMPLE = {
       source: 'LANDING',
       leadId: '7001',
       affiliateId: '77',
-      phoneMasked: '+998 90 *** ** 67',
+      phoneMasked: '****4567',
     },
   ],
   total: 1,

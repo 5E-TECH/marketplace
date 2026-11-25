@@ -411,8 +411,9 @@ export class LeadIntakeService {
       if (decision.kind === 'REOPEN_AND_MERGE') {
         const from = root.status;
         root.status = LeadStatus.NEW;
-        // Tekshiruvga tushgan ariza qayta ochilgan lidni ham navbatdan ushlab turadi.
-        if (heldForReview) root.reviewReason = LeadReviewReason.IP_RATE;
+        // Tekshiruvga tushgan ariza qayta ochilgan lidni ham navbatdan ushlab turadi; oddiy ariza esa avval spam deb
+        // yopilgan lidni ham navbatga qaytaradi (belgi qolsa lid hech qachon operatorga tushmasdi).
+        root.reviewReason = heldForReview ? LeadReviewReason.IP_RATE : null;
         root.attempts = 0;
         root.nextAttemptAt = now;
         root.expiresAt = contactDeadline(now);
