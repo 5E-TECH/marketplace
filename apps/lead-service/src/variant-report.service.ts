@@ -40,12 +40,12 @@ const realDay = (s: string) =>
   DAY.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
 
 /**
- * CSV katagi: formula sifatida ochilmasin (= + - @ tab CR bilan boshlansa «'»), «;», qo‘shtirnoq va qator
- * ko‘chishi bo‘lsa qo‘shtirnoqda. Mahsulot nomini sotuvchi yozadi.
+ * CSV katagi: formula sifatida ochilmasin (= + - @ tab CR bilan boshlansa «'»), «;», qo‘shtirnoq, qator ko‘chishi
+ * yoki verguldan keyin formula belgisi bo‘lsa qo‘shtirnoqda (ajratgichi vergul bo‘lgan Excel’da ham formula ochilmasin). Mahsulot nomini sotuvchi yozadi.
  */
 export const csvCell = (value: string): string => {
   const v = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return /[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  return /[;"\r\n]|,\s*[=+\-@]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 };
 
 type Counts = Omit<

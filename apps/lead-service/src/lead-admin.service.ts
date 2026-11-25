@@ -59,6 +59,7 @@ import {
   closesAtOf,
   deviceOf,
   fullTime,
+  IN_REVIEW,
   inReview,
   leadNumber,
   likeText,
@@ -82,6 +83,8 @@ const DEFAULT_LIMIT = 20;
 const EXPORT_CHUNK = 1_000;
 /** Mahsulot nomi — ko‘rinish ma’lumoti: katalog javob bermasa ro‘yxat nomsiz ochiladi (ismlar bilan bir xil) [taklif]. */
 const NAMES_TIMEOUT_MS = 1_500;
+/** Katalog bir so‘rovda shuncha mahsulot qaytaradi (`LIST_LIMIT`). */
+const NAMES_CHUNK = 500;
 /** Yopilgan holatlar: karta «Kim — Shohruh M. · 13:02». */
 const CLOSED = [
   LeadStatus.REJECTED,
@@ -138,6 +141,8 @@ export class LeadAdminService {
     this.assertTab(query.tab, viewer);
     const sort = SORT_SQL[query.sort ?? AdminLeadSort.CREATED_DESC];
     const filtered = this.filtered(query);
+    // nazoratchiga tekshiruvdagi arizalar umuman ko‘rinmaydi: ro‘yxat, sonlar va qidiruvda ham
+    if (!viewer.admin) filtered.andWhere(`NOT ${IN_REVIEW}`);
     const [[rows, total], counts, review] = await Promise.all([
       this.byTab(filtered.clone(), query)
         .orderBy(sort.by, sort.direction)
@@ -224,7 +229,8 @@ export class LeadAdminService {
     const lead = await this.leads.findOne({
       where: { id: leadId, isDeleted: false },
     });
-    if (!lead) throw new NotFoundException('Lid topilmadi');
+    if (!lead || (!viewer.admin && inReview(lead)))
+      throw new NotFoundException('Lid topilmadi');
     const m = this.leads.manager;
     const held =
       lead.operatorId !== null &&
@@ -539,13 +545,18 @@ export class LeadAdminService {
           status: lead.status,
         };
       const from = lead.status;
+      let note = `Spam deb yopildi: ${reason}`;
       if (decision === LeadReviewDecision.QUEUE) {
-        if (await this.otherActive(m, lead))
+        // LID-4: navbatdagi yoki operatordagi boshqa lid; tekshiruvdagisi hisobga olinmaydi (ikkalasi bir-birini to‘sardi).
+        // Saytdan ko‘p tovarli buyurtma alohida lid (BE-34) — bloklanmaydi, dublikatni operator belgilaydi.
+        const other = await this.otherActive(m, lead, true);
+        if (other && !(await this.multiItem(m, [lead.id, other.id])))
           return {
             leadId,
             result: LeadReviewResult.ACTIVE_LEAD_EXISTS,
             status: lead.status,
           };
+        note = `Tekshiruvdan navbatga qo‘yildi: ${reason}${other ? `. Shu raqamda boshqa lid bor: #${other.id} — dublikatni operator belgilaydi` : ''}`;
         lead.reviewReason = null;
         lead.nextAttemptAt = now;
         lead.expiresAt = contactDeadline(now); // aloqa oynasi (2-qoida) qarordan boshlanadi
@@ -554,6 +565,20 @@ export class LeadAdminService {
         await this.postback?.enqueue(m, lead, AffiliatePostbackEvent.LEAD);
         await this.capi?.enqueueLead(m, lead);
       } else {
+        // oddiy IP dan qo‘shilgan ariza bor — mijoz haqiqiy bo‘lishi mumkin, spam bilan birga jim yopilmaydi
+        const clean = await leads.count({
+          where: {
+            mergedIntoId: lead.id,
+            reviewReason: IsNull(),
+            isDeleted: false,
+          },
+        });
+        if (clean)
+          return {
+            leadId,
+            result: LeadReviewResult.HAS_CLEAN_APPLICATION,
+            status: lead.status,
+          };
         lead.status = LeadStatus.INVALID;
         lead.nextAttemptAt = null;
         lead.operatorId = null;
@@ -570,10 +595,7 @@ export class LeadAdminService {
           actorId,
           field: 'review',
           newValue: { decision, reason },
-          note:
-            decision === LeadReviewDecision.QUEUE
-              ? `Tekshiruvdan navbatga qo‘yildi: ${reason}`
-              : `Spam deb yopildi: ${reason}`,
+          note,
         }),
       );
       await this.fraud?.onReviewDecision(
@@ -600,8 +622,12 @@ export class LeadAdminService {
     ]);
   }
 
-  /** LID-4: shu raqam va mahsulotdagi boshqa faol lid. */
-  private otherActive(m: EntityManager, lead: Lead): Promise<Lead | null> {
+  /** LID-4: shu raqam va mahsulotdagi boshqa faol lid; `queuedOnly` — tekshiruvdagisi hisobga olinmaydi. */
+  private otherActive(
+    m: EntityManager,
+    lead: Lead,
+    queuedOnly = false,
+  ): Promise<Lead | null> {
     return m.getRepository(Lead).findOne({
       where: {
         id: Not(lead.id),
@@ -610,8 +636,19 @@ export class LeadAdminService {
         status: In(ACTIVE_STATUSES),
         mergedIntoId: IsNull(),
         isDeleted: false,
+        ...(queuedOnly ? { reviewReason: IsNull() } : {}),
       },
     });
+  }
+
+  /** Lidlardan birortasi ko‘p tovarli (BE-34). */
+  private async multiItem(m: EntityManager, ids: string[]): Promise<boolean> {
+    const rows = (await m.query(
+      `SELECT 1 FROM lead.lead_item WHERE lead_id = ANY($1::bigint[])
+        GROUP BY lead_id HAVING count(*) > 1 LIMIT 1`,
+      [ids],
+    )) as unknown[];
+    return rows.length > 0;
   }
 
   /** Eksportga tushadigan qatorlar soni (so‘ralgan vaqtgacha kelganlar). */
@@ -705,8 +742,12 @@ export class LeadAdminService {
   ): SelectQueryBuilder<Lead> {
     if (query.status)
       qb.andWhere('l.status = :status', { status: query.status });
-    if (query.tab && query.tab !== AdminLeadTab.ALL)
-      qb.andWhere(TAB_SQL[query.tab]);
+    // «Hammasi» va yorliqsiz ro‘yxat: tekshiruvdagi arizalar alohida yorliqda (dizayn p-a6)
+    qb.andWhere(
+      query.tab && query.tab !== AdminLeadTab.ALL
+        ? TAB_SQL[query.tab]
+        : `NOT ${IN_REVIEW}`,
+    );
     return qb;
   }
 
@@ -724,7 +765,10 @@ export class LeadAdminService {
       .reduce(
         (q, [tab, sql]) =>
           q.addSelect(`count(*) FILTER (WHERE ${sql})::int`, tab),
-        qb.select('count(*)::int', AdminLeadTab.ALL),
+        qb.select(
+          `count(*) FILTER (WHERE NOT ${IN_REVIEW})::int`,
+          AdminLeadTab.ALL,
+        ),
       )
       .getRawOne<Record<AdminLeadTab, number>>();
     const n = (tab: AdminLeadTab) => Number(row?.[tab] ?? 0);
@@ -793,15 +837,23 @@ export class LeadAdminService {
   }
 
   private async productNames(ids: string[]): Promise<Map<string, string>> {
-    if (!ids.length) return new Map();
+    const unique = [...new Set(ids)];
+    if (!unique.length) return new Map();
+    const chunks: string[][] = [];
+    for (let i = 0; i < unique.length; i += NAMES_CHUNK)
+      chunks.push(unique.slice(i, i + NAMES_CHUNK));
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<CatalogOfferSnapshot[]>((resolve) => {
       timer = setTimeout(() => resolve([]), NAMES_TIMEOUT_MS);
     });
     const offers = await Promise.race([
-      this.catalog
-        .list({ productIds: [...new Set(ids)] })
-        .catch(() => [] as CatalogOfferSnapshot[]),
+      Promise.all(
+        chunks.map((productIds) =>
+          this.catalog
+            .list({ productIds })
+            .catch(() => [] as CatalogOfferSnapshot[]),
+        ),
+      ).then((parts) => parts.flat()),
       late,
     ]).finally(() => clearTimeout(timer));
     return new Map(offers.map((o) => [o.productId, o.name]));

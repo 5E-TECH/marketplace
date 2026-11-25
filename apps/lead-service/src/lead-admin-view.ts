@@ -15,7 +15,7 @@ export const ACTIVE_STATUSES = [
 ];
 
 /** Yorliq sharti (BE-25, FE-26). «Ishda» va «Tekshiruvda» kesishmaydi: tekshiruvdagi ariza navbatga tushmagan. */
-const IN_REVIEW = `(l.review_reason IS NOT NULL AND l.merged_into_id IS NULL AND l.status IN ('NEW','BOOKED','CALLBACK'))`;
+export const IN_REVIEW = `(l.review_reason IS NOT NULL AND l.merged_into_id IS NULL AND l.status IN ('NEW','BOOKED','CALLBACK'))`;
 export const TAB_SQL: Record<
   Exclude<AdminLeadTab, AdminLeadTab.ALL>,
   string

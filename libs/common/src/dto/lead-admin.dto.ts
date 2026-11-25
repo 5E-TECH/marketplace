@@ -7,6 +7,7 @@ import {
   IsArray,
   IsEnum,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -16,6 +17,7 @@ import { AffiliatePostbackStatus } from './lead-affiliate.dto';
 import { IsLeadBigintId, LeadStatus, trimLeadText } from './lead.dto';
 import {
   AdminLeadFilterDto,
+  AdminLeadSort,
   LeadCardDto,
   OperatorWorkState,
 } from './lead-operator.dto';
@@ -295,6 +297,8 @@ export enum LeadReviewResult {
   NOT_IN_REVIEW = 'NOT_IN_REVIEW',
   /** Shu raqam va mahsulotda boshqa faol lid bor — ikkinchisi ochilmaydi (LID-4). */
   ACTIVE_LEAD_EXISTS = 'ACTIVE_LEAD_EXISTS',
+  /** Spam qilib bo‘lmaydi: shu lidga oddiy IP dan ham ariza qo‘shilgan — mijoz haqiqiy bo‘lishi mumkin. */
+  HAS_CLEAN_APPLICATION = 'HAS_CLEAN_APPLICATION',
 }
 
 export class LeadReviewDecisionDto {
@@ -359,15 +363,27 @@ export enum ExportPhone {
   FULL = 'FULL',
 }
 
+/** Eksport filtri: ro‘yxatniki, sahifalashsiz. */
+export class LeadExportFilterDto extends AdminLeadFilterDto {
+  @ApiPropertyOptional({
+    enum: AdminLeadSort,
+    description:
+      'Qabul qilinadi, lekin qo‘llanmaydi: fayl yangi liddan eskisiga',
+  })
+  @IsOptional()
+  @IsEnum(AdminLeadSort)
+  sort?: AdminLeadSort;
+}
+
 export class LeadExportRequestDto {
   @ApiProperty({
-    type: AdminLeadFilterDto,
-    description: 'Ro‘yxat filtrlari (sahifalash va saralashsiz)',
+    type: LeadExportFilterDto,
+    description: 'Ro‘yxat filtrlari (sahifalashsiz)',
   })
+  @IsObject()
   @ValidateNested()
-  @Type(() => AdminLeadFilterDto)
-  @IsNotEmpty()
-  filters: AdminLeadFilterDto;
+  @Type(() => LeadExportFilterDto)
+  filters: LeadExportFilterDto;
 
   @ApiProperty({
     enum: LeadExportColumn,

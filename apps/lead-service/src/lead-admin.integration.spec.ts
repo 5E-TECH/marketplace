@@ -30,6 +30,7 @@ import {
   Lead,
   LeadAttempt,
   LeadHistory,
+  LeadItem,
   OfferContent,
   OperatorState,
   PostbackDelivery,
@@ -44,6 +45,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
 import { CallService } from './telephony/call.service';
 import { TelephonyProvider } from './telephony/telephony.provider';
 import { UserNamesClient } from './user-names.client';
+import { csvCell } from './variant-report.service';
 
 const url = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = url ? describe : describe.skip;
@@ -271,7 +273,7 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
 
   beforeEach(async () => {
     await db.query(
-      'TRUNCATE lead.call_event, lead.call, lead.operator_phone, lead.lead_attempt, lead.lead_history, lead.fraud_incident, lead.postback_delivery, lead.operator_state, lead.lead, lead.click, lead.stream RESTART IDENTITY CASCADE',
+      'TRUNCATE lead.call_event, lead.call, lead.operator_phone, lead.lead_attempt, lead.lead_history, lead.lead_item, lead.fraud_incident, lead.postback_delivery, lead.operator_state, lead.lead, lead.click, lead.stream RESTART IDENTITY CASCADE',
     );
     stream = await db.getRepository(Stream).save({
       code: 'k7m2qa',
@@ -309,9 +311,9 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
     await addLead({ status: LeadStatus.CONFIRMED, productId: '502' });
 
     const all = await admin().list({}, { admin: true }, NOW);
-    expect(all.total).toBe(6);
+    expect(all.total).toBe(5); // tekshiruvdagi «Hammasi» ga kirmaydi
     expect(all.counts).toEqual({
-      ALL: 6,
+      ALL: 5,
       ACTIVE: 2,
       CONFIRMED: 1,
       REJECTED: 1,
@@ -327,17 +329,35 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
     expect(ids(await tab(AdminLeadTab.REJECTED))).toEqual([rejected.id]);
     expect(ids(await tab(AdminLeadTab.CLOSED))).toEqual([merged.id]);
     // yorliq tanlansa ham sonlar o‘zgarmaydi; filtr esa ta’sir qiladi
-    expect((await tab(AdminLeadTab.REJECTED)).counts.ALL).toBe(6);
+    expect((await tab(AdminLeadTab.REJECTED)).counts.ALL).toBe(5);
     expect(
       (await admin().list({ productId: '502' }, { admin: true }, NOW)).counts,
     ).toMatchObject({ ALL: 1, CONFIRMED: 1, ACTIVE: 0 });
-    // har lid bitta yorliqda
-    const { ALL, ...rest } = all.counts;
+    // har lid bitta yorliqda; tekshiruvdagilar alohida
+    const { ALL, REVIEW, ...rest } = all.counts;
+    expect(REVIEW).toBe(1);
     expect(Object.values(rest).reduce((a, b) => a + b, 0)).toBe(ALL);
 
     const sup = await admin().list({}, { admin: false }, NOW);
     expect(sup.counts).not.toHaveProperty('REVIEW');
     expect(sup.review).toBeNull();
+    // nazoratchiga tekshiruvdagi ariza hech qanday yo‘l bilan ko‘rinmaydi
+    expect(ids(sup)).not.toContain(review.id);
+    expect(
+      ids(
+        await admin().list(
+          { status: LeadStatus.NEW, search: `L-${review.id}` },
+          { admin: false },
+          NOW,
+        ),
+      ),
+    ).toEqual([]);
+    await expect(
+      admin().card(review.id, { admin: false }, NOW),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      admin().card(review.id, { admin: true }, NOW),
+    ).resolves.toMatchObject({ id: review.id });
     await expect(
       tab(AdminLeadTab.REVIEW, { admin: false }),
     ).rejects.toMatchObject({ status: 403 });
@@ -1056,6 +1076,97 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
       ).rejects.toMatchObject({ status: 400 });
     });
 
+    it('saytdan ko‘p tovarli ikki ariza bir-birini to‘smaydi: ikkalasi navbatga, tarixda «boshqa lid bor»', async () => {
+      const phone = '+998907770002';
+      const cart = async (products: string[]) => {
+        const lead = await held({
+          phoneE164: phone,
+          source: LeadSource.SITE,
+          streamId: null,
+          affiliateId: null,
+        });
+        await db.getRepository(LeadItem).save(
+          products.map((productId, position) => ({
+            leadId: lead.id,
+            position,
+            productId,
+            productName: productId,
+            quantity: 1,
+            salePrice: '262000',
+          })),
+        );
+        return lead;
+      };
+      const a = await cart(['501', '502']);
+      const b = await cart(['501', '503']);
+      const res = await reviewer().review('7', {
+        leadIds: [a.id, b.id],
+        decision: LeadReviewDecision.QUEUE,
+        reason: 'x',
+      });
+      expect(res.done).toBe(2);
+      expect(
+        (
+          await db
+            .getRepository(LeadHistory)
+            .findOneByOrFail({ leadId: b.id, field: 'review' })
+        ).note,
+      ).toContain(`#${a.id}`);
+      // oddiy (bitta tovarli) ikki ariza: birinchisi navbatga, ikkinchisi — faol lid bor
+      const c = await held({ phoneE164: '+998907770003' });
+      const d = await held({ phoneE164: '+998907770003' });
+      expect(
+        (
+          await reviewer().review('7', {
+            leadIds: [c.id, d.id],
+            decision: LeadReviewDecision.QUEUE,
+            reason: 'x',
+          })
+        ).items.map((i) => i.result),
+      ).toEqual([LeadReviewResult.DONE, LeadReviewResult.ACTIVE_LEAD_EXISTS]);
+    });
+
+    it('oddiy IP dan ariza qo‘shilgan lid spam bilan jim yopilmaydi', async () => {
+      const lead = await held();
+      await addLead({
+        phoneE164: lead.phoneE164,
+        status: LeadStatus.MERGED,
+        mergedIntoId: lead.id,
+      });
+      const res = await reviewer().review('7', {
+        leadIds: [lead.id],
+        decision: LeadReviewDecision.SPAM,
+        reason: 'x',
+      });
+      expect(res).toEqual({
+        done: 0,
+        items: [
+          {
+            leadId: lead.id,
+            result: LeadReviewResult.HAS_CLEAN_APPLICATION,
+            status: LeadStatus.NEW,
+          },
+        ],
+      });
+      expect((await reload(lead.id)).status).toBe(LeadStatus.NEW);
+      // o‘zi ham tekshiruvda qo‘shilgan ariza to‘smaydi
+      const bot = await held();
+      await held({
+        phoneE164: bot.phoneE164,
+        status: LeadStatus.MERGED,
+        mergedIntoId: bot.id,
+      });
+      expect(
+        (
+          await reviewer().review('7', {
+            leadIds: [bot.id],
+            decision: LeadReviewDecision.SPAM,
+            reason: 'x',
+          })
+        ).done,
+      ).toBe(1);
+    });
+
     it('bir vaqtda ikki qaror — bittasi qo‘llanadi', async () => {
       const lead = await held();
       const both = await Promise.all(
@@ -1080,14 +1191,19 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
         page: Awaited<ReturnType<LeadAdminService['list']>>,
         id: string,
       ) => page.items.find((i) => i.id === id)!;
-      const page = await admin().list({}, { admin: true }, NOW);
+      const page = await admin().list(
+        { tab: AdminLeadTab.REVIEW },
+        { admin: true },
+        NOW,
+      );
       expect(row(page, lead.id)).toMatchObject({
         ip: '203.0.113.47',
         device: 'Android · Chrome',
+        inReview: true,
       });
-      expect(row(page, plain.id)).toMatchObject({ ip: null, device: null });
-      const sup = await admin().list({}, { admin: false }, NOW);
-      expect(row(sup, lead.id)).toMatchObject({ ip: null, device: null });
+      const all = await admin().list({}, { admin: true }, NOW);
+      expect(row(all, plain.id)).toMatchObject({ ip: null, device: null });
+      expect(row(all, lead.id)).toBeUndefined();
     });
   });
 
@@ -1136,6 +1252,9 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
         })
       ).lines,
     ).toEqual(['Lid', `L-${b.id}`]);
+    // ajratgichi vergul bo‘lgan Excel’da ham formula ochilmaydi
+    expect(csvCell('Ali,=1+1')).toBe('"Ali,=1+1"');
+    expect(csvCell('Ali, Vali')).toBe('Ali, Vali');
     // keyingi bo‘lak sarlavhasiz
     expect(
       (

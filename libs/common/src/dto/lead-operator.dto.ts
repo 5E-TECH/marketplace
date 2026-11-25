@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -731,7 +732,9 @@ export enum AdminLeadSort {
   ATTEMPTS_DESC = '-attempts',
 }
 
-/** GET /admin/leads filtri (BE-42, FE-26). Bo‘sh matn va `limit` siz eksport ham shu filtr bilan. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** GET /admin/leads filtri (BE-42, FE-26); CSV eksport ham shu filtr bilan. */
 export class AdminLeadFilterDto {
   @ApiPropertyOptional({ enum: AdminLeadTab })
   @IsOptional()
@@ -775,14 +778,19 @@ export class AdminLeadFilterDto {
   @IsLeadBigintId('operatorId')
   operatorId?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-01' })
+  @ApiPropertyOptional({ example: '2026-12-01', description: 'Toshkent kuni' })
   @IsOptional()
-  @IsDateString()
+  @Matches(DAY, { message: 'from YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString({ strict: true })
   from?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-31' })
+  @ApiPropertyOptional({
+    example: '2026-12-31',
+    description: 'Toshkent kuni, shu kun ham kiradi',
+  })
   @IsOptional()
-  @IsDateString()
+  @Matches(DAY, { message: 'to YYYY-MM-DD bo‘lishi kerak' })
+  @IsDateString({ strict: true })
   to?: string;
 }
 
@@ -924,7 +932,10 @@ export class AdminLeadListItemDto {
   device: string | null;
 }
 
-/** Yorliqlardagi sonlar: filtrlar bo‘yicha, `tab` va `status` siz. */
+/**
+ * Yorliqlardagi sonlar: filtrlar bo‘yicha, `tab` va `status` siz. «Hammasi» ga tekshiruvdagi arizalar kirmaydi
+ * (dizayn p-a6: ALL = ACTIVE + CONFIRMED + REJECTED + CLOSED).
+ */
 export class AdminLeadCountsDto {
   @ApiProperty({ example: 128 }) ALL: number;
   @ApiProperty({ example: 42 }) ACTIVE: number;

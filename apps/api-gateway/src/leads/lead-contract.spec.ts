@@ -662,6 +662,26 @@ describe('Lid shartnomasi (BE-25)', () => {
           columns: ['lead'],
         }),
       ).toEqual(['filters']);
+      // frontend (AdminLeadsPage `csvFilters`) ro‘yxat so‘rovini sahifalashsiz yuboradi — `sort` bilan
+      expect(
+        await errorsIn(LeadExportRequestDto, {
+          filters: {
+            tab: 'ALL',
+            sort: '-createdAt',
+            from: '2027-01-08',
+            to: '2027-01-14',
+            productId: '501',
+          },
+          columns: ['lead', 'customer', 'phone'],
+          phone: 'LAST4',
+        }),
+      ).toEqual([]);
+      for (const filters of [[{ status: 'NEW' }], [], 'status=NEW', null])
+        expect(
+          await errorsIn(LeadExportRequestDto, { filters, columns: ['lead'] }),
+        ).toEqual(['filters']);
+      for (const from of ['2026', '2026-12-01T00:00:00Z', '2026-02-30', '1'])
+        expect(await errorsIn(AdminLeadsQueryDto, { from })).toEqual(['from']);
     });
   });
 
