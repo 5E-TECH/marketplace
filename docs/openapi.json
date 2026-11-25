@@ -10366,6 +10366,42 @@
         ]
       }
     },
+    "/api/v1/legal/documents/{type}/pdf": {
+      "get": {
+        "operationId": "LegalDocumentsController_pdf",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "affiliate-offer",
+                "personal-data-consent",
+                "wholesaler-contract"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Hujjat matni hali e’lon qilinmagan",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hujjatning joriy versiyasi PDF da (e’lon qilingan matn)",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
     "/api/v1/admin/legal/documents/{type}": {
       "put": {
         "operationId": "LegalDocumentsController_publish",

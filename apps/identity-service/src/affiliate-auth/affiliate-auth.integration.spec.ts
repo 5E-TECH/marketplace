@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { ActivityLog, LegalDocumentType, OtpPurpose, Role } from '@app/common';
+import { inspectPdf } from '@app/common/pdf/pdf-inspect';
 import { AuthSession } from '../entities/auth-session.entity';
 import { User } from '../entities/user.entity';
 import { AuthService } from '../auth/auth.service';
@@ -128,6 +129,13 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
       version: '1.0',
       effectiveAt: null,
     });
+    // matni yo‘q hujjatning PDF i ham yo‘q
+    await expect(
+      errorOf(svc.legalDocumentPdf('affiliate-offer')),
+    ).resolves.toMatchObject({ status: 404 });
+    await expect(
+      errorOf(svc.legalDocumentPdf('boshqa')),
+    ).resolves.toMatchObject({ status: expect.any(Number) });
     await expect(
       errorOf(
         svc.registerAffiliate(
@@ -366,6 +374,10 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     );
     const user = await ds.getRepository(User).findOneByOrFail({ phone });
 
+    const before = await svc.legalDocumentPdf('affiliate-offer');
+    expect(before.fileName).toBe('sotuvchi-ofertasi-1.1.pdf');
+    // bir versiya bir marta yasaladi
+    expect(await svc.legalDocumentPdf('affiliate-offer')).toBe(before);
     await svc.publishLegalDocument(
       LegalDocumentType.AFFILIATE_OFFER,
       {
@@ -378,6 +390,12 @@ describeWithPostgres('BE-06 sotuvchi SMS ro‘yxati (PostgreSQL)', () => {
     await expect(svc.legalDocument('affiliate-offer')).resolves.toMatchObject({
       version: '1.2',
     });
+    // yangi versiya e’lon qilingach PDF ham yangi
+    const after = await svc.legalDocumentPdf('affiliate-offer');
+    expect(after.fileName).toBe('sotuvchi-ofertasi-1.2.pdf');
+    expect(inspectPdf(Buffer.from(after.base64, 'base64')).text).toContain(
+      'Yangi matn',
+    );
     // qayta qabul kerakligi profilda ko‘rinadi
     await expect(svc.profile(user.id)).resolves.toMatchObject({
       pendingAgreements: [{ type: 'affiliate-offer', version: '1.2' }],
