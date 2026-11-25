@@ -11,6 +11,13 @@ describe('redactUrl (BE-15, BE-30)', () => {
     expect(redactUrl('/api/v1/calls/501/recording-link')).toBe(
       '/api/v1/calls/501/recording-link',
     );
+    // CSV chiptasi ichida filtr (qidiruvdagi mijoz ismi) bor
+    expect(redactUrl('/api/v1/admin/leads/exports/eyJ2.abc')).toBe(
+      '/api/v1/admin/leads/exports/[havola]',
+    );
+    expect(redactUrl('/api/v1/admin/leads/export')).toBe(
+      '/api/v1/admin/leads/export',
+    );
     expect(redactUrl(undefined)).toBeUndefined();
   });
 });

@@ -137,6 +137,16 @@ export function waveText(pickDate: string | null, now: Date): string | null {
 
 type NameOf = (id: string) => string;
 
+/** Eksport filtri → ro‘yxat filtri: `from`/`to` frontend nomi; saralash va sahifalash qo‘llanmaydi. */
+function exportQuery(filters: OrderExportFilterDto): AdminOrderListQuery {
+  const { from, to, sort: _sort, ...rest } = filters ?? {};
+  return {
+    ...rest,
+    dateFrom: rest.dateFrom ?? from,
+    dateTo: rest.dateTo ?? to,
+  };
+}
+
 /**
  * Buyurtmalar admin, nazoratchi va operatorga (BE-18; FE-26 — BE-25). Kim nimani ko‘radi (TZ 3, dizayn admin-buyurtmalar,
  * nazoratchi-buyurtmalar, operator-buyurtmalarim):
@@ -348,8 +358,9 @@ export class AdminOrdersService {
           lead.districtSoato,
         ),
         addressLine: order.deliveryAddress,
+        // vaqti lid kartasidan (gateway to‘ldiradi)
         addressConfirmedBy: lead.addressConfirmedBy
-          ? nameOf(lead.addressConfirmedBy)
+          ? { name: nameOf(lead.addressConfirmedBy), at: null as string | null }
           : null,
       },
       stream:
@@ -403,6 +414,12 @@ export class AdminOrdersService {
             scanned: Number(task.scanned),
             total: Number(task.total),
             barcode: task.barcode,
+            cell: null,
+            reservedAt: new Date(order.createdAt as string).toISOString(),
+            releasedAt:
+              order.status === LeadOrderStatus.CANCELLED
+                ? statusAt.toISOString()
+                : null,
           }
         : null,
       cancel:
@@ -647,14 +664,16 @@ export class AdminOrdersService {
     filters: OrderExportFilterDto,
     until: Date,
   ): Promise<{ rows: number }> {
-    return { rows: await this.orders.adminOrderCount(filters, until) };
+    return {
+      rows: await this.orders.adminOrderCount(exportQuery(filters), until),
+    };
   }
 
   /** CSV bo‘lagi: birinchi bo‘lakda sarlavha. Telefon — faqat oxirgi 4 raqam (134-savol). */
   async exportChunk(input: OrderExportChunkInput) {
     const columns = input.columns.filter((c) => c in CSV_HEADER);
     const rows = await this.orders.adminOrderChunk(
-      input.filters,
+      exportQuery(input.filters),
       new Date(input.until),
       input.afterId,
       EXPORT_CHUNK,

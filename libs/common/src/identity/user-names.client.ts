@@ -6,6 +6,8 @@ import { RmqClient } from '../messaging/rmq.util';
 
 /** Ism — ko‘rinish ma’lumoti: identity javob bermasa ro‘yxat va karta `#ID` bilan ochiladi [taklif: 1,5 s]. */
 const NAMES_TIMEOUT_MS = 1_500;
+/** Identity bir so‘rovda shuncha ism qaytaradi (`USER_NAMES_LIMIT`). */
+const NAMES_CHUNK = 500;
 
 /** BE-25 (FE-09, FE-26): operator, admin va sotuvchi ismi. Ism yo‘q yoki identity javob bermadi — `#ID`. */
 @Injectable()
@@ -25,12 +27,19 @@ export class UserNamesClient {
     const names = new Map<string, string>();
     if (unique.length)
       try {
-        const rows = await firstValueFrom(
-          this.identity
-            .send<UserNameRow[]>({ cmd: IDENTITY_USER_NAMES }, { ids: unique })
-            .pipe(timeout(NAMES_TIMEOUT_MS)),
+        const chunks: string[][] = [];
+        for (let i = 0; i < unique.length; i += NAMES_CHUNK)
+          chunks.push(unique.slice(i, i + NAMES_CHUNK));
+        const parts = await Promise.all(
+          chunks.map((ids) =>
+            firstValueFrom(
+              this.identity
+                .send<UserNameRow[]>({ cmd: IDENTITY_USER_NAMES }, { ids })
+                .pipe(timeout(NAMES_TIMEOUT_MS)),
+            ),
+          ),
         );
-        for (const row of rows ?? [])
+        for (const row of parts.flatMap((rows) => rows ?? []))
           if (row.name) names.set(String(row.id), row.name);
       } catch (error) {
         this.logger.warn(`Ismlar olinmadi: ${(error as Error)?.message}`);

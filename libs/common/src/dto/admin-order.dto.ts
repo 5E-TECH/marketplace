@@ -16,6 +16,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -37,6 +38,8 @@ export const ADMIN_ORDER_STATUSES = [
     ...Object.values(LeadOrderStatus),
   ]),
 ];
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** «Holat · o‘zgardi» bo‘yicha saralash (BE-25, FE-26). */
 export enum AdminOrderSort {
@@ -70,14 +73,19 @@ export class AdminOrdersQueryDto {
   @IsString()
   shopId?: string;
 
-  @ApiPropertyOptional({ example: '2026-08-01' })
+  @ApiPropertyOptional({ example: '2026-08-01', description: 'Toshkent kuni' })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(DAY, { message: 'dateFrom YYYY-MM-DD bo‘lishi kerak' })
   dateFrom?: string;
 
-  @ApiPropertyOptional({ example: '2026-08-31' })
+  @ApiPropertyOptional({
+    example: '2026-08-31',
+    description: 'Toshkent kuni, shu kun ham kiradi',
+  })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(DAY, { message: 'dateTo YYYY-MM-DD bo‘lishi kerak' })
   dateTo?: string;
 
   // ── BE-25 (FE-26) ──
@@ -258,19 +266,33 @@ export enum OrderExportColumn {
   SUBS = 'subs',
 }
 
-/** Ro‘yxat filtrlari, sahifalash va saralashsiz. */
+/**
+ * Eksport filtri: ro‘yxatniki, sahifalashsiz. `from`/`to` — frontend ro‘yxat so‘rovidagi nom (`dateFrom`/`dateTo` bilan
+ * bir xil); `sort` qabul qilinadi, lekin qo‘llanmaydi (fayl yangi buyurtmadan eskisiga).
+ */
 export class OrderExportFilterDto extends OmitType(AdminOrdersQueryDto, [
   'page',
   'limit',
-  'sort',
   'withCounts',
-] as const) {}
+] as const) {
+  @ApiPropertyOptional({ example: '2026-12-01' })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(DAY, { message: 'from YYYY-MM-DD bo‘lishi kerak' })
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-12-31' })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(DAY, { message: 'to YYYY-MM-DD bo‘lishi kerak' })
+  to?: string;
+}
 
 export class OrderExportRequestDto {
   @ApiProperty({ type: OrderExportFilterDto })
+  @IsObject()
   @ValidateNested()
   @Type(() => OrderExportFilterDto)
-  @IsNotEmpty()
   filters: OrderExportFilterDto;
 
   @ApiProperty({

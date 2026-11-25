@@ -14933,6 +14933,7 @@
             "name": "from",
             "required": false,
             "in": "query",
+            "description": "Toshkent kuni",
             "schema": {
               "example": "2026-12-01",
               "type": "string"
@@ -14942,6 +14943,7 @@
             "name": "to",
             "required": false,
             "in": "query",
+            "description": "Toshkent kuni, shu kun ham kiradi",
             "schema": {
               "example": "2026-12-31",
               "type": "string"
@@ -28817,7 +28819,7 @@
           "affiliates"
         ]
       },
-      "AdminLeadFilterDto": {
+      "LeadExportFilterDto": {
         "type": "object",
         "properties": {
           "tab": {
@@ -28873,11 +28875,25 @@
           },
           "from": {
             "type": "string",
-            "example": "2026-12-01"
+            "example": "2026-12-01",
+            "description": "Toshkent kuni"
           },
           "to": {
             "type": "string",
-            "example": "2026-12-31"
+            "example": "2026-12-31",
+            "description": "Toshkent kuni, shu kun ham kiradi"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "createdAt",
+              "-createdAt",
+              "price",
+              "-price",
+              "attempts",
+              "-attempts"
+            ],
+            "description": "Qabul qilinadi, lekin qo‘llanmaydi: fayl yangi liddan eskisiga"
           }
         }
       },
@@ -28885,10 +28901,10 @@
         "type": "object",
         "properties": {
           "filters": {
-            "description": "Ro‘yxat filtrlari (sahifalash va saralashsiz)",
+            "description": "Ro‘yxat filtrlari (sahifalashsiz)",
             "allOf": [
               {
-                "$ref": "#/components/schemas/AdminLeadFilterDto"
+                "$ref": "#/components/schemas/LeadExportFilterDto"
               }
             ]
           },
@@ -29004,7 +29020,8 @@
               "DONE",
               "NOT_FOUND",
               "NOT_IN_REVIEW",
-              "ACTIVE_LEAD_EXISTS"
+              "ACTIVE_LEAD_EXISTS",
+              "HAS_CLEAN_APPLICATION"
             ],
             "example": "DONE"
           },

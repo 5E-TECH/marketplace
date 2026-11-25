@@ -1,5 +1,8 @@
-import { StreamableFile } from '@nestjs/common';
+import { Logger, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { Readable } from 'stream';
+
+const logger = new Logger('CsvExport');
 
 /** Servis bir bo‘lakda qaytaradigan CSV qatorlari; `nextAfterId` bo‘sh — tugadi. */
 export interface CsvChunk {
@@ -25,8 +28,17 @@ export async function csvStream(
       current = await chunk(current.nextAfterId);
     }
   }
-  return new StreamableFile(Readable.from(lines(), { objectMode: false }), {
-    type: 'text/csv; charset=utf-8',
-    disposition: `attachment; filename="${fileName}"`,
+  const file = new StreamableFile(
+    Readable.from(lines(), { objectMode: false }),
+    {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="${fileName}"`,
+    },
+  );
+  // Nest sukuti sarlavha ketgach javobni oddiy tugatadi — chala fayl to‘liq bo‘lib ko‘rinardi
+  file.setErrorHandler((error, res) => {
+    logger.error(`${fileName}: eksport uzildi — ${error?.message}`);
+    (res as unknown as Response).destroy(error);
   });
+  return file;
 }

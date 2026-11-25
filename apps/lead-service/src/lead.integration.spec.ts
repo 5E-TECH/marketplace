@@ -1188,6 +1188,12 @@ describeWithPostgres('lead-service sxemasi PostgreSQL (BE-10)', () => {
         status: LeadStatus.NEW,
         reviewReason: null,
       });
+      const [last] = await db.getRepository(LeadHistory).find({
+        where: { leadId: root.leadId },
+        order: { id: 'DESC' },
+        take: 1,
+      });
+      expect(last.note).toContain('avval spam deb yopilgan');
     });
 
     it('LID-4: faol lid 30 kundan eski bo‘lsa ham ikkinchi faol lid ochilmaydi', async () => {

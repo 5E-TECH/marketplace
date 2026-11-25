@@ -3,6 +3,7 @@ import { firstValueFrom, timeout } from 'rxjs';
 import {
   AdminLeadCardDto,
   JwtUser,
+  LeadHistoryChangeDto,
   LeadHistoryEntryDto,
   OrderViewer,
   Role,
@@ -24,8 +25,14 @@ export function orderViewer(user: JwtUser): OrderViewer {
 
 /** Checkout javobining shu yerda ishlatiladigan qismi. */
 export interface OrderDetailRpc {
-  lead?: { leadId?: string | null } | null;
-  customer?: Record<string, unknown> | null;
+  lead?: { leadId?: string | null; whereDeliver?: string | null } | null;
+  customer?: {
+    regionName?: string | null;
+    districtName?: string | null;
+    addressLine?: string | null;
+    addressConfirmedBy?: { name: string; at: string | null } | null;
+    [key: string]: unknown;
+  } | null;
   stream?: Record<string, unknown> | null;
   [key: string]: unknown;
 }
@@ -56,16 +63,36 @@ export async function withLeadContext(
     return order;
   }
   const edit = addressEdit(card.history ?? []);
+  const customer = order.customer;
   return {
     ...order,
-    customer: order.customer
+    customer: customer
       ? {
-          ...order.customer,
+          ...customer,
           consentAt: card.consentAt ?? null,
-          original: edit?.original ?? null,
+          // mijoz sahifada yozgani — faqat operator tuzatgan bo‘lsa (tuzatilmagan maydonlar hozirgidek)
+          original: edit
+            ? {
+                regionName: edit.original.region ?? customer.regionName ?? null,
+                districtName:
+                  edit.original.district ?? customer.districtName ?? null,
+                addressLine:
+                  edit.original.addressLine ?? customer.addressLine ?? null,
+                whereDeliver:
+                  edit.original.whereDeliver ??
+                  order.lead?.whereDeliver ??
+                  null,
+              }
+            : null,
           addressEditedBy: edit?.by ?? null,
+          addressConfirmedBy: customer.addressConfirmedBy
+            ? {
+                ...customer.addressConfirmedBy,
+                at: card.address?.confirmedAt ?? null,
+              }
+            : null,
         }
-      : order.customer,
+      : customer,
     stream:
       order.stream && viewer.kind !== 'OPERATOR'
         ? {
@@ -80,15 +107,12 @@ export async function withLeadContext(
 
 /** Manzil tuzatishlari: har maydonning eng birinchi (mijoz yozgan) qiymati va oxirgi tuzatgan odam. */
 export function addressEdit(history: LeadHistoryEntryDto[]): {
-  original: Partial<
-    Record<
-      'region' | 'district' | 'addressLine' | 'whereDeliver',
-      string | null
-    >
-  >;
+  original: Partial<Record<LeadHistoryChangeDto['field'], string | null>>;
   by: { name: string; at: string };
 } | null {
-  const original: Partial<Record<string, string | null>> = {};
+  const original: Partial<
+    Record<LeadHistoryChangeDto['field'], string | null>
+  > = {};
   let by: { name: string; at: string } | null = null;
   for (const entry of history) {
     if (!entry.changes?.length) continue;
