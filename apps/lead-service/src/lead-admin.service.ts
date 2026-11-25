@@ -80,6 +80,8 @@ import { csvCell } from './variant-report.service';
 
 const DEFAULT_LIMIT = 20;
 const EXPORT_CHUNK = 1_000;
+/** Mahsulot nomi — ko‘rinish ma’lumoti: katalog javob bermasa ro‘yxat nomsiz ochiladi (ismlar bilan bir xil) [taklif]. */
+const NAMES_TIMEOUT_MS = 1_500;
 /** Yopilgan holatlar: karta «Kim — Shohruh M. · 13:02». */
 const CLOSED = [
   LeadStatus.REJECTED,
@@ -792,9 +794,16 @@ export class LeadAdminService {
 
   private async productNames(ids: string[]): Promise<Map<string, string>> {
     if (!ids.length) return new Map();
-    const offers = await this.catalog
-      .list({ productIds: [...new Set(ids)] })
-      .catch(() => [] as CatalogOfferSnapshot[]);
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<CatalogOfferSnapshot[]>((resolve) => {
+      timer = setTimeout(() => resolve([]), NAMES_TIMEOUT_MS);
+    });
+    const offers = await Promise.race([
+      this.catalog
+        .list({ productIds: [...new Set(ids)] })
+        .catch(() => [] as CatalogOfferSnapshot[]),
+      late,
+    ]).finally(() => clearTimeout(timer));
     return new Map(offers.map((o) => [o.productId, o.name]));
   }
 

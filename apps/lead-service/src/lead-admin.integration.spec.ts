@@ -507,6 +507,15 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
     expect(JSON.stringify(page)).not.toContain(first.phoneE164);
   });
 
+  it('katalog javob bermasa ro‘yxat nomsiz ochiladi (gateway 10 s kutishiga yetmaydi)', async () => {
+    const lead = await addLead();
+    catalogFake.list.mockImplementationOnce(() => new Promise(() => undefined));
+    const startedAt = Date.now();
+    const page = await admin().list({}, { admin: true }, NOW);
+    expect(Date.now() - startedAt).toBeLessThan(4_000);
+    expect(page.items[0]).toMatchObject({ id: lead.id, productName: '' });
+  });
+
   it('filtr variantlari: lidlardagi mahsulot, operator va sotuvchilar nomi bilan', async () => {
     await addLead();
     await addLead({ productId: '502', operatorId: '41' });
