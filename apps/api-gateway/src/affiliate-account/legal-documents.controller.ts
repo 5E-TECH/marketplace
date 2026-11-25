@@ -8,6 +8,8 @@ import {
   Param,
   ParseEnumPipe,
   Put,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -18,8 +20,10 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   AFFILIATE_AUTH_RPC,
   AuthErrorResponseDto,
@@ -35,6 +39,7 @@ import {
   RmqClient,
   sendRpc,
 } from '@app/common';
+import { LabelDocument, labelPdf } from '../orders/label-pdf';
 
 /**
  * BE-06 (SOT-1, FE-04): sotuvchi ofertasi va shaxsiy ma’lumotlarga rozilik matni. Ro‘yxat oferta qadamida o‘qiladi —
@@ -67,6 +72,33 @@ export class LegalDocumentsController {
       { cmd: AFFILIATE_AUTH_RPC.LEGAL_GET },
       { type },
     );
+  }
+
+  @Public()
+  @IgnoreAuthCookie()
+  @Get('legal/documents/:type/pdf')
+  @ApiOperation({
+    summary: 'Hujjatning joriy versiyasi PDF da (e’lon qilingan matn)',
+  })
+  @ApiParam({ name: 'type', enum: LegalDocumentType })
+  @ApiProduces('application/pdf')
+  @ApiNotFoundResponse({
+    description: 'Hujjat matni hali e’lon qilinmagan',
+    type: AuthErrorResponseDto,
+  })
+  async pdf(
+    @Param('type', new ParseEnumPipe(LegalDocumentType))
+    type: LegalDocumentType,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const pdf = await sendRpc<LabelDocument>(
+      this.identity,
+      { cmd: AFFILIATE_AUTH_RPC.LEGAL_PDF },
+      { type },
+    );
+    // yangi versiya darhol ko‘rinsin
+    res.setHeader('Cache-Control', 'no-cache');
+    return labelPdf(res, pdf);
   }
 
   @Put('admin/legal/documents/:type')

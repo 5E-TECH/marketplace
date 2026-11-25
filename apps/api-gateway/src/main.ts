@@ -68,7 +68,8 @@ async function bootstrap() {
     credentials: true,
     // Frontend xatoni log bilan solishtira olishi uchun ID'ni ochamiz.
     // `X-Labels-Skipped` — partiyada chiqmay qolgan yorliqlar (C1.45).
-    exposedHeaders: ['X-Request-Id', 'X-Labels-Skipped'],
+    // `Content-Disposition` — panel boshqa domenda, yuklanadigan fayl nomini o‘qisin (BE-25).
+    exposedHeaders: ['X-Request-Id', 'X-Labels-Skipped', 'Content-Disposition'],
   });
 
   // API_CONTRACT.md §1.1 — barcha route /api/v1 prefiksi bilan

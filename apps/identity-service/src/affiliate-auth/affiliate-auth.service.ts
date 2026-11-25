@@ -35,6 +35,7 @@ import {
 } from '@app/common';
 import { User } from '../entities/user.entity';
 import { AuthService } from '../auth/auth.service';
+import { legalDocumentPdf } from './legal-document-pdf';
 import { OtpGuardService } from './otp-guard.service';
 
 /** SMS kod bilan kira oladigan rollar (FE-04: «sotuvchi va optovik kirishi»); xodim parol bilan kiradi. */
@@ -47,6 +48,8 @@ const REGISTRATION_TOKEN_TTL = '30m';
 const REGISTRATION_PURPOSE = 'affiliate-registration';
 const BCRYPT_ROUNDS = 10;
 
+type LegalPdf = Awaited<ReturnType<typeof legalDocumentPdf>>;
+
 /**
  * BE-06 (TZ 6.1 SOT-1, T9-9): sotuvchi telefon va SMS kod bilan ro‘yxatdan o‘tadi va kiradi, ofertani qabul qiladi.
  * Kod qoidasi `OtpGuardService` da (randomInt, HMAC, 5 daqiqa); telefon va maqsad bo‘yicha 3 xato → 15 daqiqa
@@ -54,6 +57,12 @@ const BCRYPT_ROUNDS = 10;
  */
 @Injectable()
 export class AffiliateAuthService {
+  /** Hujjat turi → oxirgi yasalgan PDF (turlar soni bilan cheklangan). */
+  private readonly legalPdfs = new Map<
+    LegalDocumentType,
+    { version: string; pdf: LegalPdf }
+  >();
+
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly auth: AuthService,
@@ -409,6 +418,18 @@ export class AffiliateAuthService {
     const doc = await this.currentDocument(this.documentType(type), version);
     if (!doc) throw new NotFoundException('Hujjat topilmadi');
     return doc;
+  }
+
+  /** Joriy versiya PDF i. E’lon qilingan versiya o‘zgarmaydi — bir marta yasaladi. */
+  async legalDocumentPdf(type: string): Promise<LegalPdf> {
+    const doc = await this.legalDocument(type);
+    if (!doc.sections.length)
+      throw new NotFoundException('Hujjat matni hali e’lon qilinmagan');
+    const cached = this.legalPdfs.get(doc.type);
+    if (cached?.version === doc.version) return cached.pdf;
+    const pdf = await legalDocumentPdf(doc);
+    this.legalPdfs.set(doc.type, { version: doc.version, pdf });
+    return pdf;
   }
 
   async publishLegalDocument(

@@ -37,6 +37,7 @@ export const AFFILIATE_AUTH_RPC = {
   REGISTER: 'auth.register.affiliate',
   LEGAL_GET: 'identity.legal.get',
   LEGAL_PUBLISH: 'identity.legal.publish',
+  LEGAL_PDF: 'identity.legal.pdf',
   PROFILE_GET: 'identity.affiliate.profile.get',
   PROFILE_UPDATE: 'identity.affiliate.profile.update',
   AGREEMENT_ACCEPT: 'identity.affiliate.agreement.accept',

@@ -73,6 +73,11 @@ export class AffiliateAuthController {
     return this.svc.legalDocument(String(data?.type ?? ''), data?.version);
   }
 
+  @MessagePattern({ cmd: AFFILIATE_AUTH_RPC.LEGAL_PDF })
+  legalPdf(@Payload() data: { type: string }) {
+    return this.svc.legalDocumentPdf(String(data?.type ?? ''));
+  }
+
   @MessagePattern({ cmd: AFFILIATE_AUTH_RPC.LEGAL_PUBLISH })
   publish(
     @Payload()
