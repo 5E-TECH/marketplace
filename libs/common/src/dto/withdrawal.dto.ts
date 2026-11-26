@@ -191,6 +191,22 @@ export class WithdrawalDto {
 
   @ApiProperty({ example: null, nullable: true, type: Date })
   failedAt: Date | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'BE-32: tasdiqlangan so‘rov kartaga avtomatik yuboriladi (provayder yoqilgan, sotuvchida karta bor) — qo‘lda «To‘landi» yo‘q',
+  })
+  autoPayout: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'BE-32: provayder natijasi holatga zid kelgan (moliya tekshiradi) — nima bo‘lgani; faqat moliya ro‘yxatida',
+  })
+  payoutConflict: string | null;
 }
 
 export class WithdrawalPageDto {

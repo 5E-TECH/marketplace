@@ -3,7 +3,9 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   AdminWithdrawalQueryDto,
@@ -11,6 +13,7 @@ import {
   ErrorCode,
   MAX_MONEY,
   moneyFromDb,
+  payoutEnabled,
   WithdrawalBlockReason,
   WithdrawalDto,
   WithdrawalPageDto,
@@ -77,13 +80,14 @@ export interface RequestRow {
   payoutSentAt: Date | null;
   failReason: string | null;
   failedAt: Date | null;
+  payoutConflict: string | null;
 }
 
 const SELECT = `SELECT r.id::text, r.affiliate_id AS "affiliateId", r.amount::text, r.tax_amount::text AS "taxAmount",
        r.net_amount::text AS "netAmount", r.status, r.required_approvals AS "requiredApprovals",
        r.reject_reason AS "rejectReason", r.created_at AS "createdAt", r.paid_at AS "paidAt", r.paid_by AS "paidBy",
        r.payout_mode AS "payoutMode", r.card_mask AS "cardMask", r.payout_sent_at AS "payoutSentAt",
-       r.fail_reason AS "failReason", r.failed_at AS "failedAt"
+       r.fail_reason AS "failReason", r.failed_at AS "failedAt", r.payout_conflict AS "payoutConflict"
   FROM finance.withdrawal_request r`;
 
 /**
@@ -101,7 +105,49 @@ export class WithdrawalService {
   constructor(
     private readonly db: DataSource,
     private readonly ledger: LedgerService,
+    // BE-32: kartaga avtomatik to‘lov yoqilganmi (`autoPayout`); yo‘q bo‘lsa — o‘chiq
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /**
+   * BE-32: sotuvchi hisobidan hali yechilmagan, lekin kartaga yuborilgan (`PAYING`) pulni ayirgan mavjud summa. Sotuvchi
+   * hisobi qulflanadi — bir vaqtda ikki to‘lov bir summani ikki marta hisoblamaydi. Chaqiruvchi sotuvchi qulfini olgan.
+   */
+  async spendable(
+    m: EntityManager,
+    affiliateId: string,
+    excludeId: string,
+  ): Promise<number> {
+    const aff = await this.ledger.accountId(m, 'AFFILIATE', affiliateId);
+    // «To‘landi» jurnali qulflaydigan hisoblarning hammasi birdan (tartiblangan) — qulf tartibi buzilmasin
+    await this.ledger.lockAccounts(m, [
+      aff,
+      await this.ledger.accountId(m, 'TAX', ''),
+      await this.ledger.accountId(m, 'COD_CLEARING', ''),
+    ]);
+    const [{ available, paying }] = (await m.query(
+      `SELECT (SELECT available_balance FROM finance.account WHERE id = $1)::text AS available,
+              (SELECT COALESCE(SUM(amount), 0) FROM finance.withdrawal_request
+                WHERE affiliate_id = $2 AND status = 'PAYING' AND id <> $3)::text AS paying`,
+      [aff, affiliateId, excludeId],
+    )) as Array<{ available: string; paying: string }>;
+    return moneyFromDb(available) - moneyFromDb(paying);
+  }
+
+  /** BE-32: tasdiqlangan so‘rov kartaga avtomatik ketadimi (yoqilgan va sotuvchida faol karta bor). */
+  private async autoPayoutAffiliates(
+    m: EntityManager,
+    affiliateIds: string[],
+  ): Promise<Set<string>> {
+    if (!this.config || !payoutEnabled(this.config) || !affiliateIds.length)
+      return new Set();
+    const rows = (await m.query(
+      `SELECT affiliate_id AS "affiliateId" FROM finance.payout_card
+        WHERE status = 'ACTIVE' AND affiliate_id = ANY($1::text[])`,
+      [affiliateIds],
+    )) as Array<{ affiliateId: string }>;
+    return new Set(rows.map((r) => r.affiliateId));
+  }
 
   private async minAmount(m: EntityManager): Promise<number> {
     const [row] = (await m.query(
@@ -224,7 +270,12 @@ export class WithdrawalService {
     query: WithdrawalQueryDto;
   }): Promise<WithdrawalPageDto> {
     const affiliateId = validId(input?.affiliateId, 'affiliateId');
-    return this.page(input?.query ?? {}, affiliateId);
+    const page = await this.page(input?.query ?? {}, affiliateId);
+    // ziddiyat matni — moliya uchun (BE-32)
+    return {
+      ...page,
+      items: page.items.map((i) => ({ ...i, payoutConflict: null })),
+    };
   }
 
   /** Moliya ro‘yxati (FE-20). */
@@ -360,7 +411,12 @@ export class WithdrawalService {
       const head = await this.head(m, id);
       await affiliatePayoutLock(m, head.affiliateId);
       const row = await this.lockRow(m, id);
-      if (row.status === WithdrawalStatus.PAID) return; // takror bosildi
+      if (row.status === WithdrawalStatus.PAID) {
+        // kartaga avtomatik to‘langanini qo‘lda ham o‘tkazib qo‘ymasin: jim 200 emas, aniq javob
+        if (row.payoutMode === WithdrawalPayoutMode.CARD)
+          throw state('So‘rov kartaga avtomatik to‘langan — qo‘lda o‘tkazmang');
+        return; // takror bosildi
+      }
       if (row.status === WithdrawalStatus.PAYING)
         throw state(
           'So‘rov kartaga yuborilgan — natija provayderdan keladi; tekshirib bo‘lgach «Natijani kiritish»',
@@ -379,20 +435,21 @@ export class WithdrawalService {
         throw rule(
           'O‘zini o‘zi band qilganlik maqomi tasdiqlanmagan — to‘lov qilinmaydi (T01:471)',
         );
-      const amount = moneyFromDb(row.amount);
-      const aff = await this.ledger.accountId(m, 'AFFILIATE', row.affiliateId);
-      const taxAcc = await this.ledger.accountId(m, 'TAX', '');
-      const cod = await this.ledger.accountId(m, 'COD_CLEARING', '');
-      await this.ledger.lockAccounts(m, [aff, taxAcc, cod]);
-      const [{ available }] = (await m.query(
-        `SELECT available_balance::text AS available FROM finance.account WHERE id = $1`,
-        [aff],
-      )) as Array<{ available: string }>;
-      if (moneyFromDb(available) < amount)
+      if (
+        (await this.autoPayoutAffiliates(m, [row.affiliateId])).has(
+          row.affiliateId,
+        )
+      )
         throw state(
-          `Mavjud balans yetmaydi: ${moneyFromDb(available)} so‘m, so‘rov ${amount} — rad eting yoki kuting`,
+          'So‘rov kartaga avtomatik yuboriladi — qo‘lda «To‘landi» yo‘q (sotuvchi kartani o‘chirsa — qo‘lda)',
         );
-      await this.writePaid(m, row, paidBy, WithdrawalPayoutMode.MANUAL, true);
+      const amount = moneyFromDb(row.amount);
+      const spendable = await this.spendable(m, row.affiliateId, id);
+      if (spendable < amount)
+        throw state(
+          `Mavjud balans yetmaydi: ${spendable} so‘m (kartaga yuborilayotganlardan keyin), so‘rov ${amount} — rad eting yoki kuting`,
+        );
+      await this.writePaid(m, row, paidBy, WithdrawalPayoutMode.MANUAL);
     });
     return this.get(this.db.manager, id);
   }
@@ -516,6 +573,13 @@ export class WithdrawalService {
         ORDER BY created_at, approver_id`,
       [rows.map((r) => r.id)],
     )) as Array<{ requestId: string; approvedBy: string; approvedAt: Date }>;
+    const auto = await this.autoPayoutAffiliates(m, [
+      ...new Set(
+        rows
+          .filter((r) => r.status === WithdrawalStatus.APPROVED)
+          .map((r) => r.affiliateId),
+      ),
+    ]);
     return rows.map((r) => ({
       id: r.id,
       affiliateId: r.affiliateId,
@@ -536,6 +600,9 @@ export class WithdrawalService {
       payoutSentAt: r.payoutSentAt ?? null,
       failReason: r.failReason ?? null,
       failedAt: r.failedAt ?? null,
+      autoPayout:
+        r.status === WithdrawalStatus.APPROVED && auto.has(r.affiliateId),
+      payoutConflict: r.payoutConflict ?? null,
     }));
   }
 }

@@ -25609,6 +25609,17 @@
             "type": "string",
             "example": null,
             "nullable": true
+          },
+          "autoPayout": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-32: tasdiqlangan so‘rov kartaga avtomatik yuboriladi (provayder yoqilgan, sotuvchida karta bor) — qo‘lda «To‘landi» yo‘q"
+          },
+          "payoutConflict": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "BE-32: provayder natijasi holatga zid kelgan (moliya tekshiradi) — nima bo‘lgani; faqat moliya ro‘yxatida"
           }
         },
         "required": [
@@ -25628,7 +25639,9 @@
           "cardMask",
           "payoutSentAt",
           "failReason",
-          "failedAt"
+          "failedAt",
+          "autoPayout",
+          "payoutConflict"
         ]
       },
       "WithdrawalPageDto": {
@@ -30365,7 +30378,7 @@
           },
           "payoutRef": {
             "type": "string",
-            "example": "wd-12",
+            "example": "wd-12-9f2c4a1b",
             "description": "`payout.status`"
           },
           "status": {

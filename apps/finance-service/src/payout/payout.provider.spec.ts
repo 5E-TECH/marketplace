@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 import {
+  PayoutNotSentError,
   PayoutProvider,
   PayoutRejectedError,
   PayoutUnknownError,
@@ -115,6 +116,20 @@ describe('PayoutProvider (umumiy HTTP shakl)', () => {
     expect((rejected as PayoutRejectedError).message).toBe(
       'provayder HTTP 422: token eskirgan',
     );
+    expect((rejected as PayoutRejectedError).reason).toBe('token eskirgan');
+    // avtorizatsiya va chegara — bajarilmagan; 409 («shu ref bilan bor») — noma’lum
+    handler = (_req, res) => json(res, 401, {});
+    await expect(provider().send(input)).rejects.toBeInstanceOf(
+      PayoutNotSentError,
+    );
+    handler = (_req, res) => json(res, 429, {});
+    await expect(provider().send(input)).rejects.toBeInstanceOf(
+      PayoutNotSentError,
+    );
+    handler = (_req, res) => json(res, 409, { reason: 'duplicate' });
+    await expect(provider().send(input)).rejects.toBeInstanceOf(
+      PayoutUnknownError,
+    );
     handler = (_req, res) => json(res, 502, {});
     await expect(provider().send(input)).rejects.toBeInstanceOf(
       PayoutUnknownError,
@@ -145,7 +160,7 @@ describe('PayoutProvider (umumiy HTTP shakl)', () => {
     await expect(provider(dead).status('wd-7')).rejects.toBeInstanceOf(
       PayoutUnknownError,
     );
-    // yuborishda ulanib bo‘lmadi — so‘rov provayderga yetmagan: aniq rad
+    // yuborishda ulanib bo‘lmadi — so‘rov provayderga yetmagan: qayta yuborish xavfsiz
     await expect(
       provider(dead).send({
         payoutRef: 'wd-7',
@@ -153,6 +168,6 @@ describe('PayoutProvider (umumiy HTTP shakl)', () => {
         amount: 1,
         purpose: 'x',
       }),
-    ).rejects.toBeInstanceOf(PayoutRejectedError);
+    ).rejects.toBeInstanceOf(PayoutNotSentError);
   });
 });

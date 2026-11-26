@@ -12,6 +12,14 @@ export function payoutKey(config: ConfigService): string | null {
   return key && key.length >= MIN_KEY_LENGTH ? key : null;
 }
 
+/** Kartaga avtomatik to‘lov yoqilgan: provayder manzili va token kaliti bor (BE-32). */
+export function payoutEnabled(config: ConfigService): boolean {
+  return (
+    Boolean(config.get<string>('PAYOUT_API_URL')?.trim()) &&
+    payoutKey(config) !== null
+  );
+}
+
 export function sealPayoutToken(token: string, key: string): string {
   return encryptSecret(token, key);
 }

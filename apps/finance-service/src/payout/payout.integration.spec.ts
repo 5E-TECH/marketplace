@@ -1,8 +1,9 @@
 import { Client } from 'pg';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
   sealPayoutToken,
+  WITHDRAWAL_CONFLICT_EVENT,
   WITHDRAWAL_FAILED_EVENT,
   WITHDRAWAL_OVERDUE_EVENT,
   WithdrawalPayoutMode,
@@ -15,6 +16,7 @@ import { orderEvent } from '../ledger/order-events.samples';
 import { SelfEmployedService } from '../ledger/self-employed.service';
 import { WithdrawalService } from '../ledger/withdrawal.service';
 import {
+  PayoutNotSentError,
   PayoutRejectedError,
   PayoutResult,
   PayoutUnknownError,
@@ -39,6 +41,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
   let seq = 0;
   const env: Record<string, string | undefined> = {};
   const emitted: Array<{ pattern: string; payload: any }> = [];
+  let emitFails = false;
   const provider = {
     isConfigured: jest.fn(() => true),
     createCardSession: jest.fn(async () => ({
@@ -122,11 +125,18 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
     expect(result.details.unbalancedJournals).toEqual([]);
     expect(result.ok).toBe(true);
   };
-  const ageSent = (id: string) =>
+  const ageSent = (id: string, age = '2 minutes') =>
     ds.query(
-      `UPDATE finance.withdrawal_request SET payout_sent_at = now() - interval '2 minutes' WHERE id = $1`,
-      [id],
+      `UPDATE finance.withdrawal_request SET payout_sent_at = now() - $2::interval WHERE id = $1`,
+      [id, age],
     );
+  const refOf = async (id: string) =>
+    (
+      (await ds.query(
+        `SELECT payout_ref AS ref FROM finance.withdrawal_request WHERE id = $1`,
+        [id],
+      )) as Array<{ ref: string }>
+    )[0].ref;
 
   beforeAll(async () => {
     if (!new URL(url!).pathname.endsWith('_finance_test'))
@@ -153,7 +163,9 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       logging: false,
     }).initialize();
     ledger = new LedgerService(ds);
-    withdrawals = new WithdrawalService(ds, ledger);
+    withdrawals = new WithdrawalService(ds, ledger, {
+      get: (k: string) => env[k],
+    } as never);
     check = new BalanceCheckService(ds);
     payouts = new PayoutService(
       ds,
@@ -162,6 +174,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       withdrawals,
       {
         emit: (pattern: string, payload: unknown) => {
+          if (emitFails) return throwError(() => new Error('RMQ uzildi'));
           emitted.push({ pattern, payload });
           return of(undefined);
         },
@@ -185,6 +198,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       SELF_EMPLOYED_SECRET_KEY: undefined,
     });
     emitted.length = 0;
+    emitFails = false;
     provider.isConfigured.mockImplementation(() => true);
     provider.send.mockReset();
     provider.status.mockReset();
@@ -303,7 +317,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       expect(await payouts.tick()).toEqual({ sent: 1, checked: 0 });
       expect(provider.send).toHaveBeenCalledTimes(1);
       expect(provider.send.mock.calls[0][0]).toMatchObject({
-        payoutRef: `wd-${id}`,
+        payoutRef: expect.stringMatching(new RegExp(`^wd-${id}-[0-9a-f]{8}$`)),
         cardToken: `${TOKEN}-42-1234`,
         amount: 990_000,
       });
@@ -389,12 +403,15 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       await bindCard();
       const id = await approved();
       provider.send.mockRejectedValue(
-        new PayoutRejectedError('provayder HTTP 422: token eskirgan', 422),
+        new PayoutRejectedError(
+          'provayder HTTP 422: token eskirgan',
+          'token eskirgan',
+        ),
       );
       await payouts.tick();
       expect(await withdrawals.one({ id })).toMatchObject({
         status: WithdrawalStatus.FAILED,
-        failReason: 'provayder HTTP 422: token eskirgan',
+        failReason: 'token eskirgan',
       });
       expect((await balance()).available).toBe(1_000_000);
     });
@@ -438,7 +455,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
         reason: null,
       });
       await payouts.tick();
-      expect(provider.status).toHaveBeenLastCalledWith(`wd-${id}`);
+      expect(provider.status).toHaveBeenLastCalledWith(await refOf(id));
       expect(await withdrawals.one({ id })).toMatchObject({
         status: WithdrawalStatus.PAID,
         paidBy: SYSTEM_PAYER,
@@ -457,7 +474,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       );
       const ev = {
         eventId: 'pay-1',
-        payoutRef: `wd-${id}`,
+        payoutRef: await refOf(id),
         status: 'SUCCESS' as const,
         reason: null,
       };
@@ -477,7 +494,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       await expectBalanced();
     });
 
-    it('moliya PAYING ni qo‘lda yopadi: FAILED (izoh) yoki PAID; boshqa holatda 409', async () => {
+    it('moliya PAYING ni qo‘lda yopadi: avval provayder so‘raladi, 1 soat kutiladi, izoh sotuvchiga ko‘rinmaydi', async () => {
       await bindCard();
       const id = await approved();
       provider.send.mockRejectedValue(new PayoutUnknownError('vaqt tugadi'));
@@ -485,6 +502,19 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       await expect(
         payouts.resolve({ id, result: 'FAILED', note: ' ', actorId: '7' }),
       ).rejects.toMatchObject({ status: 400 });
+      provider.status.mockResolvedValue(null);
+      // provayder bilmaydi, yuborilganiga 1 soat bo‘lmagan — 409
+      await expect(
+        payouts.resolve({ id, result: 'FAILED', note: 'yo‘q', actorId: '7' }),
+      ).rejects.toMatchObject({ status: 409 });
+      await ageSent(id, '2 hours');
+      provider.status.mockResolvedValueOnce({
+        status: 'PENDING',
+        reason: null,
+      });
+      await expect(
+        payouts.resolve({ id, result: 'FAILED', note: 'yo‘q', actorId: '7' }),
+      ).rejects.toMatchObject({ status: 409 });
       const failed = await payouts.resolve({
         id,
         result: 'FAILED',
@@ -493,23 +523,63 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       });
       expect(failed).toMatchObject({
         status: WithdrawalStatus.FAILED,
-        failReason: 'Provayder kabinetida to‘lov yo‘q',
+        failReason: 'To‘lov kartaga o‘tmadi',
       });
+      expect(
+        (
+          await ds.query(
+            `SELECT payout_note AS note, payout_resolved_by AS by FROM finance.withdrawal_request WHERE id = $1`,
+            [id],
+          )
+        )[0],
+      ).toEqual({ note: 'Provayder kabinetida to‘lov yo‘q', by: '7' });
       await expect(
         payouts.resolve({ id, result: 'PAID', note: 'x', actorId: '7' }),
       ).rejects.toMatchObject({ status: 409 });
 
-      const id2 = (
-        await withdrawals.create({ affiliateId: '42', amount: 200_000 })
-      ).id;
-      await withdrawals.approve({
-        id: id2,
-        approverId: '7',
-        currentFullName: 'Sotuvchi',
+      // keyin provayder «o‘tdi» dedi — pul ketgan: «To‘landi» bo‘ladi, moliyaga ziddiyat xabari
+      emitted.length = 0;
+      await payouts.onStatus({
+        eventId: 'late-1',
+        payoutRef: await refOf(id),
+        status: 'SUCCESS',
+        reason: null,
       });
+      const late = await withdrawals.one({ id });
+      expect(late).toMatchObject({
+        status: WithdrawalStatus.PAID,
+        paidBy: SYSTEM_PAYER,
+      });
+      expect(late.payoutConflict).toContain('o‘tdi');
+      expect(emitted.map((e) => e.pattern)).toEqual([
+        'finance.withdrawal.paid',
+        WITHDRAWAL_CONFLICT_EVENT,
+      ]);
+      expect((await balance()).available).toBe(0);
+      const mine = await withdrawals.listMine({
+        affiliateId: '42',
+        query: {},
+      });
+      expect(mine.items[0].payoutConflict).toBeNull();
+      await expectBalanced();
+    });
+
+    it('qo‘lda PAID: provayder rad etgan bo‘lsa 409, «o‘tdi» desa — o‘zi «To‘landi»; keyin kelgan FAILED — ziddiyat', async () => {
+      await bindCard();
+      const id = await approved();
+      provider.send.mockRejectedValue(new PayoutUnknownError('vaqt tugadi'));
       await payouts.tick();
+      await ageSent(id, '2 hours');
+      provider.status.mockResolvedValueOnce({
+        status: 'FAILED',
+        reason: 'Karta bloklangan',
+      });
+      await expect(
+        payouts.resolve({ id, result: 'PAID', note: 'o‘tgan', actorId: '8' }),
+      ).rejects.toMatchObject({ status: 409 });
+      provider.status.mockResolvedValueOnce(null);
       const paid = await payouts.resolve({
-        id: id2,
+        id,
         result: 'PAID',
         note: 'Provayder kabinetida: o‘tgan',
         actorId: '8',
@@ -519,7 +589,135 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
         paidBy: '8',
         payoutMode: WithdrawalPayoutMode.CARD,
       });
-      expect((await balance()).available).toBe(800_000);
+      // provayder keyin «o‘tmadi» dedi — avtomatik qaytarilmaydi, moliyaga ziddiyat
+      emitted.length = 0;
+      await payouts.onStatus({
+        eventId: 'late-2',
+        payoutRef: await refOf(id),
+        status: 'FAILED',
+        reason: 'x',
+      });
+      const after = await withdrawals.one({ id });
+      expect(after.status).toBe(WithdrawalStatus.PAID);
+      expect(after.payoutConflict).toContain('o‘tmadi');
+      expect(emitted.map((e) => e.pattern)).toEqual([
+        WITHDRAWAL_CONFLICT_EVENT,
+      ]);
+
+      // «o‘tmadi» deb yopishga urinish, provayder esa «o‘tdi» — so‘rov «To‘landi», 409
+      await fund('42', 300_000);
+      await ds.query(
+        `UPDATE finance.withdrawal_request SET request_day = request_day - 1 WHERE id = $1`,
+        [id],
+      );
+      const w2 = await withdrawals.create({
+        affiliateId: '42',
+        amount: 300_000,
+      });
+      await withdrawals.approve({
+        id: w2.id,
+        approverId: '7',
+        currentFullName: 'Sotuvchi',
+      });
+      await payouts.tick();
+      provider.status.mockResolvedValueOnce({
+        status: 'SUCCESS',
+        reason: null,
+      });
+      await expect(
+        payouts.resolve({
+          id: w2.id,
+          result: 'FAILED',
+          note: 'yo‘q',
+          actorId: '7',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect((await withdrawals.one({ id: w2.id })).status).toBe(
+        WithdrawalStatus.PAID,
+      );
+      await expectBalanced();
+    });
+
+    it('balans: boshqa yuborilayotgan so‘rov ayiriladi — ikkinchisi yuborilmaydi; qo‘lda «To‘landi» avtomatik so‘rovga 409', async () => {
+      await bindCard();
+      await fund('42', 1_000_000);
+      await selfEmployed();
+      const a = await withdrawals.create({
+        affiliateId: '42',
+        amount: 600_000,
+      });
+      await ds.query(
+        `UPDATE finance.withdrawal_request SET request_day = request_day - 1 WHERE id = $1`,
+        [a.id],
+      );
+      const b = await withdrawals.create({
+        affiliateId: '42',
+        amount: 400_000,
+      });
+      for (const w of [a, b])
+        await withdrawals.approve({
+          id: w.id,
+          approverId: '7',
+          currentFullName: 'Sotuvchi',
+        });
+      expect((await withdrawals.one({ id: b.id })).autoPayout).toBe(true);
+      // tasdiqlangan, kartaga avtomatik ketadi — qo‘lda «To‘landi» yo‘q
+      await expect(
+        withdrawals.markPaid({ id: b.id, paidBy: '7' }),
+      ).rejects.toMatchObject({ status: 409 });
+      // qaytarish: mavjud 700 000 ga tushdi
+      await ds.query(
+        `UPDATE finance.account SET available_balance = 700000 WHERE type = 'AFFILIATE' AND owner_id = '42'`,
+      );
+      provider.send.mockRejectedValue(new PayoutUnknownError('vaqt tugadi'));
+      expect((await payouts.tick()).sent).toBe(1);
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect((await withdrawals.one({ id: a.id })).status).toBe(
+        WithdrawalStatus.PAYING,
+      );
+      expect((await withdrawals.one({ id: b.id })).status).toBe(
+        WithdrawalStatus.APPROVED,
+      );
+    });
+
+    it('kartaga to‘langanini qo‘lda «To‘landi» — 409 (jim 200 emas)', async () => {
+      await bindCard();
+      const id = await approved();
+      provider.send.mockResolvedValue({ status: 'SUCCESS', reason: null });
+      await payouts.tick();
+      await expect(
+        withdrawals.markPaid({ id, paidBy: '7' }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('yuborilmadi (ulanmadi, 401/403/429) — «Tasdiqlandi» ga qaytadi, keyin o‘sha ref bilan qayta', async () => {
+      await bindCard();
+      const id = await approved();
+      provider.send.mockRejectedValueOnce(
+        new PayoutNotSentError('provayder HTTP 429'),
+      );
+      expect((await payouts.tick()).sent).toBe(0);
+      const w = await withdrawals.one({ id });
+      expect(w).toMatchObject({
+        status: WithdrawalStatus.APPROVED,
+        payoutMode: null,
+        cardMask: null,
+      });
+      expect(emitted).toEqual([]);
+      const ref = await refOf(id);
+      await payouts.tick(); // 1 soat o‘tmagan — qayta yuborilmaydi
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      await ds.query(
+        `UPDATE finance.withdrawal_request SET payout_checked_at = now() - interval '2 hours' WHERE id = $1`,
+        [id],
+      );
+      provider.send.mockResolvedValueOnce({ status: 'SUCCESS', reason: null });
+      await payouts.tick();
+      expect(provider.send).toHaveBeenCalledTimes(2);
+      expect(provider.send.mock.calls[1][0].payoutRef).toBe(ref);
+      expect((await withdrawals.one({ id })).status).toBe(
+        WithdrawalStatus.PAID,
+      );
       await expectBalanced();
     });
 
@@ -587,6 +785,35 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
                 affiliateId: '42',
                 amount: 1_000_000,
                 status: WithdrawalStatus.APPROVED,
+                kind: 'OVERDUE',
+              }),
+            ],
+          },
+        },
+      ]);
+    });
+
+    it('javobsiz yuborish (1 soat) — moliyaga bir marta; navbatga yozilmasa belgi qaytadi', async () => {
+      await bindCard();
+      const id = await approved();
+      provider.send.mockRejectedValue(new PayoutUnknownError('vaqt tugadi'));
+      await payouts.tick();
+      expect(await payouts.overdue()).toBe(0);
+      await ageSent(id, '90 minutes');
+      emitFails = true;
+      expect(await payouts.overdue()).toBe(0);
+      emitFails = false;
+      expect(await payouts.overdue()).toBe(1);
+      expect(await payouts.overdue()).toBe(0);
+      expect(emitted).toEqual([
+        {
+          pattern: WITHDRAWAL_OVERDUE_EVENT,
+          payload: {
+            withdrawals: [
+              expect.objectContaining({
+                id,
+                status: WithdrawalStatus.PAYING,
+                kind: 'NO_RESULT',
               }),
             ],
           },

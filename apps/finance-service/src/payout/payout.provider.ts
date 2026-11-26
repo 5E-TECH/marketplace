@@ -14,18 +14,29 @@ const NOT_CONNECTED: ReadonlySet<string> = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
 ]);
 
-/** Natija noma’lum (vaqt tugadi, 5xx, aloqa uzildi): pul ketgan bo‘lishi mumkin — `FAILED` deb yozilmaydi. */
+/** Natija noma’lum (vaqt tugadi, 5xx, 408/409/425, aloqa uzildi): pul ketgan bo‘lishi mumkin — `FAILED` deb yozilmaydi. */
 export class PayoutUnknownError extends Error {}
 
-/** Provayder aniq rad etdi yoki so‘rov unga yetmadi: pul ketmagan. */
+/**
+ * Provayder to‘lovni aniq rad etdi (400, 422): pul ketmagan. `reason` — provayder bergan sabab (sotuvchiga ko‘rinadi),
+ * `message` — texnik matn (faqat log).
+ */
 export class PayoutRejectedError extends Error {
   constructor(
     message: string,
-    readonly httpStatus: number | null = null,
+    readonly reason: string | null = null,
   ) {
     super(message);
   }
 }
+
+/** So‘rov bajarilmagan (ulanib bo‘lmadi, 401/403/429): pul ketmagan, keyinroq qayta yuborish xavfsiz. */
+export class PayoutNotSentError extends Error {}
+
+/** Aniq rad: provayder so‘rovni qabul qilib, bajarmagan [taklif — provayder hujjati bilan aniqlanadi, EQ-08]. */
+const REJECTED_HTTP: ReadonlySet<number> = new Set([400, 422]);
+/** Bajarilmagan: avtorizatsiya yoki chegara — provayder so‘rovni ishlamagan. */
+const NOT_SENT_HTTP: ReadonlySet<number> = new Set([401, 403, 429]);
 
 export type PayoutState = 'SUCCESS' | 'PENDING' | 'FAILED';
 
@@ -97,17 +108,18 @@ export class PayoutProvider {
 
   /** Holat; provayder bu chiqimni bilmasa — null. Har qanday xatoda `PayoutUnknownError`. */
   async status(payoutRef: string): Promise<PayoutResult | null> {
-    let response: Response;
+    let response: Response | null;
     try {
       response = await this.request(
         'GET',
         `/payouts/${encodeURIComponent(payoutRef)}`,
+        undefined,
+        true,
       );
     } catch (error) {
-      if (error instanceof PayoutRejectedError && error.httpStatus === 404)
-        return null;
       throw new PayoutUnknownError((error as Error).message);
     }
+    if (!response) return null;
     const result = await readResult(response);
     if (!result) throw new PayoutUnknownError('provayder javobida holat yo‘q');
     return result;
@@ -119,11 +131,23 @@ export class PayoutProvider {
       .replace(/\/+$/, '');
   }
 
+  private request(
+    method: 'GET' | 'POST',
+    path: string,
+    body: unknown,
+    notFoundIsNull: true,
+  ): Promise<Response | null>;
+  private request(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<Response>;
   private async request(
     method: 'GET' | 'POST',
     path: string,
     body?: unknown,
-  ): Promise<Response> {
+    notFoundIsNull = false,
+  ): Promise<Response | null> {
     const token = this.config.get<string>('PAYOUT_API_TOKEN')?.trim();
     let response: Response;
     try {
@@ -140,26 +164,25 @@ export class PayoutProvider {
     } catch (error) {
       const code = (error as { cause?: { code?: string } })?.cause?.code;
       if (code && NOT_CONNECTED.has(code))
-        throw new PayoutRejectedError(`provayderga ulanib bo‘lmadi: ${code}`);
+        throw new PayoutNotSentError(`provayderga ulanib bo‘lmadi: ${code}`);
       throw new PayoutUnknownError(
         (error as Error)?.name === 'TimeoutError'
           ? `provayder ${PAYOUT_TIMEOUT_MS / 1000} soniyada javob bermadi`
           : `provayder bilan aloqa uzildi: ${(error as Error)?.message}`,
       );
     }
-    // 5xx — provayder ichida nima bo‘lgani noma’lum; 4xx — aniq rad
-    if (response.status >= 500)
-      throw new PayoutUnknownError(`provayder HTTP ${response.status}`);
-    if (!response.ok) {
-      const reason = await reasonOf(response);
-      throw new PayoutRejectedError(
-        reason
-          ? `provayder HTTP ${response.status}: ${reason}`
-          : `provayder HTTP ${response.status}`,
-        response.status,
-      );
-    }
-    return response;
+    if (response.ok) return response;
+    if (response.status === 404 && notFoundIsNull) return null;
+    const reason = await reasonOf(response);
+    const message = reason
+      ? `provayder HTTP ${response.status}: ${reason}`
+      : `provayder HTTP ${response.status}`;
+    if (REJECTED_HTTP.has(response.status))
+      throw new PayoutRejectedError(message, reason);
+    if (NOT_SENT_HTTP.has(response.status))
+      throw new PayoutNotSentError(message);
+    // 5xx, 404, 408, 409 («shu ref bilan bor»), 425 va boshqalar — provayderda nima bo‘lgani noma’lum
+    throw new PayoutUnknownError(message);
   }
 }
 

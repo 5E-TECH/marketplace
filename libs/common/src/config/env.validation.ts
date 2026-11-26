@@ -141,10 +141,18 @@ export const envValidationSchema = Joi.object({
     .default(30),
   // BE-32: sotuvchi kartasiga to'lov provayderi (EQ-08). URL berilmasa kartaga avtomatik to'lov o'chiq —
   // moliya qo'lda «To'landi» bosadi (BE-23). O'zgaruvchilar finance-service va api-gateway ga kerak.
-  PAYOUT_API_URL: Joi.string()
-    .uri({ scheme: ['https', 'http'] })
-    .allow('')
-    .optional(),
+  // prod’da faqat https (karta tokeni va Bearer kalit ochiq kanalda ketmasin); http — lokal ko'prik uchun
+  PAYOUT_API_URL: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .uri({ scheme: ['https'] })
+      .allow('')
+      .optional(),
+    otherwise: Joi.string()
+      .uri({ scheme: ['https', 'http'] })
+      .allow('')
+      .optional(),
+  }),
   PAYOUT_API_TOKEN: Joi.string().allow('').optional(),
   // provayder webhooki imzosi (X-Payout-Signature, HMAC-SHA256); URL bor, kalit yo'q bo'lsa karta ulanmasdi va
   // to'lov natijasi kelmasdi

@@ -73,13 +73,13 @@ describe('PayoutWebhookController', () => {
     await send({
       type: 'payout.status',
       eventId: 'evt-2',
-      payoutRef: 'wd-12',
+      payoutRef: 'wd-12-9f2c4a1b',
       status: 'FAILED',
       reason: 'Karta bloklangan',
     });
     expect(emit).toHaveBeenCalledWith(PAYOUT_EVENTS.STATUS, {
       eventId: 'evt-2',
-      payoutRef: 'wd-12',
+      payoutRef: 'wd-12-9f2c4a1b',
       status: 'FAILED',
       reason: 'Karta bloklangan',
     });
@@ -90,7 +90,7 @@ describe('PayoutWebhookController', () => {
     const body = {
       type: 'payout.status',
       eventId: 'evt-3',
-      payoutRef: 'wd-1',
+      payoutRef: 'wd-1-0000abcd',
       status: 'SUCCESS',
     };
     await expect(send(body, 'deadbeef')).rejects.toMatchObject({ status: 401 });
@@ -116,7 +116,7 @@ describe('PayoutWebhookController', () => {
     const body = {
       type: 'payout.status',
       eventId: 'evt-5',
-      payoutRef: 'wd-1',
+      payoutRef: 'wd-1-0000abcd',
       status: 'SUCCESS',
     };
     await expect(

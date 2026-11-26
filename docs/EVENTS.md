@@ -35,6 +35,7 @@ emas va bu ro‘yxatga kirmaydi. Outbox orqali ketadigan ombor buyruqlari ham so
 | `finance.withdrawal.paid` | `WITHDRAWAL_PAID_EVENT` | api-gateway (qo‘lda «To‘landi», BE-24); finance-service (kartaga avtomatik, BE-32) — to‘g‘ridan-to‘g‘ri | notification-service |
 | `finance.withdrawal.failed` | `WITHDRAWAL_FAILED_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-32) | notification-service (sotuvchiga SMS va kabinet, moliyaga kabinet) |
 | `finance.withdrawal.overdue` | `WITHDRAWAL_OVERDUE_EVENT` | finance-service (soatlik, to‘g‘ridan-to‘g‘ri, BE-32) | notification-service (moliya) |
+| `finance.withdrawal.conflict` | `WITHDRAWAL_CONFLICT_EVENT` | finance-service (to‘g‘ridan-to‘g‘ri, BE-32) | notification-service (moliya) |
 | `finance.payout.card-bound`, `finance.payout.status` | `PAYOUT_EVENTS` | api-gateway (provayder webhooki, to‘g‘ridan-to‘g‘ri, BE-32; token shifrlangan) | finance-service |
 | `finance.wholesaler.paid` | `SETTLEMENT_PAID_EVENT` | api-gateway (to‘g‘ridan-to‘g‘ri, BE-47) | notification-service |
 | `lead.site.confirm-sms` | `LEAD_EVENTS.SITE_CONFIRM_SMS` | lead-service (outbox, BE-34) | notification-service |

@@ -29,16 +29,21 @@ export const PAYOUT_EVENTS = {
 
 /** Kartaga yuborilgan pul provayderda rad etildi — sotuvchiga va moliyaga. */
 export const WITHDRAWAL_FAILED_EVENT = 'finance.withdrawal.failed';
-/** 24 soatdan beri to‘lanmagan so‘rov (T01:498) — moliyaga. */
+/** 24 soatdan beri to‘lanmagan so‘rov (T01:498) yoki javobsiz qolgan yuborish — moliyaga. */
 export const WITHDRAWAL_OVERDUE_EVENT = 'finance.withdrawal.overdue';
+/** Provayder natijasi so‘rov holatiga zid (masalan «o‘tmadi» deb yopilgandan keyin «o‘tdi») — moliyaga. */
+export const WITHDRAWAL_CONFLICT_EVENT = 'finance.withdrawal.conflict';
 
 /** Niqob: faqat birinchi 4 va oxirgi 4 raqam (`8600 **** **** 1234`). Boshqa shakl qabul qilinmaydi (TC3). */
 export const CARD_MASK = /^\d{4} \*{4} \*{4} \d{4}$/;
 /** Provayder tokeni va hodisa ID si — chop etiladigan ASCII [taklif]. */
 export const PAYOUT_TOKEN = /^[\x21-\x7e]{8,300}$/;
 export const PAYOUT_EVENT_ID = /^[A-Za-z0-9._:-]{1,200}$/;
-/** Bitta so‘rov — bitta chiqim: `payoutRef` = `wd-<so‘rov ID>`. */
-export const PAYOUT_REF = /^wd-\d{1,19}$/;
+/**
+ * Bitta so‘rov — bitta chiqim: `payoutRef` = `wd-<so‘rov ID>-<tasodifiy>` (tasodifiy qism — boshqa muhit yoki tiklangan baza
+ * bilan to‘qnashmasin). So‘rovga bir marta beriladi, qayta urinishda o‘zgarmaydi.
+ */
+export const PAYOUT_REF = /^wd-\d{1,19}-[0-9a-f]{8}$/;
 
 export enum PayoutCardSystem {
   UZCARD = 'UZCARD',
@@ -120,7 +125,10 @@ export class PayoutWebhookDto {
   @MaxLength(120)
   holderName?: string;
 
-  @ApiPropertyOptional({ example: 'wd-12', description: '`payout.status`' })
+  @ApiPropertyOptional({
+    example: 'wd-12-9f2c4a1b',
+    description: '`payout.status`',
+  })
   @ValidateIf((dto: PayoutWebhookDto) => dto.type === 'payout.status')
   @Matches(PAYOUT_REF)
   payoutRef?: string;
@@ -170,7 +178,19 @@ export interface WithdrawalOverdueEvent {
     amount: number;
     status: WithdrawalStatus;
     createdAt: string;
+    /** `OVERDUE` — 24 soatdan beri to‘lanmagan; `NO_RESULT` — kartaga yuborilganiga 1 soat, natija yo‘q. */
+    kind: 'OVERDUE' | 'NO_RESULT';
   }>;
+}
+
+export interface WithdrawalConflictEvent {
+  withdrawalId: string;
+  affiliateId: string;
+  net: number;
+  /** So‘rov holati (ziddiyatdan keyin). */
+  status: WithdrawalStatus;
+  /** Nima bo‘ldi — moliya uchun matn. */
+  conflict: string;
 }
 
 /** Moliya `PAYING` dagi so‘rovni provayder kabinetida tekshirib yopadi. */

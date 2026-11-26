@@ -123,16 +123,29 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'Kartaga o‘tmadi: so‘rov {withdrawalId}',
     body: 'So‘rov {withdrawalId} (sotuvchi {affiliateId}): {net} so‘m {cardMask} kartaga o‘tmadi — {reason}. Pul sotuvchi balansida qoldi.',
   },
+  withdrawal_payout_conflict: {
+    name: 'Kartaga to‘lov: provayder natijasi zid',
+    description:
+      'BE-32: provayder natijasi so‘rov holatiga zid (masalan «o‘tmadi» deb yopilgandan keyin «o‘tdi») — moliya provayder kabinetida tekshiradi',
+    variables: {
+      withdrawalId: 'So‘rov raqami',
+      affiliateId: 'Sotuvchi ID si',
+      net: 'Kartaga yuborilgan summa, so‘m',
+      conflict: 'Nima bo‘ldi',
+    },
+    title: 'Tekshiring: so‘rov {withdrawalId} — provayder natijasi zid',
+    body: 'So‘rov {withdrawalId} (sotuvchi {affiliateId}, {net} so‘m): {conflict}',
+  },
   withdrawal_overdue: {
     name: 'Pul yechish 24 soatdan oshdi',
     description:
-      'BE-32 (TZ T01:498 «so‘rovdan to‘lovgacha ≤ 24 soat», MOL-6): 24 soatdan beri to‘lanmagan so‘rovlar — moliyaga, har so‘rov bir marta',
+      'BE-32 (TZ T01:498 «so‘rovdan to‘lovgacha ≤ 24 soat», MOL-6): 24 soatdan beri to‘lanmagan so‘rovlar va kartaga yuborilganiga 1 soat bo‘lib natijasi yo‘qlar («javob yo‘q») — moliyaga, har so‘rov bir marta',
     variables: {
       count: 'So‘rovlar soni',
       withdrawals: 'So‘rovlar (raqam — holat)',
     },
-    title: '24 soatdan beri to‘lanmagan: {count} ta so‘rov',
-    body: '{count} ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan: {withdrawals}. Moliya → Pul yechish.',
+    title: 'To‘lanmagan so‘rovlar: {count} ta',
+    body: '{count} ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan yoki kartaga yuborilib javob kelmagan: {withdrawals}. Moliya → Pul yechish.',
   },
 
   lot_blocked: {

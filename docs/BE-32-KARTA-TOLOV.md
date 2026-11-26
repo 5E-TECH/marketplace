@@ -7,7 +7,7 @@ qo‘lda o‘tkazib «To‘landi» bosadi (BE-23).
 ## Yoqish (deploy, Dilshod)
 
 1. `.env.production` — `finance-service` va `api-gateway` ga:
-   - `PAYOUT_API_URL`, `PAYOUT_API_TOKEN`;
+   - `PAYOUT_API_URL` (prod’da faqat `https`), `PAYOUT_API_TOKEN`;
    - `PAYOUT_WEBHOOK_SECRET` (kamida 16 belgi);
    - `PAYOUT_SECRET_KEY` (kamida 32 belgi; karta tokenini shifrlaydi — **almashtirilsa ulangan kartalar ochilmaydi**, sotuvchilar qayta ulaydi);
    - `PAYOUT_RETURN_URL` — karta ulangach provayder sotuvchini qaytaradigan kabinet sahifasi.
@@ -26,11 +26,34 @@ So‘raldi → Tasdiqlandi → (kartasi bo‘lsa) **Yuborilmoqda** (`PAYING`) �
 - Band summa — So‘raldi, Tasdiqlandi, Yuborilmoqda.
 - `FAILED` — ledgerga hech narsa yozilmagan, pul «Mavjud» da (MOL-6). Kunni band qilmaydi — sotuvchi o‘sha kuni yangi so‘rov
   yuboradi [taklif].
-- Yuborishdan oldin qulf ostida qayta tekshiriladi: tasdiqlar soni, maqom, mavjud balans. Yetmasa — «Tasdiqlandi» da qoladi
-  (soatda bir qayta ko‘riladi), moliya qaror qiladi.
+- Yuborishdan oldin qulf ostida qayta tekshiriladi: tasdiqlar soni, maqom, mavjud balans **minus shu sotuvchining boshqa
+  «Yuborilmoqda» so‘rovlari** (ular ledgerda hali yechilmagan). Yetmasa — «Tasdiqlandi» da qoladi (soatda bir qayta
+  ko‘riladi), moliya qaror qiladi. Qo‘lda «To‘landi» ham shu qoida bilan.
+- Kartaga avtomatik ketadigan so‘rovga (`autoPayout: true` — yoqilgan va sotuvchida karta bor) qo‘lda «To‘landi» yo‘q (409);
+  kartaga to‘langaniga qo‘lda «To‘landi» ham 409 (jim 200 emas).
 - `PAYING` ga qo‘lda «To‘landi» ham, «Rad etish» ham yo‘q (409) — faqat «Natijani kiritish».
-- Karta yo‘q — «Tasdiqlandi» da qoladi, moliya qo‘lda (BE-23 yo‘li o‘zgarmagan).
-- 24 soatdan beri to‘lanmagan so‘rov (So‘raldi, Tasdiqlandi, Yuborilmoqda; T01:498) — moliyaga bir marta xabar (har soat).
+- Karta yo‘q yoki provayder o‘chiq — «Tasdiqlandi» da qoladi, moliya qo‘lda (BE-23 yo‘li o‘zgarmagan).
+- Har soat moliyaga, har so‘rov bir marta: 24 soatdan beri to‘lanmagan (So‘raldi, Tasdiqlandi, Yuborilmoqda; T01:498) va
+  kartaga yuborilganiga 1 soat bo‘lib natijasi yo‘q («javob yo‘q») [taklif]. Navbatga yozilmasa — keyingi soatda qayta.
+
+**Provayder javoblari:**
+
+| Javob | Nima bo‘ladi |
+| --- | --- |
+| `SUCCESS` | «To‘landi» (jurnal), sotuvchiga «Pul o‘tkazildi» |
+| `FAILED` yoki HTTP 400, 422 | «O‘tmadi», pul «Mavjud» da; sotuvchiga provayder sababi yoki «Provayder to‘lovni rad etdi» (texnik matn faqat logda) |
+| ulanib bo‘lmadi, HTTP 401, 403, 429 | provayder bajarmagan — «Tasdiqlandi» ga qaytadi, 1 soatdan keyin **o‘sha `payoutRef`** bilan qayta |
+| `PENDING`, 5xx, 404, 408, 409, 425, 10 s javobsiz | noma’lum — «Yuborilmoqda», holat har daqiqa so‘raladi, qayta yuborilmaydi |
+
+**«Natijani kiritish» (moliya):** avval holat provayderdan so‘raladi. Provayder «o‘tdi» desa — so‘rov o‘zi «To‘landi» bo‘ladi
+(«o‘tmadi» kiritilgan bo‘lsa 409); «kutilmoqda» — 409; «rad etdi» bo‘lsa «To‘landi» kiritib bo‘lmaydi. Provayder bilmasa yoki
+javob bermasa — yuborilganiga kamida 1 soat bo‘lishi kerak [taklif]. Moliya izohi `payout_note` da (sotuvchiga ko‘rinmaydi);
+sotuvchiga «To‘lov kartaga o‘tmadi».
+
+**Ziddiyat:** natija kiritilgandan keyin provayder boshqa natija bersa:
+- «O‘tmadi» edi, provayder «o‘tdi» — pul ketgan: so‘rov «To‘landi» bo‘ladi (jurnal), sotuvchining keyingi yuborishlari
+  balans tekshiruvida to‘xtaydi; moliyaga «provayder natijasi zid» xabari, so‘rovda `payoutConflict`.
+- «To‘landi» edi, provayder «o‘tmadi» — avtomatik qaytarilmaydi; moliyaga xabar, `payoutConflict`.
 
 ## Provayder shakli (bitta adapter — `apps/finance-service/src/payout/payout.provider.ts`)
 
@@ -43,7 +66,8 @@ Provayder tanlangach yo shu klass uning API siga yoziladi, yo oraliq ko‘prik q
 | `POST {URL}/payouts` | `{payoutRef, cardToken, amount, currency: 'UZS', purpose}` | `{status: SUCCESS \| PENDING \| FAILED, reason?}`. 4xx yoki ulanib bo‘lmadi — aniq rad (`FAILED`); 5xx, 10 s javobsiz yoki holatsiz javob — noma’lum (`PAYING`, holat so‘raladi) |
 | `GET {URL}/payouts/{payoutRef}` | — | `{status, reason?}`; 404 — topilmadi (qayta yuborilmaydi) |
 
-`payoutRef` = `wd-<so‘rov ID>` — bitta so‘rov, bitta chiqim. `amount` — net (so‘rov − 1% soliq).
+`payoutRef` = `wd-<so‘rov ID>-<8 hex>` — bitta so‘rov, bitta chiqim; so‘rovga bir marta beriladi (tasodifiy qism — boshqa
+muhit yoki tiklangan baza bilan to‘qnashmasin). `amount` — net (so‘rov − 1% soliq).
 
 ## Webhook
 
@@ -65,13 +89,14 @@ Sessiya bir martalik (ikkinchi `card.bound` tashlanadi). Yangi karta eskisining 
 | `POST /affiliate/payout-card/session` | sotuvchi | `{url, expiresAt}` (15 daqiqa); o‘chiq — 503 `PAYOUT_NOT_CONFIGURED`; provayder bermadi — 502 `PAYOUT_FAILED` |
 | `DELETE /affiliate/payout-card` | sotuvchi | karta o‘chiriladi (yuborilganlarga ta’sir qilmaydi) |
 | `POST /admin/finance/withdrawals/{id}/payout-result` | moliya, superadmin | `PAYING` ni yopish: `{result: PAID \| FAILED, note}`; audit `withdrawal.payout.resolve` |
-| `WithdrawalDto` | — | yangi maydonlar: `payoutMode` (`MANUAL` / `CARD`), `cardMask`, `payoutSentAt`, `failReason`, `failedAt`; holatlar `PAYING`, `FAILED` |
+| `WithdrawalDto` | — | yangi maydonlar: `payoutMode` (`MANUAL` / `CARD`), `cardMask`, `payoutSentAt`, `failReason`, `failedAt`, `autoPayout` (qo‘lda «To‘landi» ni yashirish), `payoutConflict` (faqat moliya ro‘yxatida); holatlar `PAYING`, `FAILED` |
 
 ## Xabarlar
 
 - To‘landi — sotuvchiga «Pul o‘tkazildi» SMS (BE-24 bilan bir xil; qo‘lda va kartaga — bitta `dedupeKey`).
 - O‘tmadi — sotuvchiga SMS va kabinet («… kartangizga o‘tmadi. Pul balansingizda qoldi …»), moliyaga kabinet.
-- 24 soat — moliyaga kabinet.
+- 24 soat va «javob yo‘q» — moliyaga kabinet.
+- Provayder natijasi zid — moliyaga kabinet.
 
 ## Saqlanadigan ma’lumot (TC3)
 

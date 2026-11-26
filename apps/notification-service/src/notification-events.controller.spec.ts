@@ -308,16 +308,32 @@ describe('NotificationEventsController', () => {
           amount: 1000000,
           status: 'APPROVED' as never,
           createdAt: '2026-12-20T08:00:00.000Z',
+          kind: 'OVERDUE',
+        },
+        {
+          id: '13',
+          affiliateId: '43',
+          amount: 200000,
+          status: 'PAYING' as never,
+          createdAt: '2026-12-21T08:00:00.000Z',
+          kind: 'NO_RESULT',
         },
       ],
     });
+    await controller.withdrawalPayoutConflict({
+      withdrawalId: '12',
+      affiliateId: '42',
+      net: 990000,
+      status: 'PAID' as never,
+      conflict: 'Provayder «o‘tdi» dedi',
+    });
     await controller.withdrawalOverdue({ withdrawals: [] });
-    expect(identitySend).toHaveBeenCalledTimes(2);
+    expect(identitySend).toHaveBeenCalledTimes(3);
     expect(identitySend).toHaveBeenCalledWith(
       { cmd: 'identity.user.active-by-role' },
       { role: 'FINANCE' },
     );
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(3);
     expect(create).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -331,8 +347,18 @@ describe('NotificationEventsController', () => {
       2,
       expect.objectContaining({
         type: 'withdrawal_overdue',
-        title: '24 soatdan beri to‘lanmagan: 1 ta so‘rov',
-        body: '1 ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan: 12 — APPROVED. Moliya → Pul yechish.',
+        title: 'To‘lanmagan so‘rovlar: 2 ta',
+        body: '2 ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan yoki kartaga yuborilib javob kelmagan: 12 — APPROVED, 13 — PAYING (javob yo‘q). Moliya → Pul yechish.',
+        dedupeKey: expect.stringMatching(/^withdrawal-overdue:[0-9a-f]{32}:5$/),
+      }),
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        type: 'withdrawal_payout_conflict',
+        title: 'Tekshiring: so‘rov 12 — provayder natijasi zid',
+        body: 'So‘rov 12 (sotuvchi 42, 990000 so‘m): Provayder «o‘tdi» dedi',
+        dedupeKey: 'withdrawal:12:CONFLICT:5',
       }),
     );
   });

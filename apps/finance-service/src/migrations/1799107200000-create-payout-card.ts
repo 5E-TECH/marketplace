@@ -54,14 +54,17 @@ export class CreatePayoutCard1799107200000 implements MigrationInterface {
         ADD COLUMN "payout_card_id" BIGINT REFERENCES "finance"."payout_card"("id"),
         ADD COLUMN "card_token_cipher" VARCHAR(700),
         ADD COLUMN "card_mask" VARCHAR(19),
-        ADD COLUMN "payout_ref" VARCHAR(24),
+        ADD COLUMN "payout_ref" VARCHAR(40),
         ADD COLUMN "payout_sent_at" TIMESTAMPTZ,
         ADD COLUMN "payout_checked_at" TIMESTAMPTZ,
         ADD COLUMN "fail_reason" VARCHAR(500),
         ADD COLUMN "failed_at" TIMESTAMPTZ,
         ADD COLUMN "payout_resolved_by" VARCHAR(64),
         ADD COLUMN "payout_note" VARCHAR(500),
-        ADD COLUMN "overdue_notified_at" TIMESTAMPTZ
+        ADD COLUMN "overdue_notified_at" TIMESTAMPTZ,
+        ADD COLUMN "payout_stuck_notified_at" TIMESTAMPTZ,
+        ADD COLUMN "payout_conflict" VARCHAR(300),
+        ADD COLUMN "payout_conflict_at" TIMESTAMPTZ
     `);
     // eski «To‘landi» lar qo‘lda bo‘lgan (BE-23)
     await queryRunner.query(
@@ -126,6 +129,9 @@ export class CreatePayoutCard1799107200000 implements MigrationInterface {
     `);
     await queryRunner.query(`
       ALTER TABLE "finance"."withdrawal_request"
+        DROP COLUMN "payout_conflict_at",
+        DROP COLUMN "payout_conflict",
+        DROP COLUMN "payout_stuck_notified_at",
         DROP COLUMN "overdue_notified_at",
         DROP COLUMN "payout_note",
         DROP COLUMN "payout_resolved_by",

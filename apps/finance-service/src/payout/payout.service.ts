@@ -10,7 +10,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { Cron } from '@nestjs/schedule';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   ErrorCode,
@@ -18,6 +19,7 @@ import {
   openPayoutToken,
   openPinfl,
   PAYOUT_REF,
+  payoutEnabled,
   payoutKey,
   PayoutCardBoundEvent,
   PayoutCardInfoDto,
@@ -26,8 +28,10 @@ import {
   PayoutStatusEvent,
   RmqClient,
   runAsLeader,
+  WITHDRAWAL_CONFLICT_EVENT,
   WITHDRAWAL_FAILED_EVENT,
   WITHDRAWAL_OVERDUE_EVENT,
+  WithdrawalConflictEvent,
   WithdrawalDto,
   WithdrawalFailedEvent,
   WithdrawalOverdueEvent,
@@ -42,6 +46,7 @@ import {
 } from '../ledger/payout-gate';
 import { RequestRow, WithdrawalService } from '../ledger/withdrawal.service';
 import {
+  PayoutNotSentError,
   PayoutProvider,
   PayoutRejectedError,
   PayoutResult,
@@ -58,6 +63,20 @@ const POLL_AFTER = `interval '1 minute'`;
 const RETRY_SKIPPED = `interval '1 hour'`;
 /** T01:498: «Pul yechish muddati: so‘rovdan to‘lovgacha … ≤ 24 soat». */
 const OVERDUE = `interval '24 hours'`;
+/** Kartaga yuborilganiga shuncha bo‘lib natija yo‘q — moliyaga xabar; qo‘lda «o‘tmadi» shundan keyin [taklif]. */
+const STUCK = `interval '1 hour'`;
+const RESOLVE_AFTER = STUCK;
+const EMIT_TIMEOUT_MS = 5_000;
+/** Sotuvchiga ko‘rinadigan umumiy sabablar [taklif] — texnik matn va moliya izohi faqat logda va `payout_note` da. */
+const PROVIDER_REJECTED = 'Provayder to‘lovni rad etdi';
+const MANUAL_FAILED = 'To‘lov kartaga o‘tmadi';
+
+type Emit = { pattern: string; payload: unknown };
+
+/** `wd-<id>-<8 hex>` — boshqa muhit yoki tiklangan baza bilan to‘qnashmasin. */
+export function newPayoutRef(id: string): string {
+  return `wd-${id}-${randomBytes(4).toString('hex')}`;
+}
 /** Avtomatik to‘lovda `paid_by`. */
 export const SYSTEM_PAYER = 'system:payout';
 const CONSUMER = 'payout-webhook';
@@ -101,7 +120,7 @@ export class PayoutService {
 
   /** Provayder ham, token kaliti ham bor — kartaga to‘lov yoqilgan. */
   enabled(): boolean {
-    return this.provider.isConfigured() && payoutKey(this.config) !== null;
+    return this.provider.isConfigured() && payoutEnabled(this.config);
   }
 
   // ---------- Karta ----------
@@ -265,11 +284,12 @@ export class PayoutService {
     for (const { id } of ready)
       if (await this.dispatch(id).catch((error) => this.logError(id, error)))
         sent++;
+    // eng uzoq so‘ralmagani birinchi — javobsiz qolganlar yangilarini to‘sib qo‘ymasin
     const waiting = (await this.db.query(
       `SELECT id::text FROM finance.withdrawal_request
         WHERE status = 'PAYING' AND payout_sent_at < now() - ${POLL_AFTER}
           AND (payout_checked_at IS NULL OR payout_checked_at < now() - ${POLL_AFTER})
-        ORDER BY payout_sent_at, id LIMIT ${BATCH * 2}`,
+        ORDER BY payout_checked_at NULLS FIRST, payout_sent_at, id LIMIT ${BATCH * 2}`,
     )) as Array<{ id: string }>;
     for (const { id } of waiting) {
       await this.poll(id).catch((error) => this.logError(id, error));
@@ -279,12 +299,12 @@ export class PayoutService {
   }
 
   /**
-   * Tasdiqlangan so‘rovni kartaga yuborish. Qulf ostida qayta tekshiriladi (tasdiqlar, maqom, mavjud balans) va
-   * `PAYING` qilinadi — faqat shundan keyin provayderga so‘rov ketadi. Qaytadi: yuborildimi.
+   * Tasdiqlangan so‘rovni kartaga yuborish. Qulf ostida qayta tekshiriladi (tasdiqlar, maqom, mavjud balans — boshqa
+   * yuborilayotganlarni ayirib) va `PAYING` qilinadi — faqat shundan keyin provayderga so‘rov ketadi. Qaytadi: yuborildimi.
    */
   async dispatch(id: string): Promise<boolean> {
     const key = payoutKey(this.config);
-    if (!key || !this.provider.isConfigured()) return false;
+    if (!key || !this.enabled()) return false;
     const prepared = await this.db.transaction(async (m) => {
       const head = await this.withdrawals.head(m, id);
       await affiliatePayoutLock(m, head.affiliateId);
@@ -305,26 +325,29 @@ export class PayoutService {
       if (n < row.requiredApprovals) return skip('tasdiqlar yetmaydi');
       if (!(await selfEmployedGate(m, row.affiliateId)))
         return skip('maqom tasdiqlanmagan');
-      const [{ available }] = (await m.query(
-        `SELECT COALESCE((SELECT available_balance FROM finance.account
-                           WHERE type = 'AFFILIATE' AND owner_id = $1), 0)::text AS available`,
-        [row.affiliateId],
-      )) as Array<{ available: string }>;
-      if (moneyFromDb(available) < moneyFromDb(row.amount))
+      if (
+        (await this.withdrawals.spendable(m, row.affiliateId, id)) <
+        moneyFromDb(row.amount)
+      )
         return skip('mavjud balans yetmaydi — moliya qaror qiladi');
       const card = await this.activeCard(m, row.affiliateId);
       if (!card) return null;
       const token = openPayoutToken(card.tokenCipher, key);
       if (!token)
         return skip('karta tokenini ochib bo‘lmadi (kalit almashganmi?)');
-      const payoutRef = `wd-${id}`;
+      // ref bir marta beriladi: «yuborilmadi» dan keyingi qayta urinishda o‘sha ref (provayderda bitta chiqim)
       await m.query(
         `UPDATE finance.withdrawal_request
             SET status = 'PAYING', payout_mode = 'CARD', payout_card_id = $2, card_token_cipher = $3,
-                card_mask = $4, payout_ref = $5, payout_sent_at = now(), payout_checked_at = NULL, updated_at = now()
+                card_mask = $4, payout_ref = COALESCE(payout_ref, $5), payout_sent_at = now(),
+                payout_checked_at = NULL, updated_at = now()
           WHERE id = $1`,
-        [id, card.id, card.tokenCipher, card.mask, payoutRef],
+        [id, card.id, card.tokenCipher, card.mask, newPayoutRef(id)],
       );
+      const [{ payoutRef }] = (await m.query(
+        `SELECT payout_ref AS "payoutRef" FROM finance.withdrawal_request WHERE id = $1`,
+        [id],
+      )) as Array<{ payoutRef: string }>;
       return { payoutRef, token, net: moneyFromDb(row.netAmount) };
     });
     if (!prepared) return false;
@@ -338,8 +361,23 @@ export class PayoutService {
       });
     } catch (error) {
       if (error instanceof PayoutRejectedError) {
-        await this.fail(id, error.message);
+        this.logger.warn(`So‘rov ${id}: provayder rad etdi — ${error.message}`);
+        await this.fail(id, error.reason || PROVIDER_REJECTED);
         return true;
+      }
+      if (error instanceof PayoutNotSentError) {
+        // provayder so‘rovni bajarmagan (ulanmadi, avtorizatsiya, chegara) — keyinroq o‘sha ref bilan qayta
+        this.logger.warn(
+          `So‘rov ${id}: yuborilmadi (${error.message}) — keyinroq qayta urinadi`,
+        );
+        await this.db.query(
+          `UPDATE finance.withdrawal_request
+              SET status = 'APPROVED', payout_mode = NULL, payout_card_id = NULL, card_token_cipher = NULL,
+                  card_mask = NULL, payout_sent_at = NULL, payout_checked_at = now(), updated_at = now()
+            WHERE id = $1 AND status = 'PAYING'`,
+          [id],
+        );
+        return false;
       }
       // noma’lum: pul ketgan bo‘lishi mumkin — `PAYING` da qoladi, holat so‘raladi, qayta yuborilmaydi
       this.logger.warn(
@@ -347,11 +385,11 @@ export class PayoutService {
       );
       return true;
     }
-    await this.apply(id, result);
+    await this.apply(id, result, null);
     return true;
   }
 
-  /** `PAYING` holatini provayderdan so‘rash. Topilmasa ham qayta yuborilmaydi — moliya qo‘lda yopadi. */
+  /** `PAYING` holatini provayderdan so‘rash. Topilmasa ham qayta yuborilmaydi — 1 soatdan keyin moliyaga xabar. */
   async poll(id: string): Promise<void> {
     const [row] = (await this.db.query(
       `SELECT payout_ref AS "payoutRef" FROM finance.withdrawal_request WHERE id = $1 AND status = 'PAYING'`,
@@ -361,20 +399,24 @@ export class PayoutService {
     let result: PayoutResult | null = null;
     try {
       result = await this.provider.status(row.payoutRef);
+      if (!result)
+        this.logger.warn(
+          `So‘rov ${id}: provayder ${row.payoutRef} ni topmadi — qayta yuborilmaydi`,
+        );
     } catch (error) {
       if (!(error instanceof PayoutUnknownError)) throw error;
       this.logger.warn(
         `So‘rov ${id}: holat so‘rovi o‘tmadi — ${error.message}`,
       );
     }
-    if (result) await this.apply(id, result);
+    if (result) await this.apply(id, result, null);
     await this.db.query(
       `UPDATE finance.withdrawal_request SET payout_checked_at = now() WHERE id = $1 AND status = 'PAYING'`,
       [id],
     );
   }
 
-  /** Webhook `payout.status`. Takror hodisa — bir marta. */
+  /** Webhook `payout.status`. Takror hodisa — bir marta (belgi holat bilan bitta tranzaksiyada). */
   async onStatus(event: PayoutStatusEvent): Promise<void> {
     if (
       !event?.eventId ||
@@ -384,10 +426,6 @@ export class PayoutService {
       this.logger.warn(`To‘lov hodisasi tashlandi (${event?.eventId})`);
       return;
     }
-    const fresh = await this.db.transaction((m) =>
-      this.firstTime(m, event.eventId),
-    );
-    if (!fresh) return;
     const [row] = (await this.db.query(
       `SELECT id::text FROM finance.withdrawal_request WHERE payout_ref = $1`,
       [event.payoutRef],
@@ -396,15 +434,20 @@ export class PayoutService {
       this.logger.warn(`To‘lov hodisasi: ${event.payoutRef} topilmadi`);
       return;
     }
-    await this.apply(row.id, {
-      status: event.status,
-      reason: event.reason ? String(event.reason).slice(0, 300) : null,
-    });
+    await this.apply(
+      row.id,
+      {
+        status: event.status,
+        reason: event.reason ? String(event.reason).slice(0, 300) : null,
+      },
+      event.eventId,
+    );
   }
 
   /**
-   * Moliya `PAYING` dagi so‘rovni provayder kabinetida tekshirib yopadi (izoh majburiy; audit — gateway).
-   * `PAID` — jurnal, `FAILED` — pul «Mavjud» da qoladi.
+   * Moliya `PAYING` dagi so‘rovni provayder kabinetida tekshirib yopadi (izoh majburiy; audit — gateway). Avval holat
+   * provayderdan so‘raladi: provayder javobiga zid natija kiritilmaydi; provayder bilmasa yoki javob bermasa — yuborilganiga
+   * kamida 1 soat bo‘lishi kerak. `PAID` — jurnal, `FAILED` — pul «Mavjud» da. Izoh sotuvchiga ko‘rinmaydi.
    */
   async resolve(input: {
     id: string;
@@ -419,9 +462,44 @@ export class PayoutService {
       throw new BadRequestException('note: 1–500 belgi');
     if (input?.result !== 'PAID' && input?.result !== 'FAILED')
       throw new BadRequestException('result: PAID yoki FAILED');
+    const [head] = (await this.db.query(
+      `SELECT status, payout_ref AS "payoutRef", payout_sent_at < now() - ${RESOLVE_AFTER} AS old
+         FROM finance.withdrawal_request WHERE id = $1`,
+      [id],
+    )) as Array<{
+      status: WithdrawalStatus;
+      payoutRef: string | null;
+      old: boolean;
+    }>;
+    if (!head) return this.withdrawals.one({ id }); // 404
+    if (head.status !== WithdrawalStatus.PAYING)
+      throw state(
+        `So‘rov ${head.status} holatida — natija faqat kartaga yuborilgan so‘rovga kiritiladi`,
+      );
+    let provider: PayoutResult | null = null;
+    if (this.provider.isConfigured() && head.payoutRef)
+      provider = await this.provider.status(head.payoutRef).catch(() => null);
+    if (provider?.status === 'SUCCESS') {
+      await this.apply(id, provider, null);
+      if (input.result === 'FAILED')
+        throw state(
+          'Provayder: pul kartaga o‘tgan — so‘rov «To‘landi» qilindi',
+        );
+      return this.withdrawals.get(this.db.manager, id);
+    }
+    if (provider?.status === 'PENDING')
+      throw state('Provayder: to‘lov hali bajarilmoqda — keyinroq tekshiring');
+    if (provider?.status === 'FAILED' && input.result === 'PAID')
+      throw state(
+        'Provayder: to‘lov rad etilgan — «To‘landi» kiritib bo‘lmaydi',
+      );
+    if (!provider && !head.old)
+      throw state(
+        'Provayder javob bermadi va yuborilganiga 1 soat bo‘lmagan — keyinroq tekshiring',
+      );
     const event = await this.db.transaction(async (m) => {
-      const head = await this.withdrawals.head(m, id);
-      await affiliatePayoutLock(m, head.affiliateId);
+      const h = await this.withdrawals.head(m, id);
+      await affiliatePayoutLock(m, h.affiliateId);
       const row = await this.withdrawals.lockRow(m, id);
       if (row.status !== WithdrawalStatus.PAYING)
         throw state(
@@ -433,13 +511,16 @@ export class PayoutService {
       );
       return input.result === 'PAID'
         ? this.markPaid(m, row, actorId)
-        : this.markFailed(m, row, note);
+        : this.markFailed(m, row, provider?.reason || MANUAL_FAILED);
     });
-    this.emit(event);
+    await this.emit(event);
     return this.withdrawals.get(this.db.manager, id);
   }
 
-  /** T01:498: 24 soatdan beri to‘lanmagan ochiq so‘rovlar — moliyaga bir marta (qo‘lda yo‘lda ham). */
+  /**
+   * Har soat: 24 soatdan beri to‘lanmagan ochiq so‘rovlar (T01:498; qo‘lda yo‘lda ham) va kartaga yuborilganiga 1 soat
+   * bo‘lib natijasi yo‘qlar — moliyaga, har so‘rov bir marta. Xabar navbatga yozilmasa — belgi qaytariladi.
+   */
   @Cron('0 5 * * * *', { name: 'finance-withdrawal-overdue', timeZone: ZONE })
   async overdueCron(): Promise<void> {
     await runAsLeader(this.db, `${LOCK}-overdue`, () => this.overdue());
@@ -447,19 +528,28 @@ export class PayoutService {
 
   async overdue(): Promise<number> {
     const rows = (await this.db.query(
-      `WITH marked AS (
+      `WITH overdue AS (
          UPDATE finance.withdrawal_request
-          SET overdue_notified_at = now()
-        WHERE status IN ('REQUESTED', 'APPROVED', 'PAYING')
-          AND created_at < now() - ${OVERDUE} AND overdue_notified_at IS NULL
-        RETURNING id::text, affiliate_id AS "affiliateId", amount::text, status, created_at AS "createdAt")
-       SELECT * FROM marked`,
+            SET overdue_notified_at = now()
+          WHERE status IN ('REQUESTED', 'APPROVED', 'PAYING')
+            AND created_at < now() - ${OVERDUE} AND overdue_notified_at IS NULL
+          RETURNING id, affiliate_id, amount, status, created_at, 'OVERDUE'::text AS kind),
+       stuck AS (
+         UPDATE finance.withdrawal_request
+            SET payout_stuck_notified_at = now()
+          WHERE status = 'PAYING' AND payout_sent_at < now() - ${STUCK}
+            AND payout_stuck_notified_at IS NULL
+            AND id NOT IN (SELECT id FROM overdue)
+          RETURNING id, affiliate_id, amount, status, created_at, 'NO_RESULT'::text AS kind)
+       SELECT id::text, affiliate_id AS "affiliateId", amount::text, status, created_at AS "createdAt", kind
+         FROM (SELECT * FROM overdue UNION ALL SELECT * FROM stuck) x`,
     )) as Array<{
       id: string;
       affiliateId: string;
       amount: string;
       status: WithdrawalStatus;
       createdAt: Date;
+      kind: 'OVERDUE' | 'NO_RESULT';
     }>;
     if (!rows.length) return 0;
     const event: WithdrawalOverdueEvent = {
@@ -471,51 +561,128 @@ export class PayoutService {
           amount: moneyFromDb(r.amount),
           status: r.status,
           createdAt: new Date(r.createdAt).toISOString(),
+          kind: r.kind,
         })),
     };
-    this.emit({ pattern: WITHDRAWAL_OVERDUE_EVENT, payload: event });
+    if (
+      !(await this.emit({ pattern: WITHDRAWAL_OVERDUE_EVENT, payload: event }))
+    ) {
+      // keyingi soatda qayta urinadi
+      const by = (kind: string) =>
+        rows.filter((r) => r.kind === kind).map((r) => r.id);
+      await this.db.query(
+        `UPDATE finance.withdrawal_request SET overdue_notified_at = NULL WHERE id = ANY($1::bigint[])`,
+        [by('OVERDUE')],
+      );
+      await this.db.query(
+        `UPDATE finance.withdrawal_request SET payout_stuck_notified_at = NULL WHERE id = ANY($1::bigint[])`,
+        [by('NO_RESULT')],
+      );
+      return 0;
+    }
     return rows.length;
   }
 
   // ---------- ichki ----------
 
-  /** Provayder natijasi: SUCCESS — «To‘landi», FAILED — `FAILED`, PENDING — kutiladi. Faqat `PAYING` dan. */
-  private async apply(id: string, result: PayoutResult): Promise<void> {
-    if (result.status === 'SUCCESS') await this.complete(id);
-    else if (result.status === 'FAILED')
-      await this.fail(id, result.reason || 'provayder to‘lovni rad etdi');
-  }
-
-  private async complete(id: string): Promise<void> {
+  /**
+   * Provayder natijasi: SUCCESS — «To‘landi», FAILED — `FAILED`, PENDING — kutiladi. `eventId` (webhook) — bir martalik
+   * belgi holat o‘zgarishi bilan bitta tranzaksiyada.
+   */
+  private async apply(
+    id: string,
+    result: PayoutResult,
+    eventId: string | null,
+  ): Promise<void> {
     const event = await this.db.transaction(async (m) => {
+      if (eventId && !(await this.firstTime(m, eventId))) return [];
+      if (result.status === 'PENDING') return [];
       const head = await this.withdrawals.head(m, id);
       await affiliatePayoutLock(m, head.affiliateId);
       const row = await this.withdrawals.lockRow(m, id);
-      if (row.status === WithdrawalStatus.PAID) return null;
-      if (row.status !== WithdrawalStatus.PAYING) {
-        // masalan, moliya «o‘tmadi» deb yopgan, provayder esa «o‘tdi» dedi — pul ketgan: qo‘lda hal qilinadi
-        this.logger.error(
-          `So‘rov ${id}: provayder «to‘landi» dedi, holat ${row.status} — moliya tekshirsin`,
-        );
-        return null;
-      }
-      return this.markPaid(m, row, SYSTEM_PAYER);
+      return result.status === 'SUCCESS'
+        ? this.onSuccess(m, row)
+        : this.onFailure(m, row, result.reason || PROVIDER_REJECTED);
     });
-    this.emit(event);
+    for (const e of event) await this.emit(e);
+  }
+
+  private async onSuccess(m: EntityManager, row: RequestRow): Promise<Emit[]> {
+    if (row.status === WithdrawalStatus.PAYING)
+      return [await this.markPaid(m, row, SYSTEM_PAYER)];
+    if (
+      row.status === WithdrawalStatus.FAILED ||
+      row.status === WithdrawalStatus.APPROVED
+    ) {
+      // pul ketgan: «O‘tmadi» (yoki «yuborilmadi» deb qaytarilgan) so‘rov «To‘landi» bo‘ladi — jurnal haqiqatga mos.
+      // Sotuvchi shu orada yangi so‘rov yuborgan bo‘lsa, uning yuborishi balans tekshiruvida to‘xtaydi; moliyaga xabar.
+      const paid = await this.markPaid(m, row, SYSTEM_PAYER);
+      return [
+        paid,
+        await this.conflict(
+          m,
+          row,
+          WithdrawalStatus.PAID,
+          `Provayder «o‘tdi» dedi, so‘rov ${row.status} edi — «To‘landi» qilindi. Sotuvchi balansi va keyingi so‘rovlarini tekshiring.`,
+        ),
+      ];
+    }
+    return [];
+  }
+
+  private async onFailure(
+    m: EntityManager,
+    row: RequestRow,
+    reason: string,
+  ): Promise<Emit[]> {
+    if (row.status === WithdrawalStatus.PAYING)
+      return [await this.markFailed(m, row, reason)];
+    if (
+      row.status === WithdrawalStatus.PAID &&
+      row.payoutMode === WithdrawalPayoutMode.CARD
+    )
+      // pul sotuvchi hisobidan yechilgan, provayder «o‘tmadi» deydi — avtomatik qaytarilmaydi, moliya hal qiladi
+      return [
+        await this.conflict(
+          m,
+          row,
+          WithdrawalStatus.PAID,
+          'So‘rov «To‘landi», provayder «o‘tmadi» dedi — pul sotuvchiga bormagan bo‘lishi mumkin. Provayder kabinetida tekshiring.',
+        ),
+      ];
+    return [];
+  }
+
+  private async conflict(
+    m: EntityManager,
+    row: RequestRow,
+    status: WithdrawalStatus,
+    text: string,
+  ): Promise<Emit> {
+    this.logger.error(`So‘rov ${row.id}: ${text}`);
+    await m.query(
+      `UPDATE finance.withdrawal_request SET payout_conflict = $2, payout_conflict_at = now() WHERE id = $1`,
+      [row.id, text.slice(0, 300)],
+    );
+    const payload: WithdrawalConflictEvent = {
+      withdrawalId: row.id,
+      affiliateId: row.affiliateId,
+      net: moneyFromDb(row.netAmount),
+      status,
+      conflict: text,
+    };
+    return { pattern: WITHDRAWAL_CONFLICT_EVENT, payload };
   }
 
   private async fail(id: string, reason: string): Promise<void> {
-    const event = await this.db.transaction(async (m) => {
-      const head = await this.withdrawals.head(m, id);
-      await affiliatePayoutLock(m, head.affiliateId);
-      const row = await this.withdrawals.lockRow(m, id);
-      if (row.status !== WithdrawalStatus.PAYING) return null;
-      return this.markFailed(m, row, reason);
-    });
-    this.emit(event);
+    await this.apply(id, { status: 'FAILED', reason }, null);
   }
 
-  private async markPaid(m: EntityManager, row: RequestRow, paidBy: string) {
+  private async markPaid(
+    m: EntityManager,
+    row: RequestRow,
+    paidBy: string,
+  ): Promise<Emit> {
     await this.withdrawals.writePaid(m, row, paidBy, WithdrawalPayoutMode.CARD);
     // BE-24: «Pul o‘tkazildi» SMS (notification `dedupeKey` — qo‘lda yo‘l bilan bir xil)
     return {
@@ -530,8 +697,13 @@ export class PayoutService {
     };
   }
 
-  private async markFailed(m: EntityManager, row: RequestRow, reason: string) {
-    const text = reason.trim().slice(0, 500) || 'provayder to‘lovni rad etdi';
+  /** `reason` sotuvchiga ko‘rinadi — provayder sababi yoki umumiy matn (texnik matn va moliya izohi emas). */
+  private async markFailed(
+    m: EntityManager,
+    row: RequestRow,
+    reason: string,
+  ): Promise<Emit> {
+    const text = reason.trim().slice(0, 500) || PROVIDER_REJECTED;
     await m.query(
       `UPDATE finance.withdrawal_request
           SET status = 'FAILED', fail_reason = $2, failed_at = now(), updated_at = now()
@@ -553,14 +725,23 @@ export class PayoutService {
     return { pattern: WITHDRAWAL_FAILED_EVENT, payload };
   }
 
-  private emit(event: { pattern: string; payload: unknown } | null): void {
-    if (!event) return;
-    this.notifications.emit(event.pattern, event.payload).subscribe({
-      error: (error: Error) =>
-        this.logger.warn(
-          `Xabar yuborilmadi (${event.pattern}): ${error?.message}`,
-        ),
-    });
+  /** Commitdan keyin; navbatga yozilganini kutadi (5 s). Qaytadi: yozildimi. */
+  private async emit(event: Emit | null): Promise<boolean> {
+    if (!event) return true;
+    try {
+      await firstValueFrom(
+        this.notifications
+          .emit(event.pattern, event.payload)
+          .pipe(timeout(EMIT_TIMEOUT_MS)),
+        { defaultValue: undefined },
+      );
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Xabar yuborilmadi (${event.pattern}): ${(error as Error)?.message}`,
+      );
+      return false;
+    }
   }
 
   private async activeCard(

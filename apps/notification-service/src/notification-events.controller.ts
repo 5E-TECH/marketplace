@@ -1,4 +1,5 @@
 import { Controller, Inject, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
@@ -11,8 +12,10 @@ import {
   LotBlockedEvent,
   RmqClient,
   sendRpc,
+  WITHDRAWAL_CONFLICT_EVENT,
   WITHDRAWAL_FAILED_EVENT,
   WITHDRAWAL_OVERDUE_EVENT,
+  WithdrawalConflictEvent,
   WithdrawalFailedEvent,
   WithdrawalOverdueEvent,
 } from '@app/common';
@@ -199,7 +202,10 @@ export class NotificationEventsController {
       count: items.length,
       withdrawals: items
         .slice(0, 20)
-        .map((w) => `${w.id} — ${w.status}`)
+        .map(
+          (w) =>
+            `${w.id} — ${w.status}${w.kind === 'NO_RESULT' ? ' (javob yo‘q)' : ''}`,
+        )
         .join(', '),
     });
     for (const user of recipients)
@@ -208,6 +214,38 @@ export class NotificationEventsController {
         type: 'withdrawal_overdue',
         ...content,
         data: { withdrawals: items.map((w) => w.id) },
+        // RMQ qayta yuborsa — bitta xabar
+        dedupeKey: `withdrawal-overdue:${createHash('sha256')
+          .update(items.map((w) => `${w.id}:${w.kind}`).join(','))
+          .digest('hex')
+          .slice(0, 32)}:${user.id}`,
+      });
+  }
+
+  /** BE-32: provayder natijasi so‘rov holatiga zid — moliyaga. */
+  @EventPattern(WITHDRAWAL_CONFLICT_EVENT)
+  async withdrawalPayoutConflict(@Payload() event: WithdrawalConflictEvent) {
+    if (!event?.withdrawalId) return;
+    const recipients = await this.byRoles(['FINANCE']);
+    if (!recipients.length) {
+      this.logger.warn(
+        `Kartaga to‘lov ziddiyati (${event.withdrawalId}): faol moliya xodimi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('withdrawal_payout_conflict', {
+      withdrawalId: event.withdrawalId,
+      affiliateId: event.affiliateId,
+      net: event.net,
+      conflict: event.conflict,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'withdrawal_payout_conflict',
+        ...content,
+        data: { withdrawalId: event.withdrawalId },
+        dedupeKey: `withdrawal:${event.withdrawalId}:CONFLICT:${user.id}`,
       });
   }
 
