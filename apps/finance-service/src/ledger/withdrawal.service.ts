@@ -14,6 +14,7 @@ import {
   WithdrawalBlockReason,
   WithdrawalDto,
   WithdrawalPageDto,
+  WithdrawalPayoutMode,
   WithdrawalQueryDto,
   WithdrawalStatus,
 } from '@app/common';
@@ -29,10 +30,19 @@ import {
 export const WITHDRAWAL_TAX_PERCENT = 1;
 /** Bundan katta so‘rov — ikki xil xodim tasdig‘i (MOL-5: «5 mln dan katta»). */
 export const TWO_APPROVALS_ABOVE = 5_000_000;
-const OPEN: WithdrawalStatus[] = [
+/** Band summa — ochiq so‘rovlar (BE-32: kartaga yuborilgani ham, natijasi kelguncha). */
+export const OPEN: WithdrawalStatus[] = [
+  WithdrawalStatus.REQUESTED,
+  WithdrawalStatus.APPROVED,
+  WithdrawalStatus.PAYING,
+];
+/** Rad etish mumkin — kartaga yuborilgan (`PAYING`) so‘rov emas: pul ketgan bo‘lishi mumkin. */
+const REJECTABLE: WithdrawalStatus[] = [
   WithdrawalStatus.REQUESTED,
   WithdrawalStatus.APPROVED,
 ];
+/** Kunni band qilmaydigan holatlar: rad etilgan va kartaga o‘tmagan (BE-32 [taklif]) — sotuvchi yangi so‘rov yuboradi. */
+const NOT_COUNTED = `('REJECTED', 'FAILED')`;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const TODAY = `(now() AT TIME ZONE 'Asia/Tashkent')::date`;
@@ -50,7 +60,7 @@ const rule = (message: string) =>
 const state = (message: string) =>
   new ConflictException({ message, errorCode: ErrorCode.INVALID_STATE });
 
-interface RequestRow {
+export interface RequestRow {
   id: string;
   affiliateId: string;
   amount: string;
@@ -62,11 +72,18 @@ interface RequestRow {
   createdAt: Date;
   paidAt: Date | null;
   paidBy: string | null;
+  payoutMode: WithdrawalPayoutMode | null;
+  cardMask: string | null;
+  payoutSentAt: Date | null;
+  failReason: string | null;
+  failedAt: Date | null;
 }
 
 const SELECT = `SELECT r.id::text, r.affiliate_id AS "affiliateId", r.amount::text, r.tax_amount::text AS "taxAmount",
        r.net_amount::text AS "netAmount", r.status, r.required_approvals AS "requiredApprovals",
-       r.reject_reason AS "rejectReason", r.created_at AS "createdAt", r.paid_at AS "paidAt", r.paid_by AS "paidBy"
+       r.reject_reason AS "rejectReason", r.created_at AS "createdAt", r.paid_at AS "paidAt", r.paid_by AS "paidBy",
+       r.payout_mode AS "payoutMode", r.card_mask AS "cardMask", r.payout_sent_at AS "payoutSentAt",
+       r.fail_reason AS "failReason", r.failed_at AS "failedAt"
   FROM finance.withdrawal_request r`;
 
 /**
@@ -107,7 +124,7 @@ export class WithdrawalService {
       `SELECT COALESCE(SUM(amount) FILTER (WHERE status = ANY($2::text[])), 0)::text AS reserved,
               COALESCE(bool_or(request_day = ${TODAY}), false) AS today
          FROM finance.withdrawal_request
-        WHERE affiliate_id = $1 AND status <> 'REJECTED'`,
+        WHERE affiliate_id = $1 AND status NOT IN ${NOT_COUNTED}`,
       [affiliateId, OPEN],
     )) as Array<{ reserved: string; today: boolean }>;
     const available = moneyFromDb(acc?.available);
@@ -313,7 +330,11 @@ export class WithdrawalService {
       throw new BadRequestException('reason: 1–500 belgi');
     await this.db.transaction(async (m) => {
       const row = await this.lockRow(m, id);
-      if (!OPEN.includes(row.status))
+      if (row.status === WithdrawalStatus.PAYING)
+        throw state(
+          'So‘rov kartaga yuborilgan — natija provayderdan keladi; tekshirib bo‘lgach «Natijani kiritish»',
+        );
+      if (!REJECTABLE.includes(row.status))
         throw state(`So‘rov ${row.status} holatida — rad etib bo‘lmaydi`);
       await m.query(
         `UPDATE finance.withdrawal_request
@@ -340,6 +361,10 @@ export class WithdrawalService {
       await affiliatePayoutLock(m, head.affiliateId);
       const row = await this.lockRow(m, id);
       if (row.status === WithdrawalStatus.PAID) return; // takror bosildi
+      if (row.status === WithdrawalStatus.PAYING)
+        throw state(
+          'So‘rov kartaga yuborilgan — natija provayderdan keladi; tekshirib bo‘lgach «Natijani kiritish»',
+        );
       if (row.status !== WithdrawalStatus.APPROVED)
         throw state(
           `So‘rov ${row.status} holatida — «To‘landi» faqat tasdiqlangandan keyin`,
@@ -355,8 +380,6 @@ export class WithdrawalService {
           'O‘zini o‘zi band qilganlik maqomi tasdiqlanmagan — to‘lov qilinmaydi (T01:471)',
         );
       const amount = moneyFromDb(row.amount);
-      const tax = moneyFromDb(row.taxAmount);
-      const net = moneyFromDb(row.netAmount);
       const aff = await this.ledger.accountId(m, 'AFFILIATE', row.affiliateId);
       const taxAcc = await this.ledger.accountId(m, 'TAX', '');
       const cod = await this.ledger.accountId(m, 'COD_CLEARING', '');
@@ -369,59 +392,87 @@ export class WithdrawalService {
         throw state(
           `Mavjud balans yetmaydi: ${moneyFromDb(available)} so‘m, so‘rov ${amount} — rad eting yoki kuting`,
         );
-      const reference = `withdrawal:${id}`;
-      const lines: Line[] = [
-        {
-          account: 'AFFILIATE',
-          ownerId: row.affiliateId,
-          lineKind: 'WITHDRAWAL',
-          itemSeq: 0,
-          productId: null,
-          amount: -amount,
-        },
-        {
-          account: 'TAX',
-          ownerId: '',
-          lineKind: 'WITHDRAWAL_TAX',
-          itemSeq: 0,
-          productId: null,
-          amount: tax,
-        },
-        {
-          account: 'COD_CLEARING',
-          ownerId: '',
-          lineKind: 'WITHDRAWAL_NET',
-          itemSeq: 0,
-          productId: null,
-          amount: net,
-        },
-      ].filter((l) => l.amount !== 0) as Line[];
-      const journalId = await this.ledger.writeJournal(
-        m,
-        {
-          kind: 'WITHDRAWAL_PAID',
-          referenceId: reference,
-          orderId: null,
-          affiliateId: row.affiliateId,
-          eventId: reference,
-          occurredAt: new Date().toISOString(),
-          gross: amount,
-        },
-        lines,
-        'AVAILABLE',
-      );
-      if (!journalId)
-        throw new Error(
-          `withdrawal ${id}: jurnal allaqachon bor, holat PAID emas`,
-        );
-      await m.query(
-        `UPDATE finance.withdrawal_request
-            SET status = 'PAID', paid_by = $2, paid_at = now(), journal_id = $3, updated_at = now()
-          WHERE id = $1`,
-        [id, paidBy, journalId],
-      );
+      await this.writePaid(m, row, paidBy, WithdrawalPayoutMode.MANUAL, true);
     });
     return this.get(this.db.manager, id);
+  }
+
+  /**
+   * «To‘landi» jurnali va holati (qo‘lda — `markPaid`; kartaga — BE-32 `PayoutService`). Chaqiruvchi so‘rov qatorini va
+   * sotuvchi qulfini allaqachon olgan. Kartaga yuborilganda balans yuborishdan oldin tekshirilgan — pul ketgan, shuning
+   * uchun bu yerda qayta rad etilmaydi.
+   */
+  async writePaid(
+    m: EntityManager,
+    row: Pick<
+      RequestRow,
+      'id' | 'affiliateId' | 'amount' | 'taxAmount' | 'netAmount'
+    >,
+    paidBy: string,
+    mode: WithdrawalPayoutMode,
+    accountsLocked = false,
+  ): Promise<void> {
+    const id = row.id;
+    const amount = moneyFromDb(row.amount);
+    const tax = moneyFromDb(row.taxAmount);
+    const net = moneyFromDb(row.netAmount);
+    if (!accountsLocked)
+      await this.ledger.lockAccounts(m, [
+        await this.ledger.accountId(m, 'AFFILIATE', row.affiliateId),
+        await this.ledger.accountId(m, 'TAX', ''),
+        await this.ledger.accountId(m, 'COD_CLEARING', ''),
+      ]);
+    const reference = `withdrawal:${id}`;
+    const lines: Line[] = [
+      {
+        account: 'AFFILIATE',
+        ownerId: row.affiliateId,
+        lineKind: 'WITHDRAWAL',
+        itemSeq: 0,
+        productId: null,
+        amount: -amount,
+      },
+      {
+        account: 'TAX',
+        ownerId: '',
+        lineKind: 'WITHDRAWAL_TAX',
+        itemSeq: 0,
+        productId: null,
+        amount: tax,
+      },
+      {
+        account: 'COD_CLEARING',
+        ownerId: '',
+        lineKind: 'WITHDRAWAL_NET',
+        itemSeq: 0,
+        productId: null,
+        amount: net,
+      },
+    ].filter((l) => l.amount !== 0) as Line[];
+    const journalId = await this.ledger.writeJournal(
+      m,
+      {
+        kind: 'WITHDRAWAL_PAID',
+        referenceId: reference,
+        orderId: null,
+        affiliateId: row.affiliateId,
+        eventId: reference,
+        occurredAt: new Date().toISOString(),
+        gross: amount,
+      },
+      lines,
+      'AVAILABLE',
+    );
+    if (!journalId)
+      throw new Error(
+        `withdrawal ${id}: jurnal allaqachon bor, holat PAID emas`,
+      );
+    await m.query(
+      `UPDATE finance.withdrawal_request
+            SET status = 'PAID', paid_by = $2, paid_at = now(), journal_id = $3, payout_mode = $4, updated_at = now()
+          WHERE id = $1`,
+      [id, paidBy, journalId, mode],
+    );
   }
 
   /** Bitta so‘rov (gateway tasdiqdan oldin sotuvchini biladi). */
@@ -429,10 +480,7 @@ export class WithdrawalService {
     return this.get(this.db.manager, validId(input?.id, 'id'));
   }
 
-  private async head(
-    m: EntityManager,
-    id: string,
-  ): Promise<{ affiliateId: string }> {
+  async head(m: EntityManager, id: string): Promise<{ affiliateId: string }> {
     const [head] = (await m.query(
       `SELECT affiliate_id AS "affiliateId" FROM finance.withdrawal_request WHERE id = $1`,
       [id],
@@ -441,7 +489,7 @@ export class WithdrawalService {
     return head;
   }
 
-  private async lockRow(m: EntityManager, id: string): Promise<RequestRow> {
+  async lockRow(m: EntityManager, id: string): Promise<RequestRow> {
     const [row] = (await m.query(`${SELECT} WHERE r.id = $1 FOR UPDATE`, [
       id,
     ])) as RequestRow[];
@@ -449,7 +497,7 @@ export class WithdrawalService {
     return row;
   }
 
-  private async get(m: EntityManager, id: string): Promise<WithdrawalDto> {
+  async get(m: EntityManager, id: string): Promise<WithdrawalDto> {
     const [row] = (await m.query(`${SELECT} WHERE r.id = $1`, [
       id,
     ])) as RequestRow[];
@@ -483,6 +531,11 @@ export class WithdrawalService {
       createdAt: r.createdAt,
       paidAt: r.paidAt,
       paidBy: r.paidBy,
+      payoutMode: r.payoutMode ?? null,
+      cardMask: r.cardMask ?? null,
+      payoutSentAt: r.payoutSentAt ?? null,
+      failReason: r.failReason ?? null,
+      failedAt: r.failedAt ?? null,
     }));
   }
 }

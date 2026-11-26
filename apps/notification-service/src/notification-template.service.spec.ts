@@ -46,6 +46,8 @@ describe('NotificationTemplateService (C6.8)', () => {
       'cod_reconciliation_mismatch',
       'elchi_status_conflict',
       'elchi_check_mismatch', // BE-46
+      'withdrawal_payout_failed', // BE-32
+      'withdrawal_overdue', // BE-32
       'lot_blocked',
       'price_orange', // BE-09
     ]);

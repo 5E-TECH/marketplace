@@ -307,6 +307,7 @@ exports[`BE-05: gateway yo‘llari va rollar ADMIN va SUPERADMIN ro‘yxati qoti
     "POST /admin/finance/settlements/run",
     "POST /admin/finance/withdrawals/:id/approve",
     "POST /admin/finance/withdrawals/:id/paid",
+    "POST /admin/finance/withdrawals/:id/payout-result",
     "POST /admin/finance/withdrawals/:id/reject",
     "POST /admin/fraud/incidents",
     "POST /admin/fraud/incidents/:id/decision",

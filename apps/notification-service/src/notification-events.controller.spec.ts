@@ -287,6 +287,56 @@ describe('NotificationEventsController', () => {
     );
   });
 
+  it('BE-32: kartaga o‘tmadi va 24 soat — faqat moliyaga', async () => {
+    identitySend.mockReset();
+    identitySend.mockReturnValue(
+      of([{ id: '5', phone: '+998900000005', email: null }]),
+    );
+    await controller.withdrawalPayoutFailed({
+      withdrawalId: '12',
+      affiliateId: '42',
+      amount: 1000000,
+      net: 990000,
+      cardMask: '8600 **** **** 1234',
+      reason: 'Karta bloklangan',
+    });
+    await controller.withdrawalOverdue({
+      withdrawals: [
+        {
+          id: '12',
+          affiliateId: '42',
+          amount: 1000000,
+          status: 'APPROVED' as never,
+          createdAt: '2026-12-20T08:00:00.000Z',
+        },
+      ],
+    });
+    await controller.withdrawalOverdue({ withdrawals: [] });
+    expect(identitySend).toHaveBeenCalledTimes(2);
+    expect(identitySend).toHaveBeenCalledWith(
+      { cmd: 'identity.user.active-by-role' },
+      { role: 'FINANCE' },
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'withdrawal_payout_failed',
+        title: 'Kartaga o‘tmadi: so‘rov 12',
+        body: 'So‘rov 12 (sotuvchi 42): 990000 so‘m 8600 **** **** 1234 kartaga o‘tmadi — Karta bloklangan. Pul sotuvchi balansida qoldi.',
+        dedupeKey: 'withdrawal:12:FAILED:5',
+      }),
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'withdrawal_overdue',
+        title: '24 soatdan beri to‘lanmagan: 1 ta so‘rov',
+        body: '1 ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan: 12 — APPROVED. Moliya → Pul yechish.',
+      }),
+    );
+  });
+
   it('BE-46: Elchi tekshiruvida yangi farq — moliya va nazoratchiga', async () => {
     identitySend
       .mockReturnValueOnce(
