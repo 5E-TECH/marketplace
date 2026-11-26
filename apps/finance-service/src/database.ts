@@ -12,6 +12,7 @@ import { CreateSettlementResponse1796947200000 } from './migrations/179694720000
 import { SettingComment1797552000000 } from './migrations/1797552000000-setting-comment';
 import { CreateElchiCheck1797638400000 } from './migrations/1797638400000-create-elchi-check';
 import { CreateSelfEmployed1798761600000 } from './migrations/1798761600000-create-self-employed';
+import { CreatePayoutCard1799107200000 } from './migrations/1799107200000-create-payout-card';
 import { CreateCodDailyCheck1796601600000 } from './migrations/1796601600000-create-cod-daily-check';
 import { CreateTextSetting1796774400000 } from './migrations/1796774400000-create-text-setting';
 import { SellerLedger } from './entities/seller-ledger.entity';
@@ -49,5 +50,6 @@ export const FINANCE_DB: DatabaseDefinition = {
     CreateCodDailyCheck1796601600000,
     CreateTextSetting1796774400000,
     CreateSelfEmployed1798761600000,
+    CreatePayoutCard1799107200000,
   ],
 };

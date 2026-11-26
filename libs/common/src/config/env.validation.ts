@@ -139,6 +139,43 @@ export const envValidationSchema = Joi.object({
     .min(1)
     .max(1440)
     .default(30),
+  // BE-32: sotuvchi kartasiga to'lov provayderi (EQ-08). URL berilmasa kartaga avtomatik to'lov o'chiq —
+  // moliya qo'lda «To'landi» bosadi (BE-23). O'zgaruvchilar finance-service va api-gateway ga kerak.
+  // prod’da faqat https (karta tokeni va Bearer kalit ochiq kanalda ketmasin); http — lokal ko'prik uchun
+  PAYOUT_API_URL: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .uri({ scheme: ['https'] })
+      .allow('')
+      .optional(),
+    otherwise: Joi.string()
+      .uri({ scheme: ['https', 'http'] })
+      .allow('')
+      .optional(),
+  }),
+  PAYOUT_API_TOKEN: Joi.string().allow('').optional(),
+  // provayder webhooki imzosi (X-Payout-Signature, HMAC-SHA256); URL bor, kalit yo'q bo'lsa karta ulanmasdi va
+  // to'lov natijasi kelmasdi
+  PAYOUT_WEBHOOK_SECRET: Joi.string()
+    .min(16)
+    .when('PAYOUT_API_URL', {
+      is: Joi.string().uri().required(),
+      then: Joi.required(),
+      otherwise: Joi.optional().allow(''),
+    }),
+  // karta tokenini shifrlash kaliti (bazada va navbatda ochiq token yo'q)
+  PAYOUT_SECRET_KEY: Joi.string()
+    .min(32)
+    .when('PAYOUT_API_URL', {
+      is: Joi.string().uri().required(),
+      then: Joi.required(),
+      otherwise: Joi.optional().allow(''),
+    }),
+  // karta ulangandan keyin provayder sotuvchini qaytaradigan sahifa (kabinet)
+  PAYOUT_RETURN_URL: Joi.string()
+    .uri({ scheme: ['https', 'http'] })
+    .allow('')
+    .optional(),
   TELEGRAM_BOT_TOKEN: Joi.string().optional(),
 
   // C4.2 — xaridor posilka yetkazilgandan keyin necha kun ichida qaytarish

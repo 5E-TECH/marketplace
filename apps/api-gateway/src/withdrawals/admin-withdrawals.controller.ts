@@ -29,6 +29,7 @@ import {
   CurrentUser,
   ErrorCode,
   FINANCE_WITHDRAWAL_RPC,
+  PayoutResultDto,
   RejectWithdrawalDto,
   RmqClient,
   Role,
@@ -169,6 +170,48 @@ export class AdminWithdrawalsController {
               `«Pul o‘tkazildi» xabari yuborilmadi: ${error.message}`,
             ),
         });
+    return result;
+  }
+
+  @Post('withdrawals/:id/payout-result')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.FINANCE, Role.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Kartaga yuborilgan so‘rov natijasini qo‘lda kiritish (BE-32)',
+    description:
+      'Provayder javobi kelmagan (`PAYING`) so‘rov: moliya provayder kabinetida tekshirib `PAID` (pul tushgan — jurnal yoziladi) yoki `FAILED` (tushmagan — pul «Mavjud» da qoladi) kiritadi. Izoh majburiy, auditga yoziladi.',
+  })
+  @ApiOkResponse({ type: WithdrawalDto })
+  @ApiNotFoundResponse({ description: 'So‘rov topilmadi' })
+  @ApiConflictResponse({
+    description: 'INVALID_STATE: so‘rov kartaga yuborilmagan (`PAYING` emas)',
+  })
+  async payoutResult(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @CurrentUser('sub') actorId: string,
+    @Body() dto: PayoutResultDto,
+    @Ip() ip: string,
+  ): Promise<WithdrawalDto> {
+    const result = await sendRpc<WithdrawalDto>(
+      this.finance,
+      { cmd: FINANCE_WITHDRAWAL_RPC.PAYOUT_RESULT },
+      { id, result: dto.result, note: dto.note, actorId },
+    );
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId,
+        action: 'withdrawal.payout.resolve',
+        entityType: 'WithdrawalRequest',
+        entityId: id,
+        meta: { result: dto.result, note: dto.note, ip: ip || null },
+      },
+    ).catch((error: Error) =>
+      this.logger.warn(
+        `Audit yozilmadi (withdrawal.payout.resolve ${id}): ${error?.message}`,
+      ),
+    );
     return result;
   }
 

@@ -14,6 +14,8 @@ import {
   RmqClient,
   RpcHttpExceptionFilter,
   sendRpc,
+  WITHDRAWAL_FAILED_EVENT,
+  WithdrawalFailedEvent,
 } from '@app/common';
 import { NotificationChannel } from './entities/notification-delivery.entity';
 import { NotificationService } from './notification.service';
@@ -23,6 +25,7 @@ import {
   customerSmsText,
   SELLER_MESSAGES,
   sellerMessageBody,
+  withdrawalFailedText,
   WithdrawalPaidEvent,
   withdrawalPaidText,
 } from './order-sms';
@@ -102,21 +105,7 @@ export class OrderSmsController {
   @EventPattern(WITHDRAWAL_PAID_EVENT)
   async onWithdrawalPaid(@Payload() event: WithdrawalPaidEvent): Promise<void> {
     if (!event?.withdrawalId || !event.affiliateId) return;
-    const user = await sendRpc<{ id: string; phone?: string | null }>(
-      this.identity,
-      { cmd: 'identity.user.admin-get' },
-      { userId: String(event.affiliateId) },
-    ).catch((error: { status?: number; message?: string }) => {
-      // foydalanuvchi yo‘q (4xx) — xabar tashlanadi; identity ishlamasa — xato qaytadi (DLQ, keyin qayta)
-      const status = Number(error?.status ?? 0);
-      if (status >= 400 && status < 500) {
-        this.logger.warn(
-          `Sotuvchi topilmadi (${event.affiliateId}): ${error?.message}`,
-        );
-        return null;
-      }
-      throw error;
-    });
+    const user = await this.seller(String(event.affiliateId));
     if (!user) return;
     // SMS va kabinet xabari (xabar-pul: «natijani SMS va kabinet xabari bilan oladi»)
     await this.notifications.create({
@@ -130,6 +119,28 @@ export class OrderSmsController {
       body: withdrawalPaidText(event),
       data: { withdrawalId: event.withdrawalId },
       dedupeKey: `withdrawal:${event.withdrawalId}:PAID`,
+    });
+  }
+
+  /** BE-32: kartaga o‘tmadi (provayder rad etdi yoki moliya «o‘tmadi» deb yopdi) — sotuvchiga SMS va kabinet. */
+  @EventPattern(WITHDRAWAL_FAILED_EVENT)
+  async onWithdrawalFailed(
+    @Payload() event: WithdrawalFailedEvent,
+  ): Promise<void> {
+    if (!event?.withdrawalId || !event.affiliateId) return;
+    const user = await this.seller(String(event.affiliateId));
+    if (!user) return;
+    await this.notifications.create({
+      recipient: {
+        userId: String(event.affiliateId),
+        phone: user.phone ?? null,
+        channels: [NotificationChannel.SMS],
+      },
+      type: 'withdrawal_failed',
+      title: 'Pul kartaga o‘tmadi',
+      body: withdrawalFailedText(event),
+      data: { withdrawalId: event.withdrawalId },
+      dedupeKey: `withdrawal:${event.withdrawalId}:FAILED`,
     });
   }
 
@@ -170,5 +181,26 @@ export class OrderSmsController {
     } catch {
       return null;
     }
+  }
+
+  /** Sotuvchi (telefon uchun). Foydalanuvchi yo‘q (4xx) — null, xabar tashlanadi; identity ishlamasa — xato (DLQ, keyin qayta). */
+  private seller(
+    affiliateId: string,
+  ): Promise<{ id: string; phone?: string | null } | null> {
+    return sendRpc<{ id: string; phone?: string | null }>(
+      this.identity,
+      { cmd: 'identity.user.admin-get' },
+      { userId: affiliateId },
+    ).catch((error: { status?: number; message?: string }) => {
+      // foydalanuvchi yo‘q (4xx) — xabar tashlanadi; identity ishlamasa — xato qaytadi (DLQ, keyin qayta)
+      const status = Number(error?.status ?? 0);
+      if (status >= 400 && status < 500) {
+        this.logger.warn(
+          `Sotuvchi topilmadi (${affiliateId}): ${error?.message}`,
+        );
+        return null;
+      }
+      throw error;
+    });
   }
 }

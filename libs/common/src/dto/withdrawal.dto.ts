@@ -16,13 +16,24 @@ import { MAX_MONEY } from '../database/money.transformer';
 
 /**
  * Sotuvchining pul yechish so‘rovlari (BE-23; TZ 6.8 MOL-5, 6.1 SOT-7, T01:471) [taklif nomlar].
- * So‘raldi → Tasdiqlandi → To‘landi / Rad etildi. To‘lov qo‘lda (kartaga avtomatik — BE-32).
+ * So‘raldi → Tasdiqlandi → To‘landi / Rad etildi. To‘lov qo‘lda yoki (BE-32) sotuvchi kartasiga avtomatik:
+ * Tasdiqlandi → Yuborilmoqda → To‘landi / Xato (pul «Mavjud» da qoladi, MOL-6).
  */
 export enum WithdrawalStatus {
   REQUESTED = 'REQUESTED',
   APPROVED = 'APPROVED',
+  /** BE-32: kartaga yuborildi, provayder javobi kutilmoqda — qayta yuborilmaydi, qo‘lda «To‘landi»/rad yo‘q. */
+  PAYING = 'PAYING',
   PAID = 'PAID',
   REJECTED = 'REJECTED',
+  /** BE-32: provayder rad etdi — ledgerga yozilmagan, pul «Mavjud» da; sotuvchi yangi so‘rov yuboradi. */
+  FAILED = 'FAILED',
+}
+
+/** BE-32: pul qanday o‘tkaziladi — moliya qo‘lda yoki provayder orqali sotuvchi kartasiga. */
+export enum WithdrawalPayoutMode {
+  MANUAL = 'MANUAL',
+  CARD = 'CARD',
 }
 
 /** Nega so‘rov yuborib bo‘lmaydi (kabinetda tugma yopiq, sababi bilan). */
@@ -45,6 +56,8 @@ export const FINANCE_WITHDRAWAL_RPC = {
   REJECT: 'finance.withdrawal.reject',
   PAID: 'finance.withdrawal.paid',
   SELF_EMPLOYED_SET: 'finance.affiliate.self-employed.set',
+  /** BE-32: `PAYING` dagi so‘rovni moliya provayder kabinetida tekshirib qo‘lda yopadi. */
+  PAYOUT_RESULT: 'finance.withdrawal.payout-result',
 } as const;
 
 export class AffiliateBalanceDto {
@@ -142,6 +155,58 @@ export class WithdrawalDto {
 
   @ApiProperty({ example: null, nullable: true, type: String })
   paidBy: string | null;
+
+  @ApiProperty({
+    enum: WithdrawalPayoutMode,
+    nullable: true,
+    example: null,
+    description:
+      'BE-32: `CARD` — kartaga provayder orqali yuborilgan; `MANUAL` — moliya qo‘lda «To‘landi»; null — hali to‘lanmagan',
+  })
+  payoutMode: WithdrawalPayoutMode | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: 'Yuborilgan karta niqobi (`8600 **** **** 1234`)',
+  })
+  cardMask: string | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: Date,
+    description: 'Kartaga yuborilgan vaqt',
+  })
+  payoutSentAt: Date | null;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description: '`FAILED` sababi (provayder javobi yoki moliya izohi)',
+  })
+  failReason: string | null;
+
+  @ApiProperty({ example: null, nullable: true, type: Date })
+  failedAt: Date | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'BE-32: tasdiqlangan so‘rov kartaga avtomatik yuboriladi (provayder yoqilgan, sotuvchida karta bor) — qo‘lda «To‘landi» yo‘q',
+  })
+  autoPayout: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    type: String,
+    description:
+      'BE-32: provayder natijasi holatga zid kelgan (moliya tekshiradi) — nima bo‘lgani; faqat moliya ro‘yxatida',
+  })
+  payoutConflict: string | null;
 }
 
 export class WithdrawalPageDto {

@@ -47,6 +47,7 @@ import { PublicLeadsController } from './leads/public-leads.controller';
 import { AffiliateStreamsController } from './leads/affiliate-streams.controller';
 import { AffiliateWithdrawalsController } from './withdrawals/affiliate-withdrawals.controller';
 import { AdminWithdrawalsController } from './withdrawals/admin-withdrawals.controller';
+import { AffiliatePayoutCardController } from './withdrawals/affiliate-payout-card.controller';
 import { AffiliateProfileController } from './affiliate-account/affiliate-profile.controller';
 import { AffiliateSelfEmployedController } from './affiliate-account/affiliate-self-employed.controller';
 import { AdminSelfEmployedController } from './withdrawals/admin-self-employed.controller';
@@ -73,6 +74,7 @@ import { CallsController } from './calls/calls.controller';
 import { ExportLinkService } from './exports/export-link.service';
 import { RecordingLinkService } from './calls/recording-link';
 import { TelephonyWebhookController } from './webhooks/telephony-webhook.controller';
+import { PayoutWebhookController } from './webhooks/payout-webhook.controller';
 import { OperatorOrdersController } from './leads/operator-orders.controller';
 import { WarehouseController } from './warehouse/warehouse.controller';
 import { WarehouseReturnsController } from './warehouse/warehouse-returns.controller';
@@ -199,6 +201,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     // BE-23: pul yechish
     AffiliateWithdrawalsController,
     AdminWithdrawalsController,
+    AffiliatePayoutCardController,
     // BE-06
     AffiliateProfileController,
     AffiliateSelfEmployedController,
@@ -228,6 +231,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     CallRecordingsController,
     AdminOperatorPhoneController,
     TelephonyWebhookController,
+    PayoutWebhookController,
     OperatorOrdersController,
     WarehouseController,
     WarehouseReturnsController,

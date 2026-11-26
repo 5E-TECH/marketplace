@@ -40,6 +40,9 @@ import { CodDailyCheckService } from './ledger/cod-daily-check.service';
 const entities = FINANCE_DB.entities;
 
 import { ElchiCheckService } from './ledger/elchi-check.service';
+import { PayoutController } from './payout/payout.controller';
+import { PayoutProvider } from './payout/payout.provider';
+import { PayoutService } from './payout/payout.service';
 @Module({
   imports: [
     CommonConfigModule,
@@ -102,6 +105,7 @@ import { ElchiCheckService } from './ledger/elchi-check.service';
     ReconciliationController,
     SettlementResponseController,
     FinanceSettingsController,
+    PayoutController,
   ],
   providers: [
     FinanceService,
@@ -119,6 +123,8 @@ import { ElchiCheckService } from './ledger/elchi-check.service';
     ElchiCheckService,
     SettlementResponseService,
     FinanceSettingsService,
+    PayoutProvider,
+    PayoutService,
   ],
 })
 export class FinanceModule {}

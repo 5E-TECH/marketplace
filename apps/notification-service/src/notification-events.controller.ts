@@ -1,4 +1,5 @@
 import { Controller, Inject, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
 import {
   COD_RECONCILIATION_MISMATCH_EVENT,
@@ -11,6 +12,12 @@ import {
   LotBlockedEvent,
   RmqClient,
   sendRpc,
+  WITHDRAWAL_CONFLICT_EVENT,
+  WITHDRAWAL_FAILED_EVENT,
+  WITHDRAWAL_OVERDUE_EVENT,
+  WithdrawalConflictEvent,
+  WithdrawalFailedEvent,
+  WithdrawalOverdueEvent,
 } from '@app/common';
 import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
@@ -151,6 +158,110 @@ export class NotificationEventsController {
           eventId: event.eventId,
         },
       });
+  }
+
+  /** BE-32: kartaga o‘tmadi — moliyaga (sotuvchiga alohida, `OrderSmsController`). */
+  @EventPattern(WITHDRAWAL_FAILED_EVENT)
+  async withdrawalPayoutFailed(@Payload() event: WithdrawalFailedEvent) {
+    if (!event?.withdrawalId) return;
+    const recipients = await this.byRoles(['FINANCE']);
+    if (!recipients.length) {
+      this.logger.warn(
+        `Kartaga o‘tmadi (${event.withdrawalId}): faol moliya xodimi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('withdrawal_payout_failed', {
+      withdrawalId: event.withdrawalId,
+      affiliateId: event.affiliateId,
+      net: event.net,
+      cardMask: event.cardMask ?? '',
+      reason: event.reason,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'withdrawal_payout_failed',
+        ...content,
+        data: { withdrawalId: event.withdrawalId },
+        dedupeKey: `withdrawal:${event.withdrawalId}:FAILED:${user.id}`,
+      });
+  }
+
+  /** BE-32 (T01:498): 24 soatdan beri to‘lanmagan so‘rovlar — moliyaga. */
+  @EventPattern(WITHDRAWAL_OVERDUE_EVENT)
+  async withdrawalOverdue(@Payload() event: WithdrawalOverdueEvent) {
+    const items = event?.withdrawals ?? [];
+    if (!items.length) return;
+    const recipients = await this.byRoles(['FINANCE']);
+    if (!recipients.length) {
+      this.logger.warn('Pul yechish 24 soatdan oshdi: faol moliya xodimi yo‘q');
+      return;
+    }
+    const content = await this.templates.render('withdrawal_overdue', {
+      count: items.length,
+      withdrawals: items
+        .slice(0, 20)
+        .map(
+          (w) =>
+            `${w.id} — ${w.status}${w.kind === 'NO_RESULT' ? ' (javob yo‘q)' : ''}`,
+        )
+        .join(', '),
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'withdrawal_overdue',
+        ...content,
+        data: { withdrawals: items.map((w) => w.id) },
+        // RMQ qayta yuborsa — bitta xabar
+        dedupeKey: `withdrawal-overdue:${createHash('sha256')
+          .update(items.map((w) => `${w.id}:${w.kind}`).join(','))
+          .digest('hex')
+          .slice(0, 32)}:${user.id}`,
+      });
+  }
+
+  /** BE-32: provayder natijasi so‘rov holatiga zid — moliyaga. */
+  @EventPattern(WITHDRAWAL_CONFLICT_EVENT)
+  async withdrawalPayoutConflict(@Payload() event: WithdrawalConflictEvent) {
+    if (!event?.withdrawalId) return;
+    const recipients = await this.byRoles(['FINANCE']);
+    if (!recipients.length) {
+      this.logger.warn(
+        `Kartaga to‘lov ziddiyati (${event.withdrawalId}): faol moliya xodimi yo‘q`,
+      );
+      return;
+    }
+    const content = await this.templates.render('withdrawal_payout_conflict', {
+      withdrawalId: event.withdrawalId,
+      affiliateId: event.affiliateId,
+      net: event.net,
+      conflict: event.conflict,
+    });
+    for (const user of recipients)
+      await this.notifications.create({
+        recipient: { userId: user.id, email: user.email, phone: user.phone },
+        type: 'withdrawal_payout_conflict',
+        ...content,
+        data: { withdrawalId: event.withdrawalId },
+        dedupeKey: `withdrawal:${event.withdrawalId}:CONFLICT:${user.id}`,
+      });
+  }
+
+  private async byRoles(
+    roles: string[],
+  ): Promise<Array<{ id: string; phone: string; email: string | null }>> {
+    const recipients = new Map<
+      string,
+      { id: string; phone: string; email: string | null }
+    >();
+    for (const role of roles)
+      for (const user of await sendRpc<
+        Array<{ id: string; phone: string; email: string | null }>
+      >(this.identity, { cmd: 'identity.user.active-by-role' }, { role }))
+        recipients.set(String(user.id), user);
+    return [...recipients.values()];
   }
 
   /** Moliya va nazoratchi (ikki rolda bitta odam — bir marta). */

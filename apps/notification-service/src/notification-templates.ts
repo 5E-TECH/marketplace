@@ -109,6 +109,45 @@ export const NOTIFICATION_TEMPLATES = {
     body: '{date}: Elchi bilan tekshiruvda {newDiffCount} ta posilkada yangi farq (jami ochiq {openDiffCount}): {orders}. Moliya → Elchi sverkasi.',
   },
 
+  withdrawal_payout_failed: {
+    name: 'Pul kartaga o‘tmadi (moliya)',
+    description:
+      'BE-32 (TZ MOL-6): sotuvchi kartasiga yuborilgan pul provayderda rad etildi — pul sotuvchi balansida qoldi; moliyaga',
+    variables: {
+      withdrawalId: 'So‘rov raqami',
+      affiliateId: 'Sotuvchi ID si',
+      net: 'Kartaga yuborilgan summa, so‘m',
+      cardMask: 'Karta niqobi',
+      reason: 'Sabab',
+    },
+    title: 'Kartaga o‘tmadi: so‘rov {withdrawalId}',
+    body: 'So‘rov {withdrawalId} (sotuvchi {affiliateId}): {net} so‘m {cardMask} kartaga o‘tmadi — {reason}. Pul sotuvchi balansida qoldi.',
+  },
+  withdrawal_payout_conflict: {
+    name: 'Kartaga to‘lov: provayder natijasi zid',
+    description:
+      'BE-32: provayder natijasi so‘rov holatiga zid (masalan «o‘tmadi» deb yopilgandan keyin «o‘tdi») — moliya provayder kabinetida tekshiradi',
+    variables: {
+      withdrawalId: 'So‘rov raqami',
+      affiliateId: 'Sotuvchi ID si',
+      net: 'Kartaga yuborilgan summa, so‘m',
+      conflict: 'Nima bo‘ldi',
+    },
+    title: 'Tekshiring: so‘rov {withdrawalId} — provayder natijasi zid',
+    body: 'So‘rov {withdrawalId} (sotuvchi {affiliateId}, {net} so‘m): {conflict}',
+  },
+  withdrawal_overdue: {
+    name: 'Pul yechish 24 soatdan oshdi',
+    description:
+      'BE-32 (TZ T01:498 «so‘rovdan to‘lovgacha ≤ 24 soat», MOL-6): 24 soatdan beri to‘lanmagan so‘rovlar va kartaga yuborilganiga 1 soat bo‘lib natijasi yo‘qlar («javob yo‘q») — moliyaga, har so‘rov bir marta',
+    variables: {
+      count: 'So‘rovlar soni',
+      withdrawals: 'So‘rovlar (raqam — holat)',
+    },
+    title: 'To‘lanmagan so‘rovlar: {count} ta',
+    body: '{count} ta pul yechish so‘rovi 24 soatdan beri to‘lanmagan yoki kartaga yuborilib javob kelmagan: {withdrawals}. Moliya → Pul yechish.',
+  },
+
   lot_blocked: {
     name: 'Partiya sotuvdan chiqdi (muddat)',
     description:

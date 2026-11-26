@@ -100,6 +100,18 @@ export function withdrawalPaidText(e: WithdrawalPaidEvent): string {
 }
 
 /**
+ * BE-32 (MOL-6): kartaga o‘tmadi — pul balansda qoldi, sotuvchi yangi so‘rov yuboradi. Matn [taklif]; provayder sababi
+ * SMS ga qo‘shilmaydi (ichki matn bo‘lishi mumkin) — kabinetda so‘rov kartasida ko‘rinadi.
+ */
+export function withdrawalFailedText(e: {
+  net: number;
+  cardMask: string | null;
+}): string {
+  const card = e.cardMask ? ` (karta *${e.cardMask.slice(-4)})` : '';
+  return `${money(e.net)} so‘m kartangizga${card} o‘tmadi. Pul balansingizda qoldi — kartani tekshirib, yangi so‘rov yuboring.`;
+}
+
+/**
  * BE-47 (TZ 6.12): sotuvchiga kabinet xabari — «Yangi sotuv, yetkazildi, rad etildi» (`order.status.changed`).
  * Faqat kabinet (SMS emas). Matn [taklif] — `xabar-sotuvchi` taxtasi uslubida.
  */

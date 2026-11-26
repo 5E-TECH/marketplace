@@ -242,6 +242,7 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /admin/finance/settlements/run',
     'POST /admin/finance/withdrawals/:id/approve',
     'POST /admin/finance/withdrawals/:id/paid',
+    'POST /admin/finance/withdrawals/:id/payout-result',
     'POST /admin/finance/withdrawals/:id/reject',
     'PUT /admin/finance/affiliates/:id/self-employed',
     // BE-25 5-tur: JShShIR arizalari — ko‘rish ADMIN ham; raqam, hujjat va qaror — moliya

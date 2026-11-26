@@ -1,5 +1,9 @@
 import { LeadOrderStatus, OrderStatusChangedEvent } from '@app/common';
-import { customerSmsText, withdrawalPaidText } from './order-sms';
+import {
+  customerSmsText,
+  withdrawalFailedText,
+  withdrawalPaidText,
+} from './order-sms';
 
 const event = (over: Partial<OrderStatusChangedEvent> = {}) =>
   ({
@@ -82,6 +86,17 @@ describe('BE-24: SMS matnlari (dizayn taxtalari bilan bir xil)', () => {
       }),
     ).toBe(
       'Pul kartangizga o‘tkazildi: 5 940 000 so‘m. So‘rov 6 000 000 so‘m, 1% soliq 60 000 so‘m.',
+    );
+  });
+
+  it('BE-32: kartaga o‘tmadi — summa, karta oxirgi 4 raqami, pul balansda', () => {
+    expect(
+      withdrawalFailedText({ net: 990000, cardMask: '8600 **** **** 1234' }),
+    ).toBe(
+      '990 000 so‘m kartangizga (karta *1234) o‘tmadi. Pul balansingizda qoldi — kartani tekshirib, yangi so‘rov yuboring.',
+    );
+    expect(withdrawalFailedText({ net: 50000, cardMask: null })).toBe(
+      '50 000 so‘m kartangizga o‘tmadi. Pul balansingizda qoldi — kartani tekshirib, yangi so‘rov yuboring.',
     );
   });
 });

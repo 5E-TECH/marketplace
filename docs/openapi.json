@@ -10147,8 +10147,10 @@
               "enum": [
                 "REQUESTED",
                 "APPROVED",
+                "PAYING",
                 "PAID",
-                "REJECTED"
+                "REJECTED",
+                "FAILED"
               ]
             }
           }
@@ -10210,8 +10212,10 @@
               "enum": [
                 "REQUESTED",
                 "APPROVED",
+                "PAYING",
                 "PAID",
-                "REJECTED"
+                "REJECTED",
+                "FAILED"
               ]
             }
           },
@@ -10386,6 +10390,59 @@
         ]
       }
     },
+    "/api/v1/admin/finance/withdrawals/{id}/payout-result": {
+      "post": {
+        "description": "Provayder javobi kelmagan (`PAYING`) so‘rov: moliya provayder kabinetida tekshirib `PAID` (pul tushgan — jurnal yoziladi) yoki `FAILED` (tushmagan — pul «Mavjud» da qoladi) kiritadi. Izoh majburiy, auditga yoziladi.",
+        "operationId": "AdminWithdrawalsController_payoutResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayoutResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE: so‘rov kartaga yuborilmagan (`PAYING` emas)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kartaga yuborilgan so‘rov natijasini qo‘lda kiritish (BE-32)",
+        "tags": [
+          "admin-finance"
+        ]
+      }
+    },
     "/api/v1/admin/finance/affiliates/{id}/self-employed": {
       "put": {
         "description": "Belgisiz sotuvchining so‘rovi rad etiladi (T01:471). Sotuvchi ariza yuborgan bo‘lsa — `admin/finance/self-employed` da tasdiqlanadi (bu yerda 409 ALREADY_PENDING).",
@@ -10430,6 +10487,94 @@
         "summary": "O‘zini o‘zi band qilganlik belgisi — arizasiz, qo‘lda",
         "tags": [
           "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/affiliate/payout-card": {
+      "get": {
+        "description": "`enabled: false` — kartaga avtomatik to‘lov hali yoqilmagan: pulni moliya qo‘lda o‘tkazadi, «Kartani ulash» ko‘rsatilmaydi.",
+        "operationId": "AffiliatePayoutCardController_card",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutCardInfoDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pul o‘tkaziladigan karta (niqob)",
+        "tags": [
+          "affiliate"
+        ]
+      },
+      "delete": {
+        "description": "Keyingi to‘lovlar moliya tomonidan qo‘lda; allaqachon kartaga yuborilgan so‘rovga ta’sir qilmaydi.",
+        "operationId": "AffiliatePayoutCardController_remove",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutCardInfoDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kartani o‘chirish",
+        "tags": [
+          "affiliate"
+        ]
+      }
+    },
+    "/api/v1/affiliate/payout-card/session": {
+      "post": {
+        "description": "Sotuvchi shu havolaga o‘tib kartani provayder sahifasida kiritadi; karta ulangach provayder `PAYOUT_RETURN_URL` ga qaytaradi. Havola 15 daqiqa amal qiladi. Yangi karta eskisining o‘rnini oladi.",
+        "operationId": "AffiliatePayoutCardController_session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutCardSessionDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "PAYOUT_FAILED: provayder sahifani bermadi"
+          },
+          "503": {
+            "description": "PAYOUT_NOT_CONFIGURED: kartaga to‘lov yoqilmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kartani ulash: provayder sahifasi havolasi",
+        "tags": [
+          "affiliate"
         ]
       }
     },
@@ -14943,6 +15088,53 @@
           }
         },
         "summary": "Telefoniya provayderi hodisalari (BE-15)",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/payout": {
+      "post": {
+        "description": "`card.bound` — sotuvchi kartani provayder sahifasida uladi (token va niqob); `payout.status` — to‘lov natijasi. 503 bo‘lsa provayder qayta yuboradi; takror `eventId` xavfsiz.",
+        "operationId": "PayoutWebhookController_receive",
+        "parameters": [
+          {
+            "name": "X-Payout-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayoutWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "received": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Imzo yo‘q yoki noto‘g‘ri"
+          }
+        },
+        "summary": "Kartaga to‘lov provayderi hodisalari (BE-32)",
         "tags": [
           "webhooks"
         ]
@@ -25344,8 +25536,10 @@
             "enum": [
               "REQUESTED",
               "APPROVED",
+              "PAYING",
               "PAID",
-              "REJECTED"
+              "REJECTED",
+              "FAILED"
             ],
             "example": "REQUESTED"
           },
@@ -25380,6 +25574,52 @@
             "type": "string",
             "example": null,
             "nullable": true
+          },
+          "payoutMode": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "CARD"
+            ],
+            "nullable": true,
+            "example": null,
+            "description": "BE-32: `CARD` — kartaga provayder orqali yuborilgan; `MANUAL` — moliya qo‘lda «To‘landi»; null — hali to‘lanmagan"
+          },
+          "cardMask": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Yuborilgan karta niqobi (`8600 **** **** 1234`)"
+          },
+          "payoutSentAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Kartaga yuborilgan vaqt"
+          },
+          "failReason": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "`FAILED` sababi (provayder javobi yoki moliya izohi)"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "autoPayout": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-32: tasdiqlangan so‘rov kartaga avtomatik yuboriladi (provayder yoqilgan, sotuvchida karta bor) — qo‘lda «To‘landi» yo‘q"
+          },
+          "payoutConflict": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "BE-32: provayder natijasi holatga zid kelgan (moliya tekshiradi) — nima bo‘lgani; faqat moliya ro‘yxatida"
           }
         },
         "required": [
@@ -25394,7 +25634,14 @@
           "rejectReason",
           "createdAt",
           "paidAt",
-          "paidBy"
+          "paidBy",
+          "payoutMode",
+          "cardMask",
+          "payoutSentAt",
+          "failReason",
+          "failedAt",
+          "autoPayout",
+          "payoutConflict"
         ]
       },
       "WithdrawalPageDto": {
@@ -25443,6 +25690,27 @@
           "reason"
         ]
       },
+      "PayoutResultDto": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": [
+              "PAID",
+              "FAILED"
+            ],
+            "description": "`PAID` — pul kartaga tushgan (jurnal yoziladi); `FAILED` — tushmagan (pul «Mavjud» da qoladi)"
+          },
+          "note": {
+            "type": "string",
+            "example": "Provayder kabinetida: to‘lov o‘tgan, 21.12 10:42"
+          }
+        },
+        "required": [
+          "result",
+          "note"
+        ]
+      },
       "SetSelfEmployedDto": {
         "type": "object",
         "properties": {
@@ -25482,6 +25750,83 @@
           "selfEmployed",
           "updatedBy",
           "updatedAt"
+        ]
+      },
+      "PayoutCardDto": {
+        "type": "object",
+        "properties": {
+          "mask": {
+            "type": "string",
+            "example": "8600 **** **** 1234"
+          },
+          "system": {
+            "type": "string",
+            "enum": [
+              "UZCARD",
+              "HUMO"
+            ],
+            "nullable": true,
+            "example": "UZCARD"
+          },
+          "holderName": {
+            "type": "string",
+            "example": "AZIZA KARIMOVA",
+            "nullable": true,
+            "description": "Karta egasi (provayder bersa)"
+          },
+          "boundAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-21T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "mask",
+          "system",
+          "holderName",
+          "boundAt"
+        ]
+      },
+      "PayoutCardInfoDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "example": false,
+            "description": "Kartaga avtomatik to‘lov yoqilganmi (provayder sozlangan). false — moliya pulni qo‘lda o‘tkazadi"
+          },
+          "card": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayoutCardDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "card"
+        ]
+      },
+      "PayoutCardSessionDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://pay.example.uz/bind/7c1e",
+            "description": "Provayder sahifasi: sotuvchi kartani shu yerda kiritadi"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-12-21T08:15:00.000Z"
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt"
         ]
       },
       "AffiliateAgreementDto": {
@@ -29991,6 +30336,67 @@
           "callRef",
           "type",
           "at"
+        ]
+      },
+      "PayoutWebhookDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "card.bound",
+              "payout.status"
+            ]
+          },
+          "eventId": {
+            "type": "string",
+            "example": "evt-8f1c",
+            "description": "Hodisa ID si (takrorsiz)"
+          },
+          "sessionRef": {
+            "type": "string",
+            "description": "`card.bound`: sessiya ID si"
+          },
+          "cardToken": {
+            "type": "string",
+            "description": "`card.bound`: provayder karta tokeni"
+          },
+          "mask": {
+            "type": "string",
+            "example": "8600 **** **** 1234"
+          },
+          "system": {
+            "type": "string",
+            "enum": [
+              "UZCARD",
+              "HUMO"
+            ]
+          },
+          "holderName": {
+            "type": "string",
+            "example": "AZIZA KARIMOVA"
+          },
+          "payoutRef": {
+            "type": "string",
+            "example": "wd-12-9f2c4a1b",
+            "description": "`payout.status`"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCESS",
+              "PENDING",
+              "FAILED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "example": "Karta bloklangan"
+          }
+        },
+        "required": [
+          "type",
+          "eventId"
         ]
       },
       "WarehouseScanDto": {

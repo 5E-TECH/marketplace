@@ -12,6 +12,7 @@ import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-f
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
 import { CreateSelfEmployed1798761600000 } from '../migrations/1798761600000-create-self-employed';
+import { CreatePayoutCard1799107200000 } from '../migrations/1799107200000-create-payout-card';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerQueryService } from './ledger-query.service';
 import { LedgerService } from './ledger.service';
@@ -135,6 +136,7 @@ describePostgres('BE-23 pul yechish (PostgreSQL)', () => {
         AddRemittanceResolution1796860800000,
         CreateSettlementResponse1796947200000,
         CreateSelfEmployed1798761600000,
+        CreatePayoutCard1799107200000,
       ],
       migrationsRun: true,
       synchronize: false,
