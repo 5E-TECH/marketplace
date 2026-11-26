@@ -1,14 +1,23 @@
-import { Controller, Inject, Logger } from '@nestjs/common';
-import { ClientProxy, EventPattern, Payload } from '@nestjs/microservices';
+import { Controller, Inject, Logger, UseFilters } from '@nestjs/common';
+import {
+  ClientProxy,
+  EventPattern,
+  MessagePattern,
+  Payload,
+} from '@nestjs/microservices';
 import {
   LeadOrderStatus,
   ORDER_EVENTS,
+  ORDER_SMS_RPC,
+  OrderSmsDto,
   OrderStatusChangedEvent,
   RmqClient,
+  RpcHttpExceptionFilter,
   sendRpc,
 } from '@app/common';
 import { NotificationChannel } from './entities/notification-delivery.entity';
 import { NotificationService } from './notification.service';
+import { OrderSmsJournalService } from './order-sms-journal.service';
 import {
   CUSTOMER_SMS_STATUSES,
   customerSmsText,
@@ -31,6 +40,7 @@ export class OrderSmsController {
 
   constructor(
     private readonly notifications: NotificationService,
+    private readonly journal: OrderSmsJournalService,
     @Inject(RmqClient.INTEGRATION) private readonly integration: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
   ) {}
@@ -71,6 +81,22 @@ export class OrderSmsController {
       },
       dedupeKey: `order:${event.orderId}:${event.status}`,
     });
+  }
+
+  /** BE-25 (FE-26): buyurtma kartasidagi SMS jurnali. */
+  @UseFilters(RpcHttpExceptionFilter)
+  @MessagePattern({ cmd: ORDER_SMS_RPC.LIST })
+  list(@Payload() data: { orderId: string }): Promise<OrderSmsDto[]> {
+    return this.journal.list(data?.orderId);
+  }
+
+  /** BE-25 (FE-26): mijozga SMS ni qo‘lda qayta yuborish (rol va audit — gateway). */
+  @UseFilters(RpcHttpExceptionFilter)
+  @MessagePattern({ cmd: ORDER_SMS_RPC.RESEND })
+  resend(
+    @Payload() data: { orderId: string; template: string; actorId: string },
+  ): Promise<OrderSmsDto> {
+    return this.journal.resend(data);
   }
 
   @EventPattern(WITHDRAWAL_PAID_EVENT)

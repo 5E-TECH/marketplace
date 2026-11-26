@@ -3,9 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { SIGNED_LINK_TTL_SECONDS, SignedLinkDto } from '@app/common';
 
-/** Imzolangan havola nimani ochadi: optovik hujjati yoki elektron shartnoma PDF i. */
+/** Imzolangan havola nimani ochadi: optovik hujjati, elektron shartnoma PDF i yoki qaytarish so‘rovi rasmi. */
 export type SignedTarget =
-  { t: 'doc'; id: string } | { t: 'contract'; w: string };
+  | { t: 'doc'; id: string }
+  | { t: 'contract'; w: string }
+  | { t: 'return-photo'; id: string };
 
 export const SIGNED_FILES_PATH = 'signed-files';
 
@@ -54,11 +56,11 @@ export class SignedLinkService {
     }
     if (typeof data.e !== 'number' || data.e * 1000 <= now) return null;
     if (
-      data.t === 'doc' &&
+      (data.t === 'doc' || data.t === 'return-photo') &&
       typeof data.id === 'string' &&
       /^\d+$/.test(data.id)
     )
-      return { t: 'doc', id: data.id };
+      return { t: data.t, id: data.id };
     if (
       data.t === 'contract' &&
       typeof data.w === 'string' &&

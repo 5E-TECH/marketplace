@@ -20,6 +20,7 @@ import {
   LegalDocumentDto,
   LegalDocumentType,
   Public,
+  RETURN_PHOTO_RPC,
   RmqClient,
   sendRpc,
   WHOLESALER_CABINET_RPC as RPC,
@@ -40,6 +41,7 @@ export class SignedFilesController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.FILE) private readonly files: ClientProxy,
+    @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     private readonly links: SignedLinkService,
   ) {}
 
@@ -47,7 +49,7 @@ export class SignedFilesController {
   @IgnoreAuthCookie()
   @Get(':token')
   @ApiOperation({ summary: 'Yopiq hujjat (imzolangan havola, 10 daqiqa)' })
-  @ApiProduces('application/pdf', 'image/jpeg', 'image/png')
+  @ApiProduces('application/pdf', 'image/jpeg', 'image/png', 'image/webp')
   @ApiForbiddenResponse({
     description: 'Imzosiz, buzilgan yoki muddati o‘tgan havola',
   })
@@ -89,6 +91,23 @@ export class SignedFilesController {
       );
       return labelPdf(res, { ...pdf, fileName: safeFileName(pdf.fileName) });
     }
+    if (target.t === 'return-photo') {
+      const photo = await sendRpc<{ id: string; objectKey: string }>(
+        this.checkout,
+        { cmd: RETURN_PHOTO_RPC.GET },
+        { photoId: target.id },
+      );
+      const file = await sendRpc<{ contentType: string; base64: string }>(
+        this.files,
+        { cmd: RPC.PRIVATE_GET },
+        { objectKey: photo.objectKey },
+      );
+      return labelPdf(res, {
+        fileName: `qaytarish-rasm-${photo.id}${EXTENSION[file.contentType] ?? ''}`,
+        contentType: file.contentType,
+        base64: file.base64,
+      });
+    }
     const doc = await sendRpc<WholesalerDocumentRecord>(
       this.catalog,
       { cmd: RPC.DOCUMENT_GET },
@@ -112,6 +131,7 @@ const EXTENSION: Record<string, string> = {
   'application/pdf': '.pdf',
   'image/jpeg': '.jpg',
   'image/png': '.png',
+  'image/webp': '.webp',
 };
 
 /** Content-Disposition uchun — faqat ASCII xavfsiz belgilar. */

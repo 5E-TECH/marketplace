@@ -1,6 +1,11 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { Role, ROLES_KEY } from '@app/common';
+import { ConfigService } from '@nestjs/config';
+import { SignedLinkService } from '../wholesaler-cabinet/signed-link';
 import { AdminReturnsController } from './admin-returns.controller';
+
+const links = () =>
+  new SignedLinkService(new ConfigService({ JWT_SECRET: 'test-secret' }));
 
 describe('AdminReturnsController (C4.2)', () => {
   it('ko‘rish va qaror — ADMIN/SUPERADMIN, pul qaytarish — faqat SUPERADMIN', () => {
@@ -23,6 +28,7 @@ describe('AdminReturnsController (C4.2)', () => {
     const controller = new AdminReturnsController(
       { send } as never,
       { send: audit } as never,
+      links(),
     );
     const admin = { sub: '1', role: Role.SUPERADMIN };
     const dto = { amount: 150000, restock: false, comment: 'Qisman' };
@@ -49,5 +55,50 @@ describe('AdminReturnsController (C4.2)', () => {
         entityId: '3',
       }),
     );
+  });
+
+  it('BE-25 (FE-26): rasm havolasi — faqat admin, shu so‘rov rasmi, auditga yoziladi', async () => {
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminReturnsController.prototype.photoLink,
+      ),
+    ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+    const send = jest.fn(() => of({ id: '9' }));
+    const audit = jest.fn(() => of({}));
+    const svc = links();
+    const controller = new AdminReturnsController(
+      { send } as never,
+      { send: audit } as never,
+      svc,
+    );
+    const link = await controller.photoLink(
+      '3',
+      '9',
+      { sub: '1', role: Role.ADMIN } as never,
+      '10.0.0.1',
+    );
+    expect(send).toHaveBeenCalledWith(
+      { cmd: 'checkout.admin.return-photo-get' },
+      { photoId: '9', returnId: '3' },
+    );
+    expect(svc.verify(link.url.split('/').pop()!)).toEqual({
+      t: 'return-photo',
+      id: '9',
+    });
+    expect(audit).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({ action: 'return.photo.view', entityId: '3' }),
+    );
+    // audit yozilmasa — havola yo‘q
+    audit.mockReturnValueOnce(throwError(() => new Error('identity')) as never);
+    await expect(
+      controller.photoLink(
+        '3',
+        '9',
+        { sub: '1', role: Role.ADMIN } as never,
+        '',
+      ),
+    ).rejects.toMatchObject({ status: 503 });
   });
 });

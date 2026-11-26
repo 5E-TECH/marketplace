@@ -136,6 +136,8 @@ export * from './dto/warehouse-inbound.dto';
 // BE-09: narx kalkulyatori (sof hisob)
 export * from './pricing';
 export * from './dto/pricing.dto';
+export * from './dto/order-sms.dto';
+export * from './dto/return-photo.dto';
 // PDF: Unicode shrift (kirill, ʻ/ʼ) — hamma PDF generatorlar
 export * from './pdf/pdf-fonts';
 // BE-36: bir nechta nusxa uchun umumiy so‘rov chegarasi (Redis)

@@ -8,15 +8,23 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   AdminCreateProductDto,
   AdminProductsQueryDto,
@@ -26,12 +34,19 @@ import {
   JwtUser,
   RejectProductDto,
   ProductDto,
+  ProductMediaDto,
   Role,
   Roles,
   RmqClient,
   sendRpc,
 } from '@app/common';
 
+import { FileTooLargeInterceptor } from '../affiliate-account/affiliate-self-employed.controller';
+import {
+  PRODUCT_MEDIA_BODY,
+  PRODUCT_MEDIA_OPTIONS,
+  storeProductMedia,
+} from './product-media';
 import { ADMIN_PRODUCTS_PAGE_EXAMPLE } from './admin-m1.examples';
 import {
   pickFields,
@@ -47,7 +62,34 @@ export class AdminProductsController {
   constructor(
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.FILE) private readonly files: ClientProxy,
   ) {}
+
+  @Post('media')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Yangi mahsulot rasmini saqlashdan oldin yuklash (FE-25)',
+    description:
+      'JPEG, PNG, WEBP, 10 MB gacha. Qaytgan `url` mahsulotning `images` maydoniga yuboriladi. Video — mahsulot saqlangach kreativlar orqali (BE-08).',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(PRODUCT_MEDIA_BODY)
+  @ApiCreatedResponse({ type: ProductMediaDto })
+  @ApiBadRequestResponse({
+    description: 'FILE_REQUIRED — fayl yo‘q; FILE_TYPE_INVALID — tur mos emas',
+  })
+  @ApiPayloadTooLargeResponse({
+    description: 'FILE_TOO_LARGE — 10 MB dan katta',
+  })
+  @UseInterceptors(
+    FileTooLargeInterceptor,
+    FileInterceptor('file', PRODUCT_MEDIA_OPTIONS),
+  )
+  media(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<ProductMediaDto> {
+    return storeProductMedia(this.files, file);
+  }
 
   @Post()
   @ApiOperation({

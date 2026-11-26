@@ -20,6 +20,7 @@ import { SmsAdapter } from './adapters/sms.adapter';
 import { CabinetMessagesController } from './cabinet-messages.controller';
 import { OtpSmsController } from './otp-sms.controller';
 import { OrderSmsController } from './order-sms.controller';
+import { OrderSmsJournalService } from './order-sms-journal.service';
 import { SiteOrderSmsController } from './site-order-sms.controller';
 import { TelegramAdapter } from './adapters/telegram.adapter';
 import { DeliveryRetryService } from './delivery-retry.service';
@@ -97,6 +98,7 @@ const entities = NOTIFICATION_DB.entities;
   ],
   providers: [
     NotificationService,
+    OrderSmsJournalService,
     NotificationTemplateService,
     BroadcastService,
     DeliveryRetryService,

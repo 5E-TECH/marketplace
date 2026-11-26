@@ -1,36 +1,54 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   Param,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   CreateProductDto,
   CurrentUser,
   JwtUser,
+  ProductMediaDto,
   RmqClient,
   Role,
   Roles,
   sendRpc,
+  ShopStatus,
   WHOLESALER_CABINET_RPC as RPC,
   WholesalerPricingQueryDto,
   WholesalerProductsQueryDto,
 } from '@app/common';
 import { WHOLESALER_PRICING_EXAMPLE } from '../admin/admin-pricing.examples';
+import { FileTooLargeInterceptor } from '../affiliate-account/affiliate-self-employed.controller';
+import {
+  PRODUCT_MEDIA_BODY,
+  PRODUCT_MEDIA_OPTIONS,
+  storeProductMedia,
+} from '../admin/product-media';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { ownWholesaler } from './own-wholesaler';
 import {
   WHOLESALER_PRODUCT_EXAMPLE,
   WHOLESALER_PRODUCTS_PAGE_EXAMPLE,
@@ -47,7 +65,50 @@ import {
 export class WholesalerProductsController {
   constructor(
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
+    @Inject(RmqClient.FILE) private readonly files: ClientProxy,
   ) {}
+
+  @Post('media')
+  // bir IP (mobil operator NAT i) ortida bir necha optovik bo‘lishi mumkin [taklif]
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Mahsulot rasmini taklifdan oldin yuklash (FE-23, OPT-2)',
+    description:
+      'JPEG, PNG, WEBP, 10 MB gacha. Qaytgan `url` taklifning `images` maydoniga yuboriladi.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(PRODUCT_MEDIA_BODY)
+  @ApiCreatedResponse({ type: ProductMediaDto })
+  @ApiBadRequestResponse({
+    description: 'FILE_REQUIRED — fayl yo‘q; FILE_TYPE_INVALID — tur mos emas',
+  })
+  @ApiPayloadTooLargeResponse({
+    description: 'FILE_TOO_LARGE — 10 MB dan katta',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'Optovik yozuvi yoki komissiya shartnomasi yo‘q, rad etilgan yoki to‘xtatilgan',
+  })
+  @UseInterceptors(
+    FileTooLargeInterceptor,
+    FileInterceptor('file', PRODUCT_MEDIA_OPTIONS),
+  )
+  async media(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtUser,
+  ): Promise<ProductMediaDto> {
+    // rasm ochiq papkaga tushadi — faqat mahsulot taklif qila oladigan optovikka
+    const wholesaler = await ownWholesaler(this.catalog, user);
+    if (
+      !wholesaler.contractNumber ||
+      !wholesaler.contractDate ||
+      ![ShopStatus.ACTIVE, ShopStatus.PENDING].includes(wholesaler.status)
+    )
+      throw new ForbiddenException(
+        'Mahsulot taklifi yopiq: shartnoma yo‘q yoki optovik to‘xtatilgan',
+      );
+    return storeProductMedia(this.files, file);
+  }
 
   @Post()
   @ApiOperation({

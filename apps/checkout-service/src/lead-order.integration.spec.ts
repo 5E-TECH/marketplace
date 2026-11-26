@@ -26,6 +26,7 @@ import { LeadOrderStatusService } from './lead-order-status.service';
 import { CheckoutOutboxRelayService } from './checkout-outbox-relay.service';
 import { SellerOrdersService } from './seller-orders.service';
 import { LeadReturnService } from './lead-return.service';
+import { ReturnPhotoService } from './return-photo.service';
 import { ReturnRequestQueryService } from './return-request-query.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
@@ -1153,6 +1154,61 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
           actor: STAFF,
           comment: 'xato',
         }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('BE-25 (FE-26): qator productId bilan ham; mijoz rasmlari — ochiq so‘rovga, 3 tagacha', async () => {
+      const { id } = await deliveredOrder('8010');
+      const photos = new ReturnPhotoService(checkoutDs);
+      const file = (n: number) => ({
+        objectKey: `private/returns/x/8010-${n}.jpg`,
+        contentType: 'image/jpeg',
+        size: 100 + n,
+      });
+      await expect(
+        photos.check({ orderId: id, count: 1 }),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        request(id, '1', { items: [{ productId: '999999', quantity: 1 }] }),
+      ).rejects.toMatchObject({ status: 400 });
+      const created = await request(id, '1', {
+        items: [{ productId: PRODUCT, quantity: 1 }],
+      });
+      expect(created.photos).toEqual([]);
+      const { returnId } = await photos.check({ orderId: id, count: 3 });
+      expect(returnId).toBe(created.id);
+      await expect(
+        photos.check({ orderId: id, count: 4 }),
+      ).rejects.toMatchObject({ status: 409 });
+      const added = await photos.add({
+        orderId: id,
+        returnId,
+        files: [file(1), file(2)],
+        actorId: '41',
+      });
+      expect(added).toMatchObject({ returnId, count: 2 });
+      expect(JSON.stringify(added)).not.toContain('private/');
+      // bir vaqtda ikki yuklash — jami 3 dan oshmaydi
+      const both = await Promise.allSettled([
+        photos.add({ orderId: id, returnId, files: [file(3)], actorId: '41' }),
+        photos.add({ orderId: id, returnId, files: [file(4)], actorId: '41' }),
+      ]);
+      expect(both.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const photoId = added.photos[0].id;
+      await expect(photos.get({ photoId, returnId })).resolves.toMatchObject({
+        objectKey: file(1).objectKey,
+      });
+      await expect(
+        photos.get({ photoId, returnId: String(Number(returnId) + 1000) }),
+      ).rejects.toMatchObject({ status: 404 });
+      await returns().decide({
+        returnId,
+        approve: false,
+        actor: STAFF,
+        comment: 'Muddat',
+      });
+      await expect(
+        photos.check({ orderId: id, count: 1 }),
       ).rejects.toMatchObject({ status: 409 });
     });
 

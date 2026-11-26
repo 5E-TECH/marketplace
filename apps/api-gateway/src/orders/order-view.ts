@@ -5,6 +5,8 @@ import {
   JwtUser,
   LeadHistoryChangeDto,
   LeadHistoryEntryDto,
+  ORDER_SMS_RPC,
+  OrderSmsDto,
   OrderViewer,
   Role,
 } from '@app/common';
@@ -109,6 +111,28 @@ export async function withLeadContext(
         : (order.stream ?? null),
     postbacks: viewer.kind === 'ADMIN' ? (card.postbacks ?? []) : [],
   };
+}
+
+/**
+ * BE-25 (FE-26): kartaga mijoz SMS lari jurnali. Bildirishnoma servisi javob bermasa — maydon yo‘q (bo‘sh ro‘yxat emas:
+ * «SMS yuborilmagan» degani bo‘lardi) [taklif].
+ */
+export async function withSmsJournal(
+  notifications: ClientProxy,
+  orderId: string,
+  order: OrderDetailRpc,
+): Promise<OrderDetailRpc> {
+  if (!order?.lead) return order;
+  try {
+    const sms = await firstValueFrom(
+      notifications
+        .send<OrderSmsDto[]>({ cmd: ORDER_SMS_RPC.LIST }, { orderId })
+        .pipe(timeout(LEAD_TIMEOUT_MS)),
+    );
+    return { ...order, sms };
+  } catch {
+    return order;
+  }
 }
 
 /** Manzil tuzatishlari: har maydonning eng birinchi (mijoz yozgan) qiymati va oxirgi tuzatgan odam. */

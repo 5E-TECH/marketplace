@@ -175,6 +175,15 @@ export const ADMIN_ORDER_EXAMPLE = {
   },
   cancel: null,
   returnRequest: null,
+  sms: [
+    {
+      template: 'order_confirmed',
+      title: 'Buyurtma tasdiqlandi',
+      at: '2026-12-01T09:14:20.000Z',
+      detail: null,
+      state: 'SENT',
+    },
+  ],
   dispute: null,
   postbacks: [],
 };
@@ -194,6 +203,7 @@ export const OPERATOR_ORDERS_PAGE_EXAMPLE = {
 /** `GET /operator/orders/{id}`: telefon, narx tarkibi, sotuvchi va sahifa yo‘q. */
 export const OPERATOR_ORDER_EXAMPLE = {
   ...ADMIN_ORDER_EXAMPLE,
+  sms: undefined,
   sellerOrders: ADMIN_ORDER_EXAMPLE.sellerOrders.map((seller) => ({
     ...seller,
     shopId: null,

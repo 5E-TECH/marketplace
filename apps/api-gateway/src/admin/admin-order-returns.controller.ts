@@ -1,24 +1,49 @@
-import { Body, Controller, Inject, Ip, Param, Post } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  HttpException,
+  Inject,
+  Ip,
+  Param,
+  Post,
+  UploadedFiles,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ClientProxy, RmqRecordBuilder } from '@nestjs/microservices';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
+  ApiConsumes,
   ApiCreatedResponse,
+  ApiNotFoundResponse,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   CreateReturnRequestDto,
   CurrentUser,
+  ErrorCode,
   JwtUser,
+  RETURN_PHOTO_MAX,
+  RETURN_PHOTO_MAX_BYTES,
+  RETURN_PHOTO_RPC,
+  RPC_TIMEOUT_MS,
+  ReturnPhotosResultDto,
   ReturnRequestDetailsDto,
   RmqClient,
   Role,
   Roles,
   sendRpc,
+  StoredReturnPhoto,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import { PhotoTooLargeInterceptor } from './photo-too-large.interceptor';
 
 /**
  * BE-44: yetkazilgandan keyin qaytarish so‘rovini xodim mijoz nomidan kiritadi (mijoz qo‘ng‘iroq qiladi —
@@ -31,6 +56,7 @@ export class AdminOrderReturnsController {
   constructor(
     @Inject(RmqClient.CHECKOUT) private readonly checkout: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    @Inject(RmqClient.FILE) private readonly files: ClientProxy,
   ) {}
 
   @Post(':id/returns')
@@ -71,5 +97,144 @@ export class AdminOrderReturnsController {
       },
     ).catch(() => undefined);
     return result;
+  }
+
+  @Post(':id/returns/photos')
+  // FE-26: rasm — mijozning shaxsiy ma’lumoti, faqat admin
+  @Roles(Role.ADMIN, Role.SUPERADMIN)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Qaytarish so‘roviga mijoz rasmlari (FE-26)',
+    description:
+      'Qaror berilmagan so‘rovga, jami 3 tagacha, har biri 5 MB gacha (JPG, PNG, WEBP). Yopiq saqlanadi; ochish — `POST admin/returns/{id}/photos/{photoId}/link`.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['files'],
+      properties: {
+        files: {
+          type: 'array',
+          maxItems: RETURN_PHOTO_MAX,
+          items: { type: 'string', format: 'binary' },
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({ type: ReturnPhotosResultDto })
+  @ApiBadRequestResponse({
+    description:
+      'FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas; bitta so‘rovda 3 tadan ko‘p fayl',
+  })
+  @ApiPayloadTooLargeResponse({
+    description: 'FILE_TOO_LARGE — 5 MB dan katta',
+  })
+  @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
+  @ApiConflictResponse({
+    description:
+      'INVALID_STATE — ochiq so‘rov yo‘q yoki avvalgilari bilan 3 tadan oshadi',
+  })
+  @UseInterceptors(
+    PhotoTooLargeInterceptor,
+    FilesInterceptor('files', RETURN_PHOTO_MAX, {
+      limits: {
+        fileSize: RETURN_PHOTO_MAX_BYTES + 1,
+        files: RETURN_PHOTO_MAX,
+      },
+    }),
+  )
+  async photos(
+    @Param('id', ParseLeadIdPipe) orderId: string,
+    @UploadedFiles() uploads: Express.Multer.File[] | undefined,
+    @CurrentUser() user: JwtUser,
+    @Ip() ip: string,
+  ): Promise<ReturnPhotosResultDto> {
+    const chosen = (uploads ?? []).filter((file) => file.size > 0);
+    if (!chosen.length)
+      throw new BadRequestException({
+        message: 'Rasm tanlanmagan',
+        errorCode: ErrorCode.FILE_REQUIRED,
+      });
+    const { returnId } = await sendRpc<{ returnId: string }>(
+      this.checkout,
+      { cmd: RETURN_PHOTO_RPC.CHECK },
+      { orderId, count: chosen.length },
+    );
+    const stored: StoredReturnPhoto[] = [];
+    let adding = false;
+    let result: ReturnPhotosResultDto;
+    try {
+      for (const file of chosen)
+        stored.push(
+          await sendRpc<StoredReturnPhoto>(
+            this.files,
+            { cmd: RETURN_PHOTO_RPC.STORE },
+            // mijoz rasmi navbatda diskka yozilmasin
+            new RmqRecordBuilder({
+              returnId,
+              base64: file.buffer.toString('base64'),
+              deadline: Date.now() + RPC_TIMEOUT_MS,
+            })
+              .setOptions({ persistent: false })
+              .build(),
+          ),
+        );
+      adding = true;
+      result = await sendRpc<ReturnPhotosResultDto>(
+        this.checkout,
+        { cmd: RETURN_PHOTO_RPC.ADD },
+        { orderId, returnId, files: stored, actorId: user.sub },
+      );
+    } catch (error) {
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      // ADD javobi kelmagan (5xx) — so‘rovga yozilgan bo‘lishi mumkin: rasmga tegilmaydi, audit qoladi
+      if (adding && status >= 500)
+        this.auditPhotos(user.sub, returnId, {
+          orderId,
+          count: stored.length,
+          unknown: true,
+          ip,
+        });
+      else await this.discard(stored);
+      throw error;
+    }
+    this.auditPhotos(user.sub, returnId, {
+      orderId,
+      count: stored.length,
+      ip,
+    });
+    return result;
+  }
+
+  private auditPhotos(
+    actorId: string,
+    returnId: string,
+    meta: { orderId: string; count: number; ip: string; unknown?: true },
+  ): void {
+    void sendRpc(
+      this.identity,
+      { cmd: 'identity.audit.log' },
+      {
+        actorId,
+        action: 'return.photos.add',
+        entityType: 'ReturnRequest',
+        entityId: returnId,
+        meta: { ...meta, ip: meta.ip || null },
+      },
+    ).catch(() => undefined);
+  }
+
+  /** So‘rovga yozilmagan rasmlar qolmasin. */
+  private async discard(stored: StoredReturnPhoto[]): Promise<void> {
+    await Promise.allSettled(
+      stored.map((file) =>
+        sendRpc(
+          this.files,
+          { cmd: RETURN_PHOTO_RPC.REMOVE },
+          { objectKey: file.objectKey },
+        ),
+      ),
+    );
   }
 }

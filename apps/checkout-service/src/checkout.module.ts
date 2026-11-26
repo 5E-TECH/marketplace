@@ -38,6 +38,7 @@ import { ReturnRequestQueryService } from './return-request-query.service';
 import { ReturnRefundService } from './return-refund.service';
 import { ReturnNotifierService } from './return-notifier.service';
 import { LeadReturnService } from './lead-return.service';
+import { ReturnPhotoService } from './return-photo.service';
 import { LeadOrderController } from './lead-order.controller';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
@@ -156,6 +157,7 @@ import {
     ReturnRefundService,
     ReturnNotifierService,
     LeadReturnService,
+    ReturnPhotoService,
     OutboxService,
     CheckoutOutboxRelayService,
     LeadOrderService,

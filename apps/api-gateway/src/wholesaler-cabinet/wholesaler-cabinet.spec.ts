@@ -80,10 +80,16 @@ describe('BE-30 TC4: imzolangan havola', () => {
         }),
       ),
     };
+    const checkout = {
+      send: jest.fn(() =>
+        of({ id: '9', objectKey: 'private/returns/3/0f0e.webp' }),
+      ),
+    };
     const controller = new SignedFilesController(
       catalog as never,
       {} as never,
       files as never,
+      checkout as never,
       svc,
     );
     const res = { setHeader: jest.fn() };
@@ -107,6 +113,29 @@ describe('BE-30 TC4: imzolangan havola', () => {
       { cmd: 'file.private.get' },
       { objectKey: 'private/wholesaler/15/0f0e.pdf' },
     );
+    // BE-25: qaytarish rasmi — shu havola turi bilan, kaliti checkout’dan
+    files.send.mockReturnValueOnce(
+      of({
+        contentType: 'image/webp',
+        base64: Buffer.from('RIFF').toString('base64'),
+      }),
+    );
+    const photo = await controller.get(
+      tokenOf(svc.sign({ t: 'return-photo', id: '9' }).url),
+      res as never,
+    );
+    expect(checkout.send).toHaveBeenCalledWith(
+      { cmd: 'checkout.admin.return-photo-get' },
+      { photoId: '9' },
+    );
+    expect(files.send).toHaveBeenLastCalledWith(
+      { cmd: 'file.private.get' },
+      { objectKey: 'private/returns/3/0f0e.webp' },
+    );
+    expect(photo.getHeaders()).toMatchObject({
+      type: 'image/webp',
+      disposition: 'attachment; filename="qaytarish-rasm-9.webp"',
+    });
     expect(safeFileName('../../etc/passwd')).toBe('.._.._etc_passwd');
   });
 });

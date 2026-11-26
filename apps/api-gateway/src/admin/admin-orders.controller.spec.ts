@@ -22,11 +22,13 @@ function makeController(
   send: jest.Mock,
   identity: jest.Mock = jest.fn(() => of({})),
   lead: unknown = down,
+  notifications: unknown = down,
 ) {
   return new AdminOrdersController(
     { send } as never,
     { send: identity } as never,
     { send: lead } as never,
+    { send: notifications } as never,
     exportsService(),
   );
 }
@@ -450,5 +452,77 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
           }),
         ).toEqual(['filters']);
     });
+  });
+
+  it('BE-25 (FE-26): SMS jurnali kartada; bildirishnoma servisi javob bermasa — maydon yo‘q; eski buyurtmada so‘ralmaydi', async () => {
+    const order = { id: '42', lead: { leadId: null } };
+    const journal = [{ template: 'order_confirmed', state: 'SENT' }];
+    const send = jest.fn(() => of(order));
+    const notifications = jest.fn(() => of(journal));
+    const controller = makeController(send, undefined, down, notifications);
+    await expect(controller.get('42', user(Role.ADMIN))).resolves.toMatchObject(
+      { sms: journal },
+    );
+    expect(notifications).toHaveBeenCalledWith(
+      { cmd: 'notification.order-sms.list' },
+      { orderId: '42' },
+    );
+    await expect(
+      makeController(send).get('42', user(Role.ADMIN)),
+    ).resolves.not.toHaveProperty('sms');
+    const old = jest.fn();
+    await makeController(
+      jest.fn(() => of({ id: '1', lead: null })),
+      undefined,
+      down,
+      old,
+    ).get('1', user(Role.ADMIN));
+    expect(old).not.toHaveBeenCalled();
+  });
+
+  it('BE-25 (FE-26): SMS ni qayta yuborish — faqat admin, auditga shablon bilan', async () => {
+    expect(
+      Reflect.getMetadata(ROLES_KEY, AdminOrdersController.prototype.resendSms),
+    ).toEqual([Role.ADMIN, Role.SUPERADMIN]);
+    const identity = jest.fn(() => of({}));
+    const notifications = jest.fn(() =>
+      of({ template: 'order_confirmed', state: 'SENT' }),
+    );
+    const order = { id: '42', status: 'CONFIRMED' };
+    const controller = makeController(
+      jest.fn(() => of(order)),
+      identity,
+      down,
+      notifications,
+    );
+    await controller.resendSms(
+      '42',
+      { template: 'Buyurtma tasdiqlandi' },
+      user(Role.ADMIN),
+      '10.0.0.1',
+    );
+    expect(notifications).toHaveBeenCalledWith(
+      { cmd: 'notification.order-sms.resend' },
+      { orderId: '42', template: 'Buyurtma tasdiqlandi', actorId: '7' },
+    );
+    expect(identity).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        action: 'order.sms.resend',
+        entityId: '42',
+        meta: expect.objectContaining({ template: 'order_confirmed' }),
+      }),
+    );
+    notifications.mockClear();
+    order.status = 'CANCELLED';
+    await expect(
+      controller.resendSms(
+        '42',
+        { template: 'order_confirmed' },
+        user(Role.ADMIN),
+        '',
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(notifications).not.toHaveBeenCalled();
   });
 });

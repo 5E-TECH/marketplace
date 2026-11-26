@@ -16,6 +16,7 @@ import {
   OutboxService,
   ReturnReason,
   ReturnRequestDetailsDto,
+  ReturnRequestItemInputDto,
   ReturnRequestStatus,
 } from '@app/common';
 import {
@@ -31,6 +32,38 @@ import {
 
 const ID = /^[1-9]\d{0,18}$/;
 const S = ReturnRequestStatus;
+const BAD_LINE = 'items tovar qatori noto‘g‘ri yoki takrorlangan';
+
+/**
+ * So‘rov qatorlari buyurtma qatoriga: `orderItemId` yoki (FE-26) `productId` — mahsulot buyurtmada bitta qatorda bo‘lsa.
+ * Bir qator ikki marta — 400.
+ */
+function orderLines(
+  requested: ReturnRequestItemInputDto[],
+  items: Array<{ id: string; productId: string }>,
+): Array<{ orderItemId: string; quantity: number }> {
+  const seen = new Set<string>();
+  return requested.map((line) => {
+    let id = line.orderItemId ? String(line.orderItemId) : null;
+    if (!id) {
+      const same = items.filter(
+        (item) => item.productId === String(line.productId),
+      );
+      if (same.length !== 1)
+        throw new BadRequestException({
+          message: [
+            same.length
+              ? `items mahsulot ${line.productId} buyurtmada bir necha qatorda — orderItemId yuboring`
+              : `items mahsulot ${line.productId} bu buyurtmada yo‘q`,
+          ],
+        });
+      id = same[0].id;
+    }
+    if (seen.has(id)) throw new BadRequestException({ message: [BAD_LINE] });
+    seen.add(id);
+    return { orderItemId: id, quantity: line.quantity };
+  });
+}
 
 /**
  * BE-44: yetkazilgandan keyin qaytarish (TZ T5, MOL-4, 2.5-4). Mijoz qo‘ng‘iroq qiladi — so‘rovni xodim (admin,
@@ -68,23 +101,16 @@ export class LeadReturnService {
       throw new BadRequestException({
         message: ['comment «Boshqa» sababida izoh majburiy'],
       });
-    const lines = Array.isArray(dto.items) ? dto.items : [];
-    if (!lines.length)
+    const requested = Array.isArray(dto.items) ? dto.items : [];
+    if (!requested.length)
       throw new BadRequestException({ message: ['items tovar tanlanmagan'] });
-    const seen = new Set<string>();
-    for (const line of lines) {
-      const id = String(line?.orderItemId ?? '');
+    for (const line of requested)
       if (
-        !ID.test(id) ||
-        seen.has(id) ||
+        !ID.test(String(line?.orderItemId ?? line?.productId ?? '')) ||
         !Number.isSafeInteger(line.quantity) ||
         line.quantity < 1
       )
-        throw new BadRequestException({
-          message: ['items tovar qatori noto‘g‘ri yoki takrorlangan'],
-        });
-      seen.add(id);
-    }
+        throw new BadRequestException({ message: [BAD_LINE] });
 
     let applied: AppliedTransition | null = null;
     const returnId = await this.dataSource.transaction(async (manager) => {
@@ -120,7 +146,7 @@ export class LeadReturnService {
         });
 
       const items = (await manager.query(
-        `SELECT i.id::text, i.quantity, i.unit_price::text AS "unitPrice",
+        `SELECT i.id::text, i.product_id::text AS "productId", i.quantity, i.unit_price::text AS "unitPrice",
                 p.id::text AS "parcelId", p.shop_id::text AS "shopId"
            FROM checkout.sales_order_item i
            JOIN checkout.parcel p ON p.id = i.sales_order_seller_id
@@ -128,12 +154,14 @@ export class LeadReturnService {
         [orderId],
       )) as Array<{
         id: string;
+        productId: string;
         quantity: number;
         unitPrice: string;
         parcelId: string;
         shopId: string;
       }>;
       const byId = new Map(items.map((item) => [item.id, item]));
+      const lines = orderLines(requested, items);
       // Hozircha faqat to‘liq qaytarish: moliya qisman qaytarishni yozmaydi (BE-22 `recordReturn`), ombor saralashi
       // hamma donani talab qiladi (BE-17) [taklif — qisman qaytarish alohida karta]
       if (

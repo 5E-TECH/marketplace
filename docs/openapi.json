@@ -2766,6 +2766,15 @@
                     },
                     "cancel": null,
                     "returnRequest": null,
+                    "sms": [
+                      {
+                        "template": "order_confirmed",
+                        "title": "Buyurtma tasdiqlandi",
+                        "at": "2026-12-01T09:14:20.000Z",
+                        "detail": null,
+                        "state": "SENT"
+                      }
+                    ],
                     "dispute": null,
                     "postbacks": []
                   }
@@ -2793,6 +2802,59 @@
           }
         ],
         "summary": "Buyurtma to‘liq (sub-order + item + shipment + to‘lov)",
+        "tags": [
+          "admin-orders"
+        ]
+      }
+    },
+    "/api/v1/admin/orders/{id}/sms/resend": {
+      "post": {
+        "description": "O‘sha matn va raqam; buyurtma holati o‘zgarmaydi. SMS navbatga qo‘yiladi (`PENDING`), natija — buyurtma kartasidagi `sms` jurnalida. Audit: kim, qaysi shablon.",
+        "operationId": "AdminOrdersController_resendSms",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderSmsResendRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSmsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Buyurtma topilmadi yoki bu SMS hali yuborilmagan"
+          },
+          "409": {
+            "description": "INVALID_STATE — SMS hali navbatda, buyurtma bekor qilingan yoki SMS xizmati sozlanmagan"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mijozga avtomatik SMS ni qo‘lda qayta yuborish (FE-26)",
         "tags": [
           "admin-orders"
         ]
@@ -4274,6 +4336,59 @@
         ],
         "tags": [
           "admin-finance"
+        ]
+      }
+    },
+    "/api/v1/admin/products/media": {
+      "post": {
+        "description": "JPEG, PNG, WEBP, 10 MB gacha. Qaytgan `url` mahsulotning `images` maydoniga yuboriladi. Video — mahsulot saqlangach kreativlar orqali (BE-08).",
+        "operationId": "AdminProductsController_media",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMediaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "FILE_REQUIRED — fayl yo‘q; FILE_TYPE_INVALID — tur mos emas"
+          },
+          "413": {
+            "description": "FILE_TOO_LARGE — 10 MB dan katta"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Yangi mahsulot rasmini saqlashdan oldin yuklash (FE-25)",
+        "tags": [
+          "admin-products"
         ]
       }
     },
@@ -8598,6 +8713,54 @@
         ]
       }
     },
+    "/api/v1/admin/returns/{id}/photos/{photoId}/link": {
+      "post": {
+        "description": "Auditga yoziladi: kim, qaysi so‘rov, qaysi rasm.",
+        "operationId": "AdminReturnsController_photoLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "photoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLinkDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "So‘rov yoki rasm topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mijoz rasmiga imzolangan havola (10 daqiqa)",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
     "/api/v1/admin/returns/{id}/approve": {
       "post": {
         "description": "SUBMITTED/IN_REVIEW/REJECTED → APPROVED",
@@ -8819,6 +8982,78 @@
           }
         ],
         "summary": "Qaytarish so‘rovini mijoz nomidan kiritish",
+        "tags": [
+          "admin-returns"
+        ]
+      }
+    },
+    "/api/v1/admin/orders/{id}/returns/photos": {
+      "post": {
+        "description": "Qaror berilmagan so‘rovga, jami 3 tagacha, har biri 5 MB gacha (JPG, PNG, WEBP). Yopiq saqlanadi; ochish — `POST admin/returns/{id}/photos/{photoId}/link`.",
+        "operationId": "AdminOrderReturnsController_photos",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "files"
+                ],
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "maxItems": 3,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnPhotosResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "FILE_REQUIRED — rasm yo‘q; FILE_TYPE_INVALID — rasm emas; bitta so‘rovda 3 tadan ko‘p fayl"
+          },
+          "404": {
+            "description": "Buyurtma topilmadi"
+          },
+          "409": {
+            "description": "INVALID_STATE — ochiq so‘rov yo‘q yoki avvalgilari bilan 3 tadan oshadi"
+          },
+          "413": {
+            "description": "FILE_TOO_LARGE — 5 MB dan katta"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qaytarish so‘roviga mijoz rasmlari (FE-26)",
         "tags": [
           "admin-returns"
         ]
@@ -12686,6 +12921,62 @@
           }
         ],
         "summary": "Hujjatga 10 daqiqalik imzolangan havola",
+        "tags": [
+          "wholesaler"
+        ]
+      }
+    },
+    "/api/v1/wholesaler/products/media": {
+      "post": {
+        "description": "JPEG, PNG, WEBP, 10 MB gacha. Qaytgan `url` taklifning `images` maydoniga yuboriladi.",
+        "operationId": "WholesalerProductsController_media",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMediaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "FILE_REQUIRED — fayl yo‘q; FILE_TYPE_INVALID — tur mos emas"
+          },
+          "403": {
+            "description": "Optovik yozuvi yoki komissiya shartnomasi yo‘q, rad etilgan yoki to‘xtatilgan"
+          },
+          "413": {
+            "description": "FILE_TOO_LARGE — 10 MB dan katta"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mahsulot rasmini taklifdan oldin yuklash (FE-23, OPT-2)",
         "tags": [
           "wholesaler"
         ]
@@ -18695,6 +18986,66 @@
           "expiresAt"
         ]
       },
+      "OrderSmsResendRequestDto": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "example": "order_confirmed",
+            "description": "Qaysi SMS: shablon kodi (`order_confirmed | order_in_transit | order_delivered`) yoki jurnaldagi `title`"
+          }
+        },
+        "required": [
+          "template"
+        ]
+      },
+      "OrderSmsDto": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "enum": [
+              "order_confirmed",
+              "order_in_transit",
+              "order_delivered"
+            ],
+            "example": "order_confirmed"
+          },
+          "title": {
+            "type": "string",
+            "example": "Buyurtma tasdiqlandi",
+            "description": "Qo‘lda qayta yuborilganida — «… — qayta yuborildi»"
+          },
+          "at": {
+            "type": "string",
+            "nullable": true,
+            "example": "2026-12-01T09:14:20.000Z",
+            "description": "Yuborilgan vaqt; hali yuborilmagan bo‘lsa yaratilgan vaqt"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Izoh: navbatda qayta urinilmoqda yoki yuborilmadi"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "SENT",
+              "PENDING",
+              "FAILED"
+            ],
+            "example": "SENT"
+          }
+        },
+        "required": [
+          "template",
+          "title",
+          "at",
+          "detail",
+          "state"
+        ]
+      },
       "OrderReasonDto": {
         "type": "object",
         "properties": {
@@ -19594,6 +19945,42 @@
             "example": 10
           }
         }
+      },
+      "ProductMediaDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "http://localhost:9000/marketplace-media/products/1722250000000-uuid.jpg",
+            "description": "Mahsulotning `images` / `imageUrl` maydoniga shu URL yuboriladi"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE"
+            ],
+            "example": "IMAGE"
+          },
+          "fileName": {
+            "type": "string",
+            "example": "quloqchin-1.jpg"
+          },
+          "contentType": {
+            "type": "string",
+            "example": "image/jpeg"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          }
+        },
+        "required": [
+          "url",
+          "type",
+          "fileName",
+          "contentType",
+          "size"
+        ]
       },
       "AdminCreateProductDto": {
         "type": "object",
@@ -22764,6 +23151,33 @@
           "createdAt"
         ]
       },
+      "ReturnPhotoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "9"
+          },
+          "contentType": {
+            "type": "string",
+            "example": "image/jpeg"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-12-01T09:14:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "contentType",
+          "size",
+          "createdAt"
+        ]
+      },
       "ReturnRequestDetailsDto": {
         "type": "object",
         "properties": {
@@ -22878,6 +23292,13 @@
             "items": {
               "$ref": "#/components/schemas/ReturnRequestHistoryDto"
             }
+          },
+          "photos": {
+            "description": "Mijoz rasmlari; ochish — `POST admin/returns/{id}/photos/{photoId}/link`",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnPhotoDto"
+            }
           }
         },
         "required": [
@@ -22900,7 +23321,24 @@
           "createdAt",
           "updatedAt",
           "items",
-          "history"
+          "history",
+          "photos"
+        ]
+      },
+      "SignedLinkDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "/api/v1/signed-files/eyJ….c2ln"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt"
         ]
       },
       "ReturnApproveDto": {
@@ -22949,7 +23387,12 @@
           "orderItemId": {
             "type": "string",
             "example": "31",
-            "description": "sales_order_item ID — `GET /orders` javobidagi `items[].id`"
+            "description": "Buyurtma qatori ID si (`sellerOrders[].items[].id`). Berilmasa — `productId`"
+          },
+          "productId": {
+            "type": "string",
+            "example": "501",
+            "description": "Mahsulot ID si — buyurtmada shu mahsulot bitta qatorda bo‘lsa yetarli (FE-26)"
           },
           "quantity": {
             "type": "number",
@@ -22958,7 +23401,6 @@
           }
         },
         "required": [
-          "orderItemId",
           "quantity"
         ]
       },
@@ -22994,6 +23436,32 @@
         "required": [
           "items",
           "reason"
+        ]
+      },
+      "ReturnPhotosResultDto": {
+        "type": "object",
+        "properties": {
+          "returnId": {
+            "type": "string",
+            "example": "3",
+            "description": "Qaytarish so‘rovi ID si"
+          },
+          "count": {
+            "type": "number",
+            "example": 2,
+            "description": "So‘rovdagi jami rasm"
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnPhotoDto"
+            }
+          }
+        },
+        "required": [
+          "returnId",
+          "count",
+          "photos"
         ]
       },
       "VariantReportRowDto": {
@@ -27392,22 +27860,6 @@
           "stock",
           "stockTotals",
           "money"
-        ]
-      },
-      "SignedLinkDto": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "example": "/api/v1/signed-files/eyJ….c2ln"
-          },
-          "expiresAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url",
-          "expiresAt"
         ]
       },
       "PrivateUploadPolicyDto": {

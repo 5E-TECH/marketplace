@@ -4,10 +4,13 @@ import {
   AdminReturnRequestsQueryDto,
   CreateReturnRequestDto,
   ErrorCode,
+  RETURN_PHOTO_RPC,
   RpcHttpExceptionFilter,
+  StoredReturnPhoto,
 } from '@app/common';
 import { LeadReturnService } from './lead-return.service';
 import { ReturnActor } from './return-history';
+import { ReturnPhotoService } from './return-photo.service';
 import { ReturnRequestQueryService } from './return-request-query.service';
 import { ReturnRequestService } from './return-request.service';
 import { ReturnRefundService } from './return-refund.service';
@@ -27,6 +30,7 @@ export class ReturnRequestsController {
     private readonly refunds: ReturnRefundService,
     private readonly queries: ReturnRequestQueryService,
     private readonly leadReturns: LeadReturnService,
+    private readonly photos: ReturnPhotoService,
   ) {}
 
   /** BE-44: xodim (admin, operator) mijoz nomidan yetkazilgan buyurtmaga qaytarish so‘rovini kiritadi. */
@@ -44,6 +48,30 @@ export class ReturnRequestsController {
       dto: data.dto,
       actor: { id: String(data.actor.id), role: String(data.actor.role) },
     });
+  }
+
+  /** BE-25 (FE-26): so‘rovga mijoz rasmlari. */
+  @MessagePattern({ cmd: RETURN_PHOTO_RPC.CHECK })
+  photoCheck(@Payload() data: { orderId: string; count: number }) {
+    return this.photos.check(data);
+  }
+
+  @MessagePattern({ cmd: RETURN_PHOTO_RPC.ADD })
+  photoAdd(
+    @Payload()
+    data: {
+      orderId: string;
+      returnId: string;
+      files: StoredReturnPhoto[];
+      actorId: string;
+    },
+  ) {
+    return this.photos.add(data);
+  }
+
+  @MessagePattern({ cmd: RETURN_PHOTO_RPC.GET })
+  photoGet(@Payload() data: { photoId: string; returnId?: string }) {
+    return this.photos.get(data);
   }
 
   // ─── Admin ────────────────────────────────────────────────────────────────

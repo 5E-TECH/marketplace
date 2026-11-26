@@ -19,17 +19,30 @@ import {
 } from 'class-validator';
 import { MAX_MONEY } from '../database/money.transformer';
 import { ReturnReason, ReturnRequestStatus } from '../enums';
+import { ReturnPhotoDto } from './return-photo.dto';
 
 // ─── So'rovlar ──────────────────────────────────────────────────────────────
 
 export class ReturnRequestItemInputDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '31',
-    description: 'sales_order_item ID — `GET /orders` javobidagi `items[].id`',
+    description:
+      'Buyurtma qatori ID si (`sellerOrders[].items[].id`). Berilmasa — `productId`',
   })
+  @IsOptional()
   @IsString()
   @Matches(/^[1-9]\d{0,18}$/)
-  orderItemId: string;
+  orderItemId?: string;
+
+  @ApiPropertyOptional({
+    example: '501',
+    description:
+      'Mahsulot ID si — buyurtmada shu mahsulot bitta qatorda bo‘lsa yetarli (FE-26)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[1-9]\d{0,18}$/)
+  productId?: string;
 
   @ApiProperty({ example: 1, minimum: 1 })
   @Type(() => Number)
@@ -228,6 +241,13 @@ export class ReturnRequestDto {
 export class ReturnRequestDetailsDto extends ReturnRequestDto {
   @ApiProperty({ type: [ReturnRequestHistoryDto] })
   history: ReturnRequestHistoryDto[];
+
+  @ApiProperty({
+    type: [ReturnPhotoDto],
+    description:
+      'Mijoz rasmlari; ochish — `POST admin/returns/{id}/photos/{photoId}/link`',
+  })
+  photos: ReturnPhotoDto[];
 }
 
 export class ReturnRequestsPageDto {
