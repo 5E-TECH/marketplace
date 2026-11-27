@@ -399,7 +399,7 @@ describePostgres('BE-32 kartaga to‘lov (PostgreSQL)', () => {
       await expectBalanced();
     });
 
-    it('TC2: 4xx yoki ulanib bo‘lmadi (PayoutRejectedError) → FAILED, sabab bilan', async () => {
+    it('TC2: provayder aniq rad etdi (HTTP 400/422 — PayoutRejectedError) → FAILED, sabab bilan', async () => {
       await bindCard();
       const id = await approved();
       provider.send.mockRejectedValue(
