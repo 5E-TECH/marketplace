@@ -28,6 +28,8 @@ import { LeadAddressService } from './lead-address.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { LeadQueueController } from './lead-queue.controller';
+import { LeadUpsellController } from './lead-upsell.controller';
+import { LeadUpsellService } from './lead-upsell.service';
 import { LeadQueueScheduler } from './lead-queue.scheduler';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadIntakeController } from './lead-intake.controller';
@@ -139,6 +141,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     LeadIntakeController,
     VariantReportController,
     LeadQueueController,
+    LeadUpsellController,
     LeadAdminController,
     LeadStatsController,
     LeadSupervisorController,
@@ -157,6 +160,7 @@ import { LeadSupervisorService } from './lead-supervisor.service';
     SiteOrderService,
     LeadQueueService,
     LeadCardService,
+    LeadUpsellService,
     OperatorWorkplaceService,
     LeadQueueScheduler,
     LeadOutboxRelayService,

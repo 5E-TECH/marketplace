@@ -1071,6 +1071,173 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     });
   });
 
+  describe('BE-45: operator qo‘shgan qo‘shimcha tovar (upsell)', () => {
+    const upsold = (leadId: string, over: Partial<LeadConfirmedEvent> = {}) =>
+      confirmed({
+        leadId,
+        items: [
+          { productId: PRODUCT, quantity: 1, salePrice: 276_000 },
+          {
+            productId: PRODUCT2,
+            quantity: 1,
+            salePrice: 120_000,
+            upsell: true,
+          },
+        ],
+        ...over,
+      });
+
+    it('TC1: sotuvchi sahifasi lidi + qo‘shimcha tovar → bitta buyurtma, ikki qator, bitta posilka; qator belgilangan, haq platformada', async () => {
+      await inventory.inbound({
+        variantId: VARIANT2,
+        warehouseId: await inventory.hqWarehouseId(),
+        quantity: 3,
+        reason: 'Qabul (test)',
+        actorId: '1',
+        idempotencyKey: 'in-upsell-1',
+      });
+      await expect(
+        orders.onLeadConfirmed(upsold('7201')),
+      ).resolves.toMatchObject({ accepted: true });
+      const order = await orderOfLead('7201');
+      expect(order).toMatchObject({
+        status: LeadOrderStatus.CONFIRMED,
+        source: LeadSource.LANDING,
+        affiliateId: '77',
+        streamId: '301',
+        // 1 000 g + 2 000 g = 3 000 g — 3 kg gacha bitta tarif, ko‘rinadigan 30 000
+        weightGrams: 3_000,
+        totalAmount: 276_000 + 120_000 + 30_000,
+      });
+      const items = (await checkoutDs.query(
+        `SELECT i.product_id::text AS "productId", i.unit_price::int AS "unitPrice", i.markup::int AS markup,
+                i.affiliate_fee::int AS "affiliateFee", i.platform_service::int AS "platformService",
+                i.is_upsell AS upsell, i.sales_order_seller_id::text AS parcel
+           FROM checkout.sales_order_item i
+           JOIN checkout.parcel p ON p.id = i.sales_order_seller_id
+          WHERE p.sales_order_id = $1 ORDER BY i.id`,
+        [order.id],
+      )) as Array<Record<string, unknown>>;
+      expect(items.map(({ parcel: _p, ...rest }) => rest)).toEqual([
+        // lid tovari: sahifa narxi 276 000 = tasdiqlangan 251 000 + ustama 25 000, haq sotuvchiga
+        {
+          productId: PRODUCT,
+          unitPrice: 276_000,
+          markup: 25_000,
+          affiliateFee: 65_000,
+          platformService: 25_000,
+          upsell: false,
+        },
+        // qo‘shimcha tovar: tasdiqlangan narx, ustama yo‘q; sotuvchi haqi (25 000) platformada [taklif]
+        {
+          productId: PRODUCT2,
+          unitPrice: 120_000,
+          markup: 0,
+          affiliateFee: 0,
+          platformService: 14_000 + 25_000,
+          upsell: true,
+        },
+      ]);
+      expect(new Set(items.map((item) => item.parcel)).size).toBe(1);
+      // moliyaga: qo‘shimcha qatorda sotuvchi haqi 0, platforma ulushi oshgan (split.ts tekshiruvi bilan mos)
+      const [changed] = await outboxOf(
+        'order.status.changed',
+        String(order.id),
+      );
+      const lines = (
+        changed.payload as {
+          items: Array<{
+            productId: string;
+            approvedPrice: number;
+            basePrice: number;
+            split: Record<string, number>;
+          }>;
+        }
+      ).items;
+      expect(lines[1]).toMatchObject({
+        productId: PRODUCT2,
+        split: {
+          affiliateFee: 0,
+          callCenterFee: 10_000,
+          hiddenDelivery: 11_000,
+          platformService: 39_000,
+        },
+      });
+      const { approvedPrice, basePrice, split } = lines[1];
+      expect(
+        approvedPrice -
+          basePrice -
+          split.affiliateFee -
+          split.callCenterFee -
+          split.hiddenDelivery,
+      ).toBe(split.platformService);
+      // admin kartasida qator belgisi
+      const card = await admin.adminGetOrder(String(order.id));
+      expect(card.sellerOrders[0].items.map((i) => i.upsell)).toEqual([
+        false,
+        true,
+      ]);
+    });
+
+    it('TC3: qo‘shimcha tovar narxi tasdiqlangan narxdan farq qilsa → buyurtma yo‘q (PRICE_CHANGED)', async () => {
+      for (const [leadId, price] of [
+        ['7202', 130_000],
+        ['7203', 110_000],
+      ] as Array<[string, number]>) {
+        await orders.onLeadConfirmed(
+          upsold(leadId, {
+            items: [
+              { productId: PRODUCT, quantity: 1, salePrice: 276_000 },
+              {
+                productId: PRODUCT2,
+                quantity: 1,
+                salePrice: price,
+                upsell: true,
+              },
+            ],
+          }),
+        );
+        expect(await orderOfLead(leadId)).toBeUndefined();
+        const [failed] = await outboxOf('order.create-failed', leadId);
+        expect(failed.payload).toMatchObject({ reason: 'PRICE_CHANGED' });
+      }
+    });
+
+    it('hodisa tekshiruvi: sayt bo‘lmagan lidda belgisiz ikkinchi qator va belgili birinchi qator — rad', async () => {
+      for (const [leadId, items] of [
+        [
+          '7211',
+          [
+            { productId: PRODUCT, quantity: 1, salePrice: 276_000 },
+            { productId: PRODUCT2, quantity: 1, salePrice: 120_000 },
+          ],
+        ],
+        [
+          '7212',
+          [
+            {
+              productId: PRODUCT,
+              quantity: 1,
+              salePrice: 276_000,
+              upsell: true,
+            },
+            {
+              productId: PRODUCT2,
+              quantity: 1,
+              salePrice: 120_000,
+              upsell: true,
+            },
+          ],
+        ],
+      ] as Array<[string, LeadConfirmedEvent['items']]>) {
+        await orders.onLeadConfirmed(upsold(leadId, { items }));
+        expect(await orderOfLead(leadId)).toBeUndefined();
+        const [failed] = await outboxOf('order.create-failed', leadId);
+        expect(failed.payload).toMatchObject({ reason: 'INVALID_ORDER' });
+      }
+    });
+  });
+
   describe('BE-44: yetkazilgandan keyin qaytarish so‘rovi', () => {
     const STAFF = { id: '41', role: 'ADMIN' };
     let windowDays = 10;

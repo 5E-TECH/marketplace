@@ -303,7 +303,7 @@ describeWithPostgres(
           approveRate: row.approveRate,
           saleRate: row.saleRate,
           firstCallMedianMinutes: row.firstCallMedianMinutes,
-        }).toEqual(own);
+        }).toEqual({ ...own, upsellRate: undefined });
       }
       expect(rows.find((r) => r.key === '41')).toMatchObject({
         attempts: 3,

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -19,15 +20,19 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import {
+  AddLeadItemDto,
   CurrentUser,
+  LEAD_UPSELL_RPC,
   LeadCardDto,
   LeadPriceDto,
   LeadPriceQuoteDto,
   LeadResultAcceptedDto,
   LeadStatsPeriodQueryDto,
+  LeadUpsellDto,
   OperatorAttemptsPageDto,
   OperatorAttemptsQueryDto,
   OperatorLeadListItemDto,
@@ -212,6 +217,116 @@ export class OperatorLeadsController {
         leadId,
         quantity: dto.quantity,
         whereDeliver: dto.whereDeliver,
+      },
+    );
+  }
+
+  @Get('leads/:id/upsell')
+  @ApiOperation({
+    summary:
+      'Qo‘shimcha taklif: juftlik, vaqt oynasi va qo‘shilgan tovarlar (BE-45)',
+    description:
+      'OPR-4: operator tasdiqlash qo‘ng‘irog‘ida mijozga qo‘shimcha tovar taklif qiladi. Juftlik — admin belgilagan ' +
+      'mahsulot (admin-offer); `pair: null` — «Bu mahsulotga qo‘shimcha taklif yo‘q». `window` — 12-qoida (yoqilgan bo‘lsa).',
+  })
+  @ApiOkResponse({ type: LeadUpsellDto })
+  @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
+  upsell(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+  ): Promise<LeadUpsellDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: LEAD_UPSELL_RPC.GET },
+      {
+        operatorId,
+        leadId,
+      },
+    );
+  }
+
+  @Post('leads/:id/items')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lidga qo‘shimcha tovar qo‘shish (upsell, BE-45)',
+    description:
+      'Faqat bronlagan operator. Narx yuborilmaydi — tovarning tasdiqlangan narxi (BE-09) olinadi; `price` maydoni ' +
+      'bilan yuborilsa 400. Tasdiqlanganda bitta buyurtma, bitta posilka, qo‘shimcha qator belgilangan (BE-34 tartibi). ' +
+      'Javob — yangilangan karta (`items`, `price` — butun posilka).',
+  })
+  @ApiOkResponse({ type: LeadCardDto })
+  @ApiBadRequestResponse({
+    description:
+      'Qoldiq yetarli emas; narx tasdiqlanmagan; tovar sotuvchilarga yopiq; 12-qoida oynasidan tashqarida; qatorlar ko‘p',
+  })
+  @ApiConflictResponse({ description: 'Bu tovar lidda allaqachon bor' })
+  @ApiNotFoundResponse({
+    description: 'Lid topilmadi yoki bu operatorda emas; mahsulot topilmadi',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'Katalog yoki ombor javob bermadi — qo‘shilmadi',
+  })
+  addItem(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Body() dto: AddLeadItemDto,
+  ): Promise<LeadCardDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: LEAD_UPSELL_RPC.ADD },
+      {
+        operatorId,
+        leadId,
+        productId: dto.productId,
+        quantity: dto.quantity,
+      },
+    );
+  }
+
+  @Delete('leads/:id/items/:itemId')
+  @ApiOperation({
+    summary: 'Qo‘shimcha tovarni olib tashlash (BE-45)',
+    description:
+      'Faqat operator qo‘shgan (upsell) qator; lidning o‘z tovari va saytdan kelgan qatorlar olib tashlanmaydi.',
+  })
+  @ApiOkResponse({ type: LeadCardDto })
+  @ApiBadRequestResponse({ description: 'Bu qator qo‘shimcha tovar emas' })
+  @ApiNotFoundResponse({ description: 'Lid yoki qator topilmadi' })
+  removeItem(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+    @Param('itemId', ParseLeadIdPipe) itemId: string,
+  ): Promise<LeadCardDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: LEAD_UPSELL_RPC.REMOVE },
+      {
+        operatorId,
+        leadId,
+        itemId,
+      },
+    );
+  }
+
+  @Post('leads/:id/upsell/decline')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '«Mijoz olmadi» — qo‘shimcha taklif rad etildi (BE-45)',
+    description:
+      'Lid tarixiga qayd (dizayn operator-upsell 6-kadr) [taklif]. Upsell foizi (OPR-7) unga bog‘liq emas.',
+  })
+  @ApiOkResponse({ type: LeadUpsellDto })
+  @ApiNotFoundResponse({ description: 'Lid topilmadi yoki bu operatorda emas' })
+  declineUpsell(
+    @CurrentUser('sub') operatorId: string,
+    @Param('id', ParseLeadIdPipe) leadId: string,
+  ): Promise<LeadUpsellDto> {
+    return sendRpc(
+      this.lead,
+      { cmd: LEAD_UPSELL_RPC.DECLINE },
+      {
+        operatorId,
+        leadId,
       },
     );
   }

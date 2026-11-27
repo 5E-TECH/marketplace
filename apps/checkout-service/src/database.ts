@@ -19,6 +19,7 @@ import { ElchiWebhookResult1796601600000 } from './migrations/1796601600000-elch
 import { OrderItemFiscal1797120000000 } from './migrations/1797120000000-order-item-fiscal';
 import { OrderDisputeLabel1798934400000 } from './migrations/1798934400000-order-dispute-label';
 import { DeliveryShownOther1799280000000 } from './migrations/1799280000000-delivery-shown-other';
+import { OrderItemUpsell1799366400000 } from './migrations/1799366400000-order-item-upsell';
 import { ReturnPhoto1799020800000 } from './migrations/1799020800000-return-photo';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
@@ -53,5 +54,6 @@ export const CHECKOUT_DB: DatabaseDefinition = {
     OrderDisputeLabel1798934400000,
     ReturnPhoto1799020800000,
     DeliveryShownOther1799280000000,
+    OrderItemUpsell1799366400000,
   ],
 };

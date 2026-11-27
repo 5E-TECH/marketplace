@@ -139,6 +139,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/:id/quote',
     'POST /operator/leads/:id/result',
     'POST /operator/leads/next',
+    // BE-45 (OPR-4): qo‘shimcha tovar (upsell)
+    'GET /operator/leads/:id/upsell',
+    'POST /operator/leads/:id/items',
+    'DELETE /operator/leads/:id/items/:itemId',
+    'POST /operator/leads/:id/upsell/decline',
     // BE-25 (FE-26): operator o‘zi tasdiqlagan buyurtmalar
     'GET /operator/orders',
     'GET /operator/orders/:id',
@@ -179,6 +184,11 @@ const EXPECTED: Partial<Record<Role, string[]>> = {
     'POST /operator/leads/:id/quote',
     'POST /operator/leads/:id/result',
     'POST /operator/leads/next',
+    // BE-45 (OPR-4): qo‘shimcha tovar (upsell)
+    'GET /operator/leads/:id/upsell',
+    'POST /operator/leads/:id/items',
+    'DELETE /operator/leads/:id/items/:itemId',
+    'POST /operator/leads/:id/upsell/decline',
     'POST /supervisor/leads/:id/transfer',
     'PUT /operator/state',
   ],

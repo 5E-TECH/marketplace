@@ -7,6 +7,7 @@ import { WholesalerCabinet1798329600000 } from './migrations/1798329600000-whole
 import { ProductBlockReason1797379200000 } from './migrations/1797379200000-product-block-reason';
 import { CategoryFlags1798502400000 } from './migrations/1798502400000-category-flags';
 import { ProductMarketSource1798588800000 } from './migrations/1798588800000-product-market-source';
+import { ProductUpsellPair1799366400000 } from './migrations/1799366400000-product-upsell-pair';
 import { Creative } from './entities/creative.entity';
 import { ProductFiscalCodes1797033600000 } from './migrations/1797033600000-product-fiscal-codes';
 import {
@@ -71,5 +72,6 @@ export const CATALOG_DB: DatabaseDefinition = {
     ProductFiscalCodes1797033600000,
     CategoryFlags1798502400000,
     ProductMarketSource1798588800000,
+    ProductUpsellPair1799366400000,
   ],
 };

@@ -684,6 +684,9 @@ export function toSnapshot(
     stock, // BE-16: HQ ombordagi bo‘sh (band qilinmagan) qoldiq
     // BE-08: admin yuklagan kreativlar (SOT-9), tartib bilan
     creatives,
+    // BE-45: upsell juftligi (operator qo‘ng‘iroqda taklif qiladi)
+    upsellProductId:
+      product.upsellProductId == null ? null : String(product.upsellProductId),
     createdAt: new Date(product.createdAt).toISOString(),
   };
 }

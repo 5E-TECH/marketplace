@@ -313,6 +313,14 @@ export class ProductDto {
   basePrice: number | null;
   @ApiProperty({ example: 65000, nullable: true, type: Number })
   affiliateFee: number | null;
+  @ApiPropertyOptional({
+    example: '512',
+    nullable: true,
+    type: String,
+    description:
+      'BE-45: upsell juftligi — operator qo‘ng‘iroqda taklif qiladigan mahsulot (admin-offer); bo‘sh — yo‘q',
+  })
+  upsellProductId?: string | null;
   @ApiProperty({ example: 450, nullable: true, type: Number })
   weightGrams: number | null;
   @ApiProperty({ example: 200, nullable: true, type: Number })

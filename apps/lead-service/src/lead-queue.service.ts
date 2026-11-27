@@ -31,7 +31,13 @@ import {
   OutboxEvent,
   SubmitLeadResultDto,
 } from '@app/common';
-import { Lead, LeadAttempt, LeadHistory, OperatorState } from './entities';
+import {
+  Lead,
+  LeadAttempt,
+  LeadHistory,
+  LeadItem,
+  OperatorState,
+} from './entities';
 import { LeadAddressService } from './lead-address.service';
 import { LeadOutboxRelayService } from './lead-outbox-relay.service';
 import { PostbackService } from './postback.service';
@@ -49,6 +55,7 @@ import {
   retryAt,
 } from './lead-schedule';
 import { enqueueLeadConfirmed } from './lead-confirmed.event';
+import { dropUpsellLines, LeadUpsellService } from './lead-upsell.service';
 
 /** 1-qoida zinapoyasi faqat aloqa bo‘lmagan natijalar soniga qarab yuradi (TZ 5-bo‘lim jadvali). */
 const MISSED_OUTCOMES = [
@@ -80,6 +87,8 @@ export class LeadQueueService {
     @Optional() private readonly userNames?: UserNamesClient,
     // BE-15: telefoniya (ulanmagan bo‘lsa natija qo‘lda kiritiladi)
     @Optional() private readonly calls?: CallService,
+    // BE-45: qo‘shimcha tovar narxi tasdiqdan oldin
+    @Optional() private readonly upsell?: LeadUpsellService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -190,6 +199,9 @@ export class LeadQueueService {
     leadId: string,
     dto: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
+    // BE-45: qo‘shimcha tovar sotuvda emas, qoldig‘i yetmaydi yoki narxi o‘zgargan — 409, operator tuzatadi
+    if (dto?.outcome === LeadOutcome.CONFIRMED)
+      await this.upsell?.checkBeforeConfirm(operatorId, leadId);
     const accepted = await this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
       const lead = await leads.findOne({
@@ -312,6 +324,9 @@ export class LeadQueueService {
       }
       await leads.save(lead);
       await this.history(manager, lead, from, operatorId, note);
+      // BE-45: tasdiqlanmagan suhbatdagi qo‘shimcha tovar keyingi qo‘ng‘iroqqa o‘tmaydi
+      if (dto.outcome !== LeadOutcome.CONFIRMED)
+        await dropUpsellLines(manager, lead, 'natija kiritildi, tasdiqlanmadi');
       return {
         leadId: lead.id,
         status: lead.status,
@@ -439,6 +454,7 @@ export class LeadQueueService {
           null,
           'Bron muddati tugadi, navbatga qaytdi (5-qoida)',
         );
+        await dropUpsellLines(manager, lead, 'bron muddati tugadi'); // BE-45
       }
 
       const remind = await leads.find({
@@ -530,7 +546,13 @@ export class LeadQueueService {
         (event.reason ?? OrderCreateFailedReason.OUT_OF_STOCK) ===
         OrderCreateFailedReason.OUT_OF_STOCK;
       lead.status = LeadStatus.CALLBACK;
-      if (outOfStock) lead.stockShortageAt = now;
+      // BE-45: qo‘shimcha tovarli buyurtmada sabab qaysi qatorda ekani noma’lum — qo‘shimcha tovar olib tashlanadi,
+      // lid tovari bilan qayta tasdiqlanadi («qoldiq yo‘q» belgisi qo‘yilmaydi; lid tovari tugagan bo‘lsa — keyingi safar)
+      const hadUpsell =
+        (await manager
+          .getRepository(LeadItem)
+          .count({ where: { leadId: lead.id, isUpsell: true } })) > 0;
+      if (outOfStock && !hadUpsell) lead.stockShortageAt = now;
       lead.operatorId = null;
       lead.confirmedAt = null; // BE-28: buyurtma yaratilmadi — «Tasdiqlangan» ga kirmaydi
       lead.confirmedBy = null;
@@ -543,14 +565,18 @@ export class LeadQueueService {
         lead,
         LeadStatus.CONFIRMED,
         null,
-        outOfStock
-          ? 'Buyurtma yaratilmadi: qoldiq yo‘q — navbatga qaytdi'
-          : event.reason === OrderCreateFailedReason.OFFER_UNAVAILABLE
-            ? 'Buyurtma yaratilmadi: mahsulot sotuvda emas — navbatga qaytdi'
-            : event.reason === OrderCreateFailedReason.PRICE_CHANGED
-              ? 'Buyurtma yaratilmadi: narx oshgan (sahifa narxi tasdiqlangan narxdan past) — navbatga qaytdi'
-              : 'Buyurtma yaratilmadi: buyurtma ma’lumoti xato — navbatga qaytdi',
+        hadUpsell
+          ? `Buyurtma yaratilmadi (qo‘shimcha tovar bilan; sabab: ${event.reason ?? OrderCreateFailedReason.OUT_OF_STOCK}) — qo‘shimcha tovar olib tashlandi, navbatga qaytdi`
+          : outOfStock
+            ? 'Buyurtma yaratilmadi: qoldiq yo‘q — navbatga qaytdi'
+            : event.reason === OrderCreateFailedReason.OFFER_UNAVAILABLE
+              ? 'Buyurtma yaratilmadi: mahsulot sotuvda emas — navbatga qaytdi'
+              : event.reason === OrderCreateFailedReason.PRICE_CHANGED
+                ? 'Buyurtma yaratilmadi: narx oshgan (sahifa narxi tasdiqlangan narxdan past) — navbatga qaytdi'
+                : 'Buyurtma yaratilmadi: buyurtma ma’lumoti xato — navbatga qaytdi',
       );
+      if (hadUpsell)
+        await dropUpsellLines(manager, lead, 'buyurtma yaratilmadi');
     });
   }
 

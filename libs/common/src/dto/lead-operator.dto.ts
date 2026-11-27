@@ -320,6 +320,11 @@ export class LeadPreviousDto {
 /** Lid kartasi: operator (BE-13) va admin/nazoratchi (BE-42) uchun bitta shakl. */
 /** BE-34: saytdan ko‘p tovarli lidning bitta qatori (operator hamma tovarni bitta jami bilan ko‘radi — FE-29). */
 export class LeadCardItemDto {
+  @ApiProperty({
+    example: '9001',
+    description: 'BE-45: qator ID si (qo‘shimcha tovarni olib tashlash uchun)',
+  })
+  itemId: string;
   @ApiProperty({ example: '501' }) productId: string;
   @ApiProperty({ example: 'Simsiz quloqchin' }) name: string;
   @ApiProperty({ example: 1 }) quantity: number;
@@ -329,6 +334,12 @@ export class LeadCardItemDto {
   })
   unitPrice: number;
   @ApiProperty({ example: 251000 }) lineTotal: number;
+  @ApiProperty({
+    example: false,
+    description:
+      'BE-45: operator qo‘shgan qo‘shimcha tovar (upsell); narx — tasdiqlangan narx',
+  })
+  upsell: boolean;
 }
 
 export class LeadCardDto {
@@ -353,7 +364,8 @@ export class LeadCardDto {
   @ApiProperty({
     type: [LeadCardItemDto],
     description:
-      'BE-34: saytdan buyurtma tovarlari (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami',
+      'BE-34: saytdan buyurtma tovarlari; BE-45: operator qo‘shgan qo‘shimcha tovar bilan (bitta tovarli lidda bo‘sh). ' +
+      'Ko‘p tovarda `price` — butun posilka jami',
   })
   items: LeadCardItemDto[];
 
@@ -708,6 +720,16 @@ export class OperatorStatsDto {
     description: 'Birinchi qo‘ng‘iroqqacha median, daqiqa',
   })
   firstCallMedianMinutes: number | null;
+
+  @ApiProperty({
+    example: 15,
+    nullable: true,
+    type: Number,
+    description:
+      'BE-45 (OPR-7): upsell foizi — shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari ' +
+      '(TZ 9: «Qo‘shimcha tovarli buyurtmalar / barcha buyurtmalar»); maxraj 0 bo‘lsa bo‘sh',
+  })
+  upsellRate: number | null;
 }
 
 /**

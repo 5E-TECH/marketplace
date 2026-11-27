@@ -31,11 +31,16 @@ export enum LeadConfirmedVia {
   SMS = 'SMS',
 }
 
-/** BE-34: saytdan ko‘p tovarli lidning bitta qatori; narx — saytdagi (tasdiqlangan) narx, bir dona, so‘m. */
+/** BE-34: saytdan ko‘p tovarli lidning bitta qatori; narx — saytdagi (tasdiqlangan) narx, bir dona, so‘m. BE-45 — upsell qatori. */
 export interface LeadOrderItemEvent {
   productId: string;
   quantity: number;
   salePrice: number;
+  /**
+   * BE-45: operator qo‘shgan qo‘shimcha tovar (upsell). Narx — tasdiqlangan narx (ustamasiz); sotuvchi haqi
+   * platformada qoladi [taklif, EQ-14]. Sayt bo‘lmagan lidda faqat shunday qatorlar qo‘shilishi mumkin.
+   */
+  upsell?: boolean;
 }
 
 /** lead.site.confirm-sms — mijozga SMS: summa, tovarlar, manzil va bir martalik tasdiq havolasi (BE-34). */
@@ -97,6 +102,7 @@ export interface LeadConfirmedEvent {
   confirmedVia?: LeadConfirmedVia;
   /**
    * BE-34: saytdan ko‘p tovarli lid — hamma qatorlar; birinchisi `productId`/`quantity`/`salePrice` bilan bir xil.
+   * BE-45: operator qo‘shimcha tovar qo‘shgan lid (har qanday manba) — birinchisi lid tovari, qolganlari `upsell`.
    * Yo‘q bo‘lsa — bitta tovar (eski shakl).
    */
   items?: LeadOrderItemEvent[];
