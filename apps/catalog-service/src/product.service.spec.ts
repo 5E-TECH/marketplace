@@ -594,6 +594,23 @@ describe('ProductService', () => {
     );
   });
 
+  it('BE-25 (FE-25): arxivdagi mahsulot rad etilmaydi va «qayta yoqish» bilan qaytmaydi — 409', async () => {
+    productRepo.findOne.mockResolvedValue({
+      id: '10',
+      status: ProductStatus.ARCHIVED,
+      isBlocked: true,
+      isDeleted: false,
+    });
+    await expect(service.adminReject('10', 'Sabab')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    await expect(service.adminReactivate('10')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(productRepo.save).not.toHaveBeenCalled();
+    expect(searchClient.emit).not.toHaveBeenCalled();
+  });
+
   it('C4.5: noto‘g‘ri product moderatsiya holati 409', async () => {
     productRepo.findOne.mockResolvedValue({
       id: '10',

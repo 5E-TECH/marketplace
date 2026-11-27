@@ -451,6 +451,7 @@ export class SellerOrdersService {
               so.customer_phone AS "customerPhone", so.region_soato AS "regionSoato",
               so.district_soato AS "districtSoato", so.where_deliver AS "whereDeliver",
               so.delivery_mode AS "deliveryMode", so.delivery_shown::text AS "deliveryShown",
+              so.delivery_shown_other::text AS "deliveryShownOther",
               so.delivery_cost::text AS "deliveryCost",
               so.delivery_embedded::text AS "deliveryEmbedded",
               so.weight_grams AS "weightGrams", so.cod_amount::text AS "codAmount",
@@ -584,6 +585,8 @@ export class SellerOrdersService {
             whereDeliver: order.whereDeliver,
             deliveryMode: order.deliveryMode,
             deliveryShown: money(order.deliveryShown),
+            // FE-26: tanlanmagan yetkazish turida ko‘rinadigan summa (eski buyurtmada null)
+            deliveryShownOther: money(order.deliveryShownOther),
             deliveryCost: money(order.deliveryCost),
             deliveryEmbedded: money(order.deliveryEmbedded),
             weightGrams: money(order.weightGrams),

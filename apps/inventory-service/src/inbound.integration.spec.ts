@@ -133,6 +133,10 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     await expect(inbound.inTransit({ id: declared.id })).resolves.toMatchObject(
       { status: 'IN_TRANSIT' },
     );
+    // BE-25 (FE-12): ro‘yxat qatori — qoldiq yo‘q, yo‘lda 100; noma’lum variant javobda yo‘q
+    await expect(inventory.stockSummary(['842', '999999'])).resolves.toEqual({
+      '842': { onHand: 0, reserved: 0, available: 0, incoming: 100 },
+    });
     const received = await inbound.receive({
       id: declared.id,
       items: [
@@ -267,6 +271,10 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     });
     expect((await stockOf('843')).quantityOnHand).toBe(10);
     await expect(inventory.available(['843'])).resolves.toEqual({ '843': 0 });
+    // BE-25 (FE-12): sotsa bo‘ladigani `available` bilan bir xil, omborda — to‘silgan partiya bilan
+    await expect(inventory.stockSummary(['843'])).resolves.toEqual({
+      '843': { onHand: 10, reserved: 0, available: 0, incoming: 0 },
+    });
     await expect(
       inventory.reserveAvailable({
         orderRef: '7001',

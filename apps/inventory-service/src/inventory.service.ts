@@ -4,6 +4,8 @@ import {
   ReservationStatus,
   StockMovementType,
   WarehouseOwnerType,
+  InboundShipmentStatus,
+  InventoryVariantStock,
 } from '@app/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { Warehouse } from './entities/warehouse.entity';
@@ -203,6 +205,58 @@ export class InventoryService {
           row.quantityReserved -
           (blocked.get(String(row.variantId)) ?? 0),
       );
+    return result;
+  }
+
+  /**
+   * BE-25 (FE-12): admin mahsulotlar ro‘yxati — HQ dagi omborda, band, sotsa bo‘ladigan (`available` bilan bir xil
+   * formula) va e’lon qilingan yoki yo‘ldagi postavka. Qoldiq qatori ham, kelayotgani ham yo‘q variant javobda yo‘q.
+   */
+  async stockSummary(
+    variantIds: string[],
+  ): Promise<Record<string, InventoryVariantStock>> {
+    const ids = [...new Set((variantIds ?? []).map(String))].filter((id) =>
+      /^\d+$/.test(id),
+    );
+    const result: Record<string, InventoryVariantStock> = {};
+    if (!ids.length) return result;
+    const warehouseId = await this.hqWarehouseId();
+    const [rows, blocked, incoming] = await Promise.all([
+      this.dataSource.getRepository(Stock).find({
+        where: { variantId: In(ids), warehouseId },
+      }),
+      blockedByVariant(this.dataSource.manager, ids, warehouseId),
+      this.dataSource.query(
+        `SELECT i.variant_id::text AS "variantId", COALESCE(SUM(i.declared_qty), 0)::int AS incoming
+           FROM inventory.inbound_shipment_item i
+           JOIN inventory.inbound_shipment s ON s.id = i.shipment_id
+          WHERE i.variant_id = ANY($1::bigint[]) AND s.status = ANY($2::text[])
+          GROUP BY i.variant_id`,
+        [
+          ids,
+          [InboundShipmentStatus.DECLARED, InboundShipmentStatus.IN_TRANSIT],
+        ],
+      ) as Promise<Array<{ variantId: string; incoming: number }>>,
+    ]);
+    for (const row of rows) {
+      const id = String(row.variantId);
+      result[id] = {
+        onHand: row.quantityOnHand,
+        reserved: row.quantityReserved,
+        available: Math.max(
+          0,
+          row.quantityOnHand - row.quantityReserved - (blocked.get(id) ?? 0),
+        ),
+        incoming: 0,
+      };
+    }
+    for (const row of incoming) {
+      const id = String(row.variantId);
+      result[id] = {
+        ...(result[id] ?? { onHand: 0, reserved: 0, available: 0 }),
+        incoming: Number(row.incoming),
+      };
+    }
     return result;
   }
 

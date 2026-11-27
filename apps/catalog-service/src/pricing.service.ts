@@ -157,7 +157,10 @@ export class PricingService {
     return this.view(product, ctx, query);
   }
 
-  /** NRX-6: narxni tasdiqlash. Qizil — saqlanmaydi; to‘q sariq — faqat sabab bilan, superadminga xabar. */
+  /**
+   * NRX-6: narxni tasdiqlash. Qizil — saqlanmaydi; to‘q sariq — faqat sabab bilan, superadminga xabar.
+   * Javob — `decision` va qarordan KEYINGI hisob (`calculate` bilan bir xil; FE-13).
+   */
   async decide(productId: string, actorId: string, dto: PriceDecisionDto) {
     const product = await this.product(productId);
     const ctx = await this.context();
@@ -185,41 +188,51 @@ export class PricingService {
         'To‘q sariq narx: sabab majburiy (platforma yoki sotuvchi zarar ko‘radi)',
       );
 
-    const decision = await this.decisions.manager.transaction(async (m) => {
-      const saved = await m.getRepository(PriceDecision).save(
-        m.getRepository(PriceDecision).create({
-          productId: String(product.id),
-          price: dto.price,
-          basePrice: product.basePrice!,
-          affiliateFee,
-          recommended: view.calculation.recommended,
-          status: evaluation.status,
-          reason,
-          calculation: {
-            params: view.params,
-            calculation: view.calculation,
-            evaluation,
-            tariff: ctx.tariff,
+    const { decision, updated } = await this.decisions.manager.transaction(
+      async (m) => {
+        const saved = await m.getRepository(PriceDecision).save(
+          m.getRepository(PriceDecision).create({
+            productId: String(product.id),
+            price: dto.price,
+            basePrice: product.basePrice!,
+            affiliateFee,
+            recommended: view.calculation.recommended,
+            status: evaluation.status,
+            reason,
+            calculation: {
+              params: view.params,
+              calculation: view.calculation,
+              evaluation,
+              tariff: ctx.tariff,
+            },
+            decidedBy: String(actorId),
+          }),
+        );
+        await m.getRepository(Product).update(
+          { id: product.id },
+          {
+            approvedPrice: dto.price,
+            priceStatus: evaluation.status,
+            affiliateFee,
+            // Eski storefront va qidiruv `price` dan o‘qiydi — tasdiqlangan narx bilan bir xil
+            price: dto.price,
           },
-          decidedBy: String(actorId),
-        }),
-      );
-      await m.getRepository(Product).update(
-        { id: product.id },
-        {
-          approvedPrice: dto.price,
-          priceStatus: evaluation.status,
-          affiliateFee,
-          // Eski storefront va qidiruv `price` dan o‘qiydi — tasdiqlangan narx bilan bir xil
-          price: dto.price,
-        },
-      );
-      return saved;
-    });
+        );
+        // shu tranzaksiyada qayta o‘qiladi: qator qulfi bizda — javobda boshqa parallel qaror bo‘lmaydi
+        const after = await m
+          .getRepository(Product)
+          .findOneByOrFail({ id: product.id });
+        return { decision: saved, updated: after };
+      },
+    );
 
     if (evaluation.status === PriceStatus.ORANGE)
       await this.emitOrange(product, decision);
-    return { decision: this.decisionView(decision), ...view };
+    // o‘sha `ctx` bilan — javob `decision.calculation` ga mos (tarif so‘rov paytida o‘zgarsa ham)
+    return {
+      decision: this.decisionView(decision),
+      ...this.view(updated, ctx, {}),
+    };
   }
 
   async history(productId: string) {
@@ -418,6 +431,15 @@ export class PricingService {
       approvedPrice ?? calculation.recommended,
     );
     const delivery = this.quoteFor(product, ctx, quantity, whereDeliver);
+    // FE-26: tanlanmagan tur — kartadagi izoh uchun (o‘sha qoida)
+    const other = this.quoteFor(
+      product,
+      ctx,
+      quantity,
+      whereDeliver === DeliveryKind.ADDRESS
+        ? DeliveryKind.CENTER
+        : DeliveryKind.ADDRESS,
+    );
     return {
       basePrice: calculation.basePrice,
       recommendedPrice: calculation.recommended,
@@ -430,6 +452,7 @@ export class PricingService {
         mode: params.deliveryMode,
         shown: delivery.deliveryFee,
         elchiTariff: delivery.elchiTariff,
+        shownOther: other.deliveryFee,
       },
     };
   }
@@ -446,6 +469,7 @@ export class PricingService {
     mode: DeliveryDisplayMode;
     shown: number;
     elchiTariff: number;
+    shownOther: number;
   }> {
     const ctx = await this.context();
     // har qator bitta tovar qoidalari bilan tekshiriladi (miqdor, og‘irlik, bazaviy narx)
@@ -455,6 +479,23 @@ export class PricingService {
       whereDeliver === DeliveryKind.ADDRESS
         ? DeliveryKind.ADDRESS
         : DeliveryKind.CENTER;
+    const chosen = this.combinedFor(entries, ctx, kind);
+    // FE-26: tanlanmagan tur — kartadagi izoh uchun (o‘sha qoida)
+    const other = this.combinedFor(
+      entries,
+      ctx,
+      kind === DeliveryKind.ADDRESS
+        ? DeliveryKind.CENTER
+        : DeliveryKind.ADDRESS,
+    );
+    return { ...chosen, shownOther: other.shown };
+  }
+
+  private combinedFor(
+    entries: Array<{ product: Product; quantity: number }>,
+    ctx: PricingContext,
+    kind: DeliveryKind,
+  ): { mode: DeliveryDisplayMode; shown: number; elchiTariff: number } {
     const weight = entries.reduce(
       (sum, { product, quantity }) => sum + product.weightGrams! * quantity,
       0,
@@ -622,6 +663,45 @@ export class PricingService {
   }
 
   /** BE-25 (FE-13): narx navbati uchun tavsiya va rejim; hisoblab bo‘lmasa — null (mahsulot baribir navbatda). */
+  /**
+   * BE-25 (FE-12): ro‘yxatdagi mijoz narxi — amaldagi tasdiqlangan narx, bo‘lmasa (yoki tasdiq eskirgan bo‘lsa) tavsiya;
+   * ko‘rinadigan yetkazish (markazgacha, 1 dona).
+   * Bazaviy narx, og‘irlik yoki siyosat yo‘q — null (ro‘yxat yiqilmaydi).
+   */
+  listPrice(
+    product: Product,
+    ctx: PricingContext,
+  ): {
+    customer: number;
+    recommended: boolean;
+    delivery: number;
+    deliveryMode: DeliveryDisplayMode;
+  } | null {
+    if (product.basePrice == null || !product.weightGrams) return null;
+    try {
+      const params = this.paramsFor(product, ctx);
+      const calculation = calculatePrice(params, ctx.tariff, {
+        ...this.inputs(product),
+        affiliateFee: product.affiliateFee ?? recommendedAffiliateFee(params),
+      });
+      // tasdiq amalda bo‘lmasa (asosi o‘zgargan) — offer va narx navbati kabi tavsiya
+      const current =
+        product.approvedPrice != null &&
+        this.isApprovalCurrent(product, params, ctx);
+      return {
+        customer: current ? product.approvedPrice! : calculation.recommended,
+        recommended: !current,
+        delivery: calculation.delivery.visibleCenter,
+        deliveryMode: params.deliveryMode,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Ro‘yxat narxi: ${product.id} hisoblanmadi — ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   queuePrice(
     product: Product,
     ctx: PricingContext,

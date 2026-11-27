@@ -102,6 +102,7 @@ export const ADMIN_ORDER_EXAMPLE = {
     whereDeliver: 'ADDRESS',
     deliveryMode: 'SEPARATE',
     deliveryShown: 30000,
+    deliveryShownOther: 25000,
     deliveryCost: 30000,
     deliveryEmbedded: 0,
     weightGrams: 300,
@@ -186,6 +187,27 @@ export const ADMIN_ORDER_EXAMPLE = {
   ],
   dispute: null,
   postbacks: [],
+  /** FE-26: narx nusxasi — `priceSnapshot` va `lead` dagi qiymatlardan (alohida rejim, eshikkacha). */
+  pricing: {
+    salePrice: 262000,
+    approvedPrice: 251000,
+    markup: 11000,
+    recommendedPrice: 251000,
+    recommendedModePrice: 251000,
+    approvedAt: '2026-11-28T10:00:00.000Z',
+    deliveryMode: 'SEPARATE',
+    hiddenDelivery: 0,
+    priceAdd: 0,
+    visibleCenter: 25000,
+    visibleAddress: 30000,
+    elchiTariff: 30000,
+    split: {
+      wholesaler: 150000,
+      affiliate: 40000,
+      callCenter: 10000,
+      platformService: 51000,
+    },
+  },
 };
 
 /** `GET /operator/orders` (BE-25, FE-26): admin ro‘yxati, sotuvchi va sahifasiz. */
@@ -219,6 +241,7 @@ export const OPERATOR_ORDER_EXAMPLE = {
     deliveryEmbedded: null,
   },
   stream: null,
+  pricing: null,
 };
 
 const PRODUCT_SHOP_EXAMPLE = {
@@ -407,3 +430,85 @@ export const ADMIN_INTEGRATION_WEBHOOKS_PAGE_EXAMPLE = {
   limit: 20,
   totalPages: 1,
 };
+
+/**
+ * BE-25 (FE-25): `GET /admin/wholesalers/attention` — [namuna] raqamlar (FrontEnd mock fixturalari shaklida);
+ * `WholesalerAttentionService.attention` qaytaradigan shakl.
+ */
+export const WHOLESALER_ATTENTION_EXAMPLE = [
+  {
+    kind: 'SHIPMENT_DEFECT',
+    id: 'defect-14',
+    wholesalerId: '7',
+    wholesalerName: '«Toshkent Savdo» MChJ',
+    shipmentId: '14',
+    shipmentCode: 'PS-000014',
+    productName: 'Bolalar termos shishasi',
+    declared: 100,
+    received: 100,
+    defect: 2,
+  },
+  {
+    kind: 'OUT_OF_STOCK',
+    id: 'stock-42',
+    wholesalerId: '7',
+    wholesalerName: '«Toshkent Savdo» MChJ',
+    productId: '42',
+    productName: 'Elektr choynak',
+    onHand: 3,
+    reserved: 3,
+    blocked: 0,
+    incomingCode: 'PS-000015',
+    incomingQty: 40,
+  },
+  {
+    kind: 'DEFECT_NOT_RETURNED',
+    id: 'returns-7',
+    wholesalerId: '7',
+    wholesalerName: '«Toshkent Savdo» MChJ',
+    quantity: 3,
+    fromReceiving: 2,
+    receivingCodes: ['PS-000014'],
+    fromReturns: 1,
+    returnCodes: ['L-1031'],
+  },
+  {
+    kind: 'SETTLEMENT_READY',
+    id: 'act-12',
+    wholesalerId: '7',
+    wholesalerName: '«Toshkent Savdo» MChJ',
+    settlementId: '12',
+    code: 'AS-000012',
+    periodFrom: '2027-01-04',
+    periodTo: '2027-01-10',
+    amount: 280000,
+  },
+];
+
+/** BE-25 (FE-25): `GET /admin/wholesalers/:id/acts` — [namuna]; yangisi tepada. */
+export const WHOLESALER_ACTS_EXAMPLE = [
+  {
+    id: 'BA-001031',
+    kind: 'DEFECT',
+    code: 'BA-001031',
+    title: 'Elektr choynak · 1 dona · L-1031',
+    at: '2027-01-14T05:30:00.000Z',
+    sentAt: null,
+  },
+  {
+    id: 'AS-000012',
+    kind: 'SETTLEMENT',
+    code: 'AS-000012',
+    title: '04.01–10.01.2027 · o‘tkaziladi 280 000 so‘m',
+    at: '2027-01-11T04:00:00.000Z',
+    sentAt: null,
+  },
+  {
+    id: 'PS-000014',
+    kind: 'RECEIVING',
+    code: 'PS-000014',
+    title: 'Bolalar termos shishasi · farq: 2 brak',
+    at: '2026-12-29T05:00:00.000Z',
+    sentAt: null,
+  },
+];

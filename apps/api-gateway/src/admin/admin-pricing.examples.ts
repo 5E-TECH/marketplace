@@ -74,8 +74,8 @@ export const WHOLESALER_PRICING_EXAMPLE = {
 };
 
 /**
- * `catalog.pricing.decide`: birinchi qaror. `decision` dan tashqari maydonlar qarordan OLDINGI mahsulot holatidan
- * hisoblanadi (`approvedPrice`, `priceStatus`, `maxSalePrice`, `approvalCurrent`); `evaluation` — yuborilgan narx.
+ * `catalog.pricing.decide`: birinchi qaror, bozor narxi hali kiritilmagan. `decision` dan tashqari maydonlar —
+ * qarordan KEYINGI holat (`catalog.pricing.calculate` javobi bilan bir xil; FE-13).
  */
 export const PRICE_DECISION_EXAMPLE = {
   decision: {
@@ -91,12 +91,14 @@ export const PRICE_DECISION_EXAMPLE = {
     createdAt: '2026-11-20T09:15:00.000Z',
   },
   ...PRICING_VIEW_EXAMPLE,
-  approvalCurrent: false,
-  approvedPrice: null,
-  priceStatus: null,
   marketTotal: null,
   market: null,
-  maxSalePrice: null,
+  maxSalePrice: maxSalePriceFor(
+    TZ_DEFAULT_PRICING,
+    approvedPrice,
+    calculation.delivery,
+    null,
+  ),
 };
 
 /** `catalog.pricing.market-check` (NRX-5): 299 000 → eng yuqori bazaviy narx 148 099. */

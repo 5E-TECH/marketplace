@@ -241,9 +241,12 @@ export class ProductService {
     return { id, deleted: true };
   }
 
-  async adminList(query: AdminProductsQueryDto) {
+  /** `opts.ids` — faqat shu mahsulotlar (BE-25: «Diqqat» filtri); bo‘sh ro‘yxat — bo‘sh sahifa. */
+  async adminList(query: AdminProductsQueryDto, opts?: { ids?: string[] }) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    if (opts?.ids && !opts.ids.length)
+      return { items: [], total: 0, page, limit, totalPages: 0 };
     const qb = this.products
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.shop', 'shop')
@@ -253,14 +256,36 @@ export class ProductService {
     }
     if (query.blocked !== undefined) {
       qb.andWhere('product.is_blocked = :blocked', { blocked: query.blocked });
+      // BE-25 (FE-25): arxivdagi mahsulot «To‘xtatilgan» da chiqmaydi — faqat `status=ARCHIVED` bilan
+      if (!query.status)
+        qb.andWhere('product.status <> :archived', {
+          archived: ProductStatus.ARCHIVED,
+        });
     }
     if (query.shopId) {
       qb.andWhere('product.shop_id = :shopId', { shopId: query.shopId });
     }
-    if (query.search?.trim()) {
-      qb.andWhere('product.name ILIKE :search', {
-        search: `%${query.search.trim()}%`,
+    // BE-25 (FE-12): kategoriya (aynan), kanal (CPA), «Diqqat» filtri
+    if (query.categoryId)
+      qb.andWhere('product.category_id = :categoryId', {
+        categoryId: query.categoryId,
       });
+    if (query.cpaEnabled !== undefined)
+      qb.andWhere('product.cpa_enabled = :cpaEnabled', {
+        cpaEnabled: query.cpaEnabled,
+      });
+    if (opts?.ids) qb.andWhere('product.id IN (:...ids)', { ids: opts.ids });
+    if (query.search?.trim()) {
+      // nomi yoki slug (dizayn p-a2 «Nomi yoki slug»); `%`/`_` foydalanuvchi matnida joker bo‘lmasin
+      const search = `%${query.search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        new Brackets((w) =>
+          w
+            .where('product.name ILIKE :search')
+            .orWhere('product.slug ILIKE :search'),
+        ),
+        { search },
+      );
     }
     const [items, total] = await qb
       .orderBy('product.createdAt', 'DESC')
@@ -378,6 +403,9 @@ export class ProductService {
     const product = await this.getAdminProduct(id);
     if (product.status === ProductStatus.REJECTED)
       throw new ConflictException('Mahsulot allaqachon rad etilgan');
+    // BE-25 (FE-25): arxiv bir tomonlama [taklif]
+    if (product.status === ProductStatus.ARCHIVED)
+      throw new ConflictException('Mahsulot arxivda');
     product.status = ProductStatus.REJECTED;
     product.moderationNote = reason.trim();
     const saved = await this.save(product);
@@ -477,6 +505,9 @@ export class ProductService {
     if (!product.isBlocked) {
       throw new ConflictException('Mahsulot bloklanmagan');
     }
+    // BE-25 (FE-25): arxivdagi mahsulot «qayta yoqish» bilan qaytmaydi [taklif]
+    if (product.status === ProductStatus.ARCHIVED)
+      throw new ConflictException('Mahsulot arxivda');
     product.isBlocked = false;
     product.blockReason = null;
     const saved = await this.products.save(product);
@@ -619,7 +650,8 @@ export class ProductService {
     await this.emitChanged(event);
   }
 
-  private publishRemoved(product: Product): Promise<void> {
+  /** Qidiruvdan olib tashlash (`active: false`); arxivlash ham ishlatadi (`ProductArchiveService`). */
+  publishRemoved(product: Product): Promise<void> {
     return this.emitChanged({
       productId: product.id,
       categoryId: product.categoryId,

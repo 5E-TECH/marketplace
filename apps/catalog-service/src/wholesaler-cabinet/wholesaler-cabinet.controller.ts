@@ -6,6 +6,7 @@ import {
   ReviewWholesalerInput,
   RpcHttpExceptionFilter,
   SelfRegisterWholesalerInput,
+  WHOLESALER_ATTENTION_RPC,
   WHOLESALER_CABINET_RPC as RPC,
   WholesalerDocumentKind,
   WholesalerPricingQueryDto,
@@ -93,6 +94,12 @@ export class WholesalerCabinetController {
   @MessagePattern({ cmd: RPC.VARIANTS })
   variants(@Payload() data: { wholesalerId: string }) {
     return this.svc.variants(String(data?.wholesalerId ?? ''));
+  }
+
+  /** BE-25 (FE-25): «Diqqat talab qiladi» va aktlar uchun optoviklar va variantlar. */
+  @MessagePattern({ cmd: WHOLESALER_ATTENTION_RPC.CATALOG_VARIANTS })
+  attentionVariants(@Payload() data: { wholesalerId?: string | null }) {
+    return this.svc.attentionVariants(data ?? {});
   }
 
   @MessagePattern({ cmd: RPC.DOCUMENT_ADD })

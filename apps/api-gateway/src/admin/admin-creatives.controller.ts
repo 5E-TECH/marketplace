@@ -17,6 +17,7 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBadRequestResponse,
+  ApiBody,
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -40,6 +41,7 @@ import {
   Roles,
   sendRpc,
   VerifiedCreativeFile,
+  DeleteCreativeDto,
 } from '@app/common';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 
@@ -145,8 +147,8 @@ export class AdminCreativesController {
       if (status >= 400 && status < 500) await this.removeFile(file.objectKey);
       throw error;
     }
-    this.audit(admin.sub, 'creative.create', creative.id, ip, {
-      productId,
+    this.audit(admin.sub, 'creative.create', productId, ip, {
+      creativeId: creative.id,
       type: creative.type,
       size: creative.size,
     });
@@ -171,19 +173,27 @@ export class AdminCreativesController {
     schema: { example: { id: '31' } },
   })
   @ApiNotFoundResponse({ description: 'Kreativ topilmadi' })
+  @ApiBody({ type: DeleteCreativeDto })
+  @ApiBadRequestResponse({ description: 'Sabab majburiy (500 belgigacha)' })
   async remove(
     @Param('id', ParseLeadIdPipe) productId: string,
     @Param('creativeId', ParseLeadIdPipe) creativeId: string,
+    @Body() dto: DeleteCreativeDto,
     @CurrentUser() admin: JwtUser,
     @Ip() ip: string,
   ): Promise<{ id: string }> {
-    const deleted = await sendRpc<{ id: string; objectKey: string }>(
-      this.catalog,
-      { cmd: CREATIVE_RPC.DELETE },
-      { productId, creativeId },
-    );
+    const deleted = await sendRpc<{
+      id: string;
+      objectKey: string;
+      type?: string;
+    }>(this.catalog, { cmd: CREATIVE_RPC.DELETE }, { productId, creativeId });
     await this.removeFile(deleted.objectKey);
-    this.audit(admin.sub, 'creative.delete', deleted.id, ip, { productId });
+    // BE-25 (FE-12): sabab bilan; mahsulot auditida ko‘rinadi
+    this.audit(admin.sub, 'creative.delete', productId, ip, {
+      creativeId: deleted.id,
+      type: deleted.type ?? null,
+      reason: dto.reason,
+    });
     return { id: deleted.id };
   }
 
@@ -200,10 +210,14 @@ export class AdminCreativesController {
     );
   }
 
+  /**
+   * Kreativ amallari mahsulot auditiga yoziladi (BE-25, FE-12: «Audit — shu mahsulot» `entityType=Product`) [taklif];
+   * kreativ ID si — `meta.creativeId`.
+   */
   private audit(
     actorId: string,
     action: string,
-    entityId: string,
+    productId: string,
     ip: string | undefined,
     meta: Record<string, unknown>,
   ): void {
@@ -213,8 +227,8 @@ export class AdminCreativesController {
       {
         actorId,
         action,
-        entityType: 'Creative',
-        entityId,
+        entityType: 'Product',
+        entityId: productId,
         meta: { ...meta, ip: ip ?? null },
       },
     ).catch(() => undefined);

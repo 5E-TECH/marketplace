@@ -127,3 +127,105 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+/** BE-25 (FE-12): ro‘yxat qatorlari va «Diqqat» filtri — javob bermagan qism null va `unavailable`. */
+describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
+  const product = (id: string) =>
+    ({ id, basePrice: 140000, weightGrams: 300, approvedPrice: null }) as never;
+  const onSale = (id: string) =>
+    ({
+      id,
+      basePrice: 140000,
+      weightGrams: 300,
+      approvedPrice: null,
+      cpaEnabled: true,
+      status: 'ACTIVE',
+      isBlocked: false,
+      isDeleted: false,
+      shop: { isDeleted: false, status: 'ACTIVE' },
+    }) as never;
+  const make = (
+    send: jest.Mock,
+    pricing: Record<string, unknown> = {
+      context: async () => ({ tariff: {} }),
+      listPrice: () => ({
+        customer: 262000,
+        recommended: true,
+        delivery: 30000,
+        deliveryMode: 'PARTIAL',
+      }),
+    },
+  ) =>
+    new CatalogOfferService(
+      {
+        find: jest.fn(async () => [{ id: '1' }]),
+      } as never,
+      pricing as never,
+      {
+        find: jest.fn(async () => [
+          { id: '11', productId: '1' },
+          { id: '12', productId: '1' },
+          { id: '13', productId: '3' },
+          { id: '14', productId: '4' },
+        ]),
+      } as never,
+      { send } as never,
+      {
+        forProducts: async () => new Map([['1', [{ id: '5', type: 'VIDEO' }]]]),
+      } as never,
+    );
+
+  it('ombor qoldig‘i variantlar bo‘yicha qo‘shiladi; narx va video', async () => {
+    const send = jest.fn(() =>
+      of({
+        '11': { onHand: 4, reserved: 1, available: 3, incoming: 0 },
+        '12': { onHand: 2, reserved: 0, available: 2, incoming: 60 },
+      }),
+    );
+    const { byId, unavailable } = await make(send).adminListExtras([
+      product('1'),
+      product('2'),
+      product('3'),
+      onSale('4'),
+    ]);
+    expect(unavailable).toEqual([]);
+    expect(byId.get('1')).toEqual({
+      stock: { onHand: 6, reserved: 1, available: 5, incoming: 60 },
+      listPrice: {
+        customer: 262000,
+        recommended: true,
+        delivery: 30000,
+        deliveryMode: 'PARTIAL',
+      },
+      hasVideo: true,
+    });
+    // postavka bo‘lmagan (ombor qatori yo‘q): sotuvda emas — null («postavka yo‘q», dizayn p-a2 2.3);
+    // sotuvdagi CPA — nollar («Qoldiq tugagan» filtri va hisoblagichi bilan bir xil)
+    expect(byId.get('2')).toMatchObject({ stock: null, hasVideo: false });
+    expect(byId.get('3')).toMatchObject({ stock: null });
+    expect(byId.get('4')).toMatchObject({
+      stock: { onHand: 0, reserved: 0, available: 0, incoming: 0 },
+    });
+  });
+
+  it('ombor javob bermasa — qoldiq null, `stock` unavailable; narx sozlamasi yo‘q — `listPrice`', async () => {
+    const send = jest.fn(() => throwError(() => new Error('inventory yo‘q')));
+    const { byId, unavailable } = await make(send, {
+      context: async () => {
+        throw new Error('Elchi tarifi yo‘q');
+      },
+      listPrice: jest.fn(),
+    }).adminListExtras([product('1')]);
+    expect(unavailable.sort()).toEqual(['listPrice', 'stock']);
+    expect(byId.get('1')).toMatchObject({ stock: null, listPrice: null });
+  });
+
+  it('«Muddat yaqin»: partiyalar variant orqali mahsulotga; ombor javob bermasa — null', async () => {
+    const lots = jest.fn(() =>
+      of([{ variantId: '11' }, { variantId: '12' }, { variantId: 'x' }]),
+    );
+    await expect(make(lots).expirySoonIds()).resolves.toEqual(['1']);
+    const down = jest.fn(() => throwError(() => new Error('yo‘q')));
+    await expect(make(down).expirySoonIds()).resolves.toBeNull();
+  });
+});

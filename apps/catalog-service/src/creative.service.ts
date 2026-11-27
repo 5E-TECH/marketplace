@@ -11,6 +11,7 @@ import {
   CreativeType,
   MAX_CREATIVES_PER_PRODUCT,
   VerifiedCreativeFile,
+  CreativeFilesResult,
 } from '@app/common';
 import { Creative } from './entities/creative.entity';
 import { Product } from './entities/product.entity';
@@ -118,11 +119,39 @@ export class CreativeService {
     return rows.map((row) => this.toDto(row));
   }
 
+  /**
+   * BE-25 (FE-05): sotuvchi offer kreativlarini bitta ZIP da yuklaydi — fayl kalitlari va mahsulot slug i (fayl nomi
+   * uchun). Ko‘rinish (offer sotuvchiga ochiqmi) gateway da lead orqali tekshiriladi.
+   */
+  async files(productId: string): Promise<CreativeFilesResult> {
+    const id = this.productIdOf(productId);
+    const product = await this.products.findOne({
+      where: { id, isDeleted: false },
+      select: { id: true, slug: true },
+    });
+    if (!product) throw new NotFoundException('Mahsulot topilmadi');
+    const rows = await this.creatives.find({
+      where: { productId: id, isDeleted: false },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    return {
+      slug: product.slug ?? null,
+      files: rows.map((row) => ({
+        id: String(row.id),
+        type: row.type,
+        objectKey: row.objectKey,
+        mimeType: row.mimeType,
+        size: Number(row.sizeBytes),
+        position: row.position,
+      })),
+    };
+  }
+
   /** O‘chiradi (offerdan chiqadi); fayl kalitini qaytaradi — gateway faylni ham o‘chiradi. */
   async delete(input: {
     productId: string;
     creativeId: string;
-  }): Promise<{ id: string; objectKey: string }> {
+  }): Promise<{ id: string; objectKey: string; type: CreativeType }> {
     const productId = this.productIdOf(input?.productId);
     if (!ID.test(String(input?.creativeId ?? '')))
       throw new NotFoundException('Kreativ topilmadi');
@@ -136,7 +165,7 @@ export class CreativeService {
     if (!row) throw new NotFoundException('Kreativ topilmadi');
     row.isDeleted = true;
     await this.creatives.save(row);
-    return { id: row.id, objectKey: row.objectKey };
+    return { id: row.id, objectKey: row.objectKey, type: row.type };
   }
 
   /** Offer uchun (BE-11 shartnomasi): mahsulotlar bo‘yicha faol kreativlar, tartib bilan. */

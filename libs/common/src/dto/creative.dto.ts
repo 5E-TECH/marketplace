@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsString,
   Matches,
   Max,
@@ -56,7 +58,24 @@ export const CREATIVE_RPC = {
   FIND: 'catalog.creative.find',
   LIST: 'catalog.creative.list',
   DELETE: 'catalog.creative.delete',
+  /** BE-25 (FE-05): gateway → catalog — offer kreativlari ZIP i uchun fayl kalitlari va mahsulot slug i. */
+  FILES: 'catalog.creative.files',
 } as const;
+
+/** BE-25 (FE-05): ZIP uchun kreativ fayli (ochiq `creatives/<mahsulot>/` papkasida). */
+export interface CreativeFileRef {
+  id: string;
+  type: CreativeType;
+  objectKey: string;
+  mimeType: string;
+  size: number;
+  position: number;
+}
+
+export interface CreativeFilesResult {
+  slug: string | null;
+  files: CreativeFileRef[];
+}
 
 export class CreativeUploadRequestDto {
   @ApiProperty({ enum: CreativeType, example: CreativeType.VIDEO })
@@ -155,4 +174,14 @@ export class CreativeDto {
 
   @ApiProperty()
   createdAt: Date;
+}
+
+/** BE-25 (FE-12): kreativni o‘chirish sababi — audit jurnaliga (dizayn p-a2 «Sabab majburiy»). */
+export class DeleteCreativeDto {
+  @ApiProperty({ example: 'Video eskirgan, yangisi yuklanadi', maxLength: 500 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Sabab majburiy' })
+  @MaxLength(500)
+  reason: string;
 }

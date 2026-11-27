@@ -29,6 +29,9 @@ import { AdminFinanceController } from './admin/admin-finance.controller';
 import { AdminProductsController } from './admin/admin-products.controller';
 import { AdminCreativesController } from './admin/admin-creatives.controller';
 import { AdminWholesalersController } from './admin/admin-wholesalers.controller';
+import { AffiliateOfferCreativesController } from './leads/affiliate-offer-creatives.controller';
+import { CreativeArchiveService } from './leads/creative-archive.service';
+import { WholesalerAttentionService } from './admin/wholesaler-attention.service';
 import { AdminPricingController } from './admin/admin-pricing.controller';
 import { AdminAuditController } from './admin/admin-audit.controller';
 import { AdminNotificationsController } from './admin/admin-notifications.controller';
@@ -198,6 +201,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     AdminVariantReportController,
     PublicLeadsController,
     AffiliateStreamsController,
+    AffiliateOfferCreativesController, // BE-25 (FE-05): kreativlar ZIP
     // BE-23: pul yechish
     AffiliateWithdrawalsController,
     AdminWithdrawalsController,
@@ -246,6 +250,8 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     SignedLinkService, // BE-30: yopiq hujjatlarga imzolangan havola
     ExportLinkService, // BE-25 (FE-26): CSV eksport chiptasi
     RecordingLinkService, // BE-15: qo‘ng‘iroq yozuviga imzolangan havola
+    WholesalerAttentionService, // BE-25 (FE-25): optoviklar «Diqqat talab qiladi» va aktlar
+    CreativeArchiveService, // BE-25 (FE-05): kreativlar ZIP — MinIO dan o‘qish
     // Tartib muhim: avval rate limit (429) — tokensiz toshqin ham to'siladi,
     // keyin JWT (401), keyin rol (403).
     { provide: APP_GUARD, useClass: ThrottlerGuard },

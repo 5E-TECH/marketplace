@@ -19,6 +19,7 @@ import { ElchiLeadWebhookService } from './elchi-lead-webhook.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { SellerOrdersService } from './seller-orders.service';
 
+import { ProductOpenOrdersService } from './product-open-orders.controller';
 const url = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = url ? describe : describe.skip;
 const CHECKOUT_SCHEMA_TEST_LOCK = 2_304_006;
@@ -280,7 +281,35 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
     }
   });
 
+  it('BE-25 (FE-25): mahsulotning ochiq buyurtmalari (arxivlashni to‘sadi) — omborda va Elchi’da yakunlanmaganlar', async () => {
+    for (const status of [
+      'CONFIRMED',
+      'PACKED',
+      'IN_TRANSIT',
+      'DELIVERED',
+      'REFUSED',
+      'REMITTED',
+      'SETTLED',
+      'CANCELLED',
+      'RETURNED_GRADED',
+    ])
+      await addOrder({ status, productId: '501' });
+    await addOrder({ status: 'CONFIRMED', productId: '502' });
+    await addOrder({ status: 'SETTLED', productId: '503' });
+    const service = new ProductOpenOrdersService(db);
+    await expect(
+      service.count(['501', '502', '503', '504', 'abc', null]),
+    ).resolves.toEqual({ '501': 5, '502': 1 });
+    await expect(service.count(undefined)).resolves.toEqual({});
+  });
+
   it('migratsiyalar qaytariladi va qayta o‘tadi', async () => {
+    await db.undoLastMigration(); // delivery_shown_other (FE-26)
+    expect(
+      await db.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = 'checkout' AND table_name = 'sales_order' AND column_name = 'delivery_shown_other'`,
+      ),
+    ).toEqual([]);
     await db.undoLastMigration(); // return_photo
     await db.undoLastMigration(); // order_dispute, label_reprint
     const tables = (await db.query(
@@ -438,6 +467,7 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
         deliveryCost: null,
       },
       sellerOrders: [{ shopId: null }], // posilka «do‘koni» — optovik
+      pricing: null,
     });
     for (const id of [other, legacy, '999999', '9'.repeat(19), 'x'])
       await expect(service().get(id, OPERATOR, NOW)).rejects.toMatchObject({
@@ -461,14 +491,43 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
     await expect(service().get(legacy, SUPERVISOR, NOW)).rejects.toMatchObject({
       status: 404,
     });
+    // FE-26: narx nusxasi faqat adminga (seed: tasdiqlangan 251 000 + ustama 11 000, qisman, 30 000 / 40 000)
+    expect(sup).toMatchObject({ pricing: null });
     expect(await service().get(id, ADMIN, NOW)).toMatchObject({
       lead: { customerPhone: PHONE },
       sellerOrders: [{ items: [{ priceSnapshot: { basePrice: 140_000 } }] }],
+      pricing: {
+        salePrice: 262_000,
+        approvedPrice: 251_000,
+        markup: 11_000,
+        recommendedPrice: 240_000,
+        recommendedModePrice: 251_000,
+        approvedAt: null,
+        deliveryMode: 'PARTIAL',
+        hiddenDelivery: 10_000,
+        priceAdd: 11_000,
+        visibleCenter: 30_000,
+        visibleAddress: null,
+        elchiTariff: 40_000,
+        split: {
+          wholesaler: 140_000,
+          affiliate: 65_000,
+          callCenter: 10_000,
+          platformService: 25_000,
+        },
+      },
     });
-    expect(await service().get(legacy, ADMIN, NOW)).toMatchObject({
-      id: legacy,
-      lead: null,
+    // yangi buyurtma — tanlanmagan tur (eshikkacha) nusxada saqlangan
+    await db.query(
+      `UPDATE checkout.sales_order SET delivery_shown_other = 50000 WHERE id = $1`,
+      [id],
+    );
+    expect(await service().get(id, ADMIN, NOW)).toMatchObject({
+      pricing: { visibleCenter: 30_000, visibleAddress: 50_000 },
     });
+    const old = await service().get(legacy, ADMIN, NOW);
+    expect(old).toMatchObject({ id: legacy, lead: null });
+    expect(old).not.toHaveProperty('pricing');
     // RPC ko‘ruvchisiz chaqirilsa — eng kam huquq
     const rpc = new AdminOrdersRpcController(service());
     await expect(rpc.get({ orderId: id })).rejects.toMatchObject({

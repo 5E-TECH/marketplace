@@ -1,7 +1,8 @@
 # Lid-sotuv hodisalari (RabbitMQ)
 
 BE-25, TC4. Lid-sotuv modelidagi RabbitMQ hodisalari: nomi, qachon yuboriladi, maydonlari, kim yuboradi va kim qabul
-qiladi. Hamma ma’lumot `dev` dagi koddan olingan (2026-11-23, `211f6c4`; PR 127–149 `dev` da). Yo‘llar repo ildizidan.
+qiladi. Hamma ma’lumot `dev` dagi koddan olingan (2026-11-23, `211f6c4`; PR 127–149 `dev` da). BE-32 hodisalari —
+`dev` `4a7b767` (PR 165) dan, 2026-11-27. Yo‘llar repo ildizidan.
 
 Bu yerda faqat **hodisalar** bor: yuboruvchi `emit` qiladi, qabul qiluvchida `@EventPattern` turadi, javob kutilmaydi.
 So‘rov-javob chaqiriqlari (`send` → `@MessagePattern`, masalan `catalog.pricing.*`, `checkout.warehouse.*`) hodisa
@@ -462,19 +463,140 @@ sahifasi bor sotuvchilarga (RPC `lead.offer.affiliates`); bir kunda bir variantg
 
 ### `finance.withdrawal.paid`
 
-**Qachon:** moliya sotuvchining pul yechish so‘rovini «To‘landi» qildi (BE-23) — sotuvchiga «Pul o‘tkazildi» SMS i
-(BE-24, TC4).
+**Qachon:** sotuvchining pul yechish so‘rovi «To‘landi» bo‘ldi — sotuvchiga «Pul o‘tkazildi» SMS i (BE-24, TC4). Uch
+yo‘l: moliya qo‘lda «To‘landi» bosdi (BE-23); kartaga yuborilgan pul provayderda o‘tdi (BE-32: webhook `payout.status`
+`SUCCESS`, holat so‘rovi yoki yuborish javobi); moliya kartaga yuborilgan so‘rov natijasini qo‘lda `PAID` deb kiritdi
+(BE-32, `POST /admin/withdrawals/:id/payout-result`).
 
-**Yuboruvchi:** api-gateway, `AdminWithdrawalsController` (`apps/api-gateway/src/withdrawals/admin-withdrawals.controller.ts`)
-— moliya RPC muvaffaqiyatli bo‘lgach `notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`. **Outboxsiz** [taklif]:
-yuborilmasa faqat log; «To‘landi» ni qayta bosish xabarni qayta yuboradi (holat idempotent).
+**Yuboruvchi:**
+- api-gateway, `AdminWithdrawalsController.paid` (`apps/api-gateway/src/withdrawals/admin-withdrawals.controller.ts`)
+  — moliya RPC muvaffaqiyatli bo‘lgach `notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`. «To‘landi» ni qayta
+  bosish xabarni qayta yuboradi (holat idempotent).
+- finance-service, `PayoutService.markPaid` (`apps/finance-service/src/payout/payout.service.ts`) — kartaga to‘lovda:
+  hodisa «To‘landi» jurnali bilan bitta tranzaksiyada tayyorlanadi, commitdan keyin `notification_queue_v2` ga `emit`
+  (5 s kutish). Provayder «o‘tdi» degan, so‘rov esa `FAILED` yoki `APPROVED` bo‘lsa ham yuboriladi — yonida
+  `finance.withdrawal.conflict`.
 
-**Maydonlar** (`WithdrawalPaidEvent`, `apps/notification-service/src/order-sms.ts`): `withdrawalId`, `affiliateId`,
-`amount`, `tax`, `net` (so‘m). `eventId` yo‘q.
+Ikkalasi ham **outboxsiz** [taklif]: yuborilmasa faqat log, qayta yuborilmaydi.
+
+**Maydonlar** (`WithdrawalPaidEvent`, `apps/notification-service/src/order-sms.ts`; finance shu shakldagi obyektni
+yuboradi): `withdrawalId`, `affiliateId`, `amount`, `tax`, `net` (so‘m). `eventId` yo‘q.
 
 **Qabul qiluvchi:** notification-service, `OrderSmsController.onWithdrawalPaid`
 (`apps/notification-service/src/order-sms.controller.ts`) — telefon identity dan (RPC), SMS; bir so‘rovga bitta
-(`dedupeKey`).
+(`dedupeKey` = `withdrawal:<withdrawalId>:PAID`, ikkala yo‘lda bir xil).
+
+### `finance.withdrawal.failed`
+
+**Qachon:** kartaga yuborilgan pul o‘tmadi (BE-32, TZ MOL-6) — so‘rov `PAYING` → `FAILED`; ledgerga yozuv yo‘q, pul
+sotuvchining «Mavjud» balansida qoladi, sotuvchi yangi so‘rov yuboradi. Uch yo‘l: provayder yuborish so‘rovini aniq rad
+etdi; provayder `FAILED` dedi (webhook `payout.status` yoki holat so‘rovi); moliya natijani qo‘lda `FAILED` deb kiritdi
+(`POST /admin/withdrawals/:id/payout-result`).
+
+**Yuboruvchi:** finance-service, `PayoutService.markFailed` (`apps/finance-service/src/payout/payout.service.ts`) —
+holat bilan bitta tranzaksiyada tayyorlanadi, commitdan keyin `notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`
+(5 s). **Outboxsiz**: yuborilmasa faqat log, qayta yuborilmaydi.
+
+**Maydonlar** — `WithdrawalFailedEvent` (`libs/common/src/dto/payout-card.dto.ts`), `eventId` yo‘q:
+- `withdrawalId`, `affiliateId`;
+- `amount` — so‘ralgan summa, so‘m;
+- `net` — kartaga yuborilgan summa (so‘rov − 1% soliq), so‘m;
+- `cardMask` — `8600 **** **** 1234` yoki null;
+- `reason` — sotuvchiga ko‘rinadigan sabab: provayder sababi yoki umumiy matn («Provayder to‘lovni rad etdi» / «To‘lov
+  kartaga o‘tmadi»); texnik matn va moliya izohi kirmaydi; 500 belgigacha.
+
+**Qabul qiluvchi:** notification-service, ikki handler (Nest bitta hodisaga ikkalasini ham chaqiradi):
+- `OrderSmsController.onWithdrawalFailed` (`apps/notification-service/src/order-sms.controller.ts`) — sotuvchiga SMS
+  va kabinet xabari «Pul kartaga o‘tmadi» (summa va karta oxirgi 4 raqami, sababsiz); bir so‘rovga bitta
+  (`dedupeKey` = `withdrawal:<withdrawalId>:FAILED`).
+- `NotificationEventsController.withdrawalPayoutFailed` (`apps/notification-service/src/notification-events.controller.ts`)
+  — faol moliya xodimlariga, sabab bilan (shablon `withdrawal_payout_failed`); har xodimga bitta
+  (`withdrawal:<withdrawalId>:FAILED:<userId>`).
+
+### `finance.withdrawal.overdue`
+
+**Qachon:** har soat (hh:05, Toshkent; bitta nusxa — `runAsLeader`; kartaga to‘lov o‘chiq bo‘lsa ham ishlaydi):
+1. 24 soatdan beri to‘lanmagan ochiq so‘rovlar — `REQUESTED`, `APPROVED`, `PAYING`, qo‘lda yo‘l ham (TZ T01:498
+   «so‘rovdan to‘lovgacha ≤ 24 soat»);
+2. kartaga yuborilganiga 1 soat bo‘lib provayderdan natija kelmagan `PAYING` so‘rovlar [taklif].
+
+Har so‘rov har tur bo‘yicha bir marta (`overdue_notified_at`, `payout_stuck_notified_at`); bir yurishda so‘rov faqat
+bitta turda.
+
+**Yuboruvchi:** finance-service, `PayoutService.overdue` (`apps/finance-service/src/payout/payout.service.ts`) —
+belgilar qo‘yilgach `notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz. Navbatga yozilmasa belgilar olib
+tashlanadi — keyingi soatda qayta yuboriladi.
+
+**Maydonlar** — `WithdrawalOverdueEvent` (`libs/common/src/dto/payout-card.dto.ts`), `eventId` yo‘q: `withdrawals[]`
+(ID bo‘yicha) — `id`, `affiliateId`, `amount` (so‘m), `status` (`WithdrawalStatus`), `createdAt` (ISO 8601), `kind`
+(`OVERDUE` — 24 soatdan oshdi; `NO_RESULT` — kartaga yuborilganiga 1 soat, natija yo‘q).
+
+**Qabul qiluvchi:** notification-service, `NotificationEventsController.withdrawalOverdue` — faol moliya xodimlariga
+bitta xabar (shablon `withdrawal_overdue`: soni va birinchi 20 tasi «raqam — holat», `NO_RESULT` da «(javob yo‘q)»);
+RMQ qayta yuborsa — bitta (`dedupeKey` = ro‘yxat xeshi + `userId`).
+
+### `finance.withdrawal.conflict`
+
+**Qachon:** provayder natijasi so‘rov holatiga zid (BE-32). Ikki holat:
+- provayder «o‘tdi» dedi, so‘rov esa `FAILED` yoki `APPROVED` edi («o‘tmadi» deb yopilgan yoki «yuborilmadi» deb
+  qaytarilgan) — so‘rov «To‘landi» qilinadi (jurnal yoziladi), `finance.withdrawal.paid` ham ketadi;
+- provayder «o‘tmadi» dedi, so‘rov esa kartaga «To‘landi» (`PAID`, `CARD`) — holat o‘zgarmaydi, pul avtomatik
+  qaytarilmaydi, moliya hal qiladi.
+
+Matn so‘rovga yoziladi (`payout_conflict`, `payout_conflict_at`).
+
+**Yuboruvchi:** finance-service, `PayoutService.conflict` (`apply` → `onSuccess`/`onFailure`,
+`apps/finance-service/src/payout/payout.service.ts`) — holat bilan bitta tranzaksiyada tayyorlanadi, commitdan keyin
+`notification_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit`, outboxsiz: yuborilmasa faqat log (ziddiyat matni so‘rovda va
+error logida qoladi).
+
+**Maydonlar** — `WithdrawalConflictEvent` (`libs/common/src/dto/payout-card.dto.ts`), `eventId` yo‘q:
+`withdrawalId`, `affiliateId`, `net` (so‘m), `status` (ziddiyatdan keyingi holat — hozir ikkala holatda `PAID`),
+`conflict` (moliya uchun matn: nima bo‘ldi va nimani tekshirish kerak).
+
+**Qabul qiluvchi:** notification-service, `NotificationEventsController.withdrawalPayoutConflict` — faol moliya
+xodimlariga (shablon `withdrawal_payout_conflict`); har xodimga bitta (`withdrawal:<withdrawalId>:CONFLICT:<userId>`).
+
+### `finance.payout.card-bound`, `finance.payout.status`
+
+**Qachon:** kartaga to‘lov provayderi (EQ-08) imzoli webhook yubordi (BE-32): `card.bound` — sotuvchi kartani
+provayder sahifasida uladi; `payout.status` — to‘lov natijasi.
+
+**Yuboruvchi:** api-gateway, `PayoutWebhookController` (`apps/api-gateway/src/webhooks/payout-webhook.controller.ts`),
+`POST /api/v1/webhooks/payout`:
+- avval imzo (`X-Payout-Signature`, xom tananing HMAC-SHA256 i, `PAYOUT_WEBHOOK_SECRET`) va `PayoutWebhookDto`
+  tekshiriladi;
+- keyin `toPayoutEvent` faqat kerakli maydonlarni oladi, karta tokenini `PAYOUT_SECRET_KEY` bilan shifrlaydi va
+  `finance_queue_v2` ga to‘g‘ridan-to‘g‘ri `emit` qiladi (5 s);
+- provayderga javob: navbatga yozilmasa yoki kalit sozlanmagan bo‘lsa — 503 (provayder qayta yuboradi); imzo yo‘q yoki
+  noto‘g‘ri — 401; tana noto‘g‘ri — 400;
+- provayder yuborgan ortiqcha maydonlar (masalan, to‘liq karta raqami) navbatga tushmaydi.
+
+**Maydonlar** — `PayoutCardBoundEvent`, `PayoutStatusEvent` (`libs/common/src/dto/payout-card.dto.ts`):
+
+| Maydon | Turi | Ma’nosi |
+|---|---|---|
+| `eventId` | string (`[A-Za-z0-9._:-]`, 1–200) | Provayder hodisasi; takror — bir marta (`finance.processed_event`, consumer `payout-webhook`) |
+| `sessionRef` | UUID | faqat `card-bound`; karta ulash sessiyasi (`finance.payout_card_session.ref`) |
+| `tokenCipher` | string | faqat `card-bound`; provayder karta tokeni, gateway `PAYOUT_SECRET_KEY` bilan shifrlagan — navbatda va DLQ da ochiq token yo‘q |
+| `mask` | `8600 **** **** 1234` | faqat `card-bound`; birinchi 4 va oxirgi 4 raqam |
+| `system` | `UZCARD`, `HUMO` yoki null | faqat `card-bound` |
+| `holderName` | string yoki null | faqat `card-bound`; 120 belgigacha |
+| `payoutRef` | `wd-<so‘rov ID>-<8 hex>` | faqat `status`; so‘rov kaliti |
+| `status` | `SUCCESS`, `PENDING`, `FAILED` | faqat `status` |
+| `reason` | string yoki null | faqat `status`; provayder sababi (finance 300 belgigacha qisqartiradi) |
+
+**Qabul qiluvchi:** finance-service, `PayoutController` → `PayoutService` (`apps/finance-service/src/payout`):
+- `onCardBound`:
+  - maydonlar yoki token noto‘g‘ri bo‘lsa — log va tashlanadi; sessiya topilmasa yoki ishlatilgan bo‘lsa — log;
+  - aks holda bitta tranzaksiyada: eski faol karta `REMOVED`, yangi karta `finance.payout_card` ga, sessiya ishlatilgan;
+  - sessiya muddati (15 daqiqa) hodisada tekshirilmaydi — kech kelgan hodisa ham qabul qilinadi [taklif];
+  - `PAYOUT_SECRET_KEY` sozlanmagan bo‘lsa xato tashlanadi — RMQ qayta urinadi, keyin DLQ.
+- `onStatus`:
+  - noma’lum `payoutRef` — log va ack;
+  - `SUCCESS` — «To‘landi» (`finance.withdrawal.paid`); `FAILED` — `FAILED` (`finance.withdrawal.failed`); zid natija —
+    `finance.withdrawal.conflict`; `PENDING` — o‘zgarmaydi;
+  - bir martalik belgi holat bilan bitta tranzaksiyada.
 
 ### `finance.wholesaler.paid`
 
@@ -611,16 +733,17 @@ Commitdan keyin buyruq darhol yuboriladi (`sendInventoryNow`, xato e’tiborsiz)
 qator `FAILED` bo‘ladi va qo‘lda ko‘riladi. Qabul qiluvchi — inventory-service `@MessagePattern`
 (`apps/inventory-service/src/inventory-operations.controller.ts`).
 
-## Kuzatilgan bo‘shliqlar (`dev`, 2026-11-23)
+## Kuzatilgan bo‘shliqlar (`dev`, 2026-11-23; BE-32 — 2026-11-27)
 
 1. `LEAD_OUTBOX_RELAY` va `ELCHI_OUTBOX_RELAY` sukutda o‘chiq. Yoqilmasa `lead.confirmed`, `fraud.*`, `elchi.parcel.*`
    yuborilmaydi.
 2. `fraud.measure.applied` va `lead.callback.reminder` notification navbatiga ketadi, lekin handler yo‘q — sotuvchi
    va operatorga xabar bormaydi.
 3. Outboxsiz hodisalar yo‘qolishi mumkin (yuborish xatosi logga): `price.decision.orange`,
-   `finance.withdrawal.paid`, `finance.wholesaler.paid`, `auth.verification-code.requested`, `elchi.status.conflict`;
-   `finance.cod.reconciliation.mismatch` — kun qayta hisoblanganda qayta yuboriladi. `inventory.lot.blocked` va `price.decision.orange`
-   da `eventId` yo‘q.
+   `finance.withdrawal.paid` (gateway va finance), `finance.withdrawal.failed`, `finance.withdrawal.conflict`,
+   `finance.wholesaler.paid`, `auth.verification-code.requested`, `elchi.status.conflict`;
+   `finance.cod.reconciliation.mismatch` — kun qayta hisoblanganda, `finance.withdrawal.overdue` — keyingi soatda qayta
+   yuboriladi. `eventId` yo‘q: `inventory.lot.blocked`, `price.decision.orange`, `finance.withdrawal.*`.
 
 Eski marketplace hodisalari (`payment.paid`, `shop.approved`, `order.created`, `return.status-changed` va boshqalar)
 lid-sotuvga tegishli emas va bu ro‘yxatga kiritilmadi.
