@@ -4,6 +4,7 @@ import {
   FINANCE_SETTLEMENT_RESPONSE_RPC,
   RpcHttpExceptionFilter,
   SettlementDisputeQueryDto,
+  WHOLESALER_ATTENTION_RPC,
 } from '@app/common';
 import { SettlementResponseService } from './settlement-response.service';
 
@@ -46,6 +47,12 @@ export class SettlementResponseController {
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RESPONSE_RPC.DISPUTES })
   disputes(@Payload() input: { query?: SettlementDisputeQueryDto }) {
     return this.responses.disputes(input);
+  }
+
+  /** BE-25 (FE-25): «Diqqat talab qiladi» — javob kutayotgan «Tayyor» aktlar. */
+  @MessagePattern({ cmd: WHOLESALER_ATTENTION_RPC.FINANCE_READY })
+  readyForAttention() {
+    return this.responses.readyForAttention();
   }
 
   @MessagePattern({ cmd: FINANCE_SETTLEMENT_RESPONSE_RPC.ANSWER })

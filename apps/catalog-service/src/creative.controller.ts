@@ -35,6 +35,11 @@ export class CreativeController {
     return this.creatives.list(data?.productId);
   }
 
+  @MessagePattern({ cmd: CREATIVE_RPC.FILES })
+  files(@Payload() data: { productId: string }) {
+    return this.creatives.files(data?.productId);
+  }
+
   @MessagePattern({ cmd: CREATIVE_RPC.DELETE })
   delete(@Payload() data: { productId: string; creativeId: string }) {
     return this.creatives.delete(data);

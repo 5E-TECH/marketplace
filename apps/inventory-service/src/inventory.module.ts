@@ -20,6 +20,10 @@ import { InboundController } from './inbound.controller';
 import { InboundService } from './inbound.service';
 import { ReturnInspectionService } from './return-inspection.service';
 import { WholesalerStockService } from './wholesaler-stock.service';
+import {
+  WholesalerAttentionController,
+  WholesalerAttentionService,
+} from './wholesaler-attention.service';
 import { ReservationSweeperService } from './reservation-sweeper.service';
 import { InventoryOutboxRelayService } from './inventory-outbox-relay.service';
 import { InventoryOperationsController } from './inventory-operations.controller';
@@ -69,11 +73,13 @@ const entities = INVENTORY_DB.entities;
     InventoryOperationsController,
     AdminInventoryController,
     InboundController,
+    WholesalerAttentionController,
   ],
   providers: [
     InboundService,
     ReturnInspectionService,
     WholesalerStockService,
+    WholesalerAttentionService,
     InventoryService,
     ReservationSweeperService,
     OutboxService,

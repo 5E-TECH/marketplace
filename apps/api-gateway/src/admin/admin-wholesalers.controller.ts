@@ -13,9 +13,12 @@ import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiExtraModels,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import {
   AdminWholesalersQueryDto,
@@ -27,9 +30,20 @@ import {
   Roles,
   sendRpc,
   UpdateWholesalerDto,
+  WholesalerActItemDto,
+  WholesalerAttentionDefectNotReturnedDto,
+  WholesalerAttentionOutOfStockDto,
+  WholesalerAttentionSettlementReadyDto,
+  WholesalerAttentionShipmentDefectDto,
   WholesalerDto,
   WholesalerPageDto,
 } from '@app/common';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
+import {
+  WHOLESALER_ACTS_EXAMPLE,
+  WHOLESALER_ATTENTION_EXAMPLE,
+} from './admin-m1.examples';
+import { WholesalerAttentionService } from './wholesaler-attention.service';
 import {
   pickFields,
   seesFullView,
@@ -48,6 +62,7 @@ export class AdminWholesalersController {
   constructor(
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
+    private readonly attentions: WholesalerAttentionService,
   ) {}
 
   @Post()
@@ -90,6 +105,62 @@ export class AdminWholesalersController {
     return seesFullView(user)
       ? page
       : pickFields(page, WAREHOUSE_WHOLESALER_FIELDS);
+  }
+
+  // `:id` dan oldin — aks holda «attention» optovik ID si deb olinadi
+  @Get('attention')
+  @ApiOperation({
+    summary: '«Diqqat talab qiladi» (FE-25) [taklif]',
+    description:
+      'Hamma optoviklar bo‘yicha: qabulda farq chiqqan postavka (`SHIPMENT_DEFECT`), sotuvdagi mahsulot qoldig‘i 0 ' +
+      '(`OUT_OF_STOCK`, eng yaqin kelayotgan postavka bilan), optovikka qaytarilmagan brak (`DEFECT_NOT_RETURNED`; ' +
+      'qaytarish operatsiyasi hali yo‘q — faqat o‘sadi), «Tayyor» akt-sverka — optovik qabul qilmagan va e’tirozi ' +
+      'yo‘q (`SETTLEMENT_READY`). Tartib: shu to‘rt tur ketma-ket.',
+  })
+  @ApiExtraModels(
+    WholesalerAttentionShipmentDefectDto,
+    WholesalerAttentionOutOfStockDto,
+    WholesalerAttentionDefectNotReturnedDto,
+    WholesalerAttentionSettlementReadyDto,
+  )
+  @ApiOkResponse({
+    schema: {
+      type: 'array',
+      items: {
+        oneOf: [
+          { $ref: getSchemaPath(WholesalerAttentionShipmentDefectDto) },
+          { $ref: getSchemaPath(WholesalerAttentionOutOfStockDto) },
+          { $ref: getSchemaPath(WholesalerAttentionDefectNotReturnedDto) },
+          { $ref: getSchemaPath(WholesalerAttentionSettlementReadyDto) },
+        ],
+        discriminator: { propertyName: 'kind' },
+      },
+      example: WHOLESALER_ATTENTION_EXAMPLE,
+    },
+  })
+  attention() {
+    return this.attentions.attention();
+  }
+
+  @Get(':id/acts')
+  @ApiOperation({
+    summary:
+      'Optovik aktlari (FE-25): brak akti, qabul (farq) akti, akt-sverka',
+    description:
+      'Yangisi tepada. Brak akti raqami `BA-<buyurtma>` [taklif]; `sentAt` hozir doim null — aktni optovikka ' +
+      'yuborish ega qarorini kutadi.',
+  })
+  @ApiOkResponse({
+    type: [WholesalerActItemDto],
+    schema: {
+      type: 'array',
+      items: { $ref: getSchemaPath(WholesalerActItemDto) },
+      example: WHOLESALER_ACTS_EXAMPLE,
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Optovik topilmadi' })
+  acts(@Param('id', ParseLeadIdPipe) id: string) {
+    return this.attentions.acts(id);
   }
 
   @Get(':id')

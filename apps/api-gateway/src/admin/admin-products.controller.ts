@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Ip,
   Param,
@@ -17,8 +19,10 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiConflictResponse,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiPayloadTooLargeResponse,
@@ -32,6 +36,7 @@ import {
   CurrentUser,
   HideProductDto,
   JwtUser,
+  PRODUCT_ARCHIVE_RPC,
   RejectProductDto,
   ProductDto,
   ProductMediaDto,
@@ -42,6 +47,7 @@ import {
 } from '@app/common';
 
 import { FileTooLargeInterceptor } from '../affiliate-account/affiliate-self-employed.controller';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import {
   PRODUCT_MEDIA_BODY,
   PRODUCT_MEDIA_OPTIONS,
@@ -262,6 +268,37 @@ export class AdminProductsController {
       { productId: id },
     );
     this.audit(admin.sub, 'product.reactivate', id, ip);
+    return product;
+  }
+
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Mahsulotni arxivlash (FE-25)',
+    description:
+      'Karta, narx qarorlari va audit saqlanadi; ro‘yxatda «Arxiv» (`status=ARCHIVED`), offer sotuvdan tushadi. ' +
+      'Arxivdan chiqarish yo‘q [taklif]. 409: allaqachon arxivda; sotuvdagi (to‘xtatilmagan) mahsulot; omborda yoki ' +
+      'bandda dona bor; ochiq buyurtma bor (omborda yoki Elchi’da yakunlanmagan) [taklif]. 503: ombor yoki buyurtma ' +
+      'ma’lumoti olinmadi — arxivlanmaydi.',
+  })
+  @ApiOkResponse({ type: ProductDto })
+  @ApiNotFoundResponse({ description: 'Mahsulot topilmadi' })
+  @ApiConflictResponse({
+    description:
+      'Arxivlab bo‘lmaydi: «Mahsulot allaqachon arxivda», «Sotuvdagi mahsulot arxivlanmaydi — avval to‘xtating», ' +
+      '«Omborda yoki buyurtmalarda N dona bor …», «Ochiq buyurtmasi bor (N ta) …»',
+  })
+  async archive(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc(
+      this.catalog,
+      { cmd: PRODUCT_ARCHIVE_RPC.ARCHIVE },
+      { productId: id },
+    );
+    this.audit(admin.sub, 'product.archive', id, ip);
     return product;
   }
 

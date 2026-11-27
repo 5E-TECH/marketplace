@@ -6,15 +6,20 @@ import {
   CreateProductDto,
   AdminProductsQueryDto,
   MyProductsQueryDto,
+  PRODUCT_ARCHIVE_RPC,
   RpcHttpExceptionFilter,
   UpdateProductDto,
 } from '@app/common';
 import { ProductService } from './product.service';
+import { ProductArchiveService } from './product-archive.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
 export class ProductController {
-  constructor(private readonly products: ProductService) {}
+  constructor(
+    private readonly products: ProductService,
+    private readonly archives: ProductArchiveService,
+  ) {}
 
   @MessagePattern({ cmd: 'product.create' })
   create(@Payload() data: { ownerUserId: string; dto: CreateProductDto }) {
@@ -111,5 +116,11 @@ export class ProductController {
   @MessagePattern({ cmd: 'catalog.product.admin-reactivate' })
   adminReactivate(@Payload() data: { productId: string }) {
     return this.products.adminReactivate(String(data.productId));
+  }
+
+  /** BE-25 (FE-25): arxivlash — qoldiq va ochiq buyurtma tekshiriladi. */
+  @MessagePattern({ cmd: PRODUCT_ARCHIVE_RPC.ARCHIVE })
+  adminArchive(@Payload() data: { productId: string }) {
+    return this.archives.archive(String(data?.productId ?? ''));
   }
 }

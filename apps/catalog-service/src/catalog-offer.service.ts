@@ -307,9 +307,12 @@ export class CatalogOfferService {
       REJECTED: 0,
       BLOCKED: 0,
       DRAFT: 0,
+      ARCHIVED: 0,
     };
     for (const p of products) {
-      if (p.isBlocked) byStatus.BLOCKED++;
+      // BE-25 (FE-25): arxivdagi mahsulot — «Arxiv» da (bloklangan bo‘lsa ham), «To‘xtatilgan» da emas
+      if (p.status === ProductStatus.ARCHIVED) byStatus.ARCHIVED++;
+      else if (p.isBlocked) byStatus.BLOCKED++;
       else if (p.status in byStatus) byStatus[p.status]++;
     }
     const ctx = await this.pricing.context();

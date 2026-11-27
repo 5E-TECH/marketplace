@@ -579,6 +579,51 @@ describePostgres(
         expect((await responses.adminGet({ id })).acceptedBy).toBe('77');
       });
 
+      it('BE-25 (FE-25) «Diqqat talab qiladi»: javob kutayotgan «Tayyor» aktlar — qabul qilingan, e’tirozli va «Tayyor» bo‘lmagani chiqmaydi', async () => {
+        const waiting = await act('601', 'READY', '2027-02-07');
+        await ds.query(
+          `UPDATE finance.wholesaler_settlement SET total_amount = 300000, debt_deducted = 20000 WHERE id = $1`,
+          [waiting],
+        );
+        const disputed = await act('602', 'READY', '2027-02-07');
+        await responses.dispute({
+          id: disputed,
+          wholesalerId: '602',
+          userId: '77',
+          comment: 'Mos emas',
+        });
+        const accepted = await act('603', 'READY', '2027-02-07');
+        await responses.accept({
+          id: accepted,
+          wholesalerId: '603',
+          userId: '77',
+        });
+        const voided = await act('604', 'VOID', '2027-02-07');
+        const ready = await responses.readyForAttention();
+        const ids = ready.map((r) => r.id);
+        expect(ids).toContain(waiting);
+        expect(ids).not.toContain(disputed);
+        expect(ids).not.toContain(accepted);
+        expect(ids).not.toContain(voided);
+        expect(ready.find((r) => r.id === waiting)).toEqual({
+          id: waiting,
+          number: `AS-${waiting.padStart(6, '0')}`,
+          wholesalerId: '601',
+          periodStart: '2027-02-01',
+          periodEnd: '2027-02-07',
+          // o‘tkaziladigani — qarz ushlanganidan keyin
+          amount: 280000,
+        });
+        // qabuldan keyin o‘tkaziladigan summa o‘zgarsa — qabul amalda emas, yana chiqadi
+        await ds.query(
+          `UPDATE finance.wholesaler_settlement SET total_amount = 100 WHERE id = $1`,
+          [accepted],
+        );
+        expect(
+          (await responses.readyForAttention()).map((r) => r.id),
+        ).toContain(accepted);
+      });
+
       it('tovarlar qaytgan akt (VOID) — javob yo‘q; izohsiz e’tiroz — 400', async () => {
         const voided = await act('501', 'VOID');
         await expect(

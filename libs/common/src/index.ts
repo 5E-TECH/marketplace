@@ -76,6 +76,8 @@ export * from './dto/finance-settings.dto';
 export * from './dto/ops.dto';
 export * from './dto/wholesaler-settlement.dto';
 export * from './dto/settlement-response.dto';
+// BE-25 (FE-25): optoviklar «Diqqat talab qiladi» va aktlar ro‘yxati
+export * from './dto/wholesaler-attention.dto';
 export * from './dto/finance-reconciliation.dto';
 export * from './dto/elchi-check.dto';
 export * from './dto/user-names.dto';

@@ -418,9 +418,10 @@ export class ModerationSummaryDto {
       REJECTED: 1,
       BLOCKED: 0,
       DRAFT: 1,
+      ARCHIVED: 0,
     },
     description:
-      'Holat bo‘yicha (o‘chirilmaganlar); BLOCKED — yashirilgan, ACTIVE — sotuvda va yashirilmagan',
+      'Holat bo‘yicha (o‘chirilmaganlar); ARCHIVED — arxivdagi (bloklangan bo‘lsa ham), BLOCKED — yashirilgan, ACTIVE — sotuvda va yashirilmagan. «Hammasi» ro‘yxati = ALL − ARCHIVED (FE-25)',
   })
   byStatus: Record<string, number>;
 
@@ -479,3 +480,12 @@ export class PriceQueueDto {
   @ApiProperty({ type: [PriceQueueItemDto] }) items: PriceQueueItemDto[];
   @ApiProperty({ example: 1 }) total: number;
 }
+
+/**
+ * BE-25 (FE-25): mahsulotni arxivlash. Catalog qoldiq va ochiq buyurtmani tekshiradi (inventory va checkout dan).
+ */
+export const PRODUCT_ARCHIVE_RPC = {
+  ARCHIVE: 'catalog.product.admin-archive',
+  /** checkout: mahsulotning ochiq buyurtmalari soni — `{productIds}` → `{[productId]: count}`. */
+  OPEN_ORDERS: 'checkout.product.open-orders',
+} as const;

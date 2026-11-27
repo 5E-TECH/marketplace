@@ -754,6 +754,34 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       ],
     });
     await expect(creatives.list(productId)).resolves.toHaveLength(2);
+    // BE-25 (FE-05): ZIP uchun — fayl kalitlari tartib bilan va mahsulot slug i
+    const { slug } = (
+      await ds.query(`SELECT slug FROM catalog.product WHERE id = $1`, [
+        productId,
+      ])
+    )[0] as { slug: string };
+    await expect(creatives.files(productId)).resolves.toEqual({
+      slug,
+      files: [
+        {
+          id: video.id,
+          type: 'VIDEO',
+          objectKey: file(1, CreativeType.VIDEO).objectKey,
+          mimeType: 'video/mp4',
+          size: 80 * 1024 * 1024,
+          position: 0,
+        },
+        {
+          id: image.id,
+          type: 'IMAGE',
+          objectKey: file(2, CreativeType.IMAGE).objectKey,
+          mimeType: 'image/png',
+          size: 2048,
+          position: 1,
+        },
+      ],
+    });
+    await expect(creatives.files('999999')).rejects.toThrow('topilmadi');
     // gateway tasdiqdan oldin so‘raydi: bor — o‘sha kreativ, yo‘q — null
     await expect(
       creatives.find({

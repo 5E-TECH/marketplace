@@ -253,6 +253,11 @@ export class ProductService {
     }
     if (query.blocked !== undefined) {
       qb.andWhere('product.is_blocked = :blocked', { blocked: query.blocked });
+      // BE-25 (FE-25): arxivdagi mahsulot «To‘xtatilgan» da chiqmaydi — faqat `status=ARCHIVED` bilan
+      if (!query.status)
+        qb.andWhere('product.status <> :archived', {
+          archived: ProductStatus.ARCHIVED,
+        });
     }
     if (query.shopId) {
       qb.andWhere('product.shop_id = :shopId', { shopId: query.shopId });
@@ -378,6 +383,9 @@ export class ProductService {
     const product = await this.getAdminProduct(id);
     if (product.status === ProductStatus.REJECTED)
       throw new ConflictException('Mahsulot allaqachon rad etilgan');
+    // BE-25 (FE-25): arxiv bir tomonlama [taklif]
+    if (product.status === ProductStatus.ARCHIVED)
+      throw new ConflictException('Mahsulot arxivda');
     product.status = ProductStatus.REJECTED;
     product.moderationNote = reason.trim();
     const saved = await this.save(product);
@@ -477,6 +485,9 @@ export class ProductService {
     if (!product.isBlocked) {
       throw new ConflictException('Mahsulot bloklanmagan');
     }
+    // BE-25 (FE-25): arxivdagi mahsulot «qayta yoqish» bilan qaytmaydi [taklif]
+    if (product.status === ProductStatus.ARCHIVED)
+      throw new ConflictException('Mahsulot arxivda');
     product.isBlocked = false;
     product.blockReason = null;
     const saved = await this.products.save(product);
@@ -619,7 +630,8 @@ export class ProductService {
     await this.emitChanged(event);
   }
 
-  private publishRemoved(product: Product): Promise<void> {
+  /** Qidiruvdan olib tashlash (`active: false`); arxivlash ham ishlatadi (`ProductArchiveService`). */
+  publishRemoved(product: Product): Promise<void> {
     return this.emitChanged({
       productId: product.id,
       categoryId: product.categoryId,

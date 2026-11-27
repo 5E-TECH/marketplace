@@ -56,7 +56,24 @@ export const CREATIVE_RPC = {
   FIND: 'catalog.creative.find',
   LIST: 'catalog.creative.list',
   DELETE: 'catalog.creative.delete',
+  /** BE-25 (FE-05): gateway → catalog — offer kreativlari ZIP i uchun fayl kalitlari va mahsulot slug i. */
+  FILES: 'catalog.creative.files',
 } as const;
+
+/** BE-25 (FE-05): ZIP uchun kreativ fayli (ochiq `creatives/<mahsulot>/` papkasida). */
+export interface CreativeFileRef {
+  id: string;
+  type: CreativeType;
+  objectKey: string;
+  mimeType: string;
+  size: number;
+  position: number;
+}
+
+export interface CreativeFilesResult {
+  slug: string | null;
+  files: CreativeFileRef[];
+}
 
 export class CreativeUploadRequestDto {
   @ApiProperty({ enum: CreativeType, example: CreativeType.VIDEO })

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  FinanceReadySettlement,
   moneyFromDb,
   SettlementDisputeDto,
   SettlementDisputePageDto,
@@ -281,5 +282,35 @@ export class SettlementResponseService {
       throw new ConflictException(
         'Tovarlar qaytgan akt — o‘tkazma yo‘q, javob kerak emas',
       );
+  }
+
+  /**
+   * BE-25 (FE-25) «Diqqat talab qiladi»: «Tayyor» aktlar — optovik hali qabul qilmagan (yoki summa o‘zgargan) va ochiq
+   * e’tirozi yo‘q. Summa — hozirgi o‘tkazma (qarz ushlanganidan keyin). Eng yangi davr birinchi.
+   */
+  async readyForAttention(): Promise<FinanceReadySettlement[]> {
+    const rows = (await this.dataSource.query(
+      `SELECT s.id::text AS id, s.wholesaler_id::text AS "wholesalerId",
+              to_char(s.period_start, 'YYYY-MM-DD') AS "periodStart",
+              to_char(s.period_end, 'YYYY-MM-DD') AS "periodEnd", (${PAYOUT})::text AS amount
+         FROM finance.wholesaler_settlement s
+        WHERE s.status = $1 AND NOT (${ACCEPTED_VALID})
+          AND NOT EXISTS (SELECT 1 FROM finance.settlement_dispute d
+                           WHERE d.settlement_id = s.id AND d.status = $2)
+        ORDER BY s.period_end DESC, s.id DESC
+        LIMIT $3`,
+      [
+        WholesalerSettlementStatus.READY,
+        SettlementDisputeStatus.OPEN,
+        MAX_LIMIT,
+      ],
+    )) as Array<
+      Omit<FinanceReadySettlement, 'number' | 'amount'> & { amount: string }
+    >;
+    return rows.map((r) => ({
+      ...r,
+      number: `AS-${r.id.padStart(6, '0')}`,
+      amount: moneyFromDb(r.amount),
+    }));
   }
 }

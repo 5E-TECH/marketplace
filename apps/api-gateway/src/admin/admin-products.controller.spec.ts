@@ -1,5 +1,7 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ROLES_KEY, Role } from '@app/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { AdminProductsController } from './admin-products.controller';
 
 describe('AdminProductsController (C4.5)', () => {
@@ -152,5 +154,47 @@ describe('AdminProductsController (C4.5)', () => {
         meta: { reason: 'Noto‘g‘ri tavsif', ip: '1.2.3.4' },
       }),
     );
+  });
+
+  it('BE-25 (FE-25): arxivlash — catalog `admin-archive`, audit `product.archive`; ID yo‘lda tekshiriladi', async () => {
+    const { controller, catalog, identity } = setup();
+    catalog.mockReturnValue(of({ id: '10', status: 'ARCHIVED' }));
+    await expect(
+      controller.archive('10', { sub: '3' } as never, '10.0.0.1'),
+    ).resolves.toEqual({ id: '10', status: 'ARCHIVED' });
+    expect(catalog).toHaveBeenCalledWith(
+      { cmd: 'catalog.product.admin-archive' },
+      { productId: '10' },
+    );
+    expect(identity).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        action: 'product.archive',
+        entityType: 'Product',
+        entityId: '10',
+      }),
+    );
+    const args = Reflect.getMetadata(
+      ROUTE_ARGS_METADATA,
+      AdminProductsController,
+      'archive',
+    ) as Record<string, { data?: string; pipes?: unknown[] }>;
+    expect(Object.values(args).find((a) => a.data === 'id')?.pipes).toContain(
+      ParseLeadIdPipe,
+    );
+  });
+
+  it('BE-25 (FE-25): catalog 409 (sotuvda, qoldiq bor) — audit yozilmaydi', async () => {
+    const { controller, catalog, identity } = setup();
+    catalog.mockReturnValue(
+      throwError(() => ({
+        status: 409,
+        message: 'Sotuvdagi mahsulot arxivlanmaydi — avval to‘xtating',
+      })),
+    );
+    await expect(
+      controller.archive('10', { sub: '3' } as never, '10.0.0.1'),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(identity).not.toHaveBeenCalled();
   });
 });

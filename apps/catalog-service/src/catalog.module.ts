@@ -40,6 +40,7 @@ import { CatalogOfferController } from './catalog-offer.controller';
 import { CatalogOfferService } from './catalog-offer.service';
 import { PricingController } from './pricing.controller';
 import { PricingService } from './pricing.service';
+import { ProductArchiveService } from './product-archive.service';
 import { WholesalerCabinetController } from './wholesaler-cabinet/wholesaler-cabinet.controller';
 import { WholesalerCabinetService } from './wholesaler-cabinet/wholesaler-cabinet.service';
 
@@ -123,6 +124,7 @@ const entities = CATALOG_DB.entities;
     AdminShopService,
     CategoryService,
     ProductService,
+    ProductArchiveService,
     ProductVariantService,
     StorefrontService,
     FavoriteService,

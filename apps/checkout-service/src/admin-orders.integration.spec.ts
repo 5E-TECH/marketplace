@@ -19,6 +19,7 @@ import { ElchiLeadWebhookService } from './elchi-lead-webhook.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
 import { SellerOrdersService } from './seller-orders.service';
 
+import { ProductOpenOrdersService } from './product-open-orders.controller';
 const url = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = url ? describe : describe.skip;
 const CHECKOUT_SCHEMA_TEST_LOCK = 2_304_006;
@@ -278,6 +279,28 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
       await lock.query('DROP SCHEMA IF EXISTS checkout CASCADE');
       await lock.end();
     }
+  });
+
+  it('BE-25 (FE-25): mahsulotning ochiq buyurtmalari (arxivlashni to‘sadi) — omborda va Elchi’da yakunlanmaganlar', async () => {
+    for (const status of [
+      'CONFIRMED',
+      'PACKED',
+      'IN_TRANSIT',
+      'DELIVERED',
+      'REFUSED',
+      'REMITTED',
+      'SETTLED',
+      'CANCELLED',
+      'RETURNED_GRADED',
+    ])
+      await addOrder({ status, productId: '501' });
+    await addOrder({ status: 'CONFIRMED', productId: '502' });
+    await addOrder({ status: 'SETTLED', productId: '503' });
+    const service = new ProductOpenOrdersService(db);
+    await expect(
+      service.count(['501', '502', '503', '504', 'abc', null]),
+    ).resolves.toEqual({ '501': 5, '502': 1 });
+    await expect(service.count(undefined)).resolves.toEqual({});
   });
 
   it('migratsiyalar qaytariladi va qayta o‘tadi', async () => {

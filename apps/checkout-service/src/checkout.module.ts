@@ -52,6 +52,10 @@ import {
   ElchiCheckController,
   ElchiCheckParcelsService,
 } from './elchi-check.controller';
+import {
+  ProductOpenOrdersController,
+  ProductOpenOrdersService,
+} from './product-open-orders.controller';
 @Module({
   imports: [
     CommonConfigModule,
@@ -138,6 +142,7 @@ import {
     FulfillmentController,
     WarehouseReturnsController,
     ElchiCheckController,
+    ProductOpenOrdersController,
   ],
   providers: [
     WarehouseReturnsService,
@@ -165,6 +170,7 @@ import {
     FulfillmentService,
     ElchiParcelEventsService,
     ElchiCheckParcelsService,
+    ProductOpenOrdersService,
   ],
 })
 export class CheckoutModule {}
