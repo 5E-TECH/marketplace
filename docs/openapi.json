@@ -2676,6 +2676,7 @@
                       "whereDeliver": "ADDRESS",
                       "deliveryMode": "SEPARATE",
                       "deliveryShown": 30000,
+                      "deliveryShownOther": 25000,
                       "deliveryCost": 30000,
                       "deliveryEmbedded": 0,
                       "weightGrams": 300,
@@ -2779,7 +2780,7 @@
                       "deliveryMode": "SEPARATE",
                       "hiddenDelivery": 0,
                       "priceAdd": 0,
-                      "visibleCenter": null,
+                      "visibleCenter": 25000,
                       "visibleAddress": 30000,
                       "elchiTariff": 30000,
                       "split": {
@@ -15664,6 +15665,7 @@
                       "whereDeliver": "ADDRESS",
                       "deliveryMode": "SEPARATE",
                       "deliveryShown": 30000,
+                      "deliveryShownOther": 25000,
                       "deliveryCost": null,
                       "deliveryEmbedded": null,
                       "weightGrams": 300,
@@ -21210,7 +21212,7 @@
           },
           "stock": {
             "nullable": true,
-            "description": "null — postavka yo‘q (yoki ombor javob bermadi — `unavailable`)",
+            "description": "null — faol varianti yo‘q yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan mahsulotda — nollar",
             "type": "object",
             "allOf": [
               {

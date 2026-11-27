@@ -153,6 +153,7 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
         find: jest.fn(async () => [
           { id: '11', productId: '1' },
           { id: '12', productId: '1' },
+          { id: '13', productId: '3' },
         ]),
       } as never,
       { send } as never,
@@ -171,6 +172,7 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
     const { byId, unavailable } = await make(send).adminListExtras([
       product('1'),
       product('2'),
+      product('3'),
     ]);
     expect(unavailable).toEqual([]);
     expect(byId.get('1')).toEqual({
@@ -183,8 +185,11 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
       },
       hasVideo: true,
     });
-    // postavka yo‘q
+    // faol varianti yo‘q — null; varianti bor, ombor qatori yo‘q (postavka bo‘lmagan) — nollar («Qoldiq tugagan»)
     expect(byId.get('2')).toMatchObject({ stock: null, hasVideo: false });
+    expect(byId.get('3')).toMatchObject({
+      stock: { onHand: 0, reserved: 0, available: 0, incoming: 0 },
+    });
   });
 
   it('ombor javob bermasa — qoldiq null, `stock` unavailable; narx sozlamasi yo‘q — `listPrice`', async () => {

@@ -71,23 +71,24 @@ describe('AdminProductsController (C4.5)', () => {
     );
   });
 
-  it('BE-25 (FE-12): natijalar mahsulot bo‘yicha qo‘shiladi; lid javob bermasa — null va `unavailable` da; kesh', async () => {
-    const { controller, catalog, lead } = setup();
+  it('BE-25 (FE-12): lid javob bermasa — natija null va `unavailable` da', async () => {
+    const { controller, catalog } = setup();
     catalog.mockReturnValue(
-      of({
-        items: [{ id: '42' }, { id: '43' }],
-        unavailable: ['stock'],
-      }) as never,
+      of({ items: [{ id: '42' }], unavailable: ['stock'] }) as never,
     );
-    const admin = { sub: '7', role: Role.ADMIN } as never;
-    // lid javob bermadi
-    await expect(controller.list({} as never, admin)).resolves.toEqual({
-      items: [
-        { id: '42', results: null },
-        { id: '43', results: null },
-      ],
+    await expect(
+      controller.list({} as never, { sub: '7', role: Role.ADMIN } as never),
+    ).resolves.toEqual({
+      items: [{ id: '42', results: null }],
       unavailable: ['stock', 'results'],
     });
+  });
+
+  it('BE-25 (FE-12): natijalar mahsulot bo‘yicha qo‘shiladi (365 kun, offer kesimi); keshdan', async () => {
+    const { controller, catalog, lead } = setup();
+    catalog.mockReturnValue(
+      of({ items: [{ id: '42' }, { id: '43' }], unavailable: [] }) as never,
+    );
     const row = {
       key: '42',
       leads: 412,
@@ -104,6 +105,7 @@ describe('AdminProductsController (C4.5)', () => {
     lead.mockReturnValue(
       of({ rows: [row, { ...row, key: 'TOTAL' }], totals: row }) as never,
     );
+    const admin = { sub: '7', role: Role.ADMIN } as never;
     const page = (await controller.list({} as never, admin)) as {
       items: unknown[];
       unavailable: string[];
@@ -127,8 +129,8 @@ describe('AdminProductsController (C4.5)', () => {
       // statistikasi yo‘q mahsulot
       { id: '43', results: null },
     ]);
-    expect(page.unavailable).toEqual(['stock']);
-    const [, query] = lead.mock.calls[1] as unknown as [
+    expect(page.unavailable).toEqual([]);
+    const [, query] = lead.mock.calls[0] as unknown as [
       unknown,
       { from: string; to: string; groupBy: string },
     ];
@@ -138,7 +140,7 @@ describe('AdminProductsController (C4.5)', () => {
     );
     // 5 daqiqa ichida — lid qayta so‘ralmaydi
     await controller.list({} as never, admin);
-    expect(lead).toHaveBeenCalledTimes(2);
+    expect(lead).toHaveBeenCalledTimes(1);
   });
 
   it('BE-07: optovik uchun mahsulot yaratadi va admin harakatini audit qiladi', async () => {

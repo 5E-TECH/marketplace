@@ -471,7 +471,13 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       approvedPrice: 262_000,
       affiliateFee: 65_000,
       hiddenDelivery: 11_000,
-      delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+      // FE-26: eshikkacha bo‘lsa 50 000 (dizayn DZ-05 «markazgacha · eshikkacha bo‘lsa 50 000»)
+      delivery: {
+        mode: 'PARTIAL',
+        shown: 30_000,
+        elchiTariff: 40_000,
+        shownOther: 50_000,
+      },
       // BE-41: chek qatori — kodlar va optovik (komitent) STIR i (`select: false` ustun faqat shu nusxada)
       fiscal: {
         mxikCode: '08517001001000000',
@@ -519,6 +525,7 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       mode: 'PARTIAL',
       shown: 30_000,
       elchiTariff: 40_000,
+      shownOther: 50_000,
     });
     expect(one.items[0]).toMatchObject({ productId, approvedPrice: 262_000 });
     // 450 g × (1 + 7) = 3 600 g → +1 kg → tarif 44 000; ko‘rinadigan 30 000 + 4 000 (quote(8) bilan bir xil)
@@ -529,11 +536,15 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       ],
       'CENTER',
     );
+    // tanlanmagan tur (eshikkacha) — o‘sha qoida, bitta tovarda 8 dona bilan bir xil
+    const eight = await offers.orderSnapshot(productId, 8, 'ADDRESS');
     expect(two.delivery).toEqual({
       mode: 'PARTIAL',
       shown: 34_000,
       elchiTariff: 44_000,
+      shownOther: eight!.delivery.shown,
     });
+    expect(eight!.delivery.shownOther).toBe(34_000);
     expect(two.items).toHaveLength(2);
     // BE-41: sayt buyurtmasi ham chek nusxasini oladi — optovik STIR i (`select: false`) bitta tovar yo‘li bilan bir xil;
     // usiz sayt buyurtmasi Elchi’ga chek maydonlarisiz ketadi (QA 2026-11-23)
@@ -615,6 +626,19 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       approvedPrice: 262_000,
       approvalCurrent: false,
     });
+    // BE-25 (FE-12): ro‘yxat narxi ham eskirgan tasdiqni ko‘rsatmaydi — bepul rejim tavsiyasi
+    const listed = pricing.listPrice(
+      await ds.getRepository(Product).findOneByOrFail({ id: productId }),
+      await pricing.context(),
+    );
+    const fresh = await pricing.calculate(productId);
+    expect(listed).toEqual({
+      customer: fresh.calculation.recommended,
+      recommended: true,
+      delivery: 0,
+      deliveryMode: 'FREE',
+    });
+    expect(listed!.customer).not.toBe(262_000);
     await pricing.setPolicy(
       PricePolicyScope.PRODUCT,
       productId,
@@ -623,6 +647,17 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     );
     await expect(offers.get(productId)).resolves.toMatchObject({
       approvedPrice: 262_000,
+    });
+    // tasdiq yana amalda — ro‘yxatda tasdiqlangan narx
+    expect(
+      pricing.listPrice(
+        await ds.getRepository(Product).findOneByOrFail({ id: productId }),
+        await pricing.context(),
+      ),
+    ).toMatchObject({
+      customer: 262_000,
+      recommended: false,
+      delivery: 30_000,
     });
     await ds.query(
       `UPDATE catalog.product SET base_price = 200000 WHERE id = $1`,

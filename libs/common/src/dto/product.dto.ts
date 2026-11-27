@@ -582,7 +582,7 @@ export class AdminProductListItemDto extends ProductDto {
     type: AdminProductStockDto,
     nullable: true,
     description:
-      'null — postavka yo‘q (yoki ombor javob bermadi — `unavailable`)',
+      'null — faol varianti yo‘q yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan mahsulotda — nollar',
   })
   stock: AdminProductStockDto | null;
   @ApiProperty({

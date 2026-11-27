@@ -447,24 +447,26 @@ export class CatalogOfferService {
     >();
     for (const p of products) {
       const id = String(p.id);
+      const own = variants.filter((x) => String(x.productId) === id);
       const rows = stock
-        ? variants
-            .filter((x) => String(x.productId) === id)
+        ? own
             .map((v) => stock[String(v.id)])
             .filter((row): row is InventoryVariantStock => !!row)
         : [];
-      // qoldiq qatori ham, kelayotgani ham yo‘q — «postavka yo‘q» (null)
-      const sum: InventoryVariantStock | null = rows.length
-        ? rows.reduce(
-            (acc, row) => ({
-              onHand: acc.onHand + row.onHand,
-              reserved: acc.reserved + row.reserved,
-              available: acc.available + row.available,
-              incoming: acc.incoming + row.incoming,
-            }),
-            { onHand: 0, reserved: 0, available: 0, incoming: 0 },
-          )
-        : null;
+      // ombor javob berdi va faol varianti bor — qatori bo‘lmasa ham 0 («Qoldiq tugagan» filtri bilan bir xil);
+      // null — faol variant yo‘q yoki ombor javob bermadi (`unavailable`)
+      const sum: InventoryVariantStock | null =
+        stock && own.length
+          ? rows.reduce(
+              (acc, row) => ({
+                onHand: acc.onHand + row.onHand,
+                reserved: acc.reserved + row.reserved,
+                available: acc.available + row.available,
+                incoming: acc.incoming + row.incoming,
+              }),
+              { onHand: 0, reserved: 0, available: 0, incoming: 0 },
+            )
+          : null;
       byId.set(id, {
         stock: sum,
         listPrice: ctx ? this.pricing.listPrice(p, ctx) : null,

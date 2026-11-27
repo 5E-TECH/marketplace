@@ -304,6 +304,12 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
   });
 
   it('migratsiyalar qaytariladi va qayta o‘tadi', async () => {
+    await db.undoLastMigration(); // delivery_shown_other (FE-26)
+    expect(
+      await db.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = 'checkout' AND table_name = 'sales_order' AND column_name = 'delivery_shown_other'`,
+      ),
+    ).toEqual([]);
     await db.undoLastMigration(); // return_photo
     await db.undoLastMigration(); // order_dispute, label_reprint
     const tables = (await db.query(
@@ -510,6 +516,14 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
           platformService: 25_000,
         },
       },
+    });
+    // yangi buyurtma — tanlanmagan tur (eshikkacha) nusxada saqlangan
+    await db.query(
+      `UPDATE checkout.sales_order SET delivery_shown_other = 50000 WHERE id = $1`,
+      [id],
+    );
+    expect(await service().get(id, ADMIN, NOW)).toMatchObject({
+      pricing: { visibleCenter: 30_000, visibleAddress: 50_000 },
     });
     const old = await service().get(legacy, ADMIN, NOW);
     expect(old).toMatchObject({ id: legacy, lead: null });

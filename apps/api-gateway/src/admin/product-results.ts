@@ -13,13 +13,15 @@ import {
 export const PRODUCT_RESULTS_TIMEOUT_MS = 3_000;
 /** Kesh muddati [taklif; dizayn p-a2: statistika har soatda yangilanadi]. */
 export const PRODUCT_RESULTS_TTL_MS = 5 * 60_000;
+/** Xatodan keyin qayta so‘rashgacha [taklif] — lid servisi sekin bo‘lsa har ro‘yxat so‘rovi uni yuklamasin. */
+export const PRODUCT_RESULTS_RETRY_MS = 60_000;
 /** Davr: oxirgi 365 kun [taklif] — lead va moliya RPC chegarasi 366 kun; pilotning birinchi yili to‘liq kiradi. */
 const WINDOW_DAYS = 365;
 
 /**
  * BE-25 (FE-12): mahsulotlar ro‘yxatidagi «Natijalar» — hamma sotuvchilar bo‘yicha (`lead.stats.platform`, offer
- * kesimida; BE-28/BE-46 ta’riflari). Bitta so‘rov hamma mahsulot uchun, natija 5 daqiqa keshda. Javob bo‘lmasa — null
- * (keshlanmaydi).
+ * kesimida; BE-28/BE-46 ta’riflari). Bitta so‘rov hamma mahsulot uchun, natija 5 daqiqa keshda. Javob bo‘lmasa —
+ * oxirgi olingan natija (bo‘lmasa null) va 1 daqiqa qayta so‘ralmaydi.
  */
 export class ProductResultsCache {
   private readonly logger = new Logger(ProductResultsCache.name);
@@ -29,6 +31,7 @@ export class ProductResultsCache {
   } | null = null;
   private pending: Promise<Map<string, AdminProductResultsDto> | null> | null =
     null;
+  private failedAt: number | null = null;
 
   constructor(
     private readonly lead: ClientProxy,
@@ -39,6 +42,8 @@ export class ProductResultsCache {
     const at = this.now().getTime();
     if (this.cached && at - this.cached.at < PRODUCT_RESULTS_TTL_MS)
       return Promise.resolve(this.cached.value);
+    if (this.failedAt !== null && at - this.failedAt < PRODUCT_RESULTS_RETRY_MS)
+      return Promise.resolve(this.cached?.value ?? null);
     // bir vaqtdagi so‘rovlar bitta chaqiruvni kutadi
     this.pending ??= this.load(at).finally(() => {
       this.pending = null;
@@ -77,12 +82,14 @@ export class ProductResultsCache {
         });
       }
       this.cached = { at, value };
+      this.failedAt = null;
       return value;
     } catch (error) {
       this.logger.warn(
         `Mahsulot natijalari olinmadi: ${(error as Error)?.message ?? error}`,
       );
-      return null;
+      this.failedAt = at;
+      return this.cached?.value ?? null;
     }
   }
 }

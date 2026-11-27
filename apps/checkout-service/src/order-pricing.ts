@@ -34,7 +34,7 @@ export interface OrderPricing {
   hiddenDelivery: number;
   /** Narxga qo‘shimcha, bir dona (= `priceSnapshot.hiddenDelivery`). */
   priceAdd: number;
-  /** Ko‘rinadigan yetkazish: tanlangan turi; boshqasi buyurtmada saqlanmagan — null. */
+  /** Ko‘rinadigan yetkazish: markazgacha va eshikkacha (tanlanmagani — buyurtma paytidagi nusxa; eski buyurtmada null). */
   visibleCenter: number | null;
   visibleAddress: number | null;
   /** Elchi tarifi (jami og‘irlik, tanlangan tur). */
@@ -66,6 +66,7 @@ export interface OrderPricingSource {
     deliveryMode: string | null;
     whereDeliver: string | null;
     deliveryShown: number | null;
+    deliveryShownOther?: number | null;
     deliveryCost: number | null;
   } | null;
 }
@@ -102,6 +103,8 @@ export function orderPricing(order: OrderPricingSource): OrderPricing | null {
   const shown = Number(lead.deliveryShown);
   const cost = Number(lead.deliveryCost);
   const toAddress = lead.whereDeliver === 'ADDRESS';
+  const other =
+    lead.deliveryShownOther == null ? null : Number(lead.deliveryShownOther);
   return {
     salePrice: Number(first.unitPrice),
     approvedPrice: s.approvedPrice,
@@ -112,8 +115,8 @@ export function orderPricing(order: OrderPricingSource): OrderPricing | null {
     deliveryMode: lead.deliveryMode,
     hiddenDelivery: Math.max(0, cost - shown),
     priceAdd: s.hiddenDelivery,
-    visibleCenter: toAddress ? null : shown,
-    visibleAddress: toAddress ? shown : null,
+    visibleCenter: toAddress ? other : shown,
+    visibleAddress: toAddress ? shown : other,
     elchiTariff: cost,
     split,
   };

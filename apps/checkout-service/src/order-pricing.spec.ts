@@ -52,6 +52,7 @@ describe('orderPricing (FE-26)', () => {
         deliveryMode: mode,
         whereDeliver: over.whereDeliver ?? 'CENTER',
         deliveryShown: calc.delivery.visibleCenter,
+        deliveryShownOther: calc.delivery.visibleAddress,
         deliveryCost: tariff,
       },
     };
@@ -69,7 +70,8 @@ describe('orderPricing (FE-26)', () => {
       hiddenDelivery: 10_000,
       priceAdd: 11_000,
       visibleCenter: 30_000,
-      visibleAddress: null,
+      // eshikkacha bo‘lsa — buyurtma paytidagi nusxa (dizayn: 50 000)
+      visibleAddress: 50_000,
       elchiTariff: 40_000,
       split: {
         wholesaler: 140_000,
@@ -99,12 +101,24 @@ describe('orderPricing (FE-26)', () => {
     expect(sum + p.priceAdd * 2).toBe(p.approvedPrice * 2);
   });
 
-  it('eshikkacha — `visibleAddress`, markazgacha saqlanmagan (null)', () => {
-    expect(
-      orderPricing(
-        build(DeliveryDisplayMode.PARTIAL, { whereDeliver: 'ADDRESS' }),
-      ),
-    ).toMatchObject({ visibleCenter: null, visibleAddress: 30_000 });
+  it('eshikkacha tanlangan — ko‘rinadigani `visibleAddress`, markazgacha — nusxadan; eski buyurtmada (nusxasiz) null', () => {
+    const order = build(DeliveryDisplayMode.PARTIAL, {
+      whereDeliver: 'ADDRESS',
+    });
+    order.lead = {
+      ...order.lead!,
+      deliveryShown: 50_000,
+      deliveryShownOther: 30_000,
+    };
+    expect(orderPricing(order)).toMatchObject({
+      visibleCenter: 30_000,
+      visibleAddress: 50_000,
+    });
+    order.lead = { ...order.lead!, deliveryShownOther: null };
+    expect(orderPricing(order)).toMatchObject({
+      visibleCenter: null,
+      visibleAddress: 50_000,
+    });
   });
 
   it('alohida rejim: qo‘shimcha 0, ikki tavsiya teng, yashirilgan 0', () => {

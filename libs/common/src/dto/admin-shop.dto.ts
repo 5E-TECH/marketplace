@@ -6,13 +6,13 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { ShopStatus } from '../enums';
 import { ProductStatus } from '../enums';
+import { IsLeadBigintId } from './lead.dto';
 
 /** `GET /admin/shops` — filtr + sahifalash. */
 export class AdminShopsQueryDto {
@@ -120,7 +120,7 @@ export class AdminProductsQueryDto {
       'Aynan shu kategoriya (ichki kategoriyalarsiz) — BE-25 (FE-12)',
   })
   @IsOptional()
-  @Matches(/^\d{1,19}$/, { message: 'categoryId son bo‘lishi kerak' })
+  @IsLeadBigintId('categoryId')
   categoryId?: string;
 
   @ApiPropertyOptional({

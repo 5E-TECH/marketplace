@@ -102,6 +102,7 @@ export const ADMIN_ORDER_EXAMPLE = {
     whereDeliver: 'ADDRESS',
     deliveryMode: 'SEPARATE',
     deliveryShown: 30000,
+    deliveryShownOther: 25000,
     deliveryCost: 30000,
     deliveryEmbedded: 0,
     weightGrams: 300,
@@ -197,7 +198,7 @@ export const ADMIN_ORDER_EXAMPLE = {
     deliveryMode: 'SEPARATE',
     hiddenDelivery: 0,
     priceAdd: 0,
-    visibleCenter: null,
+    visibleCenter: 25000,
     visibleAddress: 30000,
     elchiTariff: 30000,
     split: {
