@@ -439,7 +439,8 @@ hodisa yo‘qolishi mumkin.
 qabul bilan bitta tranzaksiyada, agregat `inbound_shipment`; `InventoryOutboxRelayService` `notification_queue_v2` ga.
 
 **Maydonlar** — `InboundReceivedEvent` (`libs/common/src/dto/warehouse-inbound.dto.ts`): `shipmentId`, `number`
-(postavka raqami), `wholesalerId`, `status` (`InboundShipmentStatus`), `declaredQty`, `receivedQty`, `defectiveQty`.
+(postavka raqami), `wholesalerId`, `status` (`InboundShipmentStatus`), `declaredQty`, `receivedQty` (kelgan, brak bilan
+birga), `defectiveQty`. Xabarda «qabul» = `receivedQty − defectiveQty` (qabul akti bilan bir xil).
 `eventId` yo‘q — takror xabarni `dedupeKey` ushlaydi.
 
 **Qabul qiluvchi:** notification-service, `CabinetMessagesController.onInboundReceived`

@@ -4,6 +4,7 @@ import {
   CatalogInventoryProduct,
   INBOUND_RECEIVED_EVENT,
   InboundReceivedEvent,
+  InboundShipmentStatus,
   LEAD_OFFER_AFFILIATES_RPC,
   RmqClient,
   sendRpc,
@@ -77,10 +78,15 @@ export class CabinetMessagesController {
     const wholesaler = await this.wholesaler(event.wholesalerId);
     if (!wholesaler?.ownerUserId) return;
     const defective = Number(event.defectiveQty) || 0;
-    const parts = [`${event.receivedQty} dona qabul qilindi`];
+    // «qabul» — yaroqlisi (kelgan − brak), qabul akti va kabinetdagi akt bilan bir xil (dizayn `hujjat-qabul-akti`)
+    const accepted = Math.max(0, (Number(event.receivedQty) || 0) - defective);
+    const parts = [`${accepted} dona qabul qilindi`];
     if (defective > 0) parts.push(`brak ${defective} dona`);
-    // kam yoki ortiq kelgan bo‘lsa — e’lon qilingan soni ham
-    if (event.receivedQty !== event.declaredQty)
+    // kam yoki ortiq kelgan bo‘lsa — e’lon qilingan soni ham; jami teng, lekin qatorlarda farq bor (bir mahsulot ortiq,
+    // boshqasi kam) — postavka DISCREPANCY, shuning uchun holat bo‘yicha ham
+    const lineDiff =
+      event.status === InboundShipmentStatus.DISCREPANCY && defective === 0;
+    if (event.receivedQty !== event.declaredQty || lineDiff)
       parts.push(`e’lon qilingan ${event.declaredQty} dona`);
     await this.notifications.create({
       recipient: { userId: wholesaler.ownerUserId, channels: [] },

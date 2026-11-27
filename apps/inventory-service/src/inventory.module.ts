@@ -14,6 +14,7 @@ import {
   ServiceHealthModule,
   rmqOptions,
   typeOrmOptions,
+  UserNamesClient,
 } from '@app/common';
 import { InventoryService } from './inventory.service';
 import { InboundController } from './inbound.controller';
@@ -54,6 +55,13 @@ const entities = INVENTORY_DB.entities;
             RmqQueue.NOTIFICATION,
           ),
       },
+      // aktlarda xodim ismi (`#ID` o‘rniga) — `UserNamesClient`
+      {
+        name: RmqClient.IDENTITY,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) =>
+          rmqOptions([config.get<string>('RABBITMQ_URL')!], RmqQueue.IDENTITY),
+      },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -85,6 +93,7 @@ const entities = INVENTORY_DB.entities;
     OutboxService,
     InventoryOutboxRelayService,
     AdminInventoryQueryService,
+    UserNamesClient,
   ],
   exports: [InventoryService],
 })

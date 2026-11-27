@@ -434,12 +434,13 @@ export class CatalogOfferService {
       : [];
     const products = productIds.length
       ? ((await db.query(
-          `SELECT id::text AS id, NULLIF(image_url, '') AS "imageUrl",
+          `SELECT id::text AS id, name, NULLIF(image_url, '') AS "imageUrl",
                   category_id::text AS "categoryId", is_bad AS "isBad"
              FROM catalog.product WHERE id = ANY($1::bigint[])`,
           [productIds],
         )) as Array<{
           id: string;
+          name: string | null;
           imageUrl: string | null;
           categoryId: string | null;
           isBad: boolean;
@@ -465,6 +466,7 @@ export class CatalogOfferService {
       shops: shops.map((row) => ({ id: row.id, name: row.name ?? null })),
       products: products.map((row) => ({
         id: row.id,
+        name: row.name ?? null,
         imageUrl: row.imageUrl ?? null,
         expiryTracked:
           !!row.isBad || !!flags?.(row.categoryId ?? null).expiryTracked,

@@ -18,13 +18,17 @@ export class UserNamesClient {
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
   ) {}
 
-  async resolve(
+  /**
+   * Ism va rol ID bo‘yicha (hujjatlarda «Otabek N., omborchi»). Identity javob bermasa — bo‘sh (hujjat `#ID` bilan
+   * chiqadi, yiqilmaydi).
+   */
+  async lookup(
     ids: Array<string | null | undefined>,
-  ): Promise<(id: string) => string> {
+  ): Promise<Map<string, UserNameRow>> {
     const unique = [
       ...new Set(ids.filter((id): id is string => !!id).map(String)),
     ];
-    const names = new Map<string, string>();
+    const rows = new Map<string, UserNameRow>();
     if (unique.length)
       try {
         const chunks: string[][] = [];
@@ -39,11 +43,18 @@ export class UserNamesClient {
             ),
           ),
         );
-        for (const row of parts.flatMap((rows) => rows ?? []))
-          if (row.name) names.set(String(row.id), row.name);
+        for (const row of parts.flatMap((list) => list ?? []))
+          rows.set(String(row.id), row);
       } catch (error) {
         this.logger.warn(`Ismlar olinmadi: ${(error as Error)?.message}`);
       }
-    return (id) => names.get(String(id)) ?? `#${id}`;
+    return rows;
+  }
+
+  async resolve(
+    ids: Array<string | null | undefined>,
+  ): Promise<(id: string) => string> {
+    const rows = await this.lookup(ids);
+    return (id) => rows.get(String(id))?.name || `#${id}`;
   }
 }

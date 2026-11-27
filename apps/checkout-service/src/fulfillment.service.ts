@@ -27,7 +27,10 @@ import {
   PickListLine,
   PickListPage,
   RmqClient,
+  shortPersonName,
+  staffRoleLabel,
   tashkentDate,
+  UserNamesClient,
 } from '@app/common';
 import {
   AppliedTransition,
@@ -129,6 +132,7 @@ export class FulfillmentService {
     @Optional()
     @Inject(RmqClient.INVENTORY)
     private readonly inventory?: ClientProxy,
+    @Optional() private readonly names?: UserNamesClient,
   ) {}
 
   /**
@@ -694,9 +698,17 @@ export class FulfillmentService {
 
   async actPdf(id: string): Promise<ShippingLabelDocument> {
     const act = await this.act(id);
+    // aktni tuzgan omborchi ismi (dizayn «Topshirdi — ombor: Otabek N.»); identity javob bermasa — bo‘sh chiziq
+    const who = (await this.names?.lookup([act.createdBy]))?.get(
+      String(act.createdBy),
+    );
+    const role = who ? staffRoleLabel(who.role) : '';
     return this.labels.generateHandoverAct({
       id: act.id,
       createdAt: act.createdAt,
+      createdByLabel: who?.name
+        ? `${shortPersonName(who.name)}${role ? `, ${role}` : ''}`
+        : null,
       items: act.items,
     });
   }

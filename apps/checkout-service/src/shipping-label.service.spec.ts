@@ -167,6 +167,22 @@ describe('ShippingLabelService (C1.45)', () => {
     expect(text).toContain('Elchi Pochtaga topshirish akti No 5');
     expect(text).toContain('Posilkalar soni: 2');
     expect(text).toContain('2.   MP-0002   1251132   qr-2');
+    expect(text).toContain('Topshirdi (ombor): ____________________');
+  });
+
+  it('topshirish aktida omborchi ismi (dizayn «Topshirdi — ombor: Otabek N.»)', async () => {
+    const result = await new ShippingLabelService().generateHandoverAct({
+      id: '6',
+      createdAt: '2026-12-16 14:05',
+      createdByLabel: 'Jasur T., omborchi',
+      items: [
+        { orderNumber: 'MP-0001', shipmentId: '1251131', qrCodeToken: 'qr-1' },
+      ],
+    });
+    const { text } = inspectPdf(pdfBuffer(result.base64));
+    expect(text).toContain(
+      'Topshirdi (ombor): Jasur T., omborchi   ____________________',
+    );
   });
 
   it('partiyada chiqmaganlar hujjat bilan birga qaytadi', async () => {
