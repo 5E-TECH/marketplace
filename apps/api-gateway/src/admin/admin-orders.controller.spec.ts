@@ -23,6 +23,7 @@ function makeController(
   identity: jest.Mock = jest.fn(() => of({})),
   lead: unknown = down,
   notifications: unknown = down,
+  catalog: unknown = down,
 ) {
   return new AdminOrdersController(
     { send } as never,
@@ -30,6 +31,7 @@ function makeController(
     { send: lead } as never,
     { send: notifications } as never,
     exportsService(),
+    { send: catalog } as never,
   );
 }
 const user = (role: Role, sub = '7') => ({ sub, role }) as never;
@@ -524,5 +526,68 @@ describe('AdminOrdersController (C1.30/C6.4)', () => {
       ),
     ).rejects.toMatchObject({ status: 409 });
     expect(notifications).not.toHaveBeenCalled();
+  });
+});
+
+describe('FE-26: narx tasdiqlangan sana (`pricing.approvedAt`)', () => {
+  const order = (pricing: unknown) => ({
+    id: '1042',
+    createdAt: '2027-01-14T09:14:00.000Z',
+    sellerOrders: [{ items: [{ productId: '501' }] }],
+    lead: null,
+    pricing,
+  });
+  const pricing = { approvedPrice: 251_000, approvedAt: null };
+  const history = jest.fn(() =>
+    of([
+      // yangisi tepada: buyurtmadan keyingisi, oldingisi (shu narx), undan oldingisi
+      { price: 255_000, createdAt: '2027-01-20T10:00:00.000Z' },
+      { price: 251_000, createdAt: '2027-01-06T10:00:00.000Z' },
+      { price: 240_000, createdAt: '2027-01-01T10:00:00.000Z' },
+    ]),
+  );
+
+  it('buyurtmadan oldingi oxirgi qaror va narxi bir xil — sana qo‘yiladi', async () => {
+    const send = jest.fn(() => of(order(pricing)));
+    const card = await makeController(send, undefined, down, down, history).get(
+      '1042',
+      user(Role.ADMIN),
+    );
+    expect(card.pricing).toEqual({
+      approvedPrice: 251_000,
+      approvedAt: '2027-01-06T10:00:00.000Z',
+    });
+    expect(history).toHaveBeenCalledWith(
+      { cmd: 'catalog.pricing.history' },
+      { productId: '501' },
+    );
+  });
+
+  it('narx mos emas yoki katalog javob bermasa — `approvedAt: null`, karta ochiladi', async () => {
+    const other = jest.fn(() => of(order({ ...pricing, approvedPrice: 1 })));
+    await expect(
+      makeController(other, undefined, down, down, history).get(
+        '1042',
+        user(Role.ADMIN),
+      ),
+    ).resolves.toMatchObject({ pricing: { approvedAt: null } });
+    const send = jest.fn(() => of(order(pricing)));
+    await expect(
+      makeController(send, undefined, down, down, down).get(
+        '1042',
+        user(Role.ADMIN),
+      ),
+    ).resolves.toMatchObject({ pricing: { approvedAt: null } });
+  });
+
+  it('nazoratchi (narx nusxasi null) — katalog so‘ralmaydi', async () => {
+    const catalog = jest.fn(() => of([]));
+    const send = jest.fn(() => of(order(null)));
+    const card = await makeController(send, undefined, down, down, catalog).get(
+      '1042',
+      user(Role.SUPERVISOR),
+    );
+    expect(card.pricing).toBeNull();
+    expect(catalog).not.toHaveBeenCalled();
   });
 });

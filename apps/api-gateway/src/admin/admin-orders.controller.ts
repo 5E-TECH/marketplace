@@ -71,6 +71,7 @@ import {
   OrderDetailRpc,
   orderViewer,
   withLeadContext,
+  withPriceApproval,
   withSmsJournal,
 } from '../orders/order-view';
 import {
@@ -93,6 +94,8 @@ export class AdminOrdersController {
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications: ClientProxy,
     private readonly exports: ExportLinkService,
+    // FE-26: narx tasdiqlangan sana (narx qarorlari tarixi)
+    @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
   ) {}
 
   @Get('admin/orders')
@@ -220,7 +223,11 @@ export class AdminOrdersController {
   })
   @ApiOkResponse({
     description:
-      'Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`',
+      'Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`. ' +
+      '`pricing` (FE-26) — narx nusxasi buyurtma paytidagi qiymatlardan, faqat ADMIN/SUPERADMIN (nazoratchiga null): `recommendedPrice` — alohida rejim tavsiyasi ' +
+      '(`priceSnapshot.recommendedPrice` — shu rejimdagisi), `hiddenDelivery` — Elchi tarifining ko‘rinmagan qismi, `priceAdd` — narxga qo‘shimcha ' +
+      '(= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi (boshqasi saqlanmagan — null), `split` — buyurtma jami, ' +
+      '`approvedAt` — buyurtmadan oldingi shu narxdagi narx qarori [taklif].',
     schema: { example: ADMIN_ORDER_EXAMPLE },
   })
   @ApiNotFoundResponse({ description: 'Buyurtma topilmadi' })
@@ -234,11 +241,14 @@ export class AdminOrdersController {
       { cmd: 'checkout.admin.order-get' },
       { orderId: id, viewer: orderViewer(user) },
     );
-    return withSmsJournal(
-      this.notifications,
-      id,
-      await withLeadContext(this.lead, order, user),
-    );
+    const [withLead, approval] = await Promise.all([
+      withLeadContext(this.lead, order, user),
+      withPriceApproval(this.catalog, order),
+    ]);
+    return withSmsJournal(this.notifications, id, {
+      ...withLead,
+      pricing: approval.pricing,
+    });
   }
 
   @Post('admin/orders/:id/sms/resend')

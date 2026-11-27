@@ -186,6 +186,27 @@ export const ADMIN_ORDER_EXAMPLE = {
   ],
   dispute: null,
   postbacks: [],
+  /** FE-26: narx nusxasi — `priceSnapshot` va `lead` dagi qiymatlardan (alohida rejim, eshikkacha). */
+  pricing: {
+    salePrice: 262000,
+    approvedPrice: 251000,
+    markup: 11000,
+    recommendedPrice: 251000,
+    recommendedModePrice: 251000,
+    approvedAt: '2026-11-28T10:00:00.000Z',
+    deliveryMode: 'SEPARATE',
+    hiddenDelivery: 0,
+    priceAdd: 0,
+    visibleCenter: null,
+    visibleAddress: 30000,
+    elchiTariff: 30000,
+    split: {
+      wholesaler: 150000,
+      affiliate: 40000,
+      callCenter: 10000,
+      platformService: 51000,
+    },
+  },
 };
 
 /** `GET /operator/orders` (BE-25, FE-26): admin ro‘yxati, sotuvchi va sahifasiz. */
@@ -219,6 +240,7 @@ export const OPERATOR_ORDER_EXAMPLE = {
     deliveryEmbedded: null,
   },
   stream: null,
+  pricing: null,
 };
 
 const PRODUCT_SHOP_EXAMPLE = {
