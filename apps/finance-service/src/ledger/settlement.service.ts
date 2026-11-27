@@ -11,9 +11,12 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import { Cron } from '@nestjs/schedule';
 import PDFDocument from 'pdfkit';
+import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  CATALOG_DISPLAY_LOOKUP,
   CATALOG_WHOLESALER_PAYMENT_DETAILS,
+  CatalogDisplayLookupResult,
   ErrorCode,
   moneyFromDb,
   RmqClient,
@@ -115,6 +118,9 @@ export interface BankFileFormat {
   ): SettlementFile;
 }
 
+/** `YYYY-MM-DD` → `KK.OO.YYYY` (bank fayli va akt). */
+const dmy = (iso: string) => iso.slice(0, 10).split('-').reverse().join('.');
+
 /**
  * To‘lov maqsadi matni: shartnoma raqami va sanasi (2026-05-26 dan to‘lov tafsilotida), akt va uning davri. Davr — akt
  * davri, sotuv davri emas: qaytarish muddati o‘tgan oldingi sotuvlar ham aktga kiradi. Sanalar KK.OO.YYYY.
@@ -125,11 +131,10 @@ export function paymentPurpose(
   periodEnd: string,
   actId: string,
 ): string {
-  const day = (iso: string) => iso.split('-').reverse().join('.');
   const contract = payee.contractNumber?.trim()
-    ? `${payee.contractNumber.trim()}-sonli${payee.contractDate ? ` ${day(payee.contractDate)} sanadagi` : ''} komissiya shartnomasi bo‘yicha `
+    ? `${payee.contractNumber.trim()}-sonli${payee.contractDate ? ` ${dmy(payee.contractDate)} sanadagi` : ''} komissiya shartnomasi bo‘yicha `
     : '';
-  return `${contract}sotilgan tovarlar uchun, akt ${actNumber(actId)}, ${day(periodStart)}–${day(periodEnd)}`;
+  return `${contract}sotilgan tovarlar uchun, akt ${actNumber(actId)}, ${dmy(periodStart)}–${dmy(periodEnd)}`;
 }
 
 /**
@@ -244,6 +249,9 @@ function validDay(value: unknown, field: string): string {
  *   optovikda qarz bo‘lib qoladi va keyingi aktdan ushlanadi.
  * Qulf tartibi hamma joyda: hisoblar (2301) → akt qatori; run yozuvlarni SKIP LOCKED bilan oladi — hech kimni kutmaydi.
  */
+/** Akt PDF: katalogdan nom va rekvizit kutish [taklif]. */
+const ACT_CATALOG_TIMEOUT_MS = 3_000;
+
 @Injectable()
 export class SettlementService {
   private readonly logger = new Logger(SettlementService.name);
@@ -798,9 +806,23 @@ export class SettlementService {
     return this.get({ id });
   }
 
-  /** Akt-sverka PDF (dizayn `hujjat-akt-sverka` chizilmagan — tarkib [taklif]). Rekvizitlar BE-07 dan keyin. */
+  /**
+   * Akt-sverka PDF (dizayn `hujjat-akt-sverka` chizilmagan — tarkib [taklif]). Tomonlar: komissioner (platforma) —
+   * moliya sozlamasidan (EQ-05), komitent (optovik) — katalogdan (BE-07): nomi, STIR, shartnoma; tovar — nomi bilan.
+   * Rekvizit to‘liq bo‘lmasa yoki katalog javob bermasa ham PDF chiqadi («—»; bank faylidan farqli — u 409).
+   * PDF ni optovik ham yuklaydi — ichki ko‘rsatma yozilmaydi. Platforma rekvizitlari akt sanasidagi sozlamadan
+   * (keyin o‘zgartirilsa eski akt o‘zgarmaydi); optovik rekvizitlari katalogda tarixsiz — joriy qiymat.
+   */
   async actPdf(input: { id: string }): Promise<SettlementFile> {
     const s = await this.get(input);
+    const [payer, parties] = await Promise.all([
+      this.payerAt(new Date(s.exportedAt ?? s.createdAt)),
+      this.actParties(
+        s.wholesalerId,
+        s.items.map((i) => i.productId),
+      ),
+    ]);
+    const d = parties.details;
     const doc = registerPdfFonts(new PDFDocument({ size: 'A4', margin: 40 }));
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
@@ -810,19 +832,27 @@ export class SettlementService {
     });
     doc.fontSize(14).text(`AKT-SVERKA ${s.number}`, { align: 'center' });
     doc.moveDown(0.5).fontSize(10);
-    doc.text(`Davr: ${s.periodStart} — ${s.periodEnd}`);
-    doc.text(`Optovik: #${s.wholesalerId} (rekvizitlar katalogda — BE-07)`);
+    doc.text(`Davr: ${dmy(s.periodStart)} — ${dmy(s.periodEnd)}`);
+    doc.text(
+      `Komissioner (platforma): ${payer.name ?? '—'}, STIR ${payer.tin ?? '—'}`,
+    );
+    doc.text(
+      `Komitent (optovik): ${parties.wholesalerName ?? '—'}, STIR ${d?.tin?.trim() || '—'}`,
+    );
+    doc.text(
+      `Asos: komissiya shartnomasi № ${d?.contractNumber?.trim() || '—'}${d?.contractDate ? `, ${dmy(d.contractDate)}` : ''}`,
+    );
     doc.text(
       `Qaytarish muddati: ${s.returnWindowDays} kun; aktga Elchi puli kelgan va muddati o‘tgan tovarlar kiradi.`,
     );
     doc.text(
-      `Holat: ${STATUS_TEXT[s.status]}${s.paidAt ? ` (${new Date(s.paidAt).toISOString().slice(0, 10)})` : ''}`,
+      `Holat: ${STATUS_TEXT[s.status]}${s.paidAt ? ` (${dmy(new Date(s.paidAt).toISOString().slice(0, 10))})` : ''}`,
     );
     doc.moveDown();
     doc.text('Buyurtma | Tovar | Soni | Yetkazilgan | Summa, so‘m');
     for (const i of s.items)
       doc.text(
-        `${i.orderId} | ${i.productId ?? '—'} | ${i.quantity ?? '—'} | ${new Date(i.deliveredAt).toISOString().slice(0, 10)} | ${fmt(i.amount)}`,
+        `${i.orderId} | ${i.productId ? (parties.productNames.get(String(i.productId)) ?? `mahsulot #${i.productId}`) : '—'} | ${i.quantity ?? '—'} | ${dmy(new Date(i.deliveredAt).toISOString().slice(0, 10))} | ${fmt(i.amount)}`,
       );
     doc
       .moveDown()
@@ -842,12 +872,89 @@ export class SettlementService {
           align: 'right',
         },
       );
+    doc
+      .fontSize(10)
+      .moveDown(2)
+      .text('Komissioner: ____________________   Muhr o‘rni')
+      .moveDown()
+      .text('Komitent: ____________________   Muhr o‘rni');
     doc.end();
     const pdf = await done;
     return {
       fileName: `akt-sverka_${s.number}_${s.periodEnd}.pdf`,
       contentType: 'application/pdf',
       base64: pdf.toString('base64'),
+    };
+  }
+
+  /**
+   * Platforma (to‘lovchi) nomi va STIR i — `at` paytida amalda bo‘lgan sozlama (EQ-05); u paytda hali kiritilmagan
+   * bo‘lsa — joriy qiymat.
+   */
+  private async payerAt(
+    at: Date,
+  ): Promise<{ name: string | null; tin: string | null }> {
+    const rows = (await this.db.query(
+      `SELECT DISTINCT ON (key) key, value FROM finance.text_setting
+        WHERE key IN ('payer_name', 'payer_tin') AND effective_from <= $1
+        ORDER BY key, effective_from DESC`,
+      [Number.isNaN(at.getTime()) ? new Date() : at],
+    )) as Array<{ key: string; value: string }>;
+    const current = await this.settings();
+    const value = (key: string) => rows.find((r) => r.key === key)?.value;
+    return {
+      name: value('payer_name') ?? current.payerName,
+      tin: value('payer_tin') ?? current.payerTin,
+    };
+  }
+
+  /**
+   * Akt tomonlari: optovik rekvizitlari va tovar nomlari katalogdan. `payees` dan farqli — to‘liq bo‘lmasa yoki
+   * katalog javob bermasa ham xato emas (akt «—» bilan chiqadi, bank fayli esa 409). Kutish qisqa — PDF yuklash
+   * gateway chegarasiga (10 s) yetmasin.
+   */
+  private async actParties(
+    wholesalerId: string,
+    productIds: Array<string | null>,
+  ): Promise<{
+    details: WholesalerPaymentDetails | null;
+    wholesalerName: string | null;
+    productNames: Map<string, string | null>;
+  }> {
+    const ask = <T>(cmd: string, data: unknown): Promise<T | null> =>
+      this.catalog
+        ? firstValueFrom(
+            this.catalog
+              .send<T>({ cmd }, data)
+              .pipe(timeout(ACT_CATALOG_TIMEOUT_MS)),
+          ).catch((error: unknown) => {
+            this.logger.warn(
+              `Akt PDF: katalog javob bermadi (${cmd}): ${(error as Error)?.message ?? error}`,
+            );
+            return null;
+          })
+        : Promise.resolve(null);
+    const [list, display] = await Promise.all([
+      ask<WholesalerPaymentDetails[]>(CATALOG_WHOLESALER_PAYMENT_DETAILS, {
+        ids: [wholesalerId],
+      }),
+      ask<CatalogDisplayLookupResult>(CATALOG_DISPLAY_LOOKUP, {
+        shopIds: [wholesalerId],
+        productIds: [...new Set(productIds.filter((id): id is string => !!id))],
+      }),
+    ]);
+    const details =
+      (list ?? []).find((p) => String(p.id) === String(wholesalerId)) ?? null;
+    return {
+      details,
+      wholesalerName:
+        details?.name ??
+        display?.shops?.find((x) => String(x.id) === String(wholesalerId))
+          ?.name ??
+        null,
+      productNames: new Map(
+        (display?.products ?? []).map((p) => [String(p.id), p.name ?? null]),
+      ),
     };
   }
 

@@ -58,7 +58,7 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
       {} as never, // BE-08 (PR 127): kreativlar
     );
 
-  it('ID lar bo‘yicha do‘kon nomi, mahsulot va variant rasmi; noto‘g‘ri va takroriy ID tashlanadi', async () => {
+  it('ID lar bo‘yicha do‘kon nomi, mahsulot nomi va rasmi, variant rasmi; noto‘g‘ri va takroriy ID tashlanadi', async () => {
     const query = jest.fn(async (sql: string, [ids]: string[][] = [[]]) => {
       if (sql.includes('FROM catalog.shop'))
         return ids.map((id) => ({ id, name: `Do‘kon ${id}` }));
@@ -72,6 +72,7 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
         ];
       return ids.map((id) => ({
         id,
+        name: id === '13' ? null : `Mahsulot ${id}`,
         imageUrl: `https://cdn/${id}.webp`,
         categoryId: id === '10' ? '4' : null,
         isBad: id === '12',
@@ -87,9 +88,24 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
     ).resolves.toEqual({
       shops: [{ id: '7', name: 'Do‘kon 7' }],
       products: [
-        { id: '10', imageUrl: 'https://cdn/10.webp', expiryTracked: true },
-        { id: '12', imageUrl: 'https://cdn/12.webp', expiryTracked: true },
-        { id: '13', imageUrl: 'https://cdn/13.webp', expiryTracked: false },
+        {
+          id: '10',
+          name: 'Mahsulot 10',
+          imageUrl: 'https://cdn/10.webp',
+          expiryTracked: true,
+        },
+        {
+          id: '12',
+          name: 'Mahsulot 12',
+          imageUrl: 'https://cdn/12.webp',
+          expiryTracked: true,
+        },
+        {
+          id: '13',
+          name: null,
+          imageUrl: 'https://cdn/13.webp',
+          expiryTracked: false,
+        },
       ],
       variants: [{ id: '11', name: 'Smartfon', imageUrl: null }],
     });

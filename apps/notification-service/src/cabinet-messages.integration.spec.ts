@@ -238,7 +238,8 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
       {
         type: 'inbound_defect',
         title: 'Postavka qabul qilindi, brak topildi',
-        body: 'Postavka PS-000007: 10 dona qabul qilindi, brak 2 dona.',
+        // «qabul» — yaroqlisi (10 keldi − 2 brak), qabul akti bilan bir xil
+        body: 'Postavka PS-000007: 8 dona qabul qilindi, brak 2 dona.',
       },
     ]);
     await cabinet.onInboundReceived({
@@ -250,6 +251,21 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
       `SELECT count(*)::int AS count FROM notification.notification WHERE data->>'shipmentId' = '8'`,
     )) as Array<{ count: number }>;
     expect(count).toBe(0);
+    // bir mahsulot ortiq, boshqasi kam (jami teng, brak yo‘q) — farq akti, e’lon qilingan soni ham
+    await cabinet.onInboundReceived({
+      ...received,
+      shipmentId: '9',
+      number: 'PS-000009',
+      declaredQty: 20,
+      receivedQty: 20,
+      defectiveQty: 0,
+    });
+    const [{ body }] = (await ds.query(
+      `SELECT body FROM notification.notification WHERE data->>'shipmentId' = '9'`,
+    )) as Array<{ body: string }>;
+    expect(body).toBe(
+      'Postavka PS-000009: 20 dona qabul qilindi, e’lon qilingan 20 dona.',
+    );
   });
 
   it('TC3: optovikka haftalik o‘tkazma to‘landi — SMS va kabinet xabari; kabineti yo‘q — faqat SMS; takror — bitta', async () => {

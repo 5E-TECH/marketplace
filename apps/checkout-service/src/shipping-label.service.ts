@@ -24,6 +24,8 @@ export interface HandoverActPdfData {
   id: string;
   /** Toshkent vaqti, matn. */
   createdAt: string;
+  /** Aktni tuzgan omborchi: «Jasur T., omborchi»; bo‘lmasa — bo‘sh chiziq. */
+  createdByLabel?: string | null;
   items: Array<{
     orderNumber: string;
     shipmentId: string;
@@ -123,7 +125,9 @@ export class ShippingLabelService {
     });
     doc
       .moveDown(2)
-      .text('Topshirdi (ombor): ____________________')
+      .text(
+        `Topshirdi (ombor): ${act.createdByLabel ? `${act.createdByLabel}   ` : ''}____________________`,
+      )
       .moveDown()
       .text('Qabul qildi (Elchi kuryeri): ____________________');
     doc.end();
