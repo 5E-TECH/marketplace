@@ -4892,6 +4892,62 @@
         ]
       }
     },
+    "/api/v1/admin/products/{id}/upsell-pair": {
+      "put": {
+        "description": "Bitta juftlik offer bo‘yicha (admin-offer) [taklif]; `productId: null` — olib tashlash. Narx — juftlik mahsulotining tasdiqlangan narxi, sotuvchi haqi platformada [taklif, EQ-14]. Arxivdagi, rad etilgan yoki CPA o‘chirilgan mahsulot juftlik bo‘lmaydi (409); o‘zi bilan — 400.",
+        "operationId": "AdminProductsController_setUpsellPair",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUpsellPairDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mahsulotni o‘ziga juftlik qilib bo‘lmaydi"
+          },
+          "404": {
+            "description": "Mahsulot yoki juftlik topilmadi"
+          },
+          "409": {
+            "description": "Juftlik mahsuloti sotuvchilarga ochiq emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upsell juftligi: operator qo‘ng‘iroqda taklif qiladigan mahsulot (BE-45)",
+        "tags": [
+          "admin-products"
+        ]
+      }
+    },
     "/api/v1/admin/products/{id}/creatives/upload": {
       "post": {
         "description": "Fayl `multipart/form-data` bilan `url` ga yuboriladi: avval `fields` (o‘zgartirmasdan), oxirida `file`. Hajm va turni MinIO ham tekshiradi. Sozlamada yo‘q tur yoki katta hajm — 400.",
@@ -14619,6 +14675,196 @@
         ]
       }
     },
+    "/api/v1/operator/leads/{id}/upsell": {
+      "get": {
+        "description": "OPR-4: operator tasdiqlash qo‘ng‘irog‘ida mijozga qo‘shimcha tovar taklif qiladi. Juftlik — admin belgilagan mahsulot (admin-offer); `pair: null` — «Bu mahsulotga qo‘shimcha taklif yo‘q». `window` — 12-qoida (yoqilgan bo‘lsa).",
+        "operationId": "OperatorLeadsController_upsell",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadUpsellDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lid topilmadi yoki bu operatorda emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘shimcha taklif: juftlik, vaqt oynasi va qo‘shilgan tovarlar (BE-45)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/leads/{id}/items": {
+      "post": {
+        "description": "Faqat bronlagan operator. Narx yuborilmaydi — tovarning tasdiqlangan narxi (BE-09) olinadi; `price` maydoni bilan yuborilsa 400. Tasdiqlanganda bitta buyurtma, bitta posilka, qo‘shimcha qator belgilangan (BE-34 tartibi). Javob — yangilangan karta (`items`, `price` — butun posilka).",
+        "operationId": "OperatorLeadsController_addItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLeadItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCardDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Qoldiq yetarli emas; narx tasdiqlanmagan; tovar sotuvchilarga yopiq; 12-qoida oynasidan tashqarida; qatorlar ko‘p"
+          },
+          "404": {
+            "description": "Lid topilmadi yoki bu operatorda emas; mahsulot topilmadi"
+          },
+          "409": {
+            "description": "Bu tovar lidda allaqachon bor"
+          },
+          "503": {
+            "description": "Katalog yoki ombor javob bermadi — qo‘shilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lidga qo‘shimcha tovar qo‘shish (upsell, BE-45)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/leads/{id}/items/{itemId}": {
+      "delete": {
+        "description": "Faqat operator qo‘shgan (upsell) qator; lidning o‘z tovari va saytdan kelgan qatorlar olib tashlanmaydi.",
+        "operationId": "OperatorLeadsController_removeItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCardDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bu qator qo‘shimcha tovar emas"
+          },
+          "404": {
+            "description": "Lid yoki qator topilmadi"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qo‘shimcha tovarni olib tashlash (BE-45)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/v1/operator/leads/{id}/upsell/decline": {
+      "post": {
+        "description": "Lid tarixiga qayd (dizayn operator-upsell 6-kadr) [taklif]. Upsell foizi (OPR-7) unga bog‘liq emas.",
+        "operationId": "OperatorLeadsController_declineUpsell",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadUpsellDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lid topilmadi yoki bu operatorda emas"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "«Mijoz olmadi» — qo‘shimcha taklif rad etildi (BE-45)",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
     "/api/v1/operator/state": {
       "get": {
         "description": "Sahifa yangilanganda ekran «Oflayn» dan boshlanmasin; `since` — holat boshlangan vaqt (BE-25, FE-08).",
@@ -20613,6 +20859,12 @@
             "example": 65000,
             "nullable": true
           },
+          "upsellProductId": {
+            "type": "string",
+            "example": "512",
+            "nullable": true,
+            "description": "BE-45: upsell juftligi — operator qo‘ng‘iroqda taklif qiladigan mahsulot (admin-offer); bo‘sh — yo‘q"
+          },
           "weightGrams": {
             "type": "number",
             "example": 450,
@@ -21109,6 +21361,12 @@
             "example": 65000,
             "nullable": true
           },
+          "upsellProductId": {
+            "type": "string",
+            "example": "512",
+            "nullable": true,
+            "description": "BE-45: upsell juftligi — operator qo‘ng‘iroqda taklif qiladigan mahsulot (admin-offer); bo‘sh — yo‘q"
+          },
           "weightGrams": {
             "type": "number",
             "example": 450,
@@ -21346,6 +21604,17 @@
         "required": [
           "reason"
         ]
+      },
+      "SetUpsellPairDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "512",
+            "nullable": true,
+            "description": "Taklif qilinadigan mahsulot; null — juftlik olib tashlanadi"
+          }
+        }
       },
       "CreativeUploadRequestDto": {
         "type": "object",
@@ -29786,6 +30055,11 @@
       "LeadCardItemDto": {
         "type": "object",
         "properties": {
+          "itemId": {
+            "type": "string",
+            "example": "9001",
+            "description": "BE-45: qator ID si (qo‘shimcha tovarni olib tashlash uchun)"
+          },
           "productId": {
             "type": "string",
             "example": "501"
@@ -29806,14 +30080,21 @@
           "lineTotal": {
             "type": "number",
             "example": 251000
+          },
+          "upsell": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-45: operator qo‘shgan qo‘shimcha tovar (upsell); narx — tasdiqlangan narx"
           }
         },
         "required": [
+          "itemId",
           "productId",
           "name",
           "quantity",
           "unitPrice",
-          "lineTotal"
+          "lineTotal",
+          "upsell"
         ]
       },
       "LeadAddressDto": {
@@ -30271,7 +30552,7 @@
             "description": "Miqdor (OPR-4)"
           },
           "items": {
-            "description": "BE-34: saytdan buyurtma tovarlari (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami",
+            "description": "BE-34: saytdan buyurtma tovarlari; BE-45: operator qo‘shgan qo‘shimcha tovar bilan (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LeadCardItemDto"
@@ -30836,6 +31117,187 @@
           "whereDeliver"
         ]
       },
+      "LeadUpsellOfferDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "512"
+          },
+          "name": {
+            "type": "string",
+            "example": "Oshxona tarozisi"
+          },
+          "price": {
+            "type": "number",
+            "example": 85000,
+            "nullable": true,
+            "description": "Tasdiqlangan narx (BE-09), bir dona; bo‘sh — tasdiqlanmagan"
+          },
+          "stock": {
+            "type": "number",
+            "example": 45,
+            "nullable": true,
+            "description": "Band qilinmagan qoldiq; bo‘sh — ombor javob bermadi"
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 350,
+            "nullable": true
+          },
+          "image": {
+            "type": "string",
+            "example": "https://…/taroz.jpg",
+            "nullable": true
+          },
+          "unavailableReason": {
+            "type": "string",
+            "enum": [
+              "IN_LEAD",
+              "OUT_OF_STOCK",
+              "NO_PRICE",
+              "UNAVAILABLE"
+            ],
+            "nullable": true,
+            "example": null,
+            "description": "Taklif qilib bo‘lmasa sababi: IN_LEAD — lidda bor; OUT_OF_STOCK — qoldiq 0; NO_PRICE — narx tasdiqlanmagan; UNAVAILABLE — sotuvdan olingan yoki sotuvchilarga yopiq"
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "price",
+          "stock",
+          "weightGrams",
+          "image",
+          "unavailableReason"
+        ]
+      },
+      "LeadUpsellWindowDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "to": {
+            "type": "string",
+            "example": "18:00"
+          },
+          "open": {
+            "type": "boolean",
+            "example": true,
+            "description": "Hozir oyna ichidami (Toshkent vaqti)"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "open"
+        ]
+      },
+      "LeadUpsellLineDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "example": "9001"
+          },
+          "productId": {
+            "type": "string",
+            "example": "512"
+          },
+          "name": {
+            "type": "string",
+            "example": "Oshxona tarozisi"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "example": 85000
+          },
+          "lineTotal": {
+            "type": "number",
+            "example": 85000
+          }
+        },
+        "required": [
+          "itemId",
+          "productId",
+          "name",
+          "quantity",
+          "unitPrice",
+          "lineTotal"
+        ]
+      },
+      "LeadUpsellDto": {
+        "type": "object",
+        "properties": {
+          "pair": {
+            "nullable": true,
+            "description": "Admin belgilagan juftlik (admin-offer); bo‘sh — «Bu mahsulotga qo‘shimcha taklif yo‘q»",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LeadUpsellOfferDto"
+              }
+            ]
+          },
+          "window": {
+            "nullable": true,
+            "description": "12-qoida oynasi (`UPSELL_WINDOW`); bo‘sh — qoida yoqilmagan (TZ 5-bo‘lim: «Taklif — tasdiqlash kerak»)",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LeadUpsellWindowDto"
+              }
+            ]
+          },
+          "lines": {
+            "description": "Qo‘shilgan qatorlar",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadUpsellLineDto"
+            }
+          },
+          "declinedAt": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "Oxirgi «Mijoz olmadi» vaqti (shu bron ichida qayd etilgan bo‘lsa)"
+          }
+        },
+        "required": [
+          "pair",
+          "window",
+          "lines",
+          "declinedAt"
+        ]
+      },
+      "AddLeadItemDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "512",
+            "description": "Qo‘shiladigan mahsulot ID si"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1,
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Soni. 1000 — checkout qator chegarasi (`lead-order.service.ts` tekshiruvi)"
+          }
+        },
+        "required": [
+          "productId",
+          "quantity"
+        ]
+      },
       "OperatorStateDto": {
         "type": "object",
         "properties": {
@@ -31038,6 +31500,12 @@
             "example": 4,
             "nullable": true,
             "description": "Birinchi qo‘ng‘iroqqacha median, daqiqa"
+          },
+          "upsellRate": {
+            "type": "number",
+            "example": 15,
+            "nullable": true,
+            "description": "BE-45 (OPR-7): upsell foizi — shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (TZ 9: «Qo‘shimcha tovarli buyurtmalar / barcha buyurtmalar»); maxraj 0 bo‘lsa bo‘sh"
           }
         },
         "required": [
@@ -31045,7 +31513,8 @@
           "confirmed",
           "approveRate",
           "saleRate",
-          "firstCallMedianMinutes"
+          "firstCallMedianMinutes",
+          "upsellRate"
         ]
       },
       "LeadCallDto": {
@@ -32487,7 +32956,7 @@
             "description": "Miqdor (OPR-4)"
           },
           "items": {
-            "description": "BE-34: saytdan buyurtma tovarlari (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami",
+            "description": "BE-34: saytdan buyurtma tovarlari; BE-45: operator qo‘shgan qo‘shimcha tovar bilan (bitta tovarli lidda bo‘sh). Ko‘p tovarda `price` — butun posilka jami",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LeadCardItemDto"

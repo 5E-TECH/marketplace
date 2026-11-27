@@ -266,18 +266,22 @@ describeWithPostgres('BE-34 saytdan buyurtma (PostgreSQL)', () => {
     );
     expect(card.items).toEqual([
       {
+        itemId: expect.any(String),
         productId: '501',
         name: 'Simsiz quloqchin',
         quantity: 1,
         unitPrice: 251_000,
         lineTotal: 251_000,
+        upsell: false,
       },
       {
+        itemId: expect.any(String),
         productId: '502',
         name: 'Termos 1 l',
         quantity: 2,
         unitPrice: 120_000,
         lineTotal: 240_000,
+        upsell: false,
       },
     ]);
     expect(card.price).toMatchObject({

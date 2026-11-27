@@ -304,6 +304,12 @@ describeWithPostgres('BE-25 (FE-26): buyurtmalar PostgreSQL da', () => {
   });
 
   it('migratsiyalar qaytariladi va qayta o‘tadi', async () => {
+    await db.undoLastMigration(); // is_upsell (BE-45)
+    expect(
+      await db.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = 'checkout' AND table_name = 'sales_order_item' AND column_name = 'is_upsell'`,
+      ),
+    ).toEqual([]);
     await db.undoLastMigration(); // delivery_shown_other (FE-26)
     expect(
       await db.query(

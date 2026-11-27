@@ -212,6 +212,16 @@ export class LeadOrderService {
             ? `mahsulot ${lines[index].productId}: ${unavailable}`
             : unavailable,
         );
+      // BE-45 (TC3): qo‘shimcha tovar — aynan tasdiqlangan narx (lead-service tasdiqdan oldin yangilaydi)
+      if (
+        lines[index].upsell &&
+        lines[index].salePrice !== snapshot!.approvedPrice
+      )
+        return this.fail(
+          row,
+          OrderCreateFailedReason.PRICE_CHANGED,
+          `mahsulot ${lines[index].productId}: qo‘shimcha tovar narxi (${lines[index].salePrice}) tasdiqlangan narxga (${snapshot!.approvedPrice}) teng emas`,
+        );
       const priceChanged = priceProblem(snapshot!, lines[index].salePrice);
       if (priceChanged)
         return this.fail(
@@ -354,14 +364,21 @@ export class LeadOrderService {
       for (const { line, offer } of parts) {
         // TC11: tasdiqlangan narx va ustama alohida (sotuv ≥ tasdiqlangan — `priceProblem` tekshirgan)
         const approvedPrice = offer.approvedPrice!;
+        // BE-45: qo‘shimcha tovar — sotuvchi haqi platformada [taklif]
+        const fees = line.upsell
+          ? upsellFees(offer)
+          : {
+              affiliateFee: offer.affiliateFee,
+              platformService: offer.platformService,
+            };
         await manager.query(
           `INSERT INTO checkout.sales_order_item
              (sales_order_seller_id, product_id, product_name, variant_id, quantity, unit_price,
               line_total, sku, weight_grams, base_price, recommended_price, approved_price, markup,
               affiliate_fee, call_center_fee, hidden_delivery, platform_service, barcode, wholesaler_id,
-              mxik_code, package_code, wholesaler_tin)
+              mxik_code, package_code, wholesaler_tin, is_upsell)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                   $20, $21, $22)`,
+                   $20, $21, $22, $23)`,
           [
             seller.id,
             offer.productId,
@@ -376,16 +393,17 @@ export class LeadOrderService {
             offer.recommendedPrice,
             approvedPrice,
             line.salePrice - approvedPrice,
-            offer.affiliateFee,
+            fees.affiliateFee,
             offer.callCenterFee,
             offer.hiddenDelivery,
-            offer.platformService,
+            fees.platformService,
             offer.barcode?.trim() || null,
             offer.wholesalerId,
             // BE-41: fiskal chek nusxasi (katalog eski bo‘lsa `fiscal` yo‘q — null)
             offer.fiscal?.mxikCode ?? null,
             offer.fiscal?.packageCode ?? null,
             offer.fiscal?.wholesalerTin ?? null,
+            line.upsell,
           ],
         );
       }
@@ -602,10 +620,16 @@ export function invalidReason(event: LeadConfirmedEvent): string | null {
   )
     return 'tasdiqlagan operator ID si noto‘g‘ri';
   if (event.items !== undefined) {
-    if (event.source !== LeadSource.SITE)
-      return 'bir nechta tovar faqat saytdan buyurtmada';
     if (!Array.isArray(event.items) || !event.items.length)
       return 'tovar qatorlari bo‘sh';
+    // BE-45: sayt bo‘lmagan lidda faqat operator qo‘shgan qo‘shimcha tovar (upsell) bo‘lishi mumkin
+    if (
+      event.source !== LeadSource.SITE &&
+      event.items.slice(1).some((item) => item?.upsell !== true)
+    )
+      return 'bir nechta tovar faqat saytdan buyurtmada yoki operator qo‘shgan qo‘shimcha tovar bilan';
+    if (event.items[0]?.upsell === true)
+      return 'birinchi qator lid tovari — qo‘shimcha tovar emas';
     if (event.items.length > MAX_ORDER_LINES)
       return `tovar qatorlari ko‘p: ${event.items.length}`;
     const seen = new Set<string>();
@@ -635,27 +659,46 @@ export function invalidReason(event: LeadConfirmedEvent): string | null {
   return null;
 }
 
-/** Buyurtma qatorlari: saytdan ko‘p tovarli lid (BE-34) — `items`, aks holda bitta tovar. */
+/** Buyurtma qatorlari: saytdan ko‘p tovarli lid (BE-34) yoki operator qo‘shgan tovar (BE-45) — `items`, aks holda bitta tovar. */
 export interface OrderLine {
   productId: string;
   quantity: number;
   salePrice: number;
+  /** BE-45: operator qo‘shgan qo‘shimcha tovar. */
+  upsell: boolean;
 }
 
 export function orderLines(event: LeadConfirmedEvent): OrderLine[] {
   return event.items?.length
-    ? event.items.map(({ productId, quantity, salePrice }) => ({
+    ? event.items.map(({ productId, quantity, salePrice, upsell }) => ({
         productId: String(productId),
         quantity,
         salePrice,
+        upsell: upsell === true,
       }))
     : [
         {
           productId: String(event.productId),
           quantity: event.quantity,
           salePrice: event.salePrice,
+          upsell: false,
         },
       ];
+}
+
+/**
+ * BE-45: qo‘shimcha tovar qatorining taqsimoti. Narx — tasdiqlangan narx (ustama yo‘q); sotuvchi haqi platformada
+ * qoladi [taklif, EQ-14 — «qo‘shimcha tovar uchun sotuvchi haqi kimga»]: `affiliate_fee` 0, `platform_service` ga
+ * qo‘shiladi (moliya `split.ts` tekshiruvi: platforma = tasdiqlangan − bazaviy − haq − markaz − yashirin).
+ */
+export function upsellFees(offer: {
+  affiliateFee: number;
+  platformService: number;
+}): { affiliateFee: number; platformService: number } {
+  return {
+    affiliateFee: 0,
+    platformService: offer.platformService + offer.affiliateFee,
+  };
 }
 
 /**

@@ -49,6 +49,7 @@ import {
   retryAt,
 } from './lead-schedule';
 import { enqueueLeadConfirmed } from './lead-confirmed.event';
+import { LeadUpsellService } from './lead-upsell.service';
 
 /** 1-qoida zinapoyasi faqat aloqa bo‘lmagan natijalar soniga qarab yuradi (TZ 5-bo‘lim jadvali). */
 const MISSED_OUTCOMES = [
@@ -80,6 +81,8 @@ export class LeadQueueService {
     @Optional() private readonly userNames?: UserNamesClient,
     // BE-15: telefoniya (ulanmagan bo‘lsa natija qo‘lda kiritiladi)
     @Optional() private readonly calls?: CallService,
+    // BE-45: qo‘shimcha tovar narxi tasdiqdan oldin
+    @Optional() private readonly upsell?: LeadUpsellService,
   ) {}
 
   /** «Ishda / tanaffus / chiqdi». */
@@ -190,6 +193,9 @@ export class LeadQueueService {
     leadId: string,
     dto: SubmitLeadResultDto,
   ): Promise<LeadResultAcceptedDto> {
+    // BE-45: qo‘shimcha tovar narxi o‘zgargan bo‘lsa — 409, operator mijozga yangi summani aytadi
+    if (dto?.outcome === LeadOutcome.CONFIRMED)
+      await this.upsell?.refreshPrices(operatorId, leadId);
     const accepted = await this.db.transaction(async (manager) => {
       const leads = manager.getRepository(Lead);
       const lead = await leads.findOne({

@@ -409,7 +409,8 @@ export class LeadStatsService {
    * - urinishlar: shu davrdagi natijalar (javobsiz ham);
    * - tasdiq %: tasdiqlagan lidlari / shu davrda ishlagan yaroqli lidlari;
    * - sotilish %: shu davrda tasdiqlaganlaridan yetkazilgan / (yetkazilgan + rad);
-   * - birinchi qo‘ng‘iroq: lid kelganidan birinchi urinishgacha (shu operatorniki bo‘lsa), median, daqiqa.
+   * - birinchi qo‘ng‘iroq: lid kelganidan birinchi urinishgacha (shu operatorniki bo‘lsa), median, daqiqa;
+   * - upsell %: shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (BE-45).
    */
   async operatorStats(input: {
     operatorId: string;
@@ -425,14 +426,21 @@ export class LeadStatsService {
         WHERE a.operator_id = $1 AND a.created_at >= $2 AND a.created_at < $3`,
       [...range, NOT_VALID],
     )) as Array<{ attempts: number; worked: number }>;
-    const [{ confirmed, delivered, refused }] = (await this.db.query(
+    const [{ confirmed, delivered, refused, upsold }] = (await this.db.query(
       `SELECT count(*)::int AS confirmed,
-              count(*) FILTER (WHERE delivered_at IS NOT NULL)::int AS delivered,
-              count(*) FILTER (WHERE refused_at IS NOT NULL AND delivered_at IS NULL)::int AS refused
-         FROM lead.lead
-        WHERE confirmed_by = $1 AND confirmed_at >= $2 AND confirmed_at < $3 AND is_deleted = false`,
+              count(*) FILTER (WHERE l.delivered_at IS NOT NULL)::int AS delivered,
+              count(*) FILTER (WHERE l.refused_at IS NOT NULL AND l.delivered_at IS NULL)::int AS refused,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM lead.lead_item i WHERE i.lead_id = l.id AND i.is_upsell))::int AS upsold
+         FROM lead.lead l
+        WHERE l.confirmed_by = $1 AND l.confirmed_at >= $2 AND l.confirmed_at < $3 AND l.is_deleted = false`,
       range,
-    )) as Array<{ confirmed: number; delivered: number; refused: number }>;
+    )) as Array<{
+      confirmed: number;
+      delivered: number;
+      refused: number;
+      upsold: number;
+    }>;
     const [{ median }] = (await this.db.query(
       `SELECT percentile_cont(0.5) WITHIN GROUP (
                 ORDER BY extract(epoch FROM a.created_at - l.created_at) / 60) AS median
@@ -451,6 +459,8 @@ export class LeadStatsService {
       saleRate: percent(delivered, delivered + refused),
       firstCallMedianMinutes:
         median === null ? null : Math.round(Number(median)),
+      // BE-45 (OPR-7, TZ 9): qo‘shimcha tovarli tasdiqlar / tasdiqlar
+      upsellRate: percent(upsold, confirmed),
     };
   }
 }

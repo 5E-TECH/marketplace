@@ -11,7 +11,7 @@ import { Lead, LeadItem } from './entities';
 /**
  * `lead.confirmed` outbox’ga (BE-13 → BE-18). Operator tasdig‘i va BE-34 dagi SMS tasdig‘i uchun bitta qoida.
  * Saytdan ko‘p tovarli lidda `items` — hamma qator; operator sonni o‘zgartirgan bo‘lsa (faqat lidning o‘z soni),
- * birinchi qator shunga moslanadi.
+ * birinchi qator shunga moslanadi. BE-45: operator qo‘shgan qo‘shimcha tovar (har qanday manba) — `upsell` belgisi bilan.
  */
 export async function enqueueLeadConfirmed(
   manager: EntityManager,
@@ -52,6 +52,8 @@ export async function enqueueLeadConfirmed(
             productId: String(item.productId),
             quantity: item.quantity,
             salePrice: Number(item.salePrice),
+            // BE-45: operator qo‘shgan qo‘shimcha tovar
+            ...(item.isUpsell ? { upsell: true } : {}),
           })),
         }
       : {}),

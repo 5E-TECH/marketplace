@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -35,6 +36,7 @@ import {
   AdminProductsPageDto,
   AdminProductsQueryDto,
   AdminUpdateProductDto,
+  CATALOG_UPSELL_RPC,
   CurrentUser,
   HideProductDto,
   JwtUser,
@@ -46,6 +48,7 @@ import {
   Roles,
   RmqClient,
   sendRpc,
+  SetUpsellPairDto,
 } from '@app/common';
 
 import { FileTooLargeInterceptor } from '../affiliate-account/affiliate-self-employed.controller';
@@ -329,6 +332,40 @@ export class AdminProductsController {
       { productId: id },
     );
     this.audit(admin.sub, 'product.archive', id, ip);
+    return product;
+  }
+
+  @Put(':id/upsell-pair')
+  @ApiOperation({
+    summary:
+      'Upsell juftligi: operator qo‘ng‘iroqda taklif qiladigan mahsulot (BE-45)',
+    description:
+      'Bitta juftlik offer bo‘yicha (admin-offer) [taklif]; `productId: null` — olib tashlash. Narx — juftlik mahsulotining ' +
+      'tasdiqlangan narxi, sotuvchi haqi platformada [taklif, EQ-14]. Arxivdagi, rad etilgan yoki CPA o‘chirilgan ' +
+      'mahsulot juftlik bo‘lmaydi (409); o‘zi bilan — 400.',
+  })
+  @ApiOkResponse({ type: ProductDto })
+  @ApiBadRequestResponse({
+    description: 'Mahsulotni o‘ziga juftlik qilib bo‘lmaydi',
+  })
+  @ApiNotFoundResponse({ description: 'Mahsulot yoki juftlik topilmadi' })
+  @ApiConflictResponse({
+    description: 'Juftlik mahsuloti sotuvchilarga ochiq emas',
+  })
+  async setUpsellPair(
+    @Param('id', ParseLeadIdPipe) id: string,
+    @Body() dto: SetUpsellPairDto,
+    @CurrentUser() admin: JwtUser,
+    @Ip() ip: string,
+  ) {
+    const product = await sendRpc(
+      this.catalog,
+      { cmd: CATALOG_UPSELL_RPC.SET_PAIR },
+      { productId: id, pairProductId: dto.productId ?? null },
+    );
+    this.audit(admin.sub, 'product.upsell-pair', id, ip, {
+      pairProductId: dto.productId ?? null,
+    });
     return product;
   }
 

@@ -29,6 +29,7 @@ import { AddFraudCenter1795824000000 } from './migrations/1795824000000-add-frau
 import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
+import { LeadUpsell1799366400000 } from './migrations/1799366400000-lead-upsell';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = testDatabaseUrl ? describe : describe.skip;
@@ -172,6 +173,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         SiteOrder1798070400000,
         OperatorStateSince1798416000000,
         Telephony1798675200000,
+        LeadUpsell1799366400000,
       ],
       synchronize: false,
       logging: false,
@@ -632,6 +634,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         approveRate: 50, // 1 / 2 yaroqli (a, b)
         saleRate: null, // hali yetkazilmagan
         firstCallMedianMinutes: 4, // median(2, 6)
+        upsellRate: 0, // BE-45: 0 / 1 tasdiq
       });
       // Yangi natija — keyingi so‘rovda (kesh yo‘q)
       await attempt(b, '41', 'NO_ANSWER', new Date());
@@ -647,6 +650,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         approveRate: 0,
         saleRate: null,
         firstCallMedianMinutes: 5,
+        upsellRate: null,
       });
     });
 
@@ -657,6 +661,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         approveRate: null,
         saleRate: null,
         firstCallMedianMinutes: null,
+        upsellRate: null,
       });
     });
   });
@@ -824,6 +829,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
 
   describe('migratsiya', () => {
     it('mavjud tasdiqlangan lidlarga tasdiq vaqti va operatori oxirgi CONFIRMED urinishidan yoziladi; down/up', async () => {
+      await db.undoLastMigration(); // BE-45 (upsell)
       await db.undoLastMigration(); // BE-15 (telefoniya)
       await db.undoLastMigration(); // BE-25 (operator holati vaqti)
       await db.undoLastMigration(); // BE-34 (sayt buyurtmasi)

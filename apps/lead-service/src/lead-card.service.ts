@@ -196,11 +196,13 @@ export class LeadCardService {
       const quantity = index === 0 ? lead.quantity : line.quantity;
       const unitPrice = Number(line.salePrice);
       return {
+        itemId: String(line.id),
         productId: String(line.productId),
         name: line.productName,
         quantity,
         unitPrice,
         lineTotal: unitPrice * quantity,
+        upsell: line.isUpsell, // BE-45
       };
     });
     const nameOf = this.names

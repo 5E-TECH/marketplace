@@ -122,6 +122,13 @@ export class Product extends BaseEntity {
   @Column({ name: 'height_mm', type: 'integer', nullable: true })
   heightMm: number | null;
 
+  /**
+   * BE-45: upsell juftligi — operator tasdiqlash qo‘ng‘irog‘ida taklif qiladigan boshqa mahsulot (admin belgilaydi,
+   * admin-offer dizayni) [taklif]. Bo‘sh — juftlik yo‘q.
+   */
+  @Column({ name: 'upsell_product_id', type: 'bigint', nullable: true })
+  upsellProductId: string | null;
+
   /** Offer sotuvchilarga ochiq (admin o‘chirishi mumkin). CPA mahsulotida aniq bitta faol variant. */
   @Column({ name: 'cpa_enabled', type: 'boolean', default: true })
   cpaEnabled: boolean;

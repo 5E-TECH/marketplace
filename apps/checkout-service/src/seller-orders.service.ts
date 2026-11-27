@@ -496,7 +496,8 @@ export class SellerOrdersService {
                 i.affiliate_fee::text AS "affiliateFee",
                 i.call_center_fee::text AS "callCenterFee",
                 i.hidden_delivery::text AS "hiddenDelivery",
-                i.platform_service::text AS "platformService"
+                i.platform_service::text AS "platformService",
+                i.is_upsell AS "isUpsell"
            FROM checkout.sales_order_item i
            JOIN checkout.sales_order_seller sos ON sos.id = i.sales_order_seller_id
           WHERE sos.sales_order_id = $1 ORDER BY i.id`,
@@ -515,6 +516,8 @@ export class SellerOrdersService {
         quantity: Number(it.quantity),
         unitPrice: Number(it.unitPrice),
         lineTotal: Number(it.lineTotal),
+        // BE-45: operator qo‘ng‘iroqda qo‘shgan qo‘shimcha tovar
+        upsell: it.isUpsell === true,
         // BE-18: narx nusxasi (bir dona) — faqat lid buyurtmasida
         priceSnapshot:
           it.approvedPrice == null

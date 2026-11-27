@@ -632,6 +632,8 @@ export interface CatalogOfferSnapshot {
     /** Kutubxonaga qo‘shilgan vaqt (BE-08). */
     createdAt?: string;
   }>;
+  /** BE-45: admin belgilagan upsell juftligi (operator qo‘ng‘iroqda taklif qiladi); yo‘q — null. Eski katalogda yo‘q. */
+  upsellProductId?: string | null;
   createdAt: string;
 }
 

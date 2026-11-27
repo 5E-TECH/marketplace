@@ -6,12 +6,14 @@ import {
   CreateProductDto,
   AdminProductsQueryDto,
   MyProductsQueryDto,
+  CATALOG_UPSELL_RPC,
   PRODUCT_ARCHIVE_RPC,
   RpcHttpExceptionFilter,
   UpdateProductDto,
 } from '@app/common';
 import { ProductService } from './product.service';
 import { ProductArchiveService } from './product-archive.service';
+import { ProductUpsellService } from './product-upsell.service';
 import { AdminProductListService } from './admin-product-list.service';
 
 @Controller()
@@ -21,6 +23,7 @@ export class ProductController {
     private readonly products: ProductService,
     private readonly archives: ProductArchiveService,
     private readonly lists: AdminProductListService,
+    private readonly upsells: ProductUpsellService,
   ) {}
 
   @MessagePattern({ cmd: 'product.create' })
@@ -127,5 +130,16 @@ export class ProductController {
   @MessagePattern({ cmd: PRODUCT_ARCHIVE_RPC.ARCHIVE })
   adminArchive(@Payload() data: { productId: string }) {
     return this.archives.archive(String(data?.productId ?? ''));
+  }
+
+  /** BE-45: upsell juftligi (null — olib tashlash). */
+  @MessagePattern({ cmd: CATALOG_UPSELL_RPC.SET_PAIR })
+  setUpsellPair(
+    @Payload() data: { productId: string; pairProductId: string | null },
+  ) {
+    return this.upsells.setPair(
+      String(data?.productId ?? ''),
+      data?.pairProductId ?? null,
+    );
   }
 }
