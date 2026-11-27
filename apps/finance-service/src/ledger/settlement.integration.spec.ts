@@ -1,7 +1,11 @@
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { WholesalerSettlementStatus } from '@app/common';
+import {
+  CATALOG_DISPLAY_LOOKUP,
+  WholesalerSettlementStatus,
+} from '@app/common';
+import { inspectPdf } from '@app/common/pdf/pdf-inspect';
 import { CreateFinanceTables1724673600000 } from '../migrations/1724673600000-create-finance-tables';
 import { CreateCodReconciliation1724932800000 } from '../migrations/1724932800000-create-cod-reconciliation';
 import { CreatePayoutSchedule1727568000000 } from '../migrations/1727568000000-create-payout-schedule';
@@ -44,19 +48,38 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   const noBankName = new Set<string>();
   const noContract = new Set<string>();
   const catalog = {
-    send: jest.fn((_pattern: unknown, data: { ids: string[] }) =>
-      of(
-        data.ids.map((id) => ({
-          id,
-          name: `Optovik ${id} MCHJ`,
-          tin: noDetails.has(id) ? null : '301234567',
-          bankName: noBankName.has(id) ? null : 'Ipoteka bank',
-          bankAccount: noDetails.has(id) ? null : '20208000900123456789',
-          bankMfo: '00450',
-          contractNumber: noContract.has(id) ? null : 'K-12',
-          contractDate: '2026-12-01',
-        })),
-      ),
+    send: jest.fn(
+      (
+        pattern: { cmd: string },
+        data: { ids: string[]; shopIds?: string[]; productIds?: string[] },
+      ) =>
+        // BE-33 akt-sverka PDF: optovik va tovar nomlari (`catalog.display.lookup`)
+        pattern?.cmd === CATALOG_DISPLAY_LOOKUP
+          ? of({
+              shops: (data.shopIds ?? []).map((id) => ({
+                id,
+                name: `Optovik ${id} MCHJ`,
+              })),
+              products: (data.productIds ?? []).map((id) => ({
+                id,
+                name: `Mahsulot ${id}`,
+                imageUrl: null,
+                expiryTracked: false,
+              })),
+              variants: [],
+            })
+          : of(
+              data.ids.map((id) => ({
+                id,
+                name: `Optovik ${id} MCHJ`,
+                tin: noDetails.has(id) ? null : '301234567',
+                bankName: noBankName.has(id) ? null : 'Ipoteka bank',
+                bankAccount: noDetails.has(id) ? null : '20208000900123456789',
+                bankMfo: '00450',
+                contractNumber: noContract.has(id) ? null : 'K-12',
+                contractDate: '2026-12-01',
+              })),
+            ),
     ),
   };
   let check: BalanceCheckService;
@@ -240,6 +263,14 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       '%PDF',
     );
     expect(pdf.fileName).toMatch(/^akt-sverka_AS-\d{6}_2027-01-10\.pdf$/);
+    // BE-33 (QA 2026-11-27): tomonlar va tovar nomi — `#ID` emas
+    const { text } = inspectPdf(Buffer.from(pdf.base64, 'base64'));
+    expect(text).toContain(
+      'Komitent (optovik): Optovik 501 MCHJ, STIR 301234567',
+    );
+    expect(text).toContain('Asos: komissiya shartnomasi № K-12, 01.12.2026');
+    expect(text).toContain('Mahsulot 88');
+    expect(text).not.toContain('#501');
     const bank = await svc.bankFile({ periodEnd: '2027-01-10' });
     const csv = Buffer.from(bank.base64, 'base64').toString('utf8');
     // Nizom 3229, 13-band rekvizitlari (summani so‘z bilan va imzoni bank tizimi qo‘yadi)

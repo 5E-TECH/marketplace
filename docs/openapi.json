@@ -22434,7 +22434,8 @@
           "receivedQty": {
             "type": "number",
             "nullable": true,
-            "example": 98
+            "example": 100,
+            "description": "Kelgan (brak bilan birga); aktdagi «Qabul» = receivedQty − defectiveQty"
           },
           "defectiveQty": {
             "type": "number",
@@ -22633,8 +22634,8 @@
           },
           "receivedQty": {
             "type": "number",
-            "example": 98,
-            "description": "Kelgan (brak bilan birga)"
+            "example": 100,
+            "description": "Kelgan (brak bilan birga); qabul — yaroqlisi: receivedQty − defectiveQty"
           },
           "defectiveQty": {
             "type": "number",
@@ -22716,7 +22717,7 @@
           },
           "quantity": {
             "type": "number",
-            "example": 96
+            "example": 98
           },
           "blocked": {
             "type": "boolean",
