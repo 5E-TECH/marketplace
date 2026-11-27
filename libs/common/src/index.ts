@@ -115,6 +115,7 @@ export * from './messaging/reliable-rmq.server';
 export * from './messaging/rmq.util';
 export * from './messaging/rpc.util';
 export * from './identity/user-names.client';
+export * from './identity/person-name';
 export * from './health/service-health.module';
 
 // Idempotency / Outbox / Activity-log

@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import { of, throwError } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { InboundShipmentStatus, LOT_BLOCKED_EVENT } from '@app/common';
+import { inspectPdf } from '@app/common/pdf/pdf-inspect';
 import { INVENTORY_DB } from './database';
 import { InboundService } from './inbound.service';
 import { InventoryService } from './inventory.service';
@@ -111,7 +112,7 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
     await lock?.end();
   });
 
-  it('TC1: omborchi optovik nomidan 100 dona e’lon qildi → 98 qabul, 2 brak → «Farq bor», qoldiq 96, akt PDF', async () => {
+  it('TC1: omborchi optovik nomidan 100 dona e’lon qildi → 100 keldi, 2 brak → qabul 98, «Farq bor» (farq −2), qoldiq 98, akt PDF', async () => {
     const declared = await inbound.declare({
       wholesalerId: WHOLESALER,
       expectedAt: inDays(1),
@@ -137,7 +138,7 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       items: [
         {
           itemId: declared.items[0].id,
-          receivedQty: 98,
+          receivedQty: 100,
           defectiveQty: 2,
           batch: 'P-11',
           cell: 'B-02-1',
@@ -151,38 +152,43 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       receivedBy: '61',
       items: [
         expect.objectContaining({
-          receivedQty: 98,
+          receivedQty: 100,
           defectiveQty: 2,
           cell: 'B-02-1',
         }),
       ],
     });
-    // qoldiqqa faqat yaroqli soni (98 − 2), yacheyka SKU da
+    // qoldiqqa faqat yaroqli soni (100 − 2), yacheyka SKU da
     expect(await stockOf('842')).toMatchObject({
-      quantityOnHand: 96,
+      quantityOnHand: 98,
       cell: 'B-02-1',
     });
-    await expect(inventory.available(['842'])).resolves.toEqual({ '842': 96 });
+    await expect(inventory.available(['842'])).resolves.toEqual({ '842': 98 });
     // takroriy qabul — o‘sha natija, qoldiq ikki marta oshmaydi
     await inbound.receive({
       id: declared.id,
       items: [
         {
           itemId: declared.items[0].id,
-          receivedQty: 98,
+          receivedQty: 100,
           defectiveQty: 2,
           cell: 'B-02-1',
         },
       ],
       actorId: '61',
     });
-    expect((await stockOf('842')).quantityOnHand).toBe(96);
+    expect((await stockOf('842')).quantityOnHand).toBe(98);
     const act = await inbound.actPdf({ id: declared.id });
     expect(act.fileName).toBe(`qabul-akti_${declared.number}.pdf`);
-    const pdf = Buffer.from(act.base64, 'base64').toString('latin1');
-    expect(pdf.startsWith('%PDF')).toBe(true);
-    // matn glif kodlari bilan yoziladi — sarlavha (metadata) va komitent so‘rovi tekshiriladi
-    expect(pdf).toContain(`Qabul akti ${declared.number}`);
+    const buffer = Buffer.from(act.base64, 'base64');
+    expect(buffer.toString('latin1').startsWith('%PDF')).toBe(true);
+    // aktdagi sonlar ekran va dizayn bilan bir xil: qabul — yaroqlisi, farq — qabul − e’lon (ism yo‘q — `#ID`)
+    const { text } = inspectPdf(buffer);
+    expect(text).toContain(`Postavka qabul akti No ${declared.number}`);
+    expect(text).toContain('| 100 | 98 | 2 | −2');
+    expect(text).toContain('Jami: e’lon 100, qabul 98, brak 2, farq −2');
+    expect(text).toContain('Sanaldi: 100 / 100 · kam kelgan tovar yo‘q');
+    expect(text).toContain('Qabul qildi: #61');
     expect(catalog.send).toHaveBeenCalledWith(
       { cmd: 'catalog.wholesaler.admin-get' },
       { id: WHOLESALER },
@@ -198,7 +204,7 @@ describeWithPostgres('BE-17 ombor qabuli va saralash (PostgreSQL)', () => {
       number: expect.stringMatching(/^PS-\d{6}$/),
       status: 'DISCREPANCY',
       declaredQty: 100,
-      receivedQty: 98,
+      receivedQty: 100,
       defectiveQty: 2,
     });
   });

@@ -238,7 +238,8 @@ describeWithPostgres('BE-47 kabinet xabarlari (PostgreSQL)', () => {
       {
         type: 'inbound_defect',
         title: 'Postavka qabul qilindi, brak topildi',
-        body: 'Postavka PS-000007: 10 dona qabul qilindi, brak 2 dona.',
+        // «qabul» — yaroqlisi (10 keldi − 2 brak), qabul akti bilan bir xil
+        body: 'Postavka PS-000007: 8 dona qabul qilindi, brak 2 dona.',
       },
     ]);
     await cabinet.onInboundReceived({

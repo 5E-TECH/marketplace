@@ -13,7 +13,9 @@ import { Cron } from '@nestjs/schedule';
 import PDFDocument from 'pdfkit';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  CATALOG_DISPLAY_LOOKUP,
   CATALOG_WHOLESALER_PAYMENT_DETAILS,
+  CatalogDisplayLookupResult,
   ErrorCode,
   moneyFromDb,
   RmqClient,
@@ -115,6 +117,9 @@ export interface BankFileFormat {
   ): SettlementFile;
 }
 
+/** `YYYY-MM-DD` → `KK.OO.YYYY` (bank fayli va akt). */
+const dmy = (iso: string) => iso.slice(0, 10).split('-').reverse().join('.');
+
 /**
  * To‘lov maqsadi matni: shartnoma raqami va sanasi (2026-05-26 dan to‘lov tafsilotida), akt va uning davri. Davr — akt
  * davri, sotuv davri emas: qaytarish muddati o‘tgan oldingi sotuvlar ham aktga kiradi. Sanalar KK.OO.YYYY.
@@ -125,11 +130,10 @@ export function paymentPurpose(
   periodEnd: string,
   actId: string,
 ): string {
-  const day = (iso: string) => iso.split('-').reverse().join('.');
   const contract = payee.contractNumber?.trim()
-    ? `${payee.contractNumber.trim()}-sonli${payee.contractDate ? ` ${day(payee.contractDate)} sanadagi` : ''} komissiya shartnomasi bo‘yicha `
+    ? `${payee.contractNumber.trim()}-sonli${payee.contractDate ? ` ${dmy(payee.contractDate)} sanadagi` : ''} komissiya shartnomasi bo‘yicha `
     : '';
-  return `${contract}sotilgan tovarlar uchun, akt ${actNumber(actId)}, ${day(periodStart)}–${day(periodEnd)}`;
+  return `${contract}sotilgan tovarlar uchun, akt ${actNumber(actId)}, ${dmy(periodStart)}–${dmy(periodEnd)}`;
 }
 
 /**
@@ -798,9 +802,21 @@ export class SettlementService {
     return this.get({ id });
   }
 
-  /** Akt-sverka PDF (dizayn `hujjat-akt-sverka` chizilmagan — tarkib [taklif]). Rekvizitlar BE-07 dan keyin. */
+  /**
+   * Akt-sverka PDF (dizayn `hujjat-akt-sverka` chizilmagan — tarkib [taklif]). Tomonlar: komissioner (platforma) —
+   * moliya sozlamasidan (EQ-05), komitent (optovik) — katalogdan (BE-07): nomi, STIR, shartnoma; tovar — nomi bilan.
+   * Rekvizit to‘liq bo‘lmasa ham PDF chiqadi («—»; bank faylidan farqli — u 409); katalog ulanmagan — 503.
+   */
   async actPdf(input: { id: string }): Promise<SettlementFile> {
     const s = await this.get(input);
+    const [settings, parties] = await Promise.all([
+      this.settings(),
+      this.actParties(
+        s.wholesalerId,
+        s.items.map((i) => i.productId),
+      ),
+    ]);
+    const d = parties.details;
     const doc = registerPdfFonts(new PDFDocument({ size: 'A4', margin: 40 }));
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
@@ -810,19 +826,27 @@ export class SettlementService {
     });
     doc.fontSize(14).text(`AKT-SVERKA ${s.number}`, { align: 'center' });
     doc.moveDown(0.5).fontSize(10);
-    doc.text(`Davr: ${s.periodStart} — ${s.periodEnd}`);
-    doc.text(`Optovik: #${s.wholesalerId} (rekvizitlar katalogda — BE-07)`);
+    doc.text(`Davr: ${dmy(s.periodStart)} — ${dmy(s.periodEnd)}`);
+    doc.text(
+      `Komissioner (platforma): ${settings.payerName ?? '[nomi sozlanmagan — Moliya → Sozlamalar, EQ-05]'}, STIR ${settings.payerTin ?? '—'}`,
+    );
+    doc.text(
+      `Komitent (optovik): ${parties.wholesalerName ?? `#${s.wholesalerId} — katalogda topilmadi`}, STIR ${d?.tin?.trim() || '—'}`,
+    );
+    doc.text(
+      `Asos: komissiya shartnomasi № ${d?.contractNumber?.trim() || '—'}${d?.contractDate ? `, ${dmy(d.contractDate)}` : ''}`,
+    );
     doc.text(
       `Qaytarish muddati: ${s.returnWindowDays} kun; aktga Elchi puli kelgan va muddati o‘tgan tovarlar kiradi.`,
     );
     doc.text(
-      `Holat: ${STATUS_TEXT[s.status]}${s.paidAt ? ` (${new Date(s.paidAt).toISOString().slice(0, 10)})` : ''}`,
+      `Holat: ${STATUS_TEXT[s.status]}${s.paidAt ? ` (${dmy(new Date(s.paidAt).toISOString().slice(0, 10))})` : ''}`,
     );
     doc.moveDown();
     doc.text('Buyurtma | Tovar | Soni | Yetkazilgan | Summa, so‘m');
     for (const i of s.items)
       doc.text(
-        `${i.orderId} | ${i.productId ?? '—'} | ${i.quantity ?? '—'} | ${new Date(i.deliveredAt).toISOString().slice(0, 10)} | ${fmt(i.amount)}`,
+        `${i.orderId} | ${i.productId ? (parties.productNames.get(String(i.productId)) ?? `mahsulot #${i.productId}`) : '—'} | ${i.quantity ?? '—'} | ${dmy(new Date(i.deliveredAt).toISOString().slice(0, 10))} | ${fmt(i.amount)}`,
       );
     doc
       .moveDown()
@@ -842,12 +866,64 @@ export class SettlementService {
           align: 'right',
         },
       );
+    doc
+      .fontSize(10)
+      .moveDown(2)
+      .text('Komissioner: ____________________   Muhr o‘rni')
+      .moveDown()
+      .text('Komitent: ____________________   Muhr o‘rni');
     doc.end();
     const pdf = await done;
     return {
       fileName: `akt-sverka_${s.number}_${s.periodEnd}.pdf`,
       contentType: 'application/pdf',
       base64: pdf.toString('base64'),
+    };
+  }
+
+  /**
+   * Akt tomonlari: optovik rekvizitlari va tovar nomlari katalogdan. `payees` dan farqli — to‘liq bo‘lmasa ham xato
+   * emas (akt rekvizitsiz ham ko‘rinadi, bank fayli esa 409).
+   */
+  private async actParties(
+    wholesalerId: string,
+    productIds: Array<string | null>,
+  ): Promise<{
+    details: WholesalerPaymentDetails | null;
+    wholesalerName: string | null;
+    productNames: Map<string, string | null>;
+  }> {
+    if (!this.catalog)
+      throw new ServiceUnavailableException('Katalog ulanmagan');
+    const [list, display] = await Promise.all([
+      sendRpc<WholesalerPaymentDetails[]>(
+        this.catalog,
+        { cmd: CATALOG_WHOLESALER_PAYMENT_DETAILS },
+        { ids: [wholesalerId] },
+      ),
+      sendRpc<CatalogDisplayLookupResult>(
+        this.catalog,
+        { cmd: CATALOG_DISPLAY_LOOKUP },
+        {
+          shopIds: [wholesalerId],
+          productIds: [
+            ...new Set(productIds.filter((id): id is string => !!id)),
+          ],
+        },
+      ),
+    ]);
+    const details =
+      (list ?? []).find((p) => String(p.id) === String(wholesalerId)) ?? null;
+    return {
+      details,
+      wholesalerName:
+        details?.name ??
+        display?.shops?.find((x) => String(x.id) === String(wholesalerId))
+          ?.name ??
+        null,
+      productNames: new Map(
+        (display?.products ?? []).map((p) => [String(p.id), p.name ?? null]),
+      ),
     };
   }
 

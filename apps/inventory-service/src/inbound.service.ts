@@ -22,6 +22,7 @@ import {
   InventoryVariantCell,
   LOT_BLOCKED_EVENT,
   LOT_MIN_SHELF_DAYS,
+  UserNamesClient,
   LotBlockedEvent,
   PDF_FONT,
   registerPdfFonts,
@@ -41,7 +42,7 @@ import {
   recordOfferOutOfStock,
   saveMovement,
 } from './inventory.helpers';
-import { tashkentTime } from './pdf-text';
+import { minusDays, signedQty, staffName, tashkentTime } from './pdf-text';
 import { TODAY_SQL } from './stock-lots';
 
 const ID = /^[1-9]\d{0,18}$/;
@@ -104,6 +105,7 @@ export class InboundService {
     @Optional()
     @Inject(RmqClient.NOTIFICATION)
     private readonly notifications?: ClientProxy,
+    @Optional() private readonly names?: UserNamesClient,
   ) {}
 
   /** OMB-1: e’lon (omborchi, admin, superadmin) — CPA mahsulotlarining yagona varianti, shu optovikniki. */
@@ -616,9 +618,10 @@ export class InboundService {
   }
 
   /**
-   * Qabul (farq va brak) akti PDF (dizayn `hujjat-qabul-akti`): komitent — optovik (nom, STIR, shartnoma — katalog),
-   * qatorlar — mahsulot, SKU/shtrix-kod, yacheyka, partiya, muddat, e’lon/qabul/brak/farq. Optovikka yuborish
-   * qo‘lda (FE-23 gacha).
+   * Postavka qabul akti PDF (dizayn `hujjat-qabul-akti`, docs/dizayn/manbalar/h-1.md 3.1): komitent — optovik (nom,
+   * STIR, shartnoma — katalog), qatorlar — mahsulot, SKU/shtrix-kod, yacheyka, partiya, muddat, e’lon/qabul/brak/farq.
+   * «Qabul» — yaroqlisi (kelgan − brak), «Farq» — qabul − e’lon: ekran (FE-16 `InboundActPage`) va dizayn bilan bir xil
+   * (TC1: 100 keldi, 2 brak → qabul 98, farq −2). Xodim — ism bilan («Jasur T., omborchi»), identity javob bermasa `#ID`.
    */
   async actPdf(input: { id: string }): Promise<PdfFile> {
     const shipment = await this.get(input);
@@ -627,22 +630,25 @@ export class InboundService {
       shipment.status !== InboundShipmentStatus.DISCREPANCY
     )
       throw new ConflictException('Akt qabuldan keyin tuziladi');
-    const wholesaler = await sendRpc<{
-      name: string;
-      tin: string | null;
-      contractNumber: string | null;
-      contractDate: string | null;
-    }>(
-      this.catalog,
-      { cmd: 'catalog.wholesaler.admin-get' },
-      { id: shipment.wholesalerId },
-    ).catch(() => null);
+    const [wholesaler, receiver] = await Promise.all([
+      sendRpc<{
+        name: string;
+        tin: string | null;
+        contractNumber: string | null;
+        contractDate: string | null;
+      }>(
+        this.catalog,
+        { cmd: 'catalog.wholesaler.admin-get' },
+        { id: shipment.wholesalerId },
+      ).catch(() => null),
+      staffName(this.names, shipment.receivedBy),
+    ]);
     const doc = registerPdfFonts(
       new PDFDocument({
         size: 'A4',
         margin: 40,
         compress: false,
-        info: { Title: `Qabul akti ${shipment.number}` },
+        info: { Title: `Postavka qabul akti ${shipment.number}` },
       }),
     );
     const chunks: Buffer[] = [];
@@ -654,27 +660,35 @@ export class InboundService {
     const receivedAt = shipment.receivedAt
       ? tashkentTime(shipment.receivedAt)
       : '—';
+    const receivedDay = shipment.receivedAt
+      ? tashkentTime(shipment.receivedAt).slice(0, 10)
+      : null;
+    const discrepancy = shipment.status === InboundShipmentStatus.DISCREPANCY;
+    const dmy = (day: string | null) =>
+      day ? day.slice(0, 10).split('-').reverse().join('.') : null;
+
     doc
       .font(PDF_FONT.bold)
       .fontSize(14)
-      .text(
-        shipment.status === InboundShipmentStatus.DISCREPANCY
-          ? `Qabul akti (farq va brak) No ${shipment.number}`
-          : `Qabul akti No ${shipment.number}`,
-      );
+      .text(`Postavka qabul akti No ${shipment.number}`);
     doc
       .font(PDF_FONT.regular)
       .fontSize(10)
+      .text(discrepancy ? 'FARQ BOR · farq akti' : 'FARQSIZ')
+      .moveDown(0.5)
       .text(
         `Komitent (optovik): ${wholesaler?.name ?? `#${shipment.wholesalerId}`}, STIR ${wholesaler?.tin ?? '—'}`,
       )
-      .text('Komissioner: Elchi Marketplace')
+      .text('Komissioner (platforma): Elchi Marketplace')
       .text(
-        `Asos: shartnoma ${wholesaler?.contractNumber ?? '—'} (${wholesaler?.contractDate ?? '—'})`,
+        `Asos: komissiya shartnomasi № ${wholesaler?.contractNumber?.trim() || '—'}${
+          wholesaler?.contractDate ? `, ${dmy(wholesaler.contractDate)}` : ''
+        }`,
       )
       .text(
-        `Postavka: ${shipment.number}, kutilgan sana ${shipment.expectedAt}, qabul ${receivedAt}, qabul qildi #${shipment.receivedBy ?? '—'}`,
+        `Postavka arizasi: ${shipment.number} · Kelish sanasi: ${dmy(shipment.expectedAt) ?? '—'}`,
       )
+      .text(`Qabul yakunlandi: ${receivedAt} · Qabul qildi: ${receiver.label}`)
       .moveDown();
     doc
       .font(PDF_FONT.bold)
@@ -684,32 +698,94 @@ export class InboundService {
       );
     doc.font(PDF_FONT.regular).fontSize(8);
     let declared = 0;
-    let received = 0;
+    let arrived = 0;
+    let accepted = 0;
     let defective = 0;
+    let blocked = 0;
     shipment.items.forEach((item, index) => {
       const got = item.receivedQty ?? 0;
       const bad = item.defectiveQty ?? 0;
+      const good = Math.max(0, got - bad);
       declared += item.declaredQty;
-      received += got;
+      arrived += got;
+      accepted += good;
       defective += bad;
+      // qabul kuni muddatiga 60 kundan kam qolgan partiya sotuvga chiqmaydi (OMB-3, qabuldagi qoida bilan bir xil)
+      if (
+        item.expiryDate &&
+        receivedDay &&
+        minusDays(item.expiryDate, LOT_MIN_SHELF_DAYS) < receivedDay
+      )
+        blocked += good;
       doc.text(
-        `${index + 1}.  ${item.productName} | ${item.sku}${item.barcode ? ` / ${item.barcode}` : ''} | ${item.cell ?? '—'} | ${item.batch ?? '—'} | ${item.expiryDate ?? 'kuzatilmaydi'} | ${item.declaredQty} | ${got} | ${bad} | ${got - item.declaredQty}`,
+        `${index + 1}.  ${item.productName} | ${item.sku}${item.barcode ? ` / ${item.barcode}` : ''} | ${item.cell ?? '—'} | ${item.batch ?? '—'} | ${item.expiryDate ?? 'kuzatilmaydi'} | ${item.declaredQty} | ${good} | ${bad} | ${signedQty(good - item.declaredQty)}`,
       );
     });
     doc
       .moveDown()
       .font(PDF_FONT.bold)
       .text(
-        `Jami: e’lon ${declared}, qabul ${received}, brak ${defective}, farq ${received - declared}`,
+        `Jami: e’lon ${declared}, qabul ${accepted}, brak ${defective}, farq ${signedQty(accepted - declared)}`,
       )
-      .font(PDF_FONT.regular);
+      .font(PDF_FONT.regular)
+      .text('Skaner bilan sanaldi')
+      .moveDown();
+    // xulosa (dizayn h-1.md 3.1, ekran `InboundActPage` bilan bir xil matn)
+    const shortage = Math.max(0, declared - arrived);
+    const surplus = Math.max(0, arrived - declared);
+    doc.fontSize(10);
+    if (!discrepancy && !defective && !shortage && !surplus)
+      doc
+        .text(`Farq yo‘q: ${accepted} / ${declared} dona`)
+        .text('Brak yo‘q · kam kelgan tovar yo‘q');
+    else {
+      const diff = accepted - declared;
+      const parts =
+        diff === -defective && !shortage && !surplus
+          ? 'hammasi brak'
+          : [
+              defective ? `${defective} brak` : '',
+              shortage ? `${shortage} kam kelgan` : '',
+              surplus ? `${surplus} ortiq` : '',
+            ]
+              .filter(Boolean)
+              .join(', ') || '—';
+      doc
+        .text(`Farq: ${signedQty(diff)} dona — ${parts}`)
+        .text(
+          `Sanaldi: ${arrived} / ${declared} · ${
+            shortage
+              ? `kam kelgan ${shortage}`
+              : surplus
+                ? `ortiq ${surplus}`
+                : 'kam kelgan tovar yo‘q'
+          }`,
+        );
+    }
+    doc.text(
+      blocked
+        ? `Qoldiqqa kirdi: ${accepted} dona — shundan ${blocked} dona sotuvga chiqmaydi (muddatiga ${LOT_MIN_SHELF_DAYS} kundan kam).`
+        : `Qoldiqqa kirdi: ${accepted} dona — sotuvga chiqdi.`,
+    );
+    if (defective)
+      doc.text(
+        `Brak: ${defective} dona — qoldiqqa kirmaydi. Brak tovar uchun pul yozilmaydi.`,
+      );
     if (shipment.receiveComment)
       doc.moveDown().text(`Ombor izohi: ${shipment.receiveComment}`);
     doc
       .moveDown(2)
-      .text('Ombor: ____________________')
+      .text(
+        `Qabul qildi — ombor: ${receiver.label}   ________________   Muhr o‘rni`,
+      )
       .moveDown()
-      .text('Optovik vakili: ____________________');
+      .text(
+        'Topshirdi — optovik vakili (F.I.Sh.): ________________   Muhr o‘rni',
+      )
+      .moveDown(2)
+      .fontSize(8)
+      .text(`Postavka qabul akti ${shipment.number} · 1 / 1 bet`)
+      .text(`Tuzildi ${receivedAt} · ${receiver.short}`);
     doc.end();
     const pdf = await completed;
     return {

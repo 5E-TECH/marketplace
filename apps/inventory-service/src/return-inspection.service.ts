@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import PDFDocument from 'pdfkit';
@@ -16,13 +17,14 @@ import {
   RmqClient,
   sendRpc,
   StockMovementType,
+  UserNamesClient,
 } from '@app/common';
 import { ReservationItem } from './entities/reservation-item.entity';
 import { Reservation } from './entities/reservation.entity';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
 import { PdfFile } from './inbound.service';
-import { tashkentTime } from './pdf-text';
+import { staffName, tashkentTime } from './pdf-text';
 
 const ID = /^[1-9]\d{0,18}$/;
 
@@ -49,6 +51,7 @@ export class ReturnInspectionService {
   constructor(
     private readonly dataSource: DataSource,
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
+    @Optional() private readonly names?: UserNamesClient,
   ) {}
 
   async grade(input: {
@@ -220,9 +223,11 @@ export class ReturnInspectionService {
       { cmd: 'inventory.variant-details' },
       { variantIds: defective.map((item) => item.variantId) },
     ).catch(() => []);
-    const names = new Map<string, { productName: string; sku: string }>(
+    const products = new Map<string, { productName: string; sku: string }>(
       details.map((d) => [String(d.variantId), d] as const),
     );
+    const inspector = await staffName(this.names, inspection.inspectedBy);
+    const inspectedAt = tashkentTime(inspection.inspectedAt);
     const doc = registerPdfFonts(
       new PDFDocument({
         size: 'A4',
@@ -245,9 +250,7 @@ export class ReturnInspectionService {
       .font(PDF_FONT.regular)
       .fontSize(10)
       .text(`Elchi posilkasi: ${input?.shipmentId ?? '—'}`)
-      .text(
-        `Saralandi: ${tashkentTime(inspection.inspectedAt)}, saraladi #${inspection.inspectedBy}`,
-      )
+      .text(`Saralandi: ${inspectedAt} · Saralagan: ${inspector.label}`)
       .moveDown();
     doc
       .font(PDF_FONT.bold)
@@ -255,7 +258,7 @@ export class ReturnInspectionService {
       .text('No  Mahsulot | SKU | Soni | Baho');
     doc.font(PDF_FONT.regular).fontSize(9);
     defective.forEach((item, index) => {
-      const detail = names.get(item.variantId);
+      const detail = products.get(item.variantId);
       doc.text(
         `${index + 1}.  ${detail?.productName ?? `variant ${item.variantId}`} | ${detail?.sku ?? '—'} | ${item.defective} | Brak`,
       );
@@ -263,9 +266,15 @@ export class ReturnInspectionService {
     if (inspection.comment) doc.moveDown().text(`Izoh: ${inspection.comment}`);
     doc
       .moveDown(2)
-      .text('Ombor: ____________________')
+      .text(`Tuzdi — ombor: ${inspector.label}   ________________   Muhr o‘rni`)
       .moveDown()
-      .text('Optovik vakili: ____________________');
+      .text(
+        'Tanishdi — optovik vakili (F.I.Sh.): ________________   Muhr o‘rni',
+      )
+      .moveDown(2)
+      .fontSize(8)
+      .text(`Brak akti ${inspection.orderId} · 1 / 1 bet`)
+      .text(`Tuzildi ${inspectedAt} · ${inspector.short}`);
     doc.end();
     const pdf = await completed;
     return {

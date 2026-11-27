@@ -156,7 +156,11 @@ export class ReceiveInboundItemDto {
   @Matches(ID)
   itemId: string;
 
-  @ApiProperty({ example: 98, description: 'Kelgan (brak bilan birga)' })
+  @ApiProperty({
+    example: 100,
+    description:
+      'Kelgan (brak bilan birga); qabul — yaroqlisi: receivedQty − defectiveQty',
+  })
   @IsInt()
   @Min(0)
   @Max(1_000_000)
@@ -299,8 +303,8 @@ export class LotsQueryDto {
 }
 
 /**
- * Javob misollari (BE-25 TC3) bitta postavka bo‘yicha: e’londa 100 dona, qabulda 98 keldi, 2 tasi brak — «Farq bor»;
- * qoldiqqa va partiyaga 96 dona. Qabulgacha `received*`, `batch`, `expiryDate`, `cell` — `null`.
+ * Javob misollari (BE-25 TC3) bitta postavka bo‘yicha (BE-17 TC1): e’londa 100 dona, qabulda 100 keldi, 2 tasi brak —
+ * «Farq bor», aktda qabul 98, farq −2; qoldiqqa va partiyaga 98 dona. Qabulgacha `received*`, `batch`, `expiryDate`, `cell` — `null`.
  */
 export class InboundShipmentItemDto {
   @ApiProperty({ example: '7' }) id: string;
@@ -316,7 +320,13 @@ export class InboundShipmentItemDto {
   })
   barcode: string | null;
   @ApiProperty({ example: 100 }) declaredQty: number;
-  @ApiPropertyOptional({ type: Number, nullable: true, example: 98 })
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    example: 100,
+    description:
+      'Kelgan (brak bilan birga); aktdagi «Qabul» = receivedQty − defectiveQty',
+  })
   receivedQty: number | null;
   @ApiPropertyOptional({ type: Number, nullable: true, example: 2 })
   defectiveQty: number | null;
@@ -420,7 +430,7 @@ export class StockLotDto {
     example: '2027-05-01',
   })
   sellableUntil: string;
-  @ApiProperty({ example: 96 }) quantity: number;
+  @ApiProperty({ example: 98 }) quantity: number;
   @ApiProperty({ example: false }) blocked: boolean;
   @ApiProperty({ example: '15' }) wholesalerId: string;
   @ApiPropertyOptional({

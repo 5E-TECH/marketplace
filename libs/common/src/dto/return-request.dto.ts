@@ -286,6 +286,8 @@ export interface CatalogDisplayLookupResult {
   /** `expiryTracked` — postavkada muddat kuzatiladi (BAD yoki toifa belgisi, OMB-3; BE-25). */
   products: Array<{
     id: string;
+    /** Mahsulot nomi (o‘chirilgani ham — tarix); BE-33 akt-sverka PDF. */
+    name: string | null;
     imageUrl: string | null;
     expiryTracked: boolean;
   }>;
