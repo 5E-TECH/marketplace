@@ -1,5 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import {
   CATALOG_DISPLAY_LOOKUP,
   WholesalerSettlementDto,
@@ -60,11 +59,13 @@ describe('SettlementService.actPdf', () => {
     ),
   });
   const service = (
-    cat: ReturnType<typeof catalog> | undefined,
+    cat: unknown,
     payer: Record<string, unknown> = PAYER,
+    /** `finance.text_setting` dagi akt sanasida amalda bo‘lgan qatorlar. */
+    dated: Array<{ key: string; value: string }> = [],
   ) => {
     const svc = new SettlementService(
-      {} as DataSource,
+      { query: jest.fn().mockResolvedValue(dated) } as unknown as DataSource,
       {} as LedgerService,
       cat as never,
     );
@@ -125,7 +126,7 @@ describe('SettlementService.actPdf', () => {
     expect(text).not.toContain('BE-07');
   });
 
-  it('rekvizit yo‘q — PDF baribir chiqadi: «sozlanmagan», «—», optovik nomi do‘kondan, tovar `#ID`', async () => {
+  it('rekvizit yo‘q — PDF baribir chiqadi: «—» (optovik ham yuklaydi — ichki ko‘rsatma yo‘q), optovik nomi do‘kondan, tovar `#ID`', async () => {
     const svc = service(
       catalog([], {
         shops: [{ id: '501', name: 'Namuna Savdo MChJ' }],
@@ -144,15 +145,40 @@ describe('SettlementService.actPdf', () => {
     const { text } = inspectPdf(
       Buffer.from((await svc.actPdf({ id: '7' })).base64, 'base64'),
     );
-    expect(text).toContain('[nomi sozlanmagan');
+    expect(text).toContain('Komissioner (platforma): —, STIR —');
+    expect(text).not.toContain('sozlanmagan');
+    expect(text).not.toContain('EQ-05');
     expect(text).toContain('Komitent (optovik): Namuna Savdo MChJ, STIR —');
     expect(text).toContain('Asos: komissiya shartnomasi № —');
     expect(text).toContain('mp-order:42 | mahsulot #9 | 2');
   });
 
-  it('katalog ulanmagan — 503 (rekvizitsiz akt chiqmaydi)', async () => {
-    await expect(service(undefined).actPdf({ id: '7' })).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+  it('katalog javob bermasa yoki ulanmagan — PDF «—» bilan chiqadi (gateway chegarasigacha kutmaydi)', async () => {
+    const down = {
+      send: jest.fn(() => throwError(() => new Error('katalog yo‘q'))),
+    };
+    for (const cat of [down, undefined]) {
+      const { text } = inspectPdf(
+        Buffer.from((await service(cat).actPdf({ id: '7' })).base64, 'base64'),
+      );
+      expect(text).toContain('Komitent (optovik): —, STIR —');
+      expect(text).toContain('mp-order:42 | mahsulot #9 | 2');
+      expect(text).not.toContain('katalogda topilmadi');
+    }
+  });
+
+  it('platforma rekvizitlari — akt sanasidagi sozlamadan (keyin o‘zgartirilsa eski akt o‘zgarmaydi)', async () => {
+    const svc = service(
+      catalog([], { shops: [], products: [] }),
+      { ...PAYER, payerName: 'Yangi nom MChJ', payerTin: '309999999' },
+      [{ key: 'payer_name', value: 'Elchi Marketplace MChJ' }],
+    );
+    const { text } = inspectPdf(
+      Buffer.from((await svc.actPdf({ id: '7' })).base64, 'base64'),
+    );
+    // nom — akt sanasidagisi; STIR u paytda kiritilmagan — joriy
+    expect(text).toContain(
+      'Komissioner (platforma): Elchi Marketplace MChJ, STIR 309999999',
     );
   });
 });

@@ -24,7 +24,12 @@ import { Reservation } from './entities/reservation.entity';
 import { Stock } from './entities/stock.entity';
 import { lockStock, saveMovement } from './inventory.helpers';
 import { PdfFile } from './inbound.service';
-import { staffName, tashkentTime } from './pdf-text';
+import {
+  keepTogether,
+  pageFooters,
+  staffName,
+  tashkentDateTime,
+} from './pdf-text';
 
 const ID = /^[1-9]\d{0,18}$/;
 
@@ -227,12 +232,13 @@ export class ReturnInspectionService {
       details.map((d) => [String(d.variantId), d] as const),
     );
     const inspector = await staffName(this.names, inspection.inspectedBy);
-    const inspectedAt = tashkentTime(inspection.inspectedAt);
+    const inspectedAt = tashkentDateTime(inspection.inspectedAt);
     const doc = registerPdfFonts(
       new PDFDocument({
         size: 'A4',
         margin: 40,
         compress: false,
+        bufferPages: true,
         info: { Title: `Brak akti ${inspection.orderId}` },
       }),
     );
@@ -264,17 +270,18 @@ export class ReturnInspectionService {
       );
     });
     if (inspection.comment) doc.moveDown().text(`Izoh: ${inspection.comment}`);
+    keepTogether(doc, 90);
     doc
       .moveDown(2)
       .text(`Tuzdi — ombor: ${inspector.label}   ________________   Muhr o‘rni`)
       .moveDown()
       .text(
         'Tanishdi — optovik vakili (F.I.Sh.): ________________   Muhr o‘rni',
-      )
-      .moveDown(2)
-      .fontSize(8)
-      .text(`Brak akti ${inspection.orderId} · 1 / 1 bet`)
-      .text(`Tuzildi ${inspectedAt} · ${inspector.short}`);
+      );
+    pageFooters(doc, (page, count) => [
+      `Brak akti ${inspection.orderId} · ${page} / ${count} bet`,
+      `Tuzildi ${inspectedAt} · ${inspector.short}`,
+    ]);
     doc.end();
     const pdf = await completed;
     return {

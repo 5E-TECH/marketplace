@@ -42,7 +42,16 @@ import {
   recordOfferOutOfStock,
   saveMovement,
 } from './inventory.helpers';
-import { minusDays, signedQty, staffName, tashkentTime } from './pdf-text';
+import {
+  dmy,
+  keepTogether,
+  minusDays,
+  pageFooters,
+  signedQty,
+  staffName,
+  tashkentDateTime,
+  tashkentTime,
+} from './pdf-text';
 import { TODAY_SQL } from './stock-lots';
 
 const ID = /^[1-9]\d{0,18}$/;
@@ -648,6 +657,7 @@ export class InboundService {
         size: 'A4',
         margin: 40,
         compress: false,
+        bufferPages: true,
         info: { Title: `Postavka qabul akti ${shipment.number}` },
       }),
     );
@@ -658,14 +668,12 @@ export class InboundService {
       doc.on('error', reject);
     });
     const receivedAt = shipment.receivedAt
-      ? tashkentTime(shipment.receivedAt)
+      ? tashkentDateTime(shipment.receivedAt)
       : '—';
     const receivedDay = shipment.receivedAt
       ? tashkentTime(shipment.receivedAt).slice(0, 10)
       : null;
     const discrepancy = shipment.status === InboundShipmentStatus.DISCREPANCY;
-    const dmy = (day: string | null) =>
-      day ? day.slice(0, 10).split('-').reverse().join('.') : null;
 
     doc
       .font(PDF_FONT.bold)
@@ -702,6 +710,9 @@ export class InboundService {
     let accepted = 0;
     let defective = 0;
     let blocked = 0;
+    // kam va ortiq — har qator bo‘yicha (bir mahsulot ortiq, boshqasi kam kelsa jamida yo‘qolib ketmasin)
+    let shortage = 0;
+    let surplus = 0;
     shipment.items.forEach((item, index) => {
       const got = item.receivedQty ?? 0;
       const bad = item.defectiveQty ?? 0;
@@ -710,15 +721,20 @@ export class InboundService {
       arrived += got;
       accepted += good;
       defective += bad;
+      shortage += Math.max(0, item.declaredQty - got);
+      surplus += Math.max(0, got - item.declaredQty);
       // qabul kuni muddatiga 60 kundan kam qolgan partiya sotuvga chiqmaydi (OMB-3, qabuldagi qoida bilan bir xil)
-      if (
-        item.expiryDate &&
-        receivedDay &&
-        minusDays(item.expiryDate, LOT_MIN_SHELF_DAYS) < receivedDay
-      )
-        blocked += good;
+      const lotBlocked =
+        !!item.expiryDate &&
+        !!receivedDay &&
+        minusDays(item.expiryDate, LOT_MIN_SHELF_DAYS) < receivedDay;
+      if (lotBlocked) blocked += good;
+      const expiry = item.expiryDate
+        ? `${dmy(item.expiryDate)}${lotBlocked ? ' · sotuvga chiqmaydi' : ''}`
+        : 'kuzatilmaydi';
+      // partiya kiritilmagan bo‘lsa — postavka raqami (ekran va dizayn h-1 §3.2 bilan bir xil)
       doc.text(
-        `${index + 1}.  ${item.productName} | ${item.sku}${item.barcode ? ` / ${item.barcode}` : ''} | ${item.cell ?? '—'} | ${item.batch ?? '—'} | ${item.expiryDate ?? 'kuzatilmaydi'} | ${item.declaredQty} | ${good} | ${bad} | ${signedQty(good - item.declaredQty)}`,
+        `${index + 1}.  ${item.productName} | ${item.sku}${item.barcode ? ` / ${item.barcode}` : ''} | ${item.cell ?? '—'} | ${item.batch ?? shipment.number} | ${expiry} | ${item.declaredQty} | ${good} | ${bad} | ${signedQty(good - item.declaredQty)}`,
       );
     });
     doc
@@ -730,9 +746,8 @@ export class InboundService {
       .font(PDF_FONT.regular)
       .text('Skaner bilan sanaldi')
       .moveDown();
-    // xulosa (dizayn h-1.md 3.1, ekran `InboundActPage` bilan bir xil matn)
-    const shortage = Math.max(0, declared - arrived);
-    const surplus = Math.max(0, arrived - declared);
+    // xulosa (dizayn h-1.md 3.1, ekran `InboundActPage` matni); xulosa va imzolar bitta betda
+    keepTogether(doc, 190);
     doc.fontSize(10);
     if (!discrepancy && !defective && !shortage && !surplus)
       doc
@@ -741,7 +756,7 @@ export class InboundService {
     else {
       const diff = accepted - declared;
       const parts =
-        diff === -defective && !shortage && !surplus
+        defective > 0 && !shortage && !surplus
           ? 'hammasi brak'
           : [
               defective ? `${defective} brak` : '',
@@ -754,11 +769,12 @@ export class InboundService {
         .text(`Farq: ${signedQty(diff)} dona — ${parts}`)
         .text(
           `Sanaldi: ${arrived} / ${declared} · ${
-            shortage
-              ? `kam kelgan ${shortage}`
-              : surplus
-                ? `ortiq ${surplus}`
-                : 'kam kelgan tovar yo‘q'
+            [
+              shortage ? `kam kelgan ${shortage}` : '',
+              surplus ? `ortiq ${surplus}` : '',
+            ]
+              .filter(Boolean)
+              .join(', ') || 'kam kelgan tovar yo‘q'
           }`,
         );
     }
@@ -781,11 +797,11 @@ export class InboundService {
       .moveDown()
       .text(
         'Topshirdi — optovik vakili (F.I.Sh.): ________________   Muhr o‘rni',
-      )
-      .moveDown(2)
-      .fontSize(8)
-      .text(`Postavka qabul akti ${shipment.number} · 1 / 1 bet`)
-      .text(`Tuzildi ${receivedAt} · ${receiver.short}`);
+      );
+    pageFooters(doc, (page, count) => [
+      `Postavka qabul akti ${shipment.number} · ${page} / ${count} bet`,
+      `Tuzildi ${receivedAt} · ${receiver.short}`,
+    ]);
     doc.end();
     const pdf = await completed;
     return {

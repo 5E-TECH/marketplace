@@ -12,6 +12,47 @@ export function tashkentTime(value: Date | string): string {
     .slice(0, 16);
 }
 
+/** Sana va vaqt Toshkentda hujjat ko‘rinishida: `DD.MM.YYYY, HH:MM` (dizayn h-1 §3.1, «14.01.2027, 14:39»). */
+export function tashkentDateTime(value: Date | string): string {
+  const [day, time] = tashkentTime(value).split(' ');
+  return `${dmy(day)}, ${time}`;
+}
+
+/** Kun `YYYY-MM-DD` → `DD.MM.YYYY`; bo‘sh — null. */
+export function dmy(day: string | null | undefined): string | null {
+  return day ? day.slice(0, 10).split('-').reverse().join('.') : null;
+}
+
+/** Keyingi blok (xulosa va imzolar) bo‘linib ketmasin: joy yetmasa — yangi bet. */
+export function keepTogether(doc: PDFKit.PDFDocument, height: number): void {
+  if (doc.y + height > doc.page.height - doc.page.margins.bottom) doc.addPage();
+}
+
+/**
+ * Har betga pastki yozuv «… · k / n bet» (hujjat yopilishidan oldin; `bufferPages: true` bilan yaratilgan bo‘lsin).
+ * Pastki hoshiyaga yoziladi — yangi bet qo‘shilmaydi.
+ */
+export function pageFooters(
+  doc: PDFKit.PDFDocument,
+  lines: (page: number, count: number) => string[],
+): void {
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const bottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    const left = doc.page.margins.left;
+    const width = doc.page.width - left - doc.page.margins.right;
+    let y = doc.page.height - bottom + 6;
+    doc.fontSize(8);
+    for (const line of lines(i - range.start + 1, range.count)) {
+      doc.text(line, left, y, { width, lineBreak: false });
+      y += 10;
+    }
+    doc.page.margins.bottom = bottom;
+  }
+}
+
 /** Farq ishorasi bilan: «+3», «−2» (U+2212), «0» — frontenddagi akt ekrani (InboundActPage `signed`) bilan bir xil. */
 export function signedQty(value: number): string {
   if (value > 0) return `+${value}`;

@@ -126,10 +126,10 @@ describe('Ombor aktlari PDF — Unicode shrift', () => {
       'Postavka arizasi: PST-000003 · Kelish sanasi: 25.11.2026',
     );
     expect(text).toContain(
-      'Qabul yakunlandi: 2026-11-25 10:30 · Qabul qildi: Jasur T., omborchi',
+      'Qabul yakunlandi: 25.11.2026, 10:30 · Qabul qildi: Jasur T., omborchi',
     );
     expect(text).toContain(
-      '1.  Витамин С 1000 мг | VIT-C-60 / 4780000000017 | A-01-02 | L-77 | 2027-06-30 | 100 | 98 | 2 | −2',
+      '1.  Витамин С 1000 мг | VIT-C-60 / 4780000000017 | A-01-02 | L-77 | 30.06.2027 | 100 | 98 | 2 | −2',
     );
     expect(text).toContain('Jami: e’lon 100, qabul 98, brak 2, farq −2');
     expect(text).toContain('Farq: −2 dona — hammasi brak');
@@ -145,7 +145,7 @@ describe('Ombor aktlari PDF — Unicode shrift', () => {
       'Qabul qildi — ombor: Jasur T., omborchi   ________________   Muhr o‘rni',
     );
     expect(text).toContain('Postavka qabul akti PST-000003 · 1 / 1 bet');
-    expect(text).toContain('Tuzildi 2026-11-25 10:30 · Jasur T.');
+    expect(text).toContain('Tuzildi 25.11.2026, 10:30 · Jasur T.');
     expect(text).not.toContain('#12');
   });
 
@@ -153,7 +153,10 @@ describe('Ombor aktlari PDF — Unicode shrift', () => {
     const service = inbound(true);
     jest.spyOn(service, 'get').mockResolvedValue(shipment());
     const { text } = read((await service.actPdf({ id: '3' })).base64);
-    expect(text).toContain('| 10 | 9 | 0 | −1');
+    // partiya kiritilmagan — postavka raqami (ekran bilan bir xil)
+    expect(text).toContain(
+      'Choynak | CH-01 | B-08 | PST-000003 | kuzatilmaydi | 10 | 9 | 0 | −1',
+    );
     expect(text).toContain('Farq: −1 dona — 1 kam kelgan');
     expect(text).toContain('Sanaldi: 9 / 10 · kam kelgan 1');
     expect(text).toContain('Qabul qildi: #12');
@@ -175,8 +178,57 @@ describe('Ombor aktlari PDF — Unicode shrift', () => {
     expect(text).toContain('Farq yo‘q: 20 / 20 dona');
     expect(text).toContain('Brak yo‘q · kam kelgan tovar yo‘q');
     expect(text).toContain(
+      '| 12.01.2027 · sotuvga chiqmaydi | 20 | 20 | 0 | 0',
+    );
+    expect(text).toContain(
       'Qoldiqqa kirdi: 20 dona — shundan 20 dona sotuvga chiqmaydi (muddatiga 60 kundan kam).',
     );
+  });
+
+  it('qabul akti: bir mahsulot ortiq, boshqasi kam — jamida yo‘qolmaydi («hammasi brak» emas)', async () => {
+    const service = inbound();
+    const base = shipment();
+    jest.spyOn(service, 'get').mockResolvedValue({
+      ...base,
+      items: [
+        {
+          ...base.items[0],
+          productName: 'A',
+          declaredQty: 10,
+          receivedQty: 12,
+        },
+        { ...base.items[0], productName: 'B', declaredQty: 10, receivedQty: 8 },
+      ],
+    } as InboundShipmentDto);
+    const { text } = read((await service.actPdf({ id: '3' })).base64);
+    expect(text).toContain('Farq: 0 dona — 2 kam kelgan, 2 ortiq');
+    expect(text).toContain('Sanaldi: 20 / 20 · kam kelgan 2, ortiq 2');
+    expect(text).not.toContain('hammasi brak');
+  });
+
+  it('qabul akti: uzun postavka bir necha betga — har betda «k / n bet», imzolar bo‘linmaydi', async () => {
+    const service = inbound();
+    const base = shipment();
+    jest.spyOn(service, 'get').mockResolvedValue({
+      ...base,
+      items: Array.from({ length: 90 }, (_, i) => ({
+        ...base.items[0],
+        productName: `Mahsulot ${i + 1}`,
+      })),
+    } as InboundShipmentDto);
+    const pdf = Buffer.from(
+      (await service.actPdf({ id: '3' })).base64,
+      'base64',
+    );
+    const pages = (pdf.toString('latin1').match(/\/Type \/Page\b/g) ?? [])
+      .length;
+    expect(pages).toBeGreaterThan(1);
+    const { text } = read(pdf.toString('base64'));
+    for (let page = 1; page <= pages; page++)
+      expect(text).toContain(
+        `Postavka qabul akti PST-000003 · ${page} / ${pages} bet`,
+      );
+    expect(text).not.toContain('1 / 1 bet');
   });
 
   it('brak akti: mahsulot nomi kirillda, izohda ʻ', async () => {
@@ -207,7 +259,7 @@ describe('Ombor aktlari PDF — Unicode shrift', () => {
     expect(text).toContain('1.  Шампунь «Олма» | SH-01 | 1 | Brak');
     expect(text).toContain('Izoh: Qopqogʻi singan');
     expect(text).toContain(
-      'Saralandi: 2026-11-25 10:30 · Saralagan: Jasur T., omborchi',
+      'Saralandi: 25.11.2026, 10:30 · Saralagan: Jasur T., omborchi',
     );
     expect(text).toContain('Brak akti 7101 · 1 / 1 bet');
     expect(text).not.toContain('#12');
