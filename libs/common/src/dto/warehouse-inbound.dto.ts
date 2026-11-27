@@ -510,3 +510,15 @@ export class ReturnInspectionDto {
   @ApiProperty({ example: '5' }) inspectedBy: string;
   @ApiProperty({ example: '2026-12-08T09:30:00.000Z' }) inspectedAt: Date;
 }
+
+/** BE-25 (FE-12): admin mahsulotlar ro‘yxati — variantlar bo‘yicha HQ qoldig‘i va yo‘ldagi postavka. */
+export const INVENTORY_STOCK_SUMMARY = 'inventory.stock.summary';
+
+export interface InventoryVariantStock {
+  onHand: number;
+  reserved: number;
+  /** omborda − band − muddati sabab to‘silgan (`inventory.available` bilan bir xil). */
+  available: number;
+  /** E’lon qilingan va yo‘ldagi postavkalarda. */
+  incoming: number;
+}

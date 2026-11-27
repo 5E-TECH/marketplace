@@ -635,6 +635,40 @@ export class PricingService {
   }
 
   /** BE-25 (FE-13): narx navbati uchun tavsiya va rejim; hisoblab bo‘lmasa — null (mahsulot baribir navbatda). */
+  /**
+   * BE-25 (FE-12): ro‘yxatdagi mijoz narxi — tasdiqlangani, bo‘lmasa tavsiya; ko‘rinadigan yetkazish (markazgacha, 1 dona).
+   * Bazaviy narx, og‘irlik yoki siyosat yo‘q — null (ro‘yxat yiqilmaydi).
+   */
+  listPrice(
+    product: Product,
+    ctx: PricingContext,
+  ): {
+    customer: number;
+    recommended: boolean;
+    delivery: number;
+    deliveryMode: DeliveryDisplayMode;
+  } | null {
+    if (product.basePrice == null || !product.weightGrams) return null;
+    try {
+      const params = this.paramsFor(product, ctx);
+      const calculation = calculatePrice(params, ctx.tariff, {
+        ...this.inputs(product),
+        affiliateFee: product.affiliateFee ?? recommendedAffiliateFee(params),
+      });
+      return {
+        customer: product.approvedPrice ?? calculation.recommended,
+        recommended: product.approvedPrice == null,
+        delivery: calculation.delivery.visibleCenter,
+        deliveryMode: params.deliveryMode,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Ro‘yxat narxi: ${product.id} hisoblanmadi — ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   queuePrice(
     product: Product,
     ctx: PricingContext,

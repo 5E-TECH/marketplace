@@ -12,6 +12,7 @@ import {
 } from '@app/common';
 import { ProductService } from './product.service';
 import { ProductArchiveService } from './product-archive.service';
+import { AdminProductListService } from './admin-product-list.service';
 
 @Controller()
 @UseFilters(RpcHttpExceptionFilter)
@@ -19,6 +20,7 @@ export class ProductController {
   constructor(
     private readonly products: ProductService,
     private readonly archives: ProductArchiveService,
+    private readonly lists: AdminProductListService,
   ) {}
 
   @MessagePattern({ cmd: 'product.create' })
@@ -93,9 +95,12 @@ export class ProductController {
     return this.products.remove(data.ownerUserId, data.id);
   }
 
+  /** BE-25 (FE-12): `extras` — ombor, mijoz narxi, video (omborchiga false). */
   @MessagePattern({ cmd: 'catalog.product.admin-list' })
-  adminList(@Payload() data: { query: AdminProductsQueryDto }) {
-    return this.products.adminList(data.query);
+  adminList(
+    @Payload() data: { query: AdminProductsQueryDto; extras?: boolean },
+  ) {
+    return this.lists.list(data?.query, data?.extras === true);
   }
 
   @MessagePattern({ cmd: 'catalog.product.admin-get' })

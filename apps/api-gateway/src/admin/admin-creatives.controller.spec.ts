@@ -1,6 +1,14 @@
 import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { of, throwError } from 'rxjs';
-import { CREATIVE_RPC, CreativeType, Role, ROLES_KEY } from '@app/common';
+import {
+  CREATIVE_RPC,
+  CreativeType,
+  DeleteCreativeDto,
+  Role,
+  ROLES_KEY,
+} from '@app/common';
 import { AdminCreativesController } from './admin-creatives.controller';
 
 describe('AdminCreativesController (BE-08)', () => {
@@ -95,7 +103,13 @@ describe('AdminCreativesController (BE-08)', () => {
     );
     expect(identity.send).toHaveBeenCalledWith(
       { cmd: 'identity.audit.log' },
-      expect.objectContaining({ action: 'creative.create', entityId: '31' }),
+      // mahsulot auditida (FE-12 «Audit — shu mahsulot»)
+      expect.objectContaining({
+        action: 'creative.create',
+        entityType: 'Product',
+        entityId: '12',
+        meta: expect.objectContaining({ creativeId: '31' }),
+      }),
     );
   });
 
@@ -141,16 +155,47 @@ describe('AdminCreativesController (BE-08)', () => {
     }
   });
 
-  it('o‘chirish: kreativ, keyin fayl', async () => {
-    const { controller, files } = make({
-      [CREATIVE_RPC.DELETE]: () => of({ id: '31', objectKey: finalKey }),
+  it('o‘chirish: kreativ, keyin fayl; sabab mahsulot auditida (BE-25, FE-12)', async () => {
+    const { controller, files, identity } = make({
+      [CREATIVE_RPC.DELETE]: () =>
+        of({ id: '31', objectKey: finalKey, type: 'VIDEO' }),
     });
     await expect(
-      controller.remove('12', '31', admin, '1.2.3.4'),
+      controller.remove(
+        '12',
+        '31',
+        { reason: 'Video eskirgan' },
+        admin,
+        '1.2.3.4',
+      ),
     ).resolves.toEqual({ id: '31' });
     expect(files.send).toHaveBeenCalledWith(
       { cmd: CREATIVE_RPC.REMOVE },
       { objectKey: finalKey },
     );
+    expect(identity.send).toHaveBeenCalledWith(
+      { cmd: 'identity.audit.log' },
+      expect.objectContaining({
+        action: 'creative.delete',
+        entityType: 'Product',
+        entityId: '12',
+        meta: expect.objectContaining({
+          creativeId: '31',
+          type: 'VIDEO',
+          reason: 'Video eskirgan',
+        }),
+      }),
+    );
+  });
+
+  it('o‘chirish sababi: bo‘sh, faqat bo‘shliq, 500 dan uzun — 400', async () => {
+    const errors = async (body: unknown) =>
+      validate(plainToInstance(DeleteCreativeDto, body) as object);
+    for (const body of [{}, { reason: '   ' }, { reason: 'x'.repeat(501) }])
+      expect((await errors(body)).length).toBeGreaterThan(0);
+    expect(await errors({ reason: '  Sabab  ' })).toEqual([]);
+    expect(
+      plainToInstance(DeleteCreativeDto, { reason: '  Sabab  ' }).reason,
+    ).toBe('Sabab');
   });
 });

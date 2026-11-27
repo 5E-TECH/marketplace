@@ -17,6 +17,9 @@ import {
   ProductStatus,
   RmqClient,
   ShopStatus,
+  InventoryVariantStock,
+  INVENTORY_STOCK_SUMMARY,
+  CreativeType,
 } from '@app/common';
 import { ProductVariant } from './entities/product-variant.entity';
 import { CategoryFlags, loadCategoryFlags } from './category-flags';
@@ -316,29 +319,161 @@ export class CatalogOfferService {
       else if (p.status in byStatus) byStatus[p.status]++;
     }
     const ctx = await this.pricing.context();
-    const onSale = products.filter(isCpaAvailable);
-    const stock = await this.stockOf(onSale.map((p) => String(p.id)));
-    const stockValues = [...stock.values()];
-    let expirySoon: number | null = null;
-    try {
-      const lots = await firstValueFrom(
-        this.inventory
-          .send<unknown[]>({ cmd: INBOUND_RPC.LOTS }, { state: 'BLOCKED' })
-          .pipe(timeout(INVENTORY_TIMEOUT_MS)),
-      );
-      expirySoon = Array.isArray(lots) ? lots.length : null;
-    } catch (error) {
-      this.logger.warn(`Partiyalar olinmadi: ${(error as Error).message}`);
-    }
+    // BE-25 (FE-12): hisoblagich = «Diqqat» filtri qatorlari soni (bir qoida)
+    const [outOfStock, expirySoon] = await Promise.all([
+      this.outOfStockIds(products),
+      this.expirySoonIds(),
+    ]);
     return {
       productsPending: byStatus.PENDING_REVIEW,
       pricesPending: this.pricePending(products, ctx).length,
       byStatus,
-      outOfStock: stockValues.some((v) => v === null)
-        ? null
-        : stockValues.filter((v) => (v ?? 0) <= 0).length,
-      expirySoon,
+      outOfStock: outOfStock?.length ?? null,
+      expirySoon: expirySoon?.length ?? null,
     };
+  }
+
+  /**
+   * Sotuvdagi CPA mahsulotlari (offer qoidasi), bo‘sh qoldig‘i 0 — moderatsiya `outOfStock` va `attention=OUT_OF_STOCK`.
+   * Ombor javob bermasa — null.
+   */
+  async outOfStockIds(all?: Product[]): Promise<string[] | null> {
+    const products =
+      all ?? (await this.base().where('product.is_deleted = FALSE').getMany());
+    const onSale = products.filter(isCpaAvailable);
+    const stock = await this.stockOf(onSale.map((p) => String(p.id)));
+    if ([...stock.values()].some((v) => v === null)) return null;
+    return [...stock].filter(([, v]) => (v ?? 0) <= 0).map(([id]) => id);
+  }
+
+  /**
+   * Sotuvdan chiqqan partiyasi (muddat − 60 kun o‘tgan, BE-17 OMB-3) omborda turgan mahsulotlar [taklif] —
+   * moderatsiya `expirySoon` va `attention=EXPIRY_SOON`. Ombor javob bermasa — null.
+   */
+  async expirySoonIds(): Promise<string[] | null> {
+    let lots: Array<{ variantId?: string }>;
+    try {
+      lots = await firstValueFrom(
+        this.inventory
+          .send<Array<{ variantId?: string }>>(
+            { cmd: INBOUND_RPC.LOTS },
+            { state: 'BLOCKED' },
+          )
+          .pipe(timeout(INVENTORY_TIMEOUT_MS)),
+      );
+    } catch (error) {
+      this.logger.warn(`Partiyalar olinmadi: ${(error as Error).message}`);
+      return null;
+    }
+    if (!Array.isArray(lots)) return null;
+    const variantIds = [
+      ...new Set(
+        lots
+          .map((l) => String(l?.variantId ?? ''))
+          .filter((id) => /^\d+$/.test(id)),
+      ),
+    ];
+    if (!variantIds.length) return [];
+    // o‘chirilgan yoki nofaol variant ham — partiya omborda turibdi
+    const variants = await this.variants.find({
+      where: { id: In(variantIds) },
+      select: { id: true, productId: true },
+    });
+    const productIds = [...new Set(variants.map((v) => String(v.productId)))];
+    if (!productIds.length) return [];
+    const alive = await this.products.find({
+      where: { id: In(productIds), isDeleted: false },
+      select: { id: true },
+    });
+    return alive.map((p) => String(p.id));
+  }
+
+  /**
+   * BE-25 (FE-12): ro‘yxat qatorlari uchun — ombor (HQ: omborda, band, sotsa bo‘ladigan, yo‘lda), mijoz narxi, video.
+   * Javob bermagan qism `unavailable` da, qatorda esa null.
+   */
+  async adminListExtras(products: Product[]): Promise<{
+    byId: Map<
+      string,
+      {
+        stock: InventoryVariantStock | null;
+        listPrice: ReturnType<PricingService['listPrice']>;
+        hasVideo: boolean;
+      }
+    >;
+    unavailable: Array<'stock' | 'listPrice'>;
+  }> {
+    const ids = products.map((p) => String(p.id));
+    const unavailable: Array<'stock' | 'listPrice'> = [];
+    const variants = ids.length
+      ? await this.variants.find({
+          where: { productId: In(ids), isActive: true, isDeleted: false },
+          select: { id: true, productId: true },
+        })
+      : [];
+    const [stock, creatives, ctx] = await Promise.all([
+      variants.length
+        ? firstValueFrom(
+            this.inventory
+              .send<Record<string, InventoryVariantStock>>(
+                { cmd: INVENTORY_STOCK_SUMMARY },
+                { variantIds: variants.map((v) => String(v.id)) },
+              )
+              .pipe(timeout(INVENTORY_TIMEOUT_MS)),
+          ).catch((error: unknown) => {
+            this.logger.warn(
+              `Ro‘yxat qoldig‘i olinmadi: ${(error as Error)?.message}`,
+            );
+            unavailable.push('stock');
+            return null;
+          })
+        : Promise.resolve({} as Record<string, InventoryVariantStock>),
+      this.creatives.forProducts(ids),
+      this.pricing.context().catch((error: unknown) => {
+        this.logger.warn(
+          `Ro‘yxat narxi: sozlama yo‘q — ${(error as Error)?.message}`,
+        );
+        unavailable.push('listPrice');
+        return null;
+      }),
+    ]);
+    const byId = new Map<
+      string,
+      {
+        stock: InventoryVariantStock | null;
+        listPrice: ReturnType<PricingService['listPrice']>;
+        hasVideo: boolean;
+      }
+    >();
+    for (const p of products) {
+      const id = String(p.id);
+      const rows = stock
+        ? variants
+            .filter((x) => String(x.productId) === id)
+            .map((v) => stock[String(v.id)])
+            .filter((row): row is InventoryVariantStock => !!row)
+        : [];
+      // qoldiq qatori ham, kelayotgani ham yo‘q — «postavka yo‘q» (null)
+      const sum: InventoryVariantStock | null = rows.length
+        ? rows.reduce(
+            (acc, row) => ({
+              onHand: acc.onHand + row.onHand,
+              reserved: acc.reserved + row.reserved,
+              available: acc.available + row.available,
+              incoming: acc.incoming + row.incoming,
+            }),
+            { onHand: 0, reserved: 0, available: 0, incoming: 0 },
+          )
+        : null;
+      byId.set(id, {
+        stock: sum,
+        listPrice: ctx ? this.pricing.listPrice(p, ctx) : null,
+        hasVideo: (creatives.get(id) ?? []).some(
+          (c) => c.type === CreativeType.VIDEO,
+        ),
+      });
+    }
+    return { byId, unavailable };
   }
 
   /** Narx qarori kutayotganlar: CPA, yashirilmagan, tasdiq kutayotgan yoki sotuvdagi, tasdiqlangan narxi yo‘q yoki amalda emas. */

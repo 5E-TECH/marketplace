@@ -9,15 +9,18 @@ describe('AdminProductsController (C4.5)', () => {
     const catalog = jest.fn(() => of({ id: '10' }));
     const identity = jest.fn(() => of({}));
     const files = jest.fn();
+    const lead = jest.fn(() => throwError(() => new Error('lead yo‘q')));
     return {
       controller: new AdminProductsController(
         { send: catalog } as never,
         { send: identity } as never,
         { send: files } as never,
+        { send: lead } as never,
       ),
       catalog,
       identity,
       files,
+      lead,
     };
   };
 
@@ -57,14 +60,85 @@ describe('AdminProductsController (C4.5)', () => {
     });
   });
 
-  it('list filterlarni catalog servisiga uzatadi', async () => {
+  it('list filterlarni catalog servisiga uzatadi (adminga qator qo‘shimchalari bilan)', async () => {
     const { controller, catalog } = setup();
+    catalog.mockReturnValue(of({ items: [], unavailable: [] }) as never);
     const query = { blocked: true, page: 1, limit: 20 } as never;
     await controller.list(query, { sub: '7', role: Role.ADMIN } as never);
     expect(catalog).toHaveBeenCalledWith(
       { cmd: 'catalog.product.admin-list' },
-      { query },
+      { query, extras: true },
     );
+  });
+
+  it('BE-25 (FE-12): natijalar mahsulot bo‘yicha qo‘shiladi; lid javob bermasa — null va `unavailable` da; kesh', async () => {
+    const { controller, catalog, lead } = setup();
+    catalog.mockReturnValue(
+      of({
+        items: [{ id: '42' }, { id: '43' }],
+        unavailable: ['stock'],
+      }) as never,
+    );
+    const admin = { sub: '7', role: Role.ADMIN } as never;
+    // lid javob bermadi
+    await expect(controller.list({} as never, admin)).resolves.toEqual({
+      items: [
+        { id: '42', results: null },
+        { id: '43', results: null },
+      ],
+      unavailable: ['stock', 'results'],
+    });
+    const row = {
+      key: '42',
+      leads: 412,
+      clicks: 6100,
+      validLeads: 390,
+      confirmed: 248,
+      delivered: 190,
+      refused: 31,
+      approveRate: 64,
+      saleRate: 86,
+      affiliateIncome: 12_350_000,
+      epc: 2025,
+    };
+    lead.mockReturnValue(
+      of({ rows: [row, { ...row, key: 'TOTAL' }], totals: row }) as never,
+    );
+    const page = (await controller.list({} as never, admin)) as {
+      items: unknown[];
+      unavailable: string[];
+    };
+    expect(page.items).toEqual([
+      {
+        id: '42',
+        results: {
+          leads: 412,
+          clicks: 6100,
+          validLeads: 390,
+          confirmed: 248,
+          delivered: 190,
+          refused: 31,
+          epc: 2025,
+          approveRate: 64,
+          saleRate: 86,
+          revenue: 12_350_000,
+        },
+      },
+      // statistikasi yo‘q mahsulot
+      { id: '43', results: null },
+    ]);
+    expect(page.unavailable).toEqual(['stock']);
+    const [, query] = lead.mock.calls[1] as unknown as [
+      unknown,
+      { from: string; to: string; groupBy: string },
+    ];
+    expect(query.groupBy).toBe('OFFER');
+    expect((Date.parse(query.to) - Date.parse(query.from)) / 86_400_000).toBe(
+      365,
+    );
+    // 5 daqiqa ichida — lid qayta so‘ralmaydi
+    await controller.list({} as never, admin);
+    expect(lead).toHaveBeenCalledTimes(2);
   });
 
   it('BE-07: optovik uchun mahsulot yaratadi va admin harakatini audit qiladi', async () => {

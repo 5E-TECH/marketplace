@@ -241,9 +241,12 @@ export class ProductService {
     return { id, deleted: true };
   }
 
-  async adminList(query: AdminProductsQueryDto) {
+  /** `opts.ids` — faqat shu mahsulotlar (BE-25: «Diqqat» filtri); bo‘sh ro‘yxat — bo‘sh sahifa. */
+  async adminList(query: AdminProductsQueryDto, opts?: { ids?: string[] }) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    if (opts?.ids && !opts.ids.length)
+      return { items: [], total: 0, page, limit, totalPages: 0 };
     const qb = this.products
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.shop', 'shop')
@@ -262,10 +265,27 @@ export class ProductService {
     if (query.shopId) {
       qb.andWhere('product.shop_id = :shopId', { shopId: query.shopId });
     }
-    if (query.search?.trim()) {
-      qb.andWhere('product.name ILIKE :search', {
-        search: `%${query.search.trim()}%`,
+    // BE-25 (FE-12): kategoriya (aynan), kanal (CPA), «Diqqat» filtri
+    if (query.categoryId)
+      qb.andWhere('product.category_id = :categoryId', {
+        categoryId: query.categoryId,
       });
+    if (query.cpaEnabled !== undefined)
+      qb.andWhere('product.cpa_enabled = :cpaEnabled', {
+        cpaEnabled: query.cpaEnabled,
+      });
+    if (opts?.ids) qb.andWhere('product.id IN (:...ids)', { ids: opts.ids });
+    if (query.search?.trim()) {
+      // nomi yoki slug (dizayn p-a2 «Nomi yoki slug»); `%`/`_` foydalanuvchi matnida joker bo‘lmasin
+      const search = `%${query.search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        new Brackets((w) =>
+          w
+            .where('product.name ILIKE :search')
+            .orWhere('product.slug ILIKE :search'),
+        ),
+        { search },
+      );
     }
     const [items, total] = await qb
       .orderBy('product.createdAt', 'DESC')

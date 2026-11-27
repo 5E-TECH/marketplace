@@ -26,11 +26,13 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiPayloadTooLargeResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
   AdminCreateProductDto,
+  AdminProductsPageDto,
   AdminProductsQueryDto,
   AdminUpdateProductDto,
   CurrentUser,
@@ -53,7 +55,7 @@ import {
   PRODUCT_MEDIA_OPTIONS,
   storeProductMedia,
 } from './product-media';
-import { ADMIN_PRODUCTS_PAGE_EXAMPLE } from './admin-m1.examples';
+import { ProductResultsCache } from './product-results';
 import {
   pickFields,
   seesFullView,
@@ -69,7 +71,13 @@ export class AdminProductsController {
     @Inject(RmqClient.CATALOG) private readonly catalog: ClientProxy,
     @Inject(RmqClient.IDENTITY) private readonly identity: ClientProxy,
     @Inject(RmqClient.FILE) private readonly files: ClientProxy,
-  ) {}
+    // BE-25 (FE-12): ro‘yxatdagi «Natijalar» (lid statistikasi)
+    @Inject(RmqClient.LEAD) private readonly lead: ClientProxy,
+  ) {
+    this.results = new ProductResultsCache(this.lead);
+  }
+
+  private readonly results: ProductResultsCache;
 
   @Post('media')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
@@ -188,21 +196,42 @@ export class AdminProductsController {
   })
   @ApiOkResponse({
     description:
-      '{ items, total, page, limit, totalPages }; optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi',
-    schema: { example: ADMIN_PRODUCTS_PAGE_EXAMPLE },
+      'Optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi. BE-25 (FE-12): qatorda `stock` (HQ), `listPrice`, `hasVideo`, ' +
+      '`results` (hamma sotuvchilar, oxirgi 365 kun [taklif]; 5 daqiqa kesh); javob bermagan qism `unavailable` da [taklif]. Omborchiga ' +
+      'qo‘shimchalarsiz.',
+    type: AdminProductsPageDto,
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`attention` filtri: ombor javob bermadi',
   })
   async list(
     @Query() query: AdminProductsQueryDto,
     @CurrentUser() user: JwtUser,
   ) {
-    const page = await sendRpc<{ items: ProductDto[] }>(
-      this.catalog,
-      { cmd: 'catalog.product.admin-list' },
-      { query },
-    );
-    return seesFullView(user)
-      ? page
-      : pickFields(page, WAREHOUSE_PRODUCT_FIELDS);
+    const full = seesFullView(user);
+    const [page, results] = await Promise.all([
+      sendRpc<{
+        items: Array<ProductDto & Record<string, unknown>>;
+        unavailable?: string[];
+      }>(
+        this.catalog,
+        { cmd: 'catalog.product.admin-list' },
+        { query, extras: full },
+      ),
+      full ? this.results.get() : Promise.resolve(null),
+    ]);
+    if (!full) return pickFields(page, WAREHOUSE_PRODUCT_FIELDS);
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        results: results?.get(String(item.id)) ?? null,
+      })),
+      unavailable: [
+        ...(page.unavailable ?? []),
+        ...(results ? [] : ['results']),
+      ],
+    };
   }
 
   @Get(':id')

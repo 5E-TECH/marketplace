@@ -4,6 +4,7 @@ import {
   CheckoutReserveInputDto,
   ReturnOrderItemsDto,
   RpcHttpExceptionFilter,
+  INVENTORY_STOCK_SUMMARY,
 } from '@app/common';
 import { InventoryService } from './inventory.service';
 
@@ -46,6 +47,12 @@ export class InventoryOperationsController {
   @MessagePattern({ cmd: 'inventory.available' })
   available(@Payload() data: { variantIds: string[] }) {
     return this.inventory.available(data?.variantIds ?? []);
+  }
+
+  /** BE-25 (FE-12): admin mahsulotlar ro‘yxati — omborda, band, sotsa bo‘ladigan, yo‘lda (variant bo‘yicha). */
+  @MessagePattern({ cmd: INVENTORY_STOCK_SUMMARY })
+  stockSummary(@Payload() data: { variantIds: string[] }) {
+    return this.inventory.stockSummary(data?.variantIds ?? []);
   }
 
   @MessagePattern({ cmd: 'inventory.return-order-items' })

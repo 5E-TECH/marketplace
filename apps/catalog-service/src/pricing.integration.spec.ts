@@ -801,6 +801,7 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     ).resolves.toEqual({
       id: image.id,
       objectKey: file(2, CreativeType.IMAGE).objectKey,
+      type: CreativeType.IMAGE,
     });
     // o‘chirilgan kreativ fayli qayta tasdiqlanmaydi
     await expect(
