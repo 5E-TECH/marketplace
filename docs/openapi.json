@@ -5222,7 +5222,13 @@
                       }
                     ],
                     "discriminator": {
-                      "propertyName": "kind"
+                      "propertyName": "kind",
+                      "mapping": {
+                        "SHIPMENT_DEFECT": "#/components/schemas/WholesalerAttentionShipmentDefectDto",
+                        "OUT_OF_STOCK": "#/components/schemas/WholesalerAttentionOutOfStockDto",
+                        "DEFECT_NOT_RETURNED": "#/components/schemas/WholesalerAttentionDefectNotReturnedDto",
+                        "SETTLEMENT_READY": "#/components/schemas/WholesalerAttentionSettlementReadyDto"
+                      }
                     }
                   },
                   "example": [
@@ -5247,6 +5253,7 @@
                       "productName": "Elektr choynak",
                       "onHand": 3,
                       "reserved": 3,
+                      "blocked": 0,
                       "incomingCode": "PS-000015",
                       "incomingQty": 40
                     },
@@ -21334,6 +21341,11 @@
             "example": 3,
             "description": "Bandda, dona"
           },
+          "blocked": {
+            "type": "number",
+            "example": 0,
+            "description": "Muddati sabab sotuvdan chiqqan partiyalarda (OMB-3), dona — omborda bor, lekin sotilmaydi"
+          },
           "incomingCode": {
             "type": "string",
             "example": "PS-000015",
@@ -21355,6 +21367,7 @@
           "productName",
           "onHand",
           "reserved",
+          "blocked",
           "incomingCode",
           "incomingQty"
         ]

@@ -9,6 +9,7 @@ import {
   CreateProductVariantDto,
   UpdateProductVariantDto,
   CatalogInventoryProduct,
+  ProductStatus,
 } from '@app/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
@@ -243,6 +244,10 @@ export class ProductVariantService {
       .andWhere('product.is_deleted = FALSE')
       // faqat CPA mahsuloti (BE-07): eski do‘kon mahsulotiga postavka e’lon qilinmaydi
       .andWhere('product.cpa_enabled = TRUE')
+      // BE-25 (FE-25): arxivdagi mahsulotga postavka e’lon qilinmaydi (qoldig‘i sotilmay qolardi)
+      .andWhere('product.status <> :archived', {
+        archived: ProductStatus.ARCHIVED,
+      })
       .orderBy('variant.id', 'ASC')
       .getMany();
     const byProduct = new Map<string, CatalogInventoryProduct>();

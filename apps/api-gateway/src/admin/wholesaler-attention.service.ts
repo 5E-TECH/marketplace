@@ -17,7 +17,8 @@ import {
 } from '@app/common';
 
 /** Mingliklar bo‘sh joy bilan (12 345 678) — finance akt-sverka PDF i bilan bir xil. */
-const money = (n: number) => n.toLocaleString('ru-RU').replace(/[\u00a0\u202f]/g, ' ');
+const money = (n: number) =>
+  n.toLocaleString('ru-RU').replace(/[\u00a0\u202f]/g, ' ');
 /** `YYYY-MM-DD` → `DD.MM` / `DD.MM.YYYY`. */
 const dayMonth = (day: string) =>
   day.slice(5, 10).split('-').reverse().join('.');
@@ -53,7 +54,10 @@ export class WholesalerAttentionService {
     const stock = await sendRpc<InventoryAttentionResult>(
       this.inventory,
       { cmd: WHOLESALER_ATTENTION_RPC.INVENTORY_ATTENTION },
-      { variants: catalog.variants },
+      {
+        variants: catalog.variants,
+        wholesalerIds: catalog.wholesalers.map((w) => String(w.id)),
+      },
     );
     const names = new Map(
       catalog.wholesalers.map((w) => [String(w.id), w.name]),
@@ -95,6 +99,7 @@ export class WholesalerAttentionService {
         productName: product.name,
         onHand: s.onHand,
         reserved: s.reserved,
+        blocked: s.blocked,
         incomingCode: s.incomingCode,
         incomingQty: s.incomingQty,
       });

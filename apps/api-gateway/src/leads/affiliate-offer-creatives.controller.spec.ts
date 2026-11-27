@@ -1,4 +1,5 @@
-import { Readable } from 'stream';
+import { EventEmitter } from 'events';
+import { PassThrough, Readable } from 'stream';
 import { of, throwError } from 'rxjs';
 import { CREATIVE_RPC, CreativeType, ROLES_KEY, Role } from '@app/common';
 import { AffiliateOfferCreativesController } from './affiliate-offer-creatives.controller';
@@ -150,5 +151,37 @@ describe('AffiliateOfferCreativesController', () => {
     await expect(controller.download('12')).rejects.toMatchObject({
       status: 503,
     });
+  });
+
+  it('HEAD — faqat sarlavhalar (uzunlik bilan), MinIO dan fayl o‘qilmaydi', async () => {
+    const { controller, minio } = setup(offer);
+    const file = await controller.download('12', { method: 'HEAD' } as never);
+    expect(file.getHeaders().length).toBeGreaterThan(0);
+    expect(minio.getObject).not.toHaveBeenCalled();
+  });
+
+  it('mijoz uzilsa — arxiv oqimi va o‘qilayotgan fayl yopiladi', async () => {
+    const { controller, minio } = setup(offer);
+    const source = new PassThrough();
+    minio.getObject.mockResolvedValueOnce(source as never);
+    const res = new EventEmitter() as EventEmitter & {
+      writableFinished: boolean;
+    };
+    res.writableFinished = false;
+    const file = await controller.download(
+      '12',
+      { method: 'GET' } as never,
+      res as never,
+    );
+    const stream = file.getStream();
+    // birinchi bo‘lak (sarlavha) o‘qiladi, keyin fayl kutiladi
+    stream.on('data', () => undefined);
+    stream.on('error', () => undefined);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(minio.getObject).toHaveBeenCalled();
+    res.emit('close');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(stream.destroyed).toBe(true);
+    expect(source.destroyed).toBe(true);
   });
 });

@@ -16,7 +16,7 @@ describe('ProductArchiveService', () => {
   const setup = (
     product: Record<string, unknown> | null,
     opts: {
-      held?: { onHand: number; reserved: number };
+      held?: { onHand?: number; reserved?: number; inTransit?: number };
       open?: number;
       inventoryError?: boolean;
       checkoutError?: boolean;
@@ -49,7 +49,7 @@ describe('ProductArchiveService', () => {
           ? throwError(() => new Error('inventory yo‘q'))
           : of({
               items: [],
-              totals: { onHand: 0, reserved: 0, ...opts.held },
+              totals: { onHand: 0, reserved: 0, inTransit: 0, ...opts.held },
             }),
       ),
     };
@@ -135,14 +135,22 @@ describe('ProductArchiveService', () => {
     }
   });
 
-  it('omborda yoki bandda dona bor — 409 soni bilan', async () => {
-    const { service, repo } = setup(product(), {
-      held: { onHand: 2, reserved: 1 },
-    });
-    await expect(service.archive('10')).rejects.toThrow(
-      'Omborda yoki buyurtmalarda 3 dona bor — arxivlab bo‘lmaydi',
-    );
-    expect(repo.save).not.toHaveBeenCalled();
+  it('omborda dona bor (band — omborda ichida) yoki yo‘ldagi postavka bor — 409 soni bilan', async () => {
+    for (const [held, message] of [
+      [
+        { onHand: 3, reserved: 1 },
+        'Omborda 3 dona (shundan 1 tasi buyurtmada) — arxivlab bo‘lmaydi',
+      ],
+      [{ onHand: 2 }, 'Omborda 2 dona — arxivlab bo‘lmaydi'],
+      [
+        { inTransit: 40 },
+        'Yo‘ldagi postavkada 40 dona — avval qabul qiling yoki postavkani bekor qiling',
+      ],
+    ] as const) {
+      const { service, repo } = setup(product(), { held });
+      await expect(service.archive('10')).rejects.toThrow(message);
+      expect(repo.save).not.toHaveBeenCalled();
+    }
   });
 
   it('ochiq buyurtma bor — 409 soni bilan', async () => {

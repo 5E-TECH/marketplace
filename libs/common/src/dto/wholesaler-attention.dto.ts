@@ -77,6 +77,13 @@ export class WholesalerAttentionOutOfStockDto extends WholesalerAttentionBaseDto
   reserved: number;
 
   @ApiProperty({
+    example: 0,
+    description:
+      'Muddati sabab sotuvdan chiqqan partiyalarda (OMB-3), dona — omborda bor, lekin sotilmaydi',
+  })
+  blocked: number;
+
+  @ApiProperty({
     example: 'PS-000015',
     nullable: true,
     type: String,
@@ -230,6 +237,7 @@ export interface InventoryAttentionResult {
     productId: string;
     onHand: number;
     reserved: number;
+    blocked: number;
     incomingCode: string | null;
     incomingQty: number;
   }>;

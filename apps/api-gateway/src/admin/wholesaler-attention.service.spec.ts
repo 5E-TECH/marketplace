@@ -69,6 +69,7 @@ describe('WholesalerAttentionService', () => {
           productId: '42',
           onHand: 3,
           reserved: 3,
+          blocked: 0,
           incomingCode: 'PS-000016',
           incomingQty: 40,
         },
@@ -122,6 +123,7 @@ describe('WholesalerAttentionService', () => {
         productName: 'Elektr choynak',
         onHand: 3,
         reserved: 3,
+        blocked: 0,
         incomingCode: 'PS-000016',
         incomingQty: 40,
       },
@@ -151,7 +153,7 @@ describe('WholesalerAttentionService', () => {
     // inventory catalog variantlari bilan so‘raladi
     expect(inventory.send).toHaveBeenCalledWith(
       { cmd: WHOLESALER_ATTENTION_RPC.INVENTORY_ATTENTION },
-      { variants },
+      { variants, wholesalerIds: ['7', '8'] },
     );
     expect(finance.send).toHaveBeenCalledWith(
       { cmd: WHOLESALER_ATTENTION_RPC.FINANCE_READY },
