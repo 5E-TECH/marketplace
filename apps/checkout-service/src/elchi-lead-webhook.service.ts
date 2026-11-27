@@ -150,7 +150,22 @@ export class ElchiLeadWebhookService {
       }
 
       const from = order.status;
-      const target = this.targetOf(event.status, from);
+      // qaytarish tasdiqlangan (BE-44: RETURN_REQUESTED orqali RETURNING) — keyin kelgan «sotildi»/«to‘landi» holatni
+      // o‘zgartirmaydi, pul esa moliyaga yoziladi (aks holda Elchi o‘tkazgan pul yo‘qolardi; QA-02 tekshiruvi)
+      const returnedAfterDelivery =
+        (from === LeadOrderStatus.RETURNING ||
+          from === LeadOrderStatus.RETURNED_GRADED) &&
+        SALE_OR_MONEY.has(event.status) &&
+        (
+          (await manager.query(
+            `SELECT 1 FROM checkout.order_status_history
+              WHERE order_id = $1 AND to_status = 'RETURN_REQUESTED' AND accepted = TRUE LIMIT 1`,
+            [orderId],
+          )) as unknown[]
+        ).length > 0;
+      const target = returnedAfterDelivery
+        ? null
+        : this.targetOf(event.status, from);
       let result: ElchiWebhookResult;
       let detail: string | null = null;
       let status = from;

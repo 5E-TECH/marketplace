@@ -26,6 +26,7 @@ import { CreateWholesalerSettlement1795737600000 } from '../migrations/179573760
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateElchiCheck1797638400000 } from '../migrations/1797638400000-create-elchi-check';
+import { CreateReturnPending1799193600000 } from '../migrations/1799193600000-create-return-pending';
 import { ElchiCheckService } from './elchi-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -145,6 +146,7 @@ describePostgres(
           CreateFeeHold1795824000000,
           AddRemittanceResolution1796860800000,
           CreateElchiCheck1797638400000,
+          CreateReturnPending1799193600000,
         ],
         migrationsRun: true,
         synchronize: false,

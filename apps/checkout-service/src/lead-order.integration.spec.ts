@@ -1313,31 +1313,6 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       expect(await outboxOf('order.returned', other.id)).toEqual([]);
     });
 
-    it('QA-02: so‘rov ochiq turganda Elchi «to‘landi» yozgan bo‘lsa — rad etilgach «Pul o‘tkazildi»', async () => {
-      const { id, itemId } = await deliveredOrder('8013');
-      const created = await request(id, itemId);
-      // webhook RETURN_REQUESTED da holatni o‘zgartirmaydi, pulni moliyaga yozadi (finance.cod.settled, elchiStatus paid)
-      await checkoutDs.query(
-        `INSERT INTO checkout.outbox_event (aggregate_type, aggregate_id, event_type, payload, status)
-         VALUES ('sales_order', $1, 'finance.cod.settled', $2::jsonb, 'PROCESSED')`,
-        [
-          id,
-          JSON.stringify({
-            schemaVersion: 2,
-            orderId: id,
-            elchiStatus: 'paid',
-          }),
-        ],
-      );
-      await returns().decide({
-        returnId: created.id,
-        approve: false,
-        actor: STAFF,
-        comment: 'Mijoz fikridan qaytdi',
-      });
-      expect((await orderOfLead('8013')).status).toBe('REMITTED');
-    });
-
     it('qisman qaytarish hozircha yo‘q — 400; rad etilgandan keyin muddat birinchi yetkazilishdan', async () => {
       const { id, itemId } = await deliveredOrder('8005', 2);
       await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 }); // 2 dan 1

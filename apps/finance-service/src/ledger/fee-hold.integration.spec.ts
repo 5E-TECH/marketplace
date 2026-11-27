@@ -11,6 +11,7 @@ import { CreateWholesalerSettlement1795737600000 } from '../migrations/179573760
 import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-fee-hold';
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
+import { CreateReturnPending1799193600000 } from '../migrations/1799193600000-create-return-pending';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -120,6 +121,7 @@ describePostgres('BE-35 sotuvchi haqini ushlash (PostgreSQL)', () => {
         CreateFeeHold1795824000000,
         AddRemittanceResolution1796860800000,
         CreateSettlementResponse1796947200000,
+        CreateReturnPending1799193600000,
       ],
       migrationsRun: true,
       synchronize: false,

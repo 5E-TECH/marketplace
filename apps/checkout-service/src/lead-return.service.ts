@@ -332,6 +332,12 @@ export class LeadReturnService {
         actor: input.actor,
         comment,
       });
+      // buyurtma qulfi rad etishdagi holat hisobidan OLDIN: Elchi «to‘landi» xabari shu paytda yozilayotgan bo‘lsa,
+      // u commit bo‘lgach ko‘riladi (aks holda to‘langan buyurtma «Yetkazildi» ga tushardi)
+      await manager.query(
+        `SELECT 1 FROM checkout.sales_order WHERE id = $1 FOR UPDATE`,
+        [row.orderId],
+      );
       const applied = await this.status.applyTransition(manager, {
         orderId: row.orderId,
         returnDecision: true,
@@ -350,24 +356,26 @@ export class LeadReturnService {
   }
 
   /**
-   * Rad etilgan so‘rovdan keyingi holat: Elchi pulni o‘tkazgan bo‘lsa — REMITTED (so‘rovdan oldin «Pul o‘tkazildi» edi yoki
-   * so‘rov ochiq turganda «to‘landi» keldi — webhook holatni o‘zgartirmay pulni moliyaga yozgan), aks holda DELIVERED.
+   * Rad etilgan so‘rovdan keyingi holat — so‘rovdan oldingi holat (tarixdagi oxirgi qabul qilingan `→ RETURN_REQUESTED`
+   * o‘tishining `from`), so‘rov ochiq turganda Elchi «to‘landi» puli yozilgan bo‘lsa — REMITTED (webhook bu paytda
+   * holatni o‘zgartirmay pulni moliyaga yozgan). Chaqiruvchi buyurtma qatorini qulflagan.
    */
   private async statusAfterRejection(
     manager: EntityManager,
     orderId: string,
   ): Promise<LeadOrderStatus> {
     const [row] = (await manager.query(
-      `SELECT EXISTS (
-                SELECT 1 FROM checkout.order_status_history
-                 WHERE order_id = $1 AND to_status = 'REMITTED' AND accepted = TRUE)
-           OR EXISTS (
-                SELECT 1 FROM checkout.outbox_event
-                 WHERE aggregate_type = 'sales_order' AND aggregate_id = $1::text
-                   AND event_type = 'finance.cod.settled' AND payload->>'elchiStatus' = 'paid') AS remitted`,
+      `SELECT (SELECT h.from_status FROM checkout.order_status_history h
+                WHERE h.order_id = $1::bigint AND h.to_status = 'RETURN_REQUESTED' AND h.accepted = TRUE
+                ORDER BY h.id DESC LIMIT 1) AS "before",
+              EXISTS (SELECT 1 FROM checkout.elchi_webhook_event w
+                       WHERE w.order_id = $1::bigint AND w.status = 'paid' AND w.result <> 'REJECTED') AS paid`,
       [orderId],
-    )) as Array<{ remitted: boolean }>;
-    return row?.remitted ? LeadOrderStatus.REMITTED : LeadOrderStatus.DELIVERED;
+    )) as Array<{ before: LeadOrderStatus | null; paid: boolean }>;
+    if (row?.paid) return LeadOrderStatus.REMITTED;
+    return row?.before && LEAD_RETURNABLE.includes(row.before)
+      ? row.before
+      : LeadOrderStatus.DELIVERED;
   }
 
   /** EQ-10 muddati: oxirgi «Yetkazildi» o‘tishidan. TC2: muddat o‘tgan — 400. */
