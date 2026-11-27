@@ -66,6 +66,45 @@ export function isInsideWindow(window: UpsellWindow, at: Date): boolean {
 const money = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
 /**
+ * Qo‘shimcha tovar faqat bitta suhbat (bron) ichida yashaydi: lid tasdiqlanmasdan bronni tark etsa (boshqa natija,
+ * bron muddati tugadi, buyurtma yaratilmadi) — qo‘shimcha qatorlar olib tashlanadi, aks holda keyingi qo‘ng‘iroqda
+ * mijoz rozilik bermagan tovar buyurtmaga tushardi. Sayt bo‘lmagan lidda 0-qator ham (bitta tovarli shakl).
+ * Lid qatori chaqiruvchida qulflangan; `lead.status` — yangi holat. Qo‘shimcha qator bo‘lmasa — hech narsa qilinmaydi.
+ */
+export async function dropUpsellLines(
+  manager: EntityManager,
+  lead: Lead,
+  reason: string,
+): Promise<boolean> {
+  const repo = manager.getRepository(LeadItem);
+  const upsells = await repo.find({
+    where: { leadId: lead.id, isUpsell: true },
+    order: { position: 'ASC', id: 'ASC' },
+  });
+  if (!upsells.length) return false;
+  await repo.delete({ leadId: lead.id, isUpsell: true });
+  if (lead.source !== LeadSource.SITE) await repo.delete({ leadId: lead.id });
+  const history = manager.getRepository(LeadHistory);
+  await history.save(
+    history.create({
+      leadId: lead.id,
+      fromStatus: lead.status,
+      toStatus: lead.status,
+      actorId: null,
+      field: UPSELL_REMOVED,
+      oldValue: null,
+      newValue: {
+        productIds: upsells.map((item) => String(item.productId)),
+      },
+      note: `Qo‘shimcha tovar olib tashlandi (${reason}): ${upsells
+        .map((item) => `${item.productName} × ${item.quantity}`)
+        .join(', ')}`,
+    }),
+  );
+  return true;
+}
+
+/**
  * BE-45 (OPR-4): operator tasdiqlash qo‘ng‘irog‘ida lidga qo‘shimcha tovar qo‘shadi.
  * - Narx — tovarning tasdiqlangan narxi (BE-09), ustamasiz; mijoz narxni yubormaydi (TC3).
  * - Qoldig‘i yetmasa — 400 (TC2); qoldiq noma’lum (ombor javob bermadi) — 503 [taklif].
@@ -106,18 +145,28 @@ export class LeadUpsellService {
       const offer = await this.catalog.get(pairId).catch(() => undefined);
       if (offer !== undefined)
         pair = offer
-          ? this.offerView(offer, [
-              lead.productId,
-              ...items.map((i) => String(i.productId)),
-            ])
+          ? this.offerView(
+              offer,
+              new Map([
+                [String(lead.productId), lead.quantity],
+                ...items.map(
+                  (i) => [String(i.productId), i.quantity] as [string, number],
+                ),
+              ]),
+            )
           : null;
     }
     const window = this.window();
-    const [declined] = await this.db.getRepository(LeadHistory).find({
-      where: { leadId, field: UPSELL_DECLINED },
-      order: { createdAt: 'DESC', id: 'DESC' },
-      take: 1,
-    });
+    // «Mijoz olmadi» — faqat joriy bron ichidagisi (oldingi qo‘ng‘iroqdagi rad yangi suhbatga o‘tmaydi)
+    const [declined] = (await this.db.query(
+      `SELECT h.created_at AS "createdAt" FROM lead.lead_history h
+        WHERE h.lead_id = $1 AND h.field = $2
+          AND h.id > COALESCE((SELECT max(b.id) FROM lead.lead_history b
+                                WHERE b.lead_id = $1 AND b.to_status = 'BOOKED'
+                                  AND b.from_status IS DISTINCT FROM 'BOOKED'), 0)
+        ORDER BY h.id DESC LIMIT 1`,
+      [leadId, UPSELL_DECLINED],
+    )) as Array<{ createdAt: Date }>;
     return {
       pair,
       window: window ? this.windowView(window, new Date()) : null,
@@ -287,11 +336,13 @@ export class LeadUpsellService {
   }
 
   /**
-   * «Tasdiqlandi» dan oldin: qo‘shimcha tovar narxi hali tasdiqlangan narxga tengmi (narx qarori o‘zgargan bo‘lishi
-   * mumkin). O‘zgargan bo‘lsa — qator yangi narx bilan yangilanadi va 409: operator mijozga yangi summani aytadi.
-   * Katalog javob bermasa — tekshiruv checkout’da (narx teng bo‘lmasa buyurtma PRICE_CHANGED bilan yaratilmaydi).
+   * «Tasdiqlandi» dan oldin har qo‘shimcha tovar qayta tekshiriladi — buyurtma yaratilmay lid navbatga qaytmasin:
+   * - sotuvdan olingan, sotuvchilarga yopiq yoki narxi tasdiqlanmagan — 409, olib tashlash kerak;
+   * - qoldig‘i ma’lum va yetmaydi — 409, olib tashlash yoki sonini kamaytirish kerak;
+   * - tasdiqlangan narx o‘zgargan — qator yangi narx bilan yangilanadi va 409: operator mijozga yangi summani aytadi.
+   * Katalog javob bermasa — tekshiruv checkout’da (narx teng bo‘lmasa yoki qoldiq yetmasa buyurtma yaratilmaydi).
    */
-  async refreshPrices(operatorId: string, leadId: string): Promise<void> {
+  async checkBeforeConfirm(operatorId: string, leadId: string): Promise<void> {
     // begona yoki bronda bo‘lmagan lid — tekshiruv yo‘q (natija o‘zi 404 beradi)
     const lead = await this.db
       .getRepository(Lead)
@@ -303,13 +354,36 @@ export class LeadUpsellService {
     )
       return;
     const repo = this.db.getRepository(LeadItem);
-    const upsells = await repo.find({ where: { leadId, isUpsell: true } });
+    const upsells = await repo.find({
+      where: { leadId, isUpsell: true },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    const blocked: string[] = [];
     const changed: string[] = [];
     for (const item of upsells) {
-      const offer = await this.catalog
-        .get(String(item.productId))
-        .catch(() => undefined);
-      if (!offer || offer.approvedPrice == null) continue;
+      let offer: CatalogOfferSnapshot | null;
+      try {
+        offer = await this.catalog.get(String(item.productId));
+      } catch {
+        continue;
+      }
+      if (
+        !offer ||
+        offer.withdrawn ||
+        !offer.cpaAvailable ||
+        offer.approvedPrice == null
+      ) {
+        blocked.push(`${item.productName} sotuvda emas`);
+        continue;
+      }
+      if (offer.stock !== null && offer.stock < item.quantity) {
+        blocked.push(
+          offer.stock > 0
+            ? `${item.productName}: omborda ${offer.stock} dona`
+            : `${item.productName}: qoldiq tugagan`,
+        );
+        continue;
+      }
       if (offer.approvedPrice !== Number(item.salePrice)) {
         await repo.update(
           { id: item.id },
@@ -320,6 +394,10 @@ export class LeadUpsellService {
         );
       }
     }
+    if (blocked.length)
+      throw new ConflictException(
+        `Qo‘shimcha tovarni buyurtmaga qo‘shib bo‘lmaydi (${blocked.join('; ')}). Uni olib tashlang yoki sonini kamaytiring`,
+      );
     if (changed.length)
       throw new ConflictException(
         `Qo‘shimcha tovar narxi o‘zgardi (${changed.join('; ')}). Mijozga yangi summani ayting va qayta tasdiqlang`,
@@ -348,19 +426,20 @@ export class LeadUpsellService {
 
   private offerView(
     offer: CatalogOfferSnapshot,
-    inLead: string[],
+    inLead: Map<string, number>,
   ): LeadUpsellOfferDto {
-    const reason: LeadUpsellOfferDto['unavailableReason'] = inLead.includes(
-      String(offer.productId),
-    )
-      ? 'IN_LEAD'
-      : offer.withdrawn || !offer.cpaAvailable
+    const wanted = inLead.get(String(offer.productId)) ?? 1;
+    // sotuv, narx va qoldiq muammosi birinchi: lidga qo‘shilgan tovar tugab qolsa ham operator ko‘radi
+    const reason: LeadUpsellOfferDto['unavailableReason'] =
+      offer.withdrawn || !offer.cpaAvailable
         ? 'UNAVAILABLE'
         : offer.approvedPrice == null
           ? 'NO_PRICE'
-          : offer.stock !== null && offer.stock <= 0
+          : offer.stock !== null && offer.stock < wanted
             ? 'OUT_OF_STOCK'
-            : null;
+            : inLead.has(String(offer.productId))
+              ? 'IN_LEAD'
+              : null;
     return {
       productId: String(offer.productId),
       name: offer.name,

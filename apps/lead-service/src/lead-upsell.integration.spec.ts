@@ -487,4 +487,114 @@ describeWithPostgres('BE-45 qo‘shimcha tovar (PostgreSQL)', () => {
     const after = await upsell().remove('41', lead.id, card.items[2].itemId);
     expect(after.items.map((i) => i.productId)).toEqual(['501', '513']);
   });
+
+  it('tasdiqdan oldin: qo‘shimcha tovar tugagan yoki sotuvdan olingan — 409 (buyurtma yaratilmay lid aylanmaydi); ekranda OUT_OF_STOCK', async () => {
+    const lead = await mkLead();
+    await upsell().add('41', lead.id, '512', 2);
+    offers['512'] = { ...offers['512'], stock: 1 };
+    await expect(
+      queue().submitResult('41', lead.id, {
+        outcome: LeadOutcome.CONFIRMED,
+      } as never),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('Oshxona tarozisi: omborda 1 dona'),
+    });
+    expect((await upsell().get('41', lead.id)).pair).toMatchObject({
+      unavailableReason: 'OUT_OF_STOCK',
+    });
+    offers['512'] = { ...offers['512'], stock: 45, withdrawn: true };
+    await expect(
+      queue().submitResult('41', lead.id, {
+        outcome: LeadOutcome.CONFIRMED,
+      } as never),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('Oshxona tarozisi sotuvda emas'),
+    });
+    expect(
+      (await db.getRepository(Lead).findOneByOrFail({ id: lead.id })).status,
+    ).toBe(LeadStatus.BOOKED);
+    expect(await confirmedEvents(lead.id)).toEqual([]);
+  });
+
+  it('bron tasdiqsiz tugasa — qo‘shimcha tovar olib tashlanadi: boshqa natija, bron muddati, buyurtma yaratilmadi', async () => {
+    // rad: keyin qayta ochilsa ham rad etilgan qo‘shimcha tovar buyurtmaga tushmaydi
+    const rejected = await mkLead();
+    await upsell().add('41', rejected.id, '512', 1);
+    await queue().submitResult('41', rejected.id, {
+      outcome: LeadOutcome.REJECTED,
+      rejectReason: 'TOO_EXPENSIVE',
+    } as never);
+    expect(await rows(rejected.id)).toEqual([]);
+
+    // bron muddati tugadi (5-qoida)
+    const expired = await mkLead();
+    await upsell().add('41', expired.id, '512', 1);
+    await db.query(
+      `UPDATE lead.lead SET booked_until = now() - interval '1 minute' WHERE id = $1`,
+      [expired.id],
+    );
+    await queue().sweep(new Date());
+    expect(
+      (await db.getRepository(Lead).findOneByOrFail({ id: expired.id })).status,
+    ).toBe(LeadStatus.NEW);
+    expect(await rows(expired.id)).toEqual([]);
+
+    // buyurtma yaratilmadi: qo‘shimcha tovar olib tashlanadi, «qoldiq yo‘q» belgisi qo‘yilmaydi
+    const failed = await mkLead();
+    await upsell().add('41', failed.id, '512', 1);
+    await queue().submitResult('41', failed.id, {
+      outcome: LeadOutcome.CONFIRMED,
+    } as never);
+    await queue().onOrderCreateFailed({
+      eventId: 'f-1',
+      leadId: failed.id,
+      reason: 'OUT_OF_STOCK' as never,
+      at: new Date(Date.now() + 1000).toISOString(),
+    });
+    const after = await db
+      .getRepository(Lead)
+      .findOneByOrFail({ id: failed.id });
+    expect(after).toMatchObject({
+      status: LeadStatus.CALLBACK,
+      stockShortageAt: null,
+    });
+    expect(await rows(failed.id)).toEqual([]);
+    const notes = (
+      await db.getRepository(LeadHistory).find({
+        where: { leadId: failed.id },
+        order: { id: 'ASC' },
+      })
+    ).map((h) => h.note);
+    expect(notes).toEqual(
+      expect.arrayContaining([
+        'Qo‘shimcha tovar olib tashlandi (buyurtma yaratilmadi): Oshxona tarozisi × 1',
+        expect.stringContaining(
+          'qo‘shimcha tovar olib tashlandi, navbatga qaytdi',
+        ),
+      ]),
+    );
+  });
+
+  it('«Mijoz olmadi» — faqat joriy bron ichida ko‘rinadi', async () => {
+    const lead = await mkLead();
+    await db.getRepository(LeadHistory).save({
+      leadId: lead.id,
+      fromStatus: LeadStatus.NEW,
+      toStatus: LeadStatus.BOOKED,
+      actorId: '41',
+      note: 'Operator oldi',
+    });
+    expect((await upsell().decline('41', lead.id)).declinedAt).not.toBeNull();
+    // keyingi bron (boshqa qo‘ng‘iroq)
+    await db.getRepository(LeadHistory).save({
+      leadId: lead.id,
+      fromStatus: LeadStatus.CALLBACK,
+      toStatus: LeadStatus.BOOKED,
+      actorId: '41',
+      note: 'Operator oldi',
+    });
+    expect((await upsell().get('41', lead.id)).declinedAt).toBeNull();
+  });
 });

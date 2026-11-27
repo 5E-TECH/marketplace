@@ -21,9 +21,18 @@ qarorga bog‘liq joylar [taklif].
    - `DELETE /operator/leads/{id}/items/{itemId}` — faqat qo‘shimcha qator.
    - `POST /operator/leads/{id}/upsell/decline` — «Mijoz olmadi», lid tarixiga yoziladi [taklif].
    - Qo‘shish, olib tashlash va rad — lid tarixida (kim, nima, narx).
-3. **Tasdiq.** «Tasdiqlandi» dan oldin qo‘shimcha tovar narxi katalog bilan solishtiriladi: o‘zgargan bo‘lsa qator yangi
-   narxga yangilanadi va 409 — operator mijozga yangi summani aytadi. `lead.confirmed` hamma qatorlar bilan ketadi,
+   - Juftlik — ekrandagi taklif; operator sotuvdagi istalgan boshqa tovarni ham qo‘sha oladi (mijoz o‘zi so‘rasa)
+     [taklif, egaga 98-savol]. Narx baribir tasdiqlangan narx, haq platformada — pul xavfi yo‘q.
+3. **Tasdiq.** «Tasdiqlandi» dan oldin har qo‘shimcha tovar katalog bilan qayta tekshiriladi: sotuvdan olingan, narxi
+   tasdiqlanmagan yoki qoldig‘i yetmaydi — 409 (nomi bilan; olib tashlash yoki sonini kamaytirish kerak); narx
+   o‘zgargan — qator yangi narxga yangilanadi va 409, operator mijozga yangi summani aytadi. Shunday qilib buyurtma
+   qo‘shimcha tovar sababli yaratilmay, lid navbatga aylanib yurmaydi. `lead.confirmed` hamma qatorlar bilan ketadi,
    qo‘shimchasi `upsell: true` (BE-34 dagi ko‘p tovarli tartib).
+   - **Qo‘shimcha tovar faqat bitta suhbat ichida yashaydi.** Lid tasdiqlanmasdan bronni tark etsa (boshqa natija,
+     bron muddati tugadi, buyurtma yaratilmadi) — qo‘shimcha qatorlar olib tashlanadi va tarixga yoziladi: keyingi
+     qo‘ng‘iroqda mijoz rozilik bermagan tovar buyurtmaga tushmaydi. Buyurtma yaratilmasa (qaysi qator sababli ekani
+     noma’lum) — «qoldiq yo‘q» belgisi qo‘yilmaydi, lid tovari bilan qayta tasdiqlanadi.
+   - «Mijoz olmadi» (`declinedAt`) — faqat joriy bron ichidagisi.
 4. **Buyurtma (checkout).** Bitta buyurtma, bitta posilka, har tovar o‘z qatori; qo‘shimcha qator `is_upsell`.
    Qo‘shimcha qator narxi aynan tasdiqlangan narx bo‘lmasa — buyurtma yaratilmaydi (`PRICE_CHANGED`, TC3).
    Sayt bo‘lmagan lidda faqat `upsell` belgili qo‘shimcha qatorlar qabul qilinadi.

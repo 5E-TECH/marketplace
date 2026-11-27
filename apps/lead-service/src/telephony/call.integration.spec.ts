@@ -187,7 +187,7 @@ describeWithPostgres('BE-15 telefoniya (PostgreSQL)', () => {
       server.listen(0, '127.0.0.1', resolve),
     );
     providerUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-  });
+  }, 300_000); // lead sxemasi qulfini boshqa spec’lar ushlab turishi mumkin
 
   beforeEach(async () => {
     mode = 'ok';
