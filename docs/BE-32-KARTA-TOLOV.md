@@ -63,7 +63,7 @@ Provayder tanlangach yo shu klass uning API siga yoziladi, yo oraliq ko‘prik q
 | So‘rov | Tana | Javob |
 | --- | --- | --- |
 | `POST {URL}/card-sessions` | `{sessionRef, returnUrl, pinfl}` | `{url}` — https sahifa; sotuvchi kartani shu yerda kiritadi. `pinfl` — tasdiqlangan JShShIR (karta egasini tekshirish, EQ-08) yoki null |
-| `POST {URL}/payouts` | `{payoutRef, cardToken, amount, currency: 'UZS', purpose}` | `{status: SUCCESS \| PENDING \| FAILED, reason?}`. 4xx yoki ulanib bo‘lmadi — aniq rad (`FAILED`); 5xx, 10 s javobsiz yoki holatsiz javob — noma’lum (`PAYING`, holat so‘raladi) |
+| `POST {URL}/payouts` | `{payoutRef, cardToken, amount, currency: 'UZS', purpose}` | `{status: SUCCESS \| PENDING \| FAILED, reason?}`. HTTP 400 yoki 422 — aniq rad (`FAILED`, sabab bilan); ulanib bo‘lmadi, 401, 403, 429 — yuborilmagan («Tasdiqlandi» ga qaytadi, keyin o‘sha `payoutRef` bilan qayta); 5xx, 404, 409, 10 s javobsiz yoki holatsiz javob — noma’lum (`PAYING`, holat so‘raladi). Qaysi kod qaysi turga — provayder hujjati bilan aniqlanadi [taklif, EQ-08] |
 | `GET {URL}/payouts/{payoutRef}` | — | `{status, reason?}`; 404 — topilmadi (qayta yuborilmaydi) |
 
 `payoutRef` = `wd-<so‘rov ID>-<8 hex>` — bitta so‘rov, bitta chiqim; so‘rovga bir marta beriladi (tasodifiy qism — boshqa
