@@ -89,7 +89,7 @@ describe('PayoutProvider (umumiy HTTP shakl)', () => {
     ).rejects.toBeInstanceOf(PayoutRejectedError);
   });
 
-  it('to‘lov: SUCCESS/PENDING/FAILED; 4xx — aniq rad (sabab bilan); 5xx va holatsiz javob — noma’lum', async () => {
+  it('to‘lov: SUCCESS/PENDING/FAILED; 400/422 — aniq rad (sabab bilan); 5xx va holatsiz javob — noma’lum', async () => {
     const input = {
       payoutRef: 'wd-7',
       cardToken: 'tok_1',
