@@ -31,7 +31,7 @@ const ID = /^[1-9]\d{0,18}$/;
  *
  * Arxivlanmaydi (dizayn p-a2 4.4 «qoldig‘i yoki ochiq buyurtmasi bor mahsulot arxivlanmaydi»; qoidalar [taklif]):
  * - sotuvdagi (to‘xtatilmagan ACTIVE) mahsulot — avval to‘xtatiladi;
- * - omborda yoki bandda dona bor (inventory, optovik paneli bilan bir hisob);
+ * - omborda yoki bandda dona bor, yoki e’lon qilingan / yo‘ldagi postavka bor (inventory, optovik paneli bilan bir hisob);
  * - ochiq buyurtma bor (checkout: topshirilgungacha va Elchi’da yakunlanmagan holatlar).
  * Ombor yoki buyurtma xizmati javob bermasa — arxivlanmaydi (503).
  */
@@ -69,12 +69,17 @@ export class ProductArchiveService {
           })),
         },
       );
-      const held =
-        Number(summary?.totals?.onHand ?? 0) +
-        Number(summary?.totals?.reserved ?? 0);
-      if (held > 0)
+      // band dona omborda (onHand) ichida; yo‘ldagi postavka qabul qilinsa arxivdagi mahsulotda qolib ketardi
+      const onHand = Number(summary?.totals?.onHand ?? 0);
+      const reserved = Number(summary?.totals?.reserved ?? 0);
+      const inTransit = Number(summary?.totals?.inTransit ?? 0);
+      if (onHand > 0 || reserved > 0)
         throw new ConflictException(
-          `Omborda yoki buyurtmalarda ${held} dona bor — arxivlab bo‘lmaydi`,
+          `Omborda ${onHand} dona${reserved > 0 ? ` (shundan ${reserved} tasi buyurtmada)` : ''} — arxivlab bo‘lmaydi`,
+        );
+      if (inTransit > 0)
+        throw new ConflictException(
+          `Yo‘ldagi postavkada ${inTransit} dona — avval qabul qiling yoki postavkani bekor qiling`,
         );
     }
     const open = await this.call<Record<string, number>>(

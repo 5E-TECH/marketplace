@@ -11,6 +11,7 @@ import {
 } from '@app/common';
 import { shipmentNumber } from './inbound.service';
 import { InventoryService } from './inventory.service';
+import { blockedByVariant } from './stock-lots';
 
 const ID = /^[1-9]\d{0,18}$/;
 /** Ro‘yxat chegaralari (60 s da yangilanadi; pilot 30–50 SKU) [taklif]. */
@@ -55,11 +56,16 @@ export class WholesalerAttentionService {
 
   async attention(input: {
     variants: AttentionVariant[];
+    /** Katalogdagi (o‘chirilmagan) optoviklar — chegara (LIMIT) shulardan keyin qo‘llanadi. */
+    wholesalerIds?: string[];
   }): Promise<InventoryAttentionResult> {
     const variants = variantsOf(input);
+    const wholesalerIds = Array.isArray(input?.wholesalerIds)
+      ? input.wholesalerIds.map(String).filter((id) => ID.test(id))
+      : null;
     const [defectShipments, outOfStock, defectByWholesaler] = await Promise.all(
       [
-        this.defectShipments(),
+        this.defectShipments(wholesalerIds),
         this.outOfStock(variants.filter((v) => v.onSale)),
         this.defectsNotReturned(variants),
       ],
@@ -155,9 +161,9 @@ export class WholesalerAttentionService {
   }
 
   /** Qabulda farq chiqqan postavkalar (DISCREPANCY — yakuniy holat, «hal qilindi» yo‘q). */
-  private async defectShipments(): Promise<
-    InventoryAttentionResult['defectShipments']
-  > {
+  private async defectShipments(
+    wholesalerIds: string[] | null,
+  ): Promise<InventoryAttentionResult['defectShipments']> {
     const rows = (await this.dataSource.query(
       `SELECT s.id::text AS "shipmentId", s.wholesaler_id::text AS "wholesalerId",
               (SELECT i.product_name FROM inventory.inbound_shipment_item i
@@ -167,11 +173,11 @@ export class WholesalerAttentionService {
               COALESCE(SUM(i.defective_qty), 0)::int AS defect
          FROM inventory.inbound_shipment s
          JOIN inventory.inbound_shipment_item i ON i.shipment_id = s.id
-        WHERE s.status = $1
+        WHERE s.status = $1 AND ($3::bigint[] IS NULL OR s.wholesaler_id = ANY($3::bigint[]))
         GROUP BY s.id
         ORDER BY s.received_at DESC, s.id DESC
         LIMIT $2`,
-      [InboundShipmentStatus.DISCREPANCY, MAX_SHIPMENTS],
+      [InboundShipmentStatus.DISCREPANCY, MAX_SHIPMENTS, wholesalerIds],
     )) as Array<
       Omit<InventoryAttentionResult['defectShipments'][number], 'code'>
     >;
@@ -183,7 +189,7 @@ export class WholesalerAttentionService {
 
   /**
    * Sotuvdagi mahsulotning sotsa bo‘ladigan qoldig‘i 0 (offer qoldig‘i bilan bir hisob: omborda − band − muddati
-   * sabab to‘silgan partiya). Kelayotgani — eng yaqin e’lon qilingan yoki yo‘ldagi postavka.
+   * sabab to‘silgan partiya; to‘silgani alohida `blocked`). Kelayotgani — eng yaqin e’lon qilingan yoki yo‘ldagi postavka.
    */
   private async outOfStock(
     variants: AttentionVariant[],
@@ -197,7 +203,7 @@ export class WholesalerAttentionService {
     const empty = variants.filter((v) => !available[String(v.variantId)]);
     if (!empty.length) return [];
     const emptyIds = empty.map((v) => String(v.variantId));
-    const [stock, incoming] = await Promise.all([
+    const [stock, incoming, blocked] = await Promise.all([
       this.dataSource.query(
         `SELECT variant_id::text AS "variantId", quantity_on_hand AS "onHand", quantity_reserved AS reserved
            FROM inventory.stock WHERE variant_id = ANY($1::bigint[]) AND warehouse_id = $2`,
@@ -219,6 +225,7 @@ export class WholesalerAttentionService {
       ) as Promise<
         Array<{ variantId: string; shipmentId: string; qty: number }>
       >,
+      blockedByVariant(this.dataSource.manager, emptyIds, warehouseId),
     ]);
     const stockOf = new Map(stock.map((row) => [row.variantId, row]));
     const incomingOf = new Map(incoming.map((row) => [row.variantId, row]));
@@ -234,6 +241,7 @@ export class WholesalerAttentionService {
         productId,
         onHand: Number(row?.onHand ?? 0),
         reserved: Number(row?.reserved ?? 0),
+        blocked: blocked.get(String(v.variantId)) ?? 0,
         incomingCode: next ? shipmentNumber(next.shipmentId) : null,
         incomingQty: next ? Number(next.qty) : 0,
       });

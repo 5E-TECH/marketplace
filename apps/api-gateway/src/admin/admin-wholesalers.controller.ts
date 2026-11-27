@@ -133,7 +133,21 @@ export class AdminWholesalersController {
           { $ref: getSchemaPath(WholesalerAttentionDefectNotReturnedDto) },
           { $ref: getSchemaPath(WholesalerAttentionSettlementReadyDto) },
         ],
-        discriminator: { propertyName: 'kind' },
+        discriminator: {
+          propertyName: 'kind',
+          mapping: {
+            SHIPMENT_DEFECT: getSchemaPath(
+              WholesalerAttentionShipmentDefectDto,
+            ),
+            OUT_OF_STOCK: getSchemaPath(WholesalerAttentionOutOfStockDto),
+            DEFECT_NOT_RETURNED: getSchemaPath(
+              WholesalerAttentionDefectNotReturnedDto,
+            ),
+            SETTLEMENT_READY: getSchemaPath(
+              WholesalerAttentionSettlementReadyDto,
+            ),
+          },
+        },
       },
       example: WHOLESALER_ATTENTION_EXAMPLE,
     },

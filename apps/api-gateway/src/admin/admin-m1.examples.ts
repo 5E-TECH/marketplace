@@ -456,6 +456,7 @@ export const WHOLESALER_ATTENTION_EXAMPLE = [
     productName: 'Elektr choynak',
     onHand: 3,
     reserved: 3,
+    blocked: 0,
     incomingCode: 'PS-000015',
     incomingQty: 40,
   },

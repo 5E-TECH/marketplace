@@ -633,6 +633,10 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       ConflictException,
     );
     await products.adminSuspend(String(extra.id));
+    // arxivgacha — omborga postavka e’lon qilsa bo‘ladi
+    expect(await variants.inventoryProducts([String(extra.id)])).toHaveLength(
+      1,
+    );
     const blockedBefore = (await offers.moderationSummary()).byStatus.BLOCKED;
     await expect(archives.archive(String(extra.id))).resolves.toMatchObject({
       status: ProductStatus.ARCHIVED,
@@ -654,5 +658,9 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     await expect(
       products.adminReactivate(String(extra.id)),
     ).rejects.toBeInstanceOf(ConflictException);
+    // arxivdagi mahsulotga postavka e’lon qilinmaydi (ombor ro‘yxatida yo‘q)
+    await expect(
+      variants.inventoryProducts([String(extra.id)]),
+    ).resolves.toEqual([]);
   });
 });

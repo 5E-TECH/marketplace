@@ -209,6 +209,7 @@ describeWithPostgres(
           productId: '44',
           onHand: 5,
           reserved: 5,
+          blocked: 0,
           incomingCode: incoming.number,
           incomingQty: 20,
         },
@@ -217,6 +218,7 @@ describeWithPostgres(
           productId: '45',
           onHand: 6,
           reserved: 0,
+          blocked: 6,
           incomingCode: null,
           incomingQty: 0,
         },
@@ -225,6 +227,7 @@ describeWithPostgres(
           productId: '50',
           onHand: 0,
           reserved: 0,
+          blocked: 0,
           incomingCode: null,
           incomingQty: 0,
         },
@@ -252,6 +255,13 @@ describeWithPostgres(
           returnCodes: [],
         },
       ]);
+
+      // o‘chirilgan optovik (katalogda yo‘q) — chegaradan oldin chiqariladi
+      expect(
+        (
+          await attention.attention({ variants, wholesalerIds: [W] })
+        ).defectShipments.map((r) => r.wholesalerId),
+      ).toEqual([W, W]);
 
       const acts = await attention.acts({ wholesalerId: W, variants });
       expect(acts.map((a) => [a.kind, a.code, a.title])).toEqual([

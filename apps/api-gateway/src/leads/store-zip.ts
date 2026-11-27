@@ -79,6 +79,8 @@ export function zipStream(entries: ZipEntry[], at = new Date()): Readable {
   if (!zipFits(entries))
     throw new Error('ZIP chegarasi (4 GiB yoki 65 535 fayl) oshdi');
   const stamp = dosTime(at);
+  /** O‘qilayotgan fayl oqimi — mijoz uzilsa yopiladi (MinIO ulanishi osilib qolmasin). */
+  let current: NodeJS.ReadableStream | null = null;
   async function* generate(): AsyncGenerator<Buffer> {
     const central: Buffer[] = [];
     let offset = 0;
@@ -98,7 +100,8 @@ export function zipStream(entries: ZipEntry[], at = new Date()): Readable {
 
       let crc = 0;
       let size = 0;
-      for await (const chunk of await entry.open()) {
+      current = await entry.open();
+      for await (const chunk of current) {
         const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         crc = crc32(data, crc);
         size += data.length;
@@ -143,5 +146,14 @@ export function zipStream(entries: ZipEntry[], at = new Date()): Readable {
     end.writeUInt32LE(offset, 16);
     yield Buffer.concat([directory, end]);
   }
-  return Readable.from(generate(), { objectMode: false });
+  const readable = Readable.from(generate(), { objectMode: false });
+  // `destroy` generator tugashini kutadi, generator esa fayl oqimini kutib turgan bo‘lishi mumkin — avval faylni yopamiz
+  const destroy = readable._destroy.bind(readable);
+  readable._destroy = (error, callback) => {
+    const source = current as
+      (NodeJS.ReadableStream & { destroy?: () => void }) | null;
+    source?.destroy?.();
+    destroy(error, callback);
+  };
+  return readable;
 }

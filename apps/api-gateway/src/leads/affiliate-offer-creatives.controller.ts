@@ -5,6 +5,8 @@ import {
   Logger,
   NotFoundException,
   Param,
+  Req,
+  Res,
   StreamableFile,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -19,6 +21,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
 import {
   AffiliateOfferDetailDto,
   CREATIVE_RPC,
@@ -74,6 +77,8 @@ export class AffiliateOfferCreativesController {
   @ApiServiceUnavailableResponse({ description: 'Kreativ fayllari o‘qilmadi' })
   async download(
     @Param('productId', ParseLeadIdPipe) productId: string,
+    @Req() req?: Request,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<StreamableFile> {
     const offer = await sendRpc<AffiliateOfferDetailDto>(
       this.lead,
@@ -99,11 +104,20 @@ export class AffiliateOfferCreativesController {
         'Kreativlar bitta arxivga sig‘maydi — alohida yuklab oling',
       );
     const name = `${slug || `offer-${productId}`}-kreativlar.zip`;
-    const file = new StreamableFile(zipStream(entries), {
+    const headers = {
       type: 'application/zip',
       disposition: `attachment; filename="${asciiName(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`,
       length: zipLength(entries),
+    };
+    // HEAD — faqat sarlavhalar: arxiv o‘qilmaydi
+    if (req?.method === 'HEAD')
+      return new StreamableFile(Buffer.alloc(0), headers);
+    const stream = zipStream(entries);
+    // mijoz uzilsa yoki vaqt tugasa — arxiv va MinIO oqimi yopiladi
+    res?.once('close', () => {
+      if (!res.writableFinished) stream.destroy();
     });
+    const file = new StreamableFile(stream, headers);
     // sarlavha ketgandan keyingi xato — ulanish uziladi (yarim fayl to‘liq bo‘lib ko‘rinmasin)
     file.setErrorHandler((error, res) => {
       this.logger.error(
