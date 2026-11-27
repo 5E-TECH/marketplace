@@ -15,7 +15,7 @@ describe('lid buyurtmasi holatlari (BE-18, TZ T5)', () => {
       HANDED_TO_ELCHI: [S.IN_TRANSIT],
       IN_TRANSIT: [S.DELIVERED, S.REFUSED],
       DELIVERED: [S.REMITTED, S.RETURN_REQUESTED],
-      REMITTED: [S.SETTLED],
+      REMITTED: [S.SETTLED, S.RETURN_REQUESTED], // QA-02: to‘langandan keyin ham qaytarish
       REFUSED: [S.RETURNING],
       RETURNING: [S.RETURNED_GRADED],
       // BE-44: qaror o‘tishlari — faqat LEAD_RETURN_TRANSITIONS (Elchi yo‘l qidiruvi ishlatmasin)
