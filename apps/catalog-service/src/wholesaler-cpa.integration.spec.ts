@@ -2,7 +2,11 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { AdminProductsQueryDto, ProductStatus } from '@app/common';
+import {
+  AdminProductAttention,
+  AdminProductsQueryDto,
+  ProductStatus,
+} from '@app/common';
 import { CATALOG_DB } from './database';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -14,6 +18,7 @@ import { CreativeService } from './creative.service';
 import { Creative } from './entities/creative.entity';
 import { ProductService } from './product.service';
 import { ProductArchiveService } from './product-archive.service';
+import { AdminProductListService } from './admin-product-list.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
 import { PricingService } from './pricing.service';
@@ -66,6 +71,8 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
   let productId: string;
   let oldSlugs: Record<string, string>;
   let oldCpa: boolean[];
+  /** BE-27/BE-25: sotuvdan chiqqan partiyalar shu variantlarda (inventory stubi). */
+  let blockedLotVariants: string[] = [];
 
   beforeAll(async () => {
     if (!new URL(url!).pathname.toLowerCase().includes('test'))
@@ -136,10 +143,26 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       // BE-16: inventory — har bir faol variantda 5 dona bo‘sh qoldiq
       {
         send: (p: { cmd: string }, d: { variantIds: string[] }) =>
-          // BE-27: sotuvdan chiqqan partiyalar (moderatsiya hisoblagichi) — bitta
+          // BE-27: sotuvdan chiqqan partiyalar (moderatsiya hisoblagichi)
           p.cmd === 'inventory.lots.list'
-            ? of([{ id: '1', blocked: true }])
-            : of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
+            ? of(
+                blockedLotVariants.map((variantId, i) => ({
+                  id: String(i + 1),
+                  variantId,
+                  blocked: true,
+                })),
+              )
+            : // BE-25 (FE-12): ro‘yxat qatori — omborda 6, band 1, sotsa bo‘ladigan 5, yo‘lda 10
+              p.cmd === 'inventory.stock.summary'
+              ? of(
+                  Object.fromEntries(
+                    d.variantIds.map((id) => [
+                      id,
+                      { onHand: 6, reserved: 1, available: 5, incoming: 10 },
+                    ]),
+                  ),
+                )
+              : of(Object.fromEntries(d.variantIds.map((id) => [id, 5]))),
       } as never,
       new CreativeService(
         ds.getRepository(Creative),
@@ -485,6 +508,12 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
           )) as Array<{ k: string; n: number }>
         ).map((r) => [r.k, r.n]),
       );
+    // bitta sotuvdan chiqqan partiya — ikki partiya bitta mahsulotda: hisoblagich mahsulotlar soni (BE-25)
+    const [lotVariant] = (await ds.query(
+      `SELECT v.id::text AS id FROM catalog.product_variant v JOIN catalog.product p ON p.id = v.product_id
+        WHERE p.is_deleted = FALSE ORDER BY v.id LIMIT 1`,
+    )) as Array<{ id: string }>;
+    blockedLotVariants = [lotVariant.id, lotVariant.id];
     const before = await offers.moderationSummary();
     const db = await counts();
     const total = Object.values(db).reduce((a, b) => a + b, 0);
@@ -494,6 +523,72 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
     expect(before.byStatus.REJECTED).toBe(db.REJECTED ?? 0);
     expect(before.expirySoon).toBe(1);
     expect(before.outOfStock).toBe(0);
+
+    // BE-25 (FE-12): «Diqqat» filtri qatorlari = hisoblagich; kanal va kategoriya filtrlari; qator qo‘shimchalari
+    const lists = new AdminProductListService(products, offers);
+    const q = (over: Record<string, unknown>) =>
+      Object.assign(new AdminProductsQueryDto(), { limit: 100 }, over);
+    const expiring = await lists.list(
+      q({ attention: AdminProductAttention.EXPIRY_SOON }),
+    );
+    expect(expiring.total).toBe(before.expirySoon);
+    await expect(
+      lists.list(q({ attention: AdminProductAttention.OUT_OF_STOCK })),
+    ).resolves.toMatchObject({ total: 0, items: [] });
+    const all = await lists.list(q({}));
+    const cpa = await lists.list(q({ cpaEnabled: true }));
+    const site = await lists.list(q({ cpaEnabled: false }));
+    expect(cpa.total + site.total).toBe(all.total);
+    expect(cpa.items.every((p) => p.cpaEnabled)).toBe(true);
+    const [withCategory] = (await ds.query(
+      `SELECT category_id::text AS id FROM catalog.product WHERE is_deleted = FALSE AND category_id IS NOT NULL LIMIT 1`,
+    )) as Array<{ id: string }>;
+    if (withCategory) {
+      const inCategory = await lists.list(q({ categoryId: withCategory.id }));
+      expect(inCategory.total).toBeGreaterThan(0);
+      expect(
+        inCategory.items.every((p) => String(p.categoryId) === withCategory.id),
+      ).toBe(true);
+    }
+    // slug bo‘yicha qidiruv
+    const [bySlug] = (await ds.query(
+      `SELECT id::text AS id, slug FROM catalog.product WHERE is_deleted = FALSE ORDER BY id LIMIT 1`,
+    )) as Array<{ id: string; slug: string }>;
+    expect(
+      (await lists.list(q({ search: bySlug.slug }))).items.map((p) =>
+        String(p.id),
+      ),
+    ).toContain(bySlug.id);
+    // qo‘shimchalar: omborchiga yo‘q, adminga — ombor, narx, video
+    expect(all).not.toHaveProperty('unavailable');
+    const rich = (await lists.list(q({ cpaEnabled: true }), true)) as {
+      items: Array<
+        Record<string, unknown> & { id: string; approvedPrice: number | null }
+      >;
+      unavailable: string[];
+    };
+    expect(rich.unavailable).toEqual([]);
+    expect(rich.items.length).toBeGreaterThan(0);
+    for (const row of rich.items) {
+      expect(row.stock).toEqual({
+        onHand: 6,
+        reserved: 1,
+        available: 5,
+        incoming: 10,
+      });
+      expect(row.hasVideo).toBe(false);
+      const listPrice = row.listPrice as {
+        customer: number;
+        recommended: boolean;
+        delivery: number;
+      } | null;
+      expect(listPrice).not.toBeNull();
+      expect(listPrice!.recommended).toBe(row.approvedPrice == null);
+      if (row.approvedPrice != null)
+        expect(listPrice!.customer).toBe(row.approvedPrice);
+      // ko‘rinadigan yetkazish — offer bilan bir xil (sukut: qisman, 30 000)
+      expect(listPrice!.delivery).toBe(30_000);
+    }
 
     const extra = await products.adminCreate(wholesalerId, {
       wholesalerId,

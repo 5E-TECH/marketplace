@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsString,
   Matches,
   Max,
@@ -172,4 +174,14 @@ export class CreativeDto {
 
   @ApiProperty()
   createdAt: Date;
+}
+
+/** BE-25 (FE-12): kreativni o‘chirish sababi — audit jurnaliga (dizayn p-a2 «Sabab majburiy»). */
+export class DeleteCreativeDto {
+  @ApiProperty({ example: 'Video eskirgan, yangisi yuklanadi', maxLength: 500 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Sabab majburiy' })
+  @MaxLength(500)
+  reason: string;
 }

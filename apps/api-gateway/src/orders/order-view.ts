@@ -36,7 +36,56 @@ export interface OrderDetailRpc {
     [key: string]: unknown;
   } | null;
   stream?: Record<string, unknown> | null;
+  createdAt?: string | Date | null;
+  sellerOrders?: Array<{ items?: Array<{ productId?: string }> }>;
+  /** FE-26: narx nusxasi (faqat admin; checkout `order-pricing.ts`). */
+  pricing?:
+    | ({ approvedPrice: number; approvedAt: string | null } & Record<
+        string,
+        unknown
+      >)
+    | null;
   [key: string]: unknown;
+}
+
+/**
+ * FE-26: narx tasdiqlangan sana — katalogdagi narx qarori: buyurtmadan oldingi oxirgisi va narxi nusxadagi bilan bir xil
+ * [taklif]. Narx nusxasi yo‘q (nazoratchi, operator, eski buyurtma) — katalog so‘ralmaydi; katalog javob bermasa —
+ * `approvedAt: null`, karta baribir ochiladi.
+ */
+export async function withPriceApproval(
+  catalog: ClientProxy,
+  order: OrderDetailRpc,
+): Promise<OrderDetailRpc> {
+  const pricing = order?.pricing;
+  const productId = order?.sellerOrders?.[0]?.items?.[0]?.productId;
+  if (!pricing || !productId || !order.createdAt) return order;
+  const orderAt = new Date(order.createdAt).getTime();
+  try {
+    const history = await firstValueFrom(
+      catalog
+        .send<Array<{ price: number; createdAt: string | Date }>>(
+          { cmd: 'catalog.pricing.history' },
+          { productId: String(productId) },
+        )
+        .pipe(timeout(LEAD_TIMEOUT_MS)),
+    );
+    // tarix yangisi tepada — buyurtmadan oldingi birinchisi
+    const decision = (history ?? []).find(
+      (d) => new Date(d.createdAt).getTime() <= orderAt,
+    );
+    if (!decision || Number(decision.price) !== Number(pricing.approvedPrice))
+      return order;
+    return {
+      ...order,
+      pricing: {
+        ...pricing,
+        approvedAt: new Date(decision.createdAt).toISOString(),
+      },
+    };
+  } catch {
+    return order;
+  }
 }
 
 /**

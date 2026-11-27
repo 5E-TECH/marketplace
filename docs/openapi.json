@@ -2614,7 +2614,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`",
+            "description": "Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`. `pricing` (FE-26) — narx nusxasi buyurtma paytidagi qiymatlardan, faqat ADMIN/SUPERADMIN (nazoratchiga null): `recommendedPrice` — alohida rejim tavsiyasi (`priceSnapshot.recommendedPrice` — shu rejimdagisi), `hiddenDelivery` — Elchi tarifining ko‘rinmagan qismi, `priceAdd` — narxga qo‘shimcha (= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi va tanlanmagani (buyurtma paytidagi nusxa, `lead.deliveryShownOther`; migratsiya 1799280000000 dan oldingi buyurtmada — null), `split` — buyurtma jami, `approvedAt` — buyurtmadan oldingi shu narxdagi narx qarori [taklif].",
             "content": {
               "application/json": {
                 "schema": {
@@ -2676,6 +2676,7 @@
                       "whereDeliver": "ADDRESS",
                       "deliveryMode": "SEPARATE",
                       "deliveryShown": 30000,
+                      "deliveryShownOther": 25000,
                       "deliveryCost": 30000,
                       "deliveryEmbedded": 0,
                       "weightGrams": 300,
@@ -2768,7 +2769,27 @@
                       }
                     ],
                     "dispute": null,
-                    "postbacks": []
+                    "postbacks": [],
+                    "pricing": {
+                      "salePrice": 262000,
+                      "approvedPrice": 251000,
+                      "markup": 11000,
+                      "recommendedPrice": 251000,
+                      "recommendedModePrice": 251000,
+                      "approvedAt": "2026-11-28T10:00:00.000Z",
+                      "deliveryMode": "SEPARATE",
+                      "hiddenDelivery": 0,
+                      "priceAdd": 0,
+                      "visibleCenter": 25000,
+                      "visibleAddress": 30000,
+                      "elchiTariff": 30000,
+                      "split": {
+                        "wholesaler": 150000,
+                        "affiliate": 40000,
+                        "callCenter": 10000,
+                        "platformService": 51000
+                      }
+                    }
                   }
                 }
               }
@@ -4463,9 +4484,43 @@
             "name": "search",
             "required": false,
             "in": "query",
+            "description": "Nomi yoki slug bo‘yicha (BE-25, FE-12)",
             "schema": {
               "example": "telefon",
               "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "description": "Aynan shu kategoriya (ichki kategoriyalarsiz) — BE-25 (FE-12)",
+            "schema": {
+              "example": "3",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cpaEnabled",
+            "required": false,
+            "in": "query",
+            "description": "Kanal (BE-25, FE-12): true — sotuvchilar va sayt (CPA), false — faqat sayt",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "attention",
+            "required": false,
+            "in": "query",
+            "description": "BE-25 (FE-12): OUT_OF_STOCK — sotuvdagi CPA mahsulot, bo‘sh qoldiq 0 (moderatsiya `outOfStock`); EXPIRY_SOON — sotuvdan chiqqan partiyasi omborda turgan mahsulot (`expirySoon`). Ombor javob bermasa — 503.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OUT_OF_STOCK",
+                "EXPIRY_SOON"
+              ]
             }
           },
           {
@@ -4491,84 +4546,17 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items, total, page, limit, totalPages }; optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi",
+            "description": "Optovik rekvizitlari (STIR, bank, shartnoma) berilmaydi. BE-25 (FE-12): qatorda `stock` (HQ), `listPrice`, `hasVideo`, `results` (hamma sotuvchilar, oxirgi 365 kun [taklif]; 5 daqiqa kesh); javob bermagan qism `unavailable` da [taklif]. Omborchiga qo‘shimchalarsiz.",
             "content": {
               "application/json": {
                 "schema": {
-                  "example": {
-                    "items": [
-                      {
-                        "id": "501",
-                        "shopId": "12",
-                        "shop": {
-                          "id": "12",
-                          "ownerUserId": "5003",
-                          "name": "Optovik MCHJ",
-                          "slug": "optovik-mchj",
-                          "description": null,
-                          "logoUrl": null,
-                          "bannerUrl": null,
-                          "status": "ACTIVE",
-                          "phone": "+998712000000",
-                          "regionId": null,
-                          "districtId": null,
-                          "address": null,
-                          "rating": 0,
-                          "ordersCount": 0,
-                          "isFeatured": false,
-                          "elchiMarketId": null,
-                          "createdAt": "2026-11-20T08:00:00.000Z",
-                          "updatedAt": "2026-11-20T08:00:00.000Z",
-                          "isDeleted": false
-                        },
-                        "ownerUserId": "5003",
-                        "categoryId": "3",
-                        "name": "Simsiz quloqchinlar",
-                        "slug": "simsiz-quloqchinlar",
-                        "description": "Kundalik foydalanish uchun simsiz quloqchinlar",
-                        "price": 262000,
-                        "oldPrice": null,
-                        "imageUrl": null,
-                        "images": [],
-                        "attributes": {
-                          "Aloqa": "Bluetooth"
-                        },
-                        "hasVariants": false,
-                        "status": "ACTIVE",
-                        "moderationNote": null,
-                        "basePrice": 150000,
-                        "affiliateFee": 40000,
-                        "weightGrams": 300,
-                        "lengthMm": 150,
-                        "widthMm": 100,
-                        "heightMm": 50,
-                        "cpaEnabled": true,
-                        "approvedPrice": 251000,
-                        "priceStatus": "APPROVED",
-                        "marketTotal": null,
-                        "marketSource": null,
-                        "marketCheckedAt": null,
-                        "isBad": false,
-                        "isBlocked": false,
-                        "blockReason": null,
-                        "mxikCode": null,
-                        "packageCode": null,
-                        "rating": 0,
-                        "expiryTracked": false,
-                        "badByCategory": false,
-                        "createdAt": "2026-11-20T08:10:00.000Z",
-                        "updatedAt": "2026-11-21T10:00:00.000Z",
-                        "isDeleted": false
-                      }
-                    ],
-                    "total": 1,
-                    "page": 1,
-                    "limit": 20,
-                    "totalPages": 1
-                  }
+                  "$ref": "#/components/schemas/AdminProductsPageDto"
                 }
               }
             }
+          },
+          "503": {
+            "description": "`attention` filtri: ombor javob bermadi"
           }
         },
         "security": [
@@ -5071,6 +5059,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteCreativeDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "O‘chirilgan kreativ ID si",
@@ -5083,6 +5081,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Sabab majburiy (500 belgigacha)"
           },
           "404": {
             "description": "Kreativ topilmadi"
@@ -15664,6 +15665,7 @@
                       "whereDeliver": "ADDRESS",
                       "deliveryMode": "SEPARATE",
                       "deliveryShown": 30000,
+                      "deliveryShownOther": 25000,
                       "deliveryCost": null,
                       "deliveryEmbedded": null,
                       "weightGrams": 300,
@@ -15741,7 +15743,8 @@
                     "cancel": null,
                     "returnRequest": null,
                     "dispute": null,
-                    "postbacks": []
+                    "postbacks": [],
+                    "pricing": null
                   }
                 }
               }
@@ -20864,6 +20867,474 @@
           "reason"
         ]
       },
+      "AdminProductShopDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "name": {
+            "type": "string",
+            "example": "«Toshkent Savdo» MChJ"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status"
+        ]
+      },
+      "AdminProductStockDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "number",
+            "example": 40,
+            "description": "Sotsa bo‘ladigan: omborda − band − muddati sabab to‘silgan"
+          },
+          "onHand": {
+            "type": "number",
+            "example": 46,
+            "description": "Omborda (bandi bilan)"
+          },
+          "reserved": {
+            "type": "number",
+            "example": 6
+          },
+          "incoming": {
+            "type": "number",
+            "example": 60,
+            "description": "E’lon qilingan va yo‘ldagi postavkalarda"
+          }
+        },
+        "required": [
+          "available",
+          "onHand",
+          "reserved",
+          "incoming"
+        ]
+      },
+      "AdminProductResultsDto": {
+        "type": "object",
+        "properties": {
+          "leads": {
+            "type": "number",
+            "example": 412
+          },
+          "clicks": {
+            "type": "number",
+            "example": 6100
+          },
+          "validLeads": {
+            "type": "number",
+            "example": 390
+          },
+          "confirmed": {
+            "type": "number",
+            "example": 248
+          },
+          "delivered": {
+            "type": "number",
+            "example": 190
+          },
+          "refused": {
+            "type": "number",
+            "example": 31
+          },
+          "epc": {
+            "type": "number",
+            "example": 2050,
+            "nullable": true,
+            "description": "Sotuvchilar daromadi / klik, so‘m"
+          },
+          "approveRate": {
+            "type": "number",
+            "example": 64,
+            "nullable": true,
+            "description": "%, butun"
+          },
+          "saleRate": {
+            "type": "number",
+            "example": 86,
+            "nullable": true,
+            "description": "%, butun"
+          },
+          "revenue": {
+            "type": "number",
+            "example": 12350000,
+            "description": "Sotuvchilar daromadi (ledger), so‘m"
+          }
+        },
+        "required": [
+          "leads",
+          "clicks",
+          "validLeads",
+          "confirmed",
+          "delivered",
+          "refused",
+          "epc",
+          "approveRate",
+          "saleRate",
+          "revenue"
+        ]
+      },
+      "AdminProductListPriceDto": {
+        "type": "object",
+        "properties": {
+          "customer": {
+            "type": "number",
+            "example": 262000,
+            "description": "Tasdiqlangan narx, bo‘lmasa tavsiya"
+          },
+          "recommended": {
+            "type": "boolean",
+            "example": false,
+            "description": "true — narx hali tasdiqlanmagan, tavsiya ko‘rsatilmoqda"
+          },
+          "delivery": {
+            "type": "number",
+            "example": 30000,
+            "description": "Mijozga ko‘rinadigan yetkazish (markazgacha), so‘m"
+          },
+          "deliveryMode": {
+            "type": "string",
+            "enum": [
+              "SEPARATE",
+              "PARTIAL",
+              "FREE"
+            ],
+            "example": "PARTIAL"
+          }
+        },
+        "required": [
+          "customer",
+          "recommended",
+          "delivery",
+          "deliveryMode"
+        ]
+      },
+      "AdminProductListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "12"
+          },
+          "shopId": {
+            "type": "string",
+            "example": "5"
+          },
+          "ownerUserId": {
+            "type": "string",
+            "example": "42",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "example": "1",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "example": "iPhone 16 Pro"
+          },
+          "slug": {
+            "type": "string",
+            "example": "iphone-16-pro"
+          },
+          "description": {
+            "type": "string",
+            "example": "Titanium, 256 GB",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "example": 14999000
+          },
+          "oldPrice": {
+            "type": "number",
+            "example": 15999000,
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true,
+            "example": {
+              "brand": "Apple"
+            }
+          },
+          "hasVariants": {
+            "type": "boolean",
+            "example": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PENDING_REVIEW",
+              "ACTIVE",
+              "REJECTED",
+              "ARCHIVED",
+              "OUT_OF_STOCK"
+            ]
+          },
+          "moderationNote": {
+            "type": "string",
+            "example": null,
+            "nullable": true
+          },
+          "basePrice": {
+            "type": "number",
+            "example": 140000,
+            "nullable": true
+          },
+          "affiliateFee": {
+            "type": "number",
+            "example": 65000,
+            "nullable": true
+          },
+          "weightGrams": {
+            "type": "number",
+            "example": 450,
+            "nullable": true
+          },
+          "lengthMm": {
+            "type": "number",
+            "example": 200,
+            "nullable": true
+          },
+          "widthMm": {
+            "type": "number",
+            "example": 120,
+            "nullable": true
+          },
+          "heightMm": {
+            "type": "number",
+            "example": 80,
+            "nullable": true
+          },
+          "approvedPrice": {
+            "type": "number",
+            "example": 262000,
+            "nullable": true,
+            "description": "BE-09: tasdiqlangan narx"
+          },
+          "priceStatus": {
+            "type": "string",
+            "example": "GREEN",
+            "nullable": true,
+            "description": "BE-09: oxirgi narx qarori holati"
+          },
+          "marketTotal": {
+            "type": "number",
+            "example": null,
+            "nullable": true,
+            "description": "BE-09: raqobatchida mijoz jami (NRX-5)"
+          },
+          "cpaEnabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "isBad": {
+            "type": "boolean",
+            "example": false
+          },
+          "expiryTracked": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25: postavkada muddat kuzatiladi (OMB-3) — BAD mahsulot yoki toifa belgisi. Faqat admin ro‘yxati va kartasida"
+          },
+          "badByCategory": {
+            "type": "boolean",
+            "example": false,
+            "description": "BE-25 (TZ 8): toifasi BAD — o‘z `isBad` belgisi bo‘lmasa ham sahifada «Dori vositasi emas». Faqat admin ro‘yxati va kartasida"
+          },
+          "isBlocked": {
+            "type": "boolean",
+            "example": false
+          },
+          "blockReason": {
+            "type": "string",
+            "example": null,
+            "nullable": true,
+            "description": "BE-27: yashirish sababi"
+          },
+          "mxikCode": {
+            "type": "string",
+            "example": "03304001001000000",
+            "nullable": true,
+            "description": "BE-41: MXIK (IKPU) kodi — fiskal chek qatori"
+          },
+          "packageCode": {
+            "type": "string",
+            "example": "1500012",
+            "nullable": true,
+            "description": "BE-41: qadoq kodi — fiskal chek qatori"
+          },
+          "rating": {
+            "type": "number",
+            "example": 4.75
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-14T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-14T10:00:00.000Z"
+          },
+          "shop": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminProductShopDto"
+              }
+            ]
+          },
+          "stock": {
+            "nullable": true,
+            "description": "null — postavka yo‘q (ombor qatori ham, kelayotgani ham yo‘q) yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan sotuvdagi CPA mahsulotda — nollar («Qoldiq tugagan»)",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminProductStockDto"
+              }
+            ]
+          },
+          "results": {
+            "nullable": true,
+            "description": "null — statistika yo‘q (yoki lid servisi javob bermadi — `unavailable`)",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminProductResultsDto"
+              }
+            ]
+          },
+          "listPrice": {
+            "nullable": true,
+            "description": "null — bazaviy narx yoki og‘irlik kiritilmagan",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminProductListPriceDto"
+              }
+            ]
+          },
+          "hasVideo": {
+            "type": "boolean",
+            "example": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "shopId",
+          "ownerUserId",
+          "categoryId",
+          "name",
+          "slug",
+          "description",
+          "price",
+          "oldPrice",
+          "imageUrl",
+          "images",
+          "attributes",
+          "hasVariants",
+          "status",
+          "moderationNote",
+          "basePrice",
+          "affiliateFee",
+          "weightGrams",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "approvedPrice",
+          "priceStatus",
+          "marketTotal",
+          "cpaEnabled",
+          "isBad",
+          "isBlocked",
+          "blockReason",
+          "mxikCode",
+          "packageCode",
+          "rating",
+          "createdAt",
+          "updatedAt",
+          "shop",
+          "stock",
+          "results",
+          "listPrice",
+          "hasVideo"
+        ]
+      },
+      "AdminProductsPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminProductListItemDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1
+          },
+          "unavailable": {
+            "type": "array",
+            "example": [],
+            "description": "Javob bermagan qismlar [taklif]: bo‘sh qiymat «olinmadi»ni bildiradi, «yo‘q»ni emas",
+            "items": {
+              "type": "string",
+              "enum": [
+                "stock",
+                "listPrice",
+                "results"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "totalPages",
+          "unavailable"
+        ]
+      },
       "HideProductDto": {
         "type": "object",
         "properties": {
@@ -21007,6 +21478,19 @@
           "size",
           "position",
           "createdAt"
+        ]
+      },
+      "DeleteCreativeDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Video eskirgan, yangisi yuklanadi",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "CreateWholesalerDto": {
@@ -27212,13 +27696,13 @@
             "type": "number",
             "example": 1,
             "nullable": true,
-            "description": "Sotuvdagi CPA mahsulotlari, qoldig‘i 0; null — ombor javob bermadi"
+            "description": "Sotuvdagi CPA mahsulotlari, qoldig‘i 0 — `attention=OUT_OF_STOCK` filtri qatorlari bilan bir xil; null — ombor javob bermadi"
           },
           "expirySoon": {
             "type": "number",
             "example": 0,
             "nullable": true,
-            "description": "Sotuvdan chiqqan, omborda turgan partiyalar (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif]; null — ombor javob bermadi"
+            "description": "Sotuvdan chiqqan partiyasi omborda turgan mahsulotlar soni (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif] — `attention=EXPIRY_SOON` filtri qatorlari bilan bir xil (BE-25, FE-12); null — ombor javob bermadi"
           }
         },
         "required": [

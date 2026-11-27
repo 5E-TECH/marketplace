@@ -310,9 +310,10 @@ export class LeadOrderService {
            (id, customer_id, buyer_name, status, payment_method, total_amount, delivery_fee,
             delivery_address, where_deliver, source, lead_id, stream_id, affiliate_id, wholesaler_id,
             customer_phone, region_soato, district_soato, delivery_mode, delivery_shown, delivery_cost,
-            delivery_embedded, weight_grams, cod_amount, confirmed_by, address_confirmed_by, confirmed_via)
+            delivery_embedded, weight_grams, cod_amount, confirmed_by, address_confirmed_by, confirmed_via,
+            delivery_shown_other)
          VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+                 $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
         [
           row.orderId,
           event.customerName.trim(),
@@ -340,6 +341,8 @@ export class LeadOrderService {
           event.confirmedBy ?? null,
           event.addressConfirmedBy,
           event.confirmedVia ?? LeadConfirmedVia.OPERATOR,
+          // FE-26: tanlanmagan tur (eski katalog javobida yo‘q — NULL)
+          delivery.shownOther ?? null,
         ],
       );
       const [seller] = (await manager.query(

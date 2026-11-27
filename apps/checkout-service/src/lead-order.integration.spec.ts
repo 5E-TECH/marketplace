@@ -119,7 +119,13 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
     callCenterFee: 10_000,
     hiddenDelivery: 11_000,
     platformService: 25_000,
-    delivery: { mode: 'PARTIAL', shown: 30_000, elchiTariff: 40_000 },
+    // FE-26: tanlanmagan tur (eshikkacha) — katalog nusxasidan
+    delivery: {
+      mode: 'PARTIAL',
+      shown: 30_000,
+      elchiTariff: 40_000,
+      shownOther: 50_000,
+    },
     fiscal: {
       mxikCode: '03304001001000000',
       packageCode: '1500012',
@@ -158,6 +164,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
                 source, lead_id::text AS "leadId", stream_id::text AS "streamId",
                 affiliate_id::text AS "affiliateId", wholesaler_id::text AS "wholesalerId",
                 delivery_shown::int AS "deliveryShown", delivery_cost::int AS "deliveryCost",
+                delivery_shown_other::int AS "deliveryShownOther",
                 weight_grams AS "weightGrams", cod_amount::int AS "codAmount",
                 total_amount::int AS "totalAmount"
            FROM checkout.sales_order WHERE lead_id = $1`,
@@ -414,6 +421,7 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       deliveryAddress: 'Chilonzor 5-mavze, 12-uy',
       customerPhone: '+998901234567',
       deliveryShown: 30_000,
+      deliveryShownOther: 50_000,
       deliveryCost: 40_000,
       weightGrams: 1_000,
       codAmount: 306_000,

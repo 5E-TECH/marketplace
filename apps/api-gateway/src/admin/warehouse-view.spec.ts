@@ -98,10 +98,13 @@ describe('Omborchi ko‘rinishi: optoviklar va mahsulotlar', () => {
   it('mahsulotlar: omborchiga narx va sotuvchi haqi chiqmaydi', async () => {
     const page = { items: [product], total: 1, page: 1, limit: 100 };
     const send = jest.fn(() => of(page));
+    // lid statistikasi (`results`) — omborchiga so‘ralmaydi
+    const lead = { send: jest.fn(() => of({ rows: [], totals: {} })) };
     const controller = new AdminProductsController(
       { send } as never,
       {} as never,
       {} as never,
+      lead as never,
     );
     const query = { shopId: '15', page: 1, limit: 100 } as never;
     const view = await controller.list(query, user(Role.WAREHOUSE));
@@ -123,10 +126,17 @@ describe('Omborchi ko‘rinishi: optoviklar va mahsulotlar', () => {
     });
     expect(send).toHaveBeenCalledWith(
       { cmd: 'catalog.product.admin-list' },
-      { query },
+      { query, extras: false },
     );
-    await expect(controller.list(query, user(Role.ADMIN))).resolves.toEqual(
-      page,
+    expect(lead.send).not.toHaveBeenCalled();
+    await expect(controller.list(query, user(Role.ADMIN))).resolves.toEqual({
+      ...page,
+      items: [{ ...product, results: null }],
+      unavailable: [],
+    });
+    expect(send).toHaveBeenLastCalledWith(
+      { cmd: 'catalog.product.admin-list' },
+      { query, extras: true },
     );
   });
 });

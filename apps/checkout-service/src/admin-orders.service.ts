@@ -50,6 +50,7 @@ import {
 } from './seller-orders.service';
 import { returnPhotos } from './return-photo.service';
 
+import { orderPricing, OrderPricingSource } from './order-pricing';
 const ID = /^[1-9]\d{0,18}$/;
 /** Nomlar — ko‘rinish ma’lumoti: javob bo‘lmasa ro‘yxat kod yoki bo‘sh nom bilan ochiladi [taklif]. */
 const NAMES_TIMEOUT_MS = 1_500;
@@ -163,7 +164,7 @@ function exportQuery(filters: OrderExportFilterDto): AdminOrderListQuery {
  * Buyurtmalar admin, nazoratchi va operatorga (BE-18; FE-26 — BE-25). Kim nimani ko‘radi (TZ 3, dizayn admin-buyurtmalar,
  * nazoratchi-buyurtmalar, operator-buyurtmalarim):
  * - admin, superadmin — hammasi, kartada to‘liq telefon;
- * - nazoratchi — lid buyurtmalari, telefon niqoblangan, narx tarkibi (optovik narxi, haqlar) yo‘q;
+ * - nazoratchi — lid buyurtmalari, telefon niqoblangan, narx tarkibi (optovik narxi, haqlar, `pricing`) yo‘q;
  * - operator — faqat o‘zi tasdiqlagan buyurtmalar, sotuvchi va sahifa ko‘rinmaydi.
  */
 @Injectable()
@@ -429,6 +430,10 @@ export class AdminOrdersService {
               affiliateName: lead.affiliateId ? nameOf(lead.affiliateId) : null,
               affiliateId: lead.affiliateId,
             },
+      // FE-26: narx nusxasi — faqat admin va superadmin (nazoratchi va operatorga null)
+      pricing: internal
+        ? orderPricing(order as unknown as OrderPricingSource)
+        : null,
       confirmedByActor: lead.confirmedBy
         ? {
             name: nameOf(lead.confirmedBy),

@@ -430,7 +430,7 @@ export class ModerationSummaryDto {
     nullable: true,
     type: Number,
     description:
-      'Sotuvdagi CPA mahsulotlari, qoldig‘i 0; null — ombor javob bermadi',
+      'Sotuvdagi CPA mahsulotlari, qoldig‘i 0 — `attention=OUT_OF_STOCK` filtri qatorlari bilan bir xil; null — ombor javob bermadi',
   })
   outOfStock: number | null;
 
@@ -439,7 +439,7 @@ export class ModerationSummaryDto {
     nullable: true,
     type: Number,
     description:
-      'Sotuvdan chiqqan, omborda turgan partiyalar (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif]; null — ombor javob bermadi',
+      'Sotuvdan chiqqan partiyasi omborda turgan mahsulotlar soni (muddat − 60 kun o‘tgan, BE-17 OMB-3) [taklif] — `attention=EXPIRY_SOON` filtri qatorlari bilan bir xil (BE-25, FE-12); null — ombor javob bermadi',
   })
   expirySoon: number | null;
 }
@@ -489,3 +489,132 @@ export const PRODUCT_ARCHIVE_RPC = {
   /** checkout: mahsulotning ochiq buyurtmalari soni — `{productIds}` → `{[productId]: count}`. */
   OPEN_ORDERS: 'checkout.product.open-orders',
 } as const;
+
+/** BE-25 (FE-12): mahsulotlar ro‘yxati qatori — ombor (HQ, offer qoldig‘i bilan bir hisob). */
+export class AdminProductStockDto {
+  @ApiProperty({
+    example: 40,
+    description: 'Sotsa bo‘ladigan: omborda − band − muddati sabab to‘silgan',
+  })
+  available: number;
+  @ApiProperty({ example: 46, description: 'Omborda (bandi bilan)' })
+  onHand: number;
+  @ApiProperty({ example: 6 }) reserved: number;
+  @ApiProperty({
+    example: 60,
+    description: 'E’lon qilingan va yo‘ldagi postavkalarda',
+  })
+  incoming: number;
+}
+
+/** BE-25 (FE-12): natijalar — hamma sotuvchilar, oxirgi 365 kun [taklif] (BE-28/BE-46 ta’riflari). */
+export class AdminProductResultsDto {
+  @ApiProperty({ example: 412 }) leads: number;
+  @ApiProperty({ example: 6100 }) clicks: number;
+  @ApiProperty({ example: 390 }) validLeads: number;
+  @ApiProperty({ example: 248 }) confirmed: number;
+  @ApiProperty({ example: 190 }) delivered: number;
+  @ApiProperty({ example: 31 }) refused: number;
+  @ApiProperty({
+    example: 2050,
+    nullable: true,
+    type: Number,
+    description: 'Sotuvchilar daromadi / klik, so‘m',
+  })
+  epc: number | null;
+  @ApiProperty({
+    example: 64,
+    nullable: true,
+    type: Number,
+    description: '%, butun',
+  })
+  approveRate: number | null;
+  @ApiProperty({
+    example: 86,
+    nullable: true,
+    type: Number,
+    description: '%, butun',
+  })
+  saleRate: number | null;
+  @ApiProperty({
+    example: 12_350_000,
+    description: 'Sotuvchilar daromadi (ledger), so‘m',
+  })
+  revenue: number;
+}
+
+/** BE-25 (FE-12): ro‘yxatdagi mijoz narxi — tasdiqlangan yoki tavsiya. */
+export class AdminProductListPriceDto {
+  @ApiProperty({
+    example: 262000,
+    description: 'Tasdiqlangan narx, bo‘lmasa tavsiya',
+  })
+  customer: number;
+  @ApiProperty({
+    example: false,
+    description: 'true — narx hali tasdiqlanmagan, tavsiya ko‘rsatilmoqda',
+  })
+  recommended: boolean;
+  @ApiProperty({
+    example: 30000,
+    description: 'Mijozga ko‘rinadigan yetkazish (markazgacha), so‘m',
+  })
+  delivery: number;
+  @ApiProperty({
+    enum: DeliveryDisplayMode,
+    example: DeliveryDisplayMode.PARTIAL,
+  })
+  deliveryMode: DeliveryDisplayMode;
+}
+
+export class AdminProductShopDto {
+  @ApiProperty({ example: '12' }) id: string;
+  @ApiProperty({ example: '«Toshkent Savdo» MChJ' }) name: string;
+  @ApiProperty({ example: 'ACTIVE' }) status: string;
+}
+
+export type AdminProductExtra = 'stock' | 'listPrice' | 'results';
+
+export class AdminProductListItemDto extends ProductDto {
+  @ApiProperty({ type: AdminProductShopDto, nullable: true })
+  shop: AdminProductShopDto | null;
+  @ApiProperty({
+    type: AdminProductStockDto,
+    nullable: true,
+    description:
+      'null — postavka yo‘q (ombor qatori ham, kelayotgani ham yo‘q) yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan sotuvdagi CPA mahsulotda — nollar («Qoldiq tugagan»)',
+  })
+  stock: AdminProductStockDto | null;
+  @ApiProperty({
+    type: AdminProductResultsDto,
+    nullable: true,
+    description:
+      'null — statistika yo‘q (yoki lid servisi javob bermadi — `unavailable`)',
+  })
+  results: AdminProductResultsDto | null;
+  @ApiProperty({
+    type: AdminProductListPriceDto,
+    nullable: true,
+    description: 'null — bazaviy narx yoki og‘irlik kiritilmagan',
+  })
+  listPrice: AdminProductListPriceDto | null;
+  @ApiProperty({ example: true, nullable: true, type: Boolean })
+  hasVideo: boolean | null;
+}
+
+export class AdminProductsPageDto {
+  @ApiProperty({ type: [AdminProductListItemDto] })
+  items: AdminProductListItemDto[];
+  @ApiProperty({ example: 1 }) total: number;
+  @ApiProperty({ example: 1 }) page: number;
+  @ApiProperty({ example: 20 }) limit: number;
+  @ApiProperty({ example: 1 }) totalPages: number;
+  @ApiProperty({
+    type: [String],
+    enum: ['stock', 'listPrice', 'results'],
+    example: [],
+    description:
+      'Javob bermagan qismlar [taklif]: bo‘sh qiymat «olinmadi»ni bildiradi, «yo‘q»ni emas',
+  })
+  unavailable: AdminProductExtra[];
+}

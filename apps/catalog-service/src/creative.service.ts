@@ -151,7 +151,7 @@ export class CreativeService {
   async delete(input: {
     productId: string;
     creativeId: string;
-  }): Promise<{ id: string; objectKey: string }> {
+  }): Promise<{ id: string; objectKey: string; type: CreativeType }> {
     const productId = this.productIdOf(input?.productId);
     if (!ID.test(String(input?.creativeId ?? '')))
       throw new NotFoundException('Kreativ topilmadi');
@@ -165,7 +165,7 @@ export class CreativeService {
     if (!row) throw new NotFoundException('Kreativ topilmadi');
     row.isDeleted = true;
     await this.creatives.save(row);
-    return { id: row.id, objectKey: row.objectKey };
+    return { id: row.id, objectKey: row.objectKey, type: row.type };
   }
 
   /** Offer uchun (BE-11 shartnomasi): mahsulotlar bo‘yicha faol kreativlar, tartib bilan. */

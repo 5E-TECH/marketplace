@@ -137,6 +137,11 @@ export interface CatalogOrderSnapshot {
     shown: number;
     /** Elchi tarifi jami og‘irlik bo‘yicha (BUY-4, NRX-7). */
     elchiTariff: number;
+    /**
+     * FE-26: tanlanmagan yetkazish turida mijozga ko‘rinadigan summa (o‘sha qoida bilan) — buyurtma kartasidagi
+     * «eshikkacha bo‘lsa …» izohi uchun. Eski katalog javobida yo‘q.
+     */
+    shownOther?: number | null;
   };
   /** BE-41 (EQ-09): fiskal chek qatori uchun nusxa — buyurtma paytidagi kodlar (eski katalog javobida yo‘q). */
   fiscal?: OrderItemFiscal;
