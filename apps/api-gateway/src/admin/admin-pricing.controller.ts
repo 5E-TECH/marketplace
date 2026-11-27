@@ -85,7 +85,7 @@ export class AdminPricingController {
   })
   @ApiCreatedResponse({
     description:
-      '`decision` — saqlangan qaror; qolgan maydonlar — narx hisobi (`evaluation` yuborilgan narx bo‘yicha, `approvedPrice` va `priceStatus` qarordan oldingi holat)',
+      '`decision` — saqlangan qaror; qolgan maydonlar — qarordan KEYINGI narx hisobi (`GET …/pricing` javobi bilan bir xil): `approvedPrice`, `priceStatus`, `approvalCurrent`, `maxSalePrice` — shu qaror bo‘yicha',
     schema: { example: PRICE_DECISION_EXAMPLE },
   })
   async decide(
