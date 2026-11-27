@@ -11,6 +11,7 @@ import {
   CreativeType,
   MAX_CREATIVES_PER_PRODUCT,
   VerifiedCreativeFile,
+  CreativeFilesResult,
 } from '@app/common';
 import { Creative } from './entities/creative.entity';
 import { Product } from './entities/product.entity';
@@ -116,6 +117,34 @@ export class CreativeService {
       order: { position: 'ASC', id: 'ASC' },
     });
     return rows.map((row) => this.toDto(row));
+  }
+
+  /**
+   * BE-25 (FE-05): sotuvchi offer kreativlarini bitta ZIP da yuklaydi — fayl kalitlari va mahsulot slug i (fayl nomi
+   * uchun). Ko‘rinish (offer sotuvchiga ochiqmi) gateway da lead orqali tekshiriladi.
+   */
+  async files(productId: string): Promise<CreativeFilesResult> {
+    const id = this.productIdOf(productId);
+    const product = await this.products.findOne({
+      where: { id, isDeleted: false },
+      select: { id: true, slug: true },
+    });
+    if (!product) throw new NotFoundException('Mahsulot topilmadi');
+    const rows = await this.creatives.find({
+      where: { productId: id, isDeleted: false },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    return {
+      slug: product.slug ?? null,
+      files: rows.map((row) => ({
+        id: String(row.id),
+        type: row.type,
+        objectKey: row.objectKey,
+        mimeType: row.mimeType,
+        size: Number(row.sizeBytes),
+        position: row.position,
+      })),
+    };
   }
 
   /** O‘chiradi (offerdan chiqadi); fayl kalitini qaytaradi — gateway faylni ham o‘chiradi. */

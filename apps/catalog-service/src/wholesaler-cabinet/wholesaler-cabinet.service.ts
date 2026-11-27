@@ -14,6 +14,9 @@ import {
   SELF_CONTRACT_PREFIX,
   SelfRegisterWholesalerInput,
   ShopStatus,
+  AttentionVariant,
+  ProductStatus,
+  CatalogAttentionVariantsResult,
   tashkentDate,
   WholesalerDocumentKind,
   WholesalerDocumentRecord,
@@ -332,6 +335,39 @@ export class WholesalerCabinetService {
       variantId: string;
       sku: string;
     }>;
+  }
+
+  /**
+   * BE-25 (FE-25): «Diqqat talab qiladi» va aktlar ro‘yxati uchun — optoviklar (o‘chirilmagan) va ularning variantlari.
+   * O‘chirilgan mahsulot va variantlar ham (tarix: brak va qabul aktlari); `onSale` — offer qoidasi (`isCpaAvailable`)
+   * va faol variant. `wholesalerId` berilsa — faqat shu optovik.
+   */
+  async attentionVariants(input: {
+    wholesalerId?: string | null;
+  }): Promise<CatalogAttentionVariantsResult> {
+    const id = input?.wholesalerId == null ? null : String(input.wholesalerId);
+    if (id !== null && !/^[1-9]\d{0,18}$/.test(id))
+      return { wholesalers: [], variants: [] };
+    const wholesalers = (await this.dataSource.query(
+      `SELECT s.id::text AS id, s.name
+         FROM catalog.shop s
+        WHERE s.is_deleted = FALSE AND ($1::bigint IS NULL OR s.id = $1::bigint)
+        ORDER BY s.id`,
+      [id],
+    )) as Array<{ id: string; name: string }>;
+    const variants = (await this.dataSource.query(
+      `SELECT s.id::text AS "wholesalerId", p.id::text AS "productId", p.name AS "productName",
+              v.id::text AS "variantId", v.sku,
+              (p.cpa_enabled AND p.status = $2 AND NOT p.is_blocked AND NOT p.is_deleted
+                AND s.status = $3 AND v.is_active AND NOT v.is_deleted) AS "onSale"
+         FROM catalog.product_variant v
+         JOIN catalog.product p ON p.id = v.product_id
+         JOIN catalog.shop s ON s.id = p.shop_id AND s.is_deleted = FALSE
+        WHERE ($1::bigint IS NULL OR s.id = $1::bigint)
+        ORDER BY s.id, p.id, v.id`,
+      [id, ProductStatus.ACTIVE, ShopStatus.ACTIVE],
+    )) as AttentionVariant[];
+    return { wholesalers, variants };
   }
 
   // ------------------------------------------------------------------ yopiq hujjatlar

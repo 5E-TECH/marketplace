@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Client } from 'pg';
 import { of } from 'rxjs';
 import { DataSource } from 'typeorm';
-import { ProductStatus } from '@app/common';
+import { AdminProductsQueryDto, ProductStatus } from '@app/common';
 import { CATALOG_DB } from './database';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -13,6 +13,7 @@ import { CatalogOfferService } from './catalog-offer.service';
 import { CreativeService } from './creative.service';
 import { Creative } from './entities/creative.entity';
 import { ProductService } from './product.service';
+import { ProductArchiveService } from './product-archive.service';
 import { ProductVariantService } from './product-variant.service';
 import { WholesalerService } from './wholesaler.service';
 import { PricingService } from './pricing.service';
@@ -521,5 +522,50 @@ describeWithPostgres('BE-07 optovik va CPA mahsulot (PostgreSQL)', () => {
       isBlocked: false,
       blockReason: null,
     });
+
+    // BE-25 (FE-25): arxivlash — sotuvdagisi 409; to‘xtatilgach arxivga, «To‘xtatilgan» da emas, «Arxiv» da
+    const none = {
+      send: () => of({ items: [], totals: { onHand: 0, reserved: 0 } }),
+    };
+    const archives = new ProductArchiveService(
+      ds.getRepository(Product),
+      ds.getRepository(ProductVariant),
+      products,
+      none as never,
+      { send: () => of({}) } as never,
+    );
+    await expect(archives.archive(String(extra.id))).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    await products.adminSuspend(String(extra.id));
+    // arxivgacha — omborga postavka e’lon qilsa bo‘ladi
+    expect(await variants.inventoryProducts([String(extra.id)])).toHaveLength(
+      1,
+    );
+    const blockedBefore = (await offers.moderationSummary()).byStatus.BLOCKED;
+    await expect(archives.archive(String(extra.id))).resolves.toMatchObject({
+      status: ProductStatus.ARCHIVED,
+      isBlocked: true,
+    });
+    s = await offers.moderationSummary();
+    expect(s.byStatus.ARCHIVED).toBe(1);
+    expect(s.byStatus.BLOCKED).toBe(blockedBefore - 1);
+    const ids = async (query: Record<string, unknown>) =>
+      (
+        await products.adminList(
+          Object.assign(new AdminProductsQueryDto(), query),
+        )
+      ).items.map((p) => String(p.id));
+    expect(await ids({ blocked: true })).not.toContain(String(extra.id));
+    expect(await ids({ status: ProductStatus.ARCHIVED })).toEqual([
+      String(extra.id),
+    ]);
+    await expect(
+      products.adminReactivate(String(extra.id)),
+    ).rejects.toBeInstanceOf(ConflictException);
+    // arxivdagi mahsulotga postavka e’lon qilinmaydi (ombor ro‘yxatida yo‘q)
+    await expect(
+      variants.inventoryProducts([String(extra.id)]),
+    ).resolves.toEqual([]);
   });
 });

@@ -28,6 +28,8 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
+  ApiGoneResponse,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -50,7 +52,7 @@ import {
   RegisterWholesalerDto,
   SendOtpDto,
   VerifyOtpDto,
-  AuthSuccessResponseDto,
+  AuthUserDto,
   ForgotPasswordDto,
   CurrentUser,
   IgnoreAuthCookie,
@@ -169,17 +171,23 @@ export class AuthController {
   @IgnoreAuthCookie()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
-  @ApiOperation({ summary: 'Yangi foydalanuvchini ro‘yxatdan o‘tkazish' })
-  @ApiCreatedResponse({
-    description: 'Foydalanuvchi yaratildi, access va refresh token qaytarildi',
-    type: AuthSuccessResponseDto,
+  @ApiOperation({
+    summary: 'Eski ochiq ro‘yxat (parol bilan) — yopilgan, doim 410 (BE-06)',
+    description:
+      'Sotuvchi: `POST /auth/otp/send` (REGISTER) → `POST /auth/otp/verify` → `POST /auth/register/affiliate`. ' +
+      'Optovik: `POST /auth/register/wholesaler`. Yo‘l frontend shartnoma tekshiruvi uchun qoldirilgan.',
+    deprecated: true,
   })
+  // FE `contractAssertions.ts` `AuthUserDto` sxemasini tekshiradi — 201 javobi olib tashlangach ham components da qolsin
+  @ApiExtraModels(AuthUserDto)
   @ApiBadRequestResponse({
-    description: 'Request body validatsiyadan o‘tmadi',
+    description:
+      'Request body validatsiyadan o‘tmadi (410 dan oldin tekshiriladi)',
     type: AuthErrorResponseDto,
   })
-  @ApiConflictResponse({
-    description: 'Telefon raqami allaqachon ro‘yxatdan o‘tgan',
+  @ApiGoneResponse({
+    description:
+      'BUSINESS_RULE_VIOLATION — parol bilan ochiq ro‘yxat yopilgan (identity `auth.register`)',
     type: AuthErrorResponseDto,
   })
   async register(

@@ -167,6 +167,12 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       reason: 'Raqobatchi narxi past',
       decidedBy: '7',
     });
+    // FE-13: javob — qarordan keyingi holat
+    expect(orange).toMatchObject({
+      approvedPrice: 245_000,
+      priceStatus: PriceStatus.ORANGE,
+      approvalCurrent: true,
+    });
     // TC4 (NRX-13): zararsiz sotuvchi haqi
     expect(orange.evaluation.safeAffiliateFee).toBe(58_936);
     expect(emitted).toEqual([
@@ -177,11 +183,25 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
     ]);
   });
 
-  it('sariq va yashil saqlanadi; offerda tasdiqlangan narx va ustama chegarasi (NRX-4); tarix — kim, qachon, holat', async () => {
+  it('sariq va yashil saqlanadi (javob — qarordan keyingi holat); offerda tasdiqlangan narx va ustama chegarasi (NRX-4); tarix — kim, qachon, holat', async () => {
     const yellow = await pricing.decide(productId, '8', { price: 255_000 });
     expect(yellow.decision.status).toBe(PriceStatus.YELLOW);
+    expect(yellow).toMatchObject({
+      approvedPrice: 255_000,
+      priceStatus: PriceStatus.YELLOW,
+      approvalCurrent: true,
+    });
     const green = await pricing.decide(productId, '8', { price: 262_000 });
     expect(green.decision.status).toBe(PriceStatus.GREEN);
+    // QA (FE-13): ikkinchi qarorda eski kod oldingi YELLOW / 255 000 ni qaytarardi
+    expect(green).toMatchObject({
+      approvedPrice: 262_000,
+      priceStatus: PriceStatus.GREEN,
+      approvalCurrent: true,
+      maxSalePrice: 287_000,
+    });
+    const { decision: _decision, ...after } = green;
+    expect(after).toEqual(await pricing.calculate(productId));
     await expect(offers.get(productId)).resolves.toMatchObject({
       approvedPrice: 262_000,
       maxSalePrice: 287_000,
@@ -734,6 +754,34 @@ describeWithPostgres('BE-09 narx kalkulyatori (PostgreSQL)', () => {
       ],
     });
     await expect(creatives.list(productId)).resolves.toHaveLength(2);
+    // BE-25 (FE-05): ZIP uchun — fayl kalitlari tartib bilan va mahsulot slug i
+    const { slug } = (
+      await ds.query(`SELECT slug FROM catalog.product WHERE id = $1`, [
+        productId,
+      ])
+    )[0] as { slug: string };
+    await expect(creatives.files(productId)).resolves.toEqual({
+      slug,
+      files: [
+        {
+          id: video.id,
+          type: 'VIDEO',
+          objectKey: file(1, CreativeType.VIDEO).objectKey,
+          mimeType: 'video/mp4',
+          size: 80 * 1024 * 1024,
+          position: 0,
+        },
+        {
+          id: image.id,
+          type: 'IMAGE',
+          objectKey: file(2, CreativeType.IMAGE).objectKey,
+          mimeType: 'image/png',
+          size: 2048,
+          position: 1,
+        },
+      ],
+    });
+    await expect(creatives.files('999999')).rejects.toThrow('topilmadi');
     // gateway tasdiqdan oldin so‘raydi: bor — o‘sha kreativ, yo‘q — null
     await expect(
       creatives.find({

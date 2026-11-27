@@ -1,6 +1,6 @@
 import { DataSource, QueryResult } from 'typeorm';
 import { of } from 'rxjs';
-import { AdminProductsQueryDto } from '@app/common';
+import { AdminProductsQueryDto, ProductStatus } from '@app/common';
 import { ProductService } from './product.service';
 import { Product } from './entities/product.entity';
 import { Shop } from './entities/shop.entity';
@@ -47,5 +47,21 @@ describe('ProductService admin list SQL', () => {
     expect(query.mock.calls[0][0]).toContain('SELECT DISTINCT');
     expect(query.mock.calls[0][0]).toContain('"product_created_at" DESC');
     expect(query.mock.calls[0][0]).toContain('LIMIT 20');
+
+    // BE-25 (FE-25): «To‘xtatilgan» (blocked=true, holatsiz) — arxivdagisiz; `status=ARCHIVED` — faqat arxiv
+    query.mockClear();
+    await service.adminList(
+      Object.assign(new AdminProductsQueryDto(), { blocked: true }),
+    );
+    expect(query.mock.calls[0][0]).toContain('"product"."status" <> $');
+    expect(query.mock.calls[0][1]).toContain(ProductStatus.ARCHIVED);
+    query.mockClear();
+    await service.adminList(
+      Object.assign(new AdminProductsQueryDto(), {
+        status: ProductStatus.ARCHIVED,
+      }),
+    );
+    expect(query.mock.calls[0][0]).not.toContain('<>');
+    expect(query.mock.calls[0][1]).toContain(ProductStatus.ARCHIVED);
   });
 });

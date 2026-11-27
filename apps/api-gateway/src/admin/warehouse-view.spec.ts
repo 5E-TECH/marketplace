@@ -70,6 +70,7 @@ describe('Omborchi ko‘rinishi: optoviklar va mahsulotlar', () => {
     const controller = new AdminWholesalersController(
       { send: () => of(full) } as never,
       {} as never,
+      {} as never,
     );
     await expect(
       controller.list({} as never, user(Role.WAREHOUSE)),
