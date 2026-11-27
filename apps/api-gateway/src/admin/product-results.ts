@@ -18,10 +18,19 @@ export const PRODUCT_RESULTS_RETRY_MS = 60_000;
 /** Davr: oxirgi 365 kun [taklif] — lead va moliya RPC chegarasi 366 kun; pilotning birinchi yili to‘liq kiradi. */
 const WINDOW_DAYS = 365;
 
+/** Xatodan keyin eski natija shuncha vaqtgacha beriladi [taklif]; undan eskisi — null. */
+export const PRODUCT_RESULTS_STALE_MAX_MS = 60 * 60_000;
+
+export interface ProductResults {
+  value: Map<string, AdminProductResultsDto> | null;
+  /** Lid servisi javob bermadi — eski natija (`unavailable` ga `results` qo‘shiladi). */
+  stale: boolean;
+}
+
 /**
  * BE-25 (FE-12): mahsulotlar ro‘yxatidagi «Natijalar» — hamma sotuvchilar bo‘yicha (`lead.stats.platform`, offer
  * kesimida; BE-28/BE-46 ta’riflari). Bitta so‘rov hamma mahsulot uchun, natija 5 daqiqa keshda. Javob bo‘lmasa —
- * oxirgi olingan natija (bo‘lmasa null) va 1 daqiqa qayta so‘ralmaydi.
+ * 1 soatgacha oxirgi natija `stale` belgisi bilan (bo‘lmasa null) va 1 daqiqa qayta so‘ralmaydi.
  */
 export class ProductResultsCache {
   private readonly logger = new Logger(ProductResultsCache.name);
@@ -29,8 +38,7 @@ export class ProductResultsCache {
     at: number;
     value: Map<string, AdminProductResultsDto>;
   } | null = null;
-  private pending: Promise<Map<string, AdminProductResultsDto> | null> | null =
-    null;
+  private pending: Promise<ProductResults> | null = null;
   private failedAt: number | null = null;
 
   constructor(
@@ -38,12 +46,12 @@ export class ProductResultsCache {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  get(): Promise<Map<string, AdminProductResultsDto> | null> {
+  get(): Promise<ProductResults> {
     const at = this.now().getTime();
     if (this.cached && at - this.cached.at < PRODUCT_RESULTS_TTL_MS)
-      return Promise.resolve(this.cached.value);
+      return Promise.resolve({ value: this.cached.value, stale: false });
     if (this.failedAt !== null && at - this.failedAt < PRODUCT_RESULTS_RETRY_MS)
-      return Promise.resolve(this.cached?.value ?? null);
+      return Promise.resolve(this.staleAt(at));
     // bir vaqtdagi so‘rovlar bitta chaqiruvni kutadi
     this.pending ??= this.load(at).finally(() => {
       this.pending = null;
@@ -51,9 +59,13 @@ export class ProductResultsCache {
     return this.pending;
   }
 
-  private async load(
-    at: number,
-  ): Promise<Map<string, AdminProductResultsDto> | null> {
+  private staleAt(at: number): ProductResults {
+    const fresh =
+      this.cached && at - this.cached.at < PRODUCT_RESULTS_STALE_MAX_MS;
+    return { value: fresh ? this.cached!.value : null, stale: true };
+  }
+
+  private async load(at: number): Promise<ProductResults> {
     const to = tashkentDate(new Date(at));
     const from = tashkentDate(new Date(at - WINDOW_DAYS * 24 * 60 * 60_000));
     try {
@@ -83,13 +95,13 @@ export class ProductResultsCache {
       }
       this.cached = { at, value };
       this.failedAt = null;
-      return value;
+      return { value, stale: false };
     } catch (error) {
       this.logger.warn(
         `Mahsulot natijalari olinmadi: ${(error as Error)?.message ?? error}`,
       );
       this.failedAt = at;
-      return this.cached?.value ?? null;
+      return this.staleAt(at);
     }
   }
 }

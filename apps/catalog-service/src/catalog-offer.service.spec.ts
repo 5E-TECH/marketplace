@@ -132,6 +132,18 @@ describe('CatalogOfferService.displayLookup (BE-29)', () => {
 describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
   const product = (id: string) =>
     ({ id, basePrice: 140000, weightGrams: 300, approvedPrice: null }) as never;
+  const onSale = (id: string) =>
+    ({
+      id,
+      basePrice: 140000,
+      weightGrams: 300,
+      approvedPrice: null,
+      cpaEnabled: true,
+      status: 'ACTIVE',
+      isBlocked: false,
+      isDeleted: false,
+      shop: { isDeleted: false, status: 'ACTIVE' },
+    }) as never;
   const make = (
     send: jest.Mock,
     pricing: Record<string, unknown> = {
@@ -154,6 +166,7 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
           { id: '11', productId: '1' },
           { id: '12', productId: '1' },
           { id: '13', productId: '3' },
+          { id: '14', productId: '4' },
         ]),
       } as never,
       { send } as never,
@@ -173,6 +186,7 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
       product('1'),
       product('2'),
       product('3'),
+      onSale('4'),
     ]);
     expect(unavailable).toEqual([]);
     expect(byId.get('1')).toEqual({
@@ -185,9 +199,11 @@ describe('CatalogOfferService: ro‘yxat qo‘shimchalari (FE-12)', () => {
       },
       hasVideo: true,
     });
-    // faol varianti yo‘q — null; varianti bor, ombor qatori yo‘q (postavka bo‘lmagan) — nollar («Qoldiq tugagan»)
+    // postavka bo‘lmagan (ombor qatori yo‘q): sotuvda emas — null («postavka yo‘q», dizayn p-a2 2.3);
+    // sotuvdagi CPA — nollar («Qoldiq tugagan» filtri va hisoblagichi bilan bir xil)
     expect(byId.get('2')).toMatchObject({ stock: null, hasVideo: false });
-    expect(byId.get('3')).toMatchObject({
+    expect(byId.get('3')).toMatchObject({ stock: null });
+    expect(byId.get('4')).toMatchObject({
       stock: { onHand: 0, reserved: 0, available: 0, incoming: 0 },
     });
   });

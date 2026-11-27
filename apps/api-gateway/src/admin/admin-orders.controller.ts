@@ -226,7 +226,7 @@ export class AdminOrdersController {
       'Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`. ' +
       '`pricing` (FE-26) — narx nusxasi buyurtma paytidagi qiymatlardan, faqat ADMIN/SUPERADMIN (nazoratchiga null): `recommendedPrice` — alohida rejim tavsiyasi ' +
       '(`priceSnapshot.recommendedPrice` — shu rejimdagisi), `hiddenDelivery` — Elchi tarifining ko‘rinmagan qismi, `priceAdd` — narxga qo‘shimcha ' +
-      '(= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi (boshqasi saqlanmagan — null), `split` — buyurtma jami, ' +
+      '(= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi va tanlanmagani (buyurtma paytidagi nusxa, `lead.deliveryShownOther`; migratsiya 1799280000000 dan oldingi buyurtmada — null), `split` — buyurtma jami, ' +
       '`approvedAt` — buyurtmadan oldingi shu narxdagi narx qarori [taklif].',
     schema: { example: ADMIN_ORDER_EXAMPLE },
   })

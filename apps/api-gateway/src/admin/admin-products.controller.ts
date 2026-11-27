@@ -220,16 +220,17 @@ export class AdminProductsController {
       ),
       full ? this.results.get() : Promise.resolve(null),
     ]);
-    if (!full) return pickFields(page, WAREHOUSE_PRODUCT_FIELDS);
+    if (!full || !results) return pickFields(page, WAREHOUSE_PRODUCT_FIELDS);
     return {
       ...page,
       items: page.items.map((item) => ({
         ...item,
-        results: results?.get(String(item.id)) ?? null,
+        results: results.value?.get(String(item.id)) ?? null,
       })),
+      // eski (lid javob bermagan) natija ham «olinmadi» deb belgilanadi
       unavailable: [
         ...(page.unavailable ?? []),
-        ...(results ? [] : ['results']),
+        ...(results.value && !results.stale ? [] : ['results']),
       ],
     };
   }

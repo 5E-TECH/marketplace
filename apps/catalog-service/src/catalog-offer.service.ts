@@ -453,10 +453,11 @@ export class CatalogOfferService {
             .map((v) => stock[String(v.id)])
             .filter((row): row is InventoryVariantStock => !!row)
         : [];
-      // ombor javob berdi va faol varianti bor — qatori bo‘lmasa ham 0 («Qoldiq tugagan» filtri bilan bir xil);
-      // null — faol variant yo‘q yoki ombor javob bermadi (`unavailable`)
+      // ombor qatori bor — yig‘indi; qatori yo‘q (postavka bo‘lmagan): sotuvdagi CPA mahsulotda nollar («Qoldiq tugagan»
+      // filtri va hisoblagichi bilan bir xil), boshqasida null — «postavka yo‘q» (dizayn p-a2 2.3); ombor javob
+      // bermasa — null va `unavailable`
       const sum: InventoryVariantStock | null =
-        stock && own.length
+        stock && own.length && (rows.length || isCpaAvailable(p))
           ? rows.reduce(
               (acc, row) => ({
                 onHand: acc.onHand + row.onHand,

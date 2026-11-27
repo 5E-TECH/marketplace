@@ -3,6 +3,7 @@ import { ROLES_KEY, Role } from '@app/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { ParseLeadIdPipe } from '../leads/lead-id.pipe';
 import { AdminProductsController } from './admin-products.controller';
+import { PRODUCT_RESULTS_TTL_MS, ProductResultsCache } from './product-results';
 
 describe('AdminProductsController (C4.5)', () => {
   const setup = () => {
@@ -82,6 +83,34 @@ describe('AdminProductsController (C4.5)', () => {
       items: [{ id: '42', results: null }],
       unavailable: ['stock', 'results'],
     });
+  });
+
+  it('BE-25 (FE-12): lid xatosidan keyin eski natija — qatorda bor, lekin `unavailable` da `results`', async () => {
+    const { controller, catalog, lead } = setup();
+    let now = 0;
+    (controller as unknown as { results: ProductResultsCache }).results =
+      new ProductResultsCache(
+        { send: lead } as never,
+        () => new Date(Date.UTC(2027, 0, 14) + now),
+      );
+    catalog.mockReturnValue(
+      of({ items: [{ id: '42' }], unavailable: [] }) as never,
+    );
+    lead.mockReturnValueOnce(
+      of({
+        rows: [{ key: '42', leads: 3, confirmed: 1, delivered: 1, refused: 0 }],
+        totals: {},
+      }) as never,
+    );
+    const admin = { sub: '7', role: Role.ADMIN } as never;
+    await controller.list({} as never, admin);
+    now = PRODUCT_RESULTS_TTL_MS;
+    const page = (await controller.list({} as never, admin)) as {
+      items: Array<{ results: { leads: number } | null }>;
+      unavailable: string[];
+    };
+    expect(page.items[0].results!.leads).toBe(3);
+    expect(page.unavailable).toEqual(['results']);
   });
 
   it('BE-25 (FE-12): natijalar mahsulot bo‘yicha qo‘shiladi (365 kun, offer kesimi); keshdan', async () => {

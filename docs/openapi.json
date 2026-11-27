@@ -2614,7 +2614,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`. `pricing` (FE-26) — narx nusxasi buyurtma paytidagi qiymatlardan, faqat ADMIN/SUPERADMIN (nazoratchiga null): `recommendedPrice` — alohida rejim tavsiyasi (`priceSnapshot.recommendedPrice` — shu rejimdagisi), `hiddenDelivery` — Elchi tarifining ko‘rinmagan qismi, `priceAdd` — narxga qo‘shimcha (= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi (boshqasi saqlanmagan — null), `split` — buyurtma jami, `approvedAt` — buyurtmadan oldingi shu narxdagi narx qarori [taklif].",
+            "description": "Buyurtma, posilkalar (`sellerOrders`) va tovarlar; lid buyurtmasida `lead` (narx nusxasi, holat jurnali), eski buyurtmada `lead: null`. `pricing` (FE-26) — narx nusxasi buyurtma paytidagi qiymatlardan, faqat ADMIN/SUPERADMIN (nazoratchiga null): `recommendedPrice` — alohida rejim tavsiyasi (`priceSnapshot.recommendedPrice` — shu rejimdagisi), `hiddenDelivery` — Elchi tarifining ko‘rinmagan qismi, `priceAdd` — narxga qo‘shimcha (= `priceSnapshot.hiddenDelivery`), `visibleCenter`/`visibleAddress` — tanlangan turi va tanlanmagani (buyurtma paytidagi nusxa, `lead.deliveryShownOther`; migratsiya 1799280000000 dan oldingi buyurtmada — null), `split` — buyurtma jami, `approvedAt` — buyurtmadan oldingi shu narxdagi narx qarori [taklif].",
             "content": {
               "application/json": {
                 "schema": {
@@ -21212,7 +21212,7 @@
           },
           "stock": {
             "nullable": true,
-            "description": "null — faol varianti yo‘q yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan mahsulotda — nollar",
+            "description": "null — postavka yo‘q (ombor qatori ham, kelayotgani ham yo‘q) yoki ombor javob bermadi (`unavailable`); postavkasi bo‘lmagan sotuvdagi CPA mahsulotda — nollar («Qoldiq tugagan»)",
             "type": "object",
             "allOf": [
               {

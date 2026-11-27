@@ -102,7 +102,7 @@ export class AdminProductsQueryDto {
 
   @ApiPropertyOptional({ example: '15' })
   @IsOptional()
-  @IsString()
+  @IsLeadBigintId('shopId')
   shopId?: string;
 
   @ApiPropertyOptional({

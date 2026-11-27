@@ -1,11 +1,12 @@
 import { of, throwError } from 'rxjs';
 import {
   PRODUCT_RESULTS_RETRY_MS,
+  PRODUCT_RESULTS_STALE_MAX_MS,
   PRODUCT_RESULTS_TTL_MS,
   ProductResultsCache,
 } from './product-results';
 
-/** BE-25 (FE-12): mahsulot natijalari keshi — muvaffaqiyat 5 daqiqa, xato 1 daqiqa (eski natija bilan). */
+/** BE-25 (FE-12): mahsulot natijalari keshi — muvaffaqiyat 5 daqiqa; xato — 1 daqiqa, eski natija `stale` bilan (1 soatgacha). */
 describe('ProductResultsCache', () => {
   const row = (key: string, leads: number) => ({
     key,
@@ -22,14 +23,17 @@ describe('ProductResultsCache', () => {
   });
   let now = 0;
   const clock = () => new Date(Date.UTC(2027, 0, 14) + now);
+  const ok = (leads: number) => of({ rows: [row('42', leads)], totals: {} });
+  const down = () => throwError(() => new Error('lead sekin'));
 
   it('bir vaqtdagi so‘rovlar bitta chaqiruv; 5 daqiqa kesh', async () => {
     now = 0;
-    const send = jest.fn(() => of({ rows: [row('42', 3)], totals: {} }));
+    const send = jest.fn(() => ok(3));
     const cache = new ProductResultsCache({ send } as never, clock);
     const [a, b] = await Promise.all([cache.get(), cache.get()]);
     expect(a).toBe(b);
-    expect(a!.get('42')!.leads).toBe(3);
+    expect(a.stale).toBe(false);
+    expect(a.value!.get('42')!.leads).toBe(3);
     expect(send).toHaveBeenCalledTimes(1);
     now = PRODUCT_RESULTS_TTL_MS - 1;
     await cache.get();
@@ -39,32 +43,46 @@ describe('ProductResultsCache', () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it('xato — 1 daqiqa qayta so‘ralmaydi; oldin olingan natija berib turiladi', async () => {
+  it('xato — 1 daqiqa qayta so‘ralmaydi; eski natija `stale` belgisi bilan', async () => {
     now = 0;
     const send = jest.fn();
-    send.mockReturnValueOnce(of({ rows: [row('42', 3)], totals: {} }));
+    send.mockReturnValueOnce(ok(3));
     const cache = new ProductResultsCache({ send } as never, clock);
     await cache.get();
-    // kesh eskirdi, lid javob bermaydi — eski natija
-    send.mockReturnValue(throwError(() => new Error('lead sekin')));
+    send.mockReturnValue(down());
     now = PRODUCT_RESULTS_TTL_MS;
-    expect((await cache.get())!.get('42')!.leads).toBe(3);
+    const stale = await cache.get();
+    expect(stale.stale).toBe(true);
+    expect(stale.value!.get('42')!.leads).toBe(3);
     expect(send).toHaveBeenCalledTimes(2);
     now += PRODUCT_RESULTS_RETRY_MS - 1;
-    await cache.get();
+    expect((await cache.get()).stale).toBe(true);
     expect(send).toHaveBeenCalledTimes(2);
     now += 1;
-    send.mockReturnValue(of({ rows: [row('42', 5)], totals: {} }));
-    expect((await cache.get())!.get('42')!.leads).toBe(5);
+    send.mockReturnValue(ok(5));
+    const fresh = await cache.get();
+    expect(fresh).toMatchObject({ stale: false });
+    expect(fresh.value!.get('42')!.leads).toBe(5);
     expect(send).toHaveBeenCalledTimes(3);
   });
 
-  it('hech qachon olinmagan va xato — null', async () => {
+  it('eski natija 1 soatdan oshsa — berilmaydi (null, `stale`)', async () => {
     now = 0;
-    const send = jest.fn(() => throwError(() => new Error('yo‘q')));
+    const send = jest.fn();
+    send.mockReturnValueOnce(ok(3));
     const cache = new ProductResultsCache({ send } as never, clock);
-    await expect(cache.get()).resolves.toBeNull();
-    await expect(cache.get()).resolves.toBeNull();
+    await cache.get();
+    send.mockReturnValue(down());
+    now = PRODUCT_RESULTS_STALE_MAX_MS;
+    await expect(cache.get()).resolves.toEqual({ value: null, stale: true });
+  });
+
+  it('hech qachon olinmagan va xato — null, qayta so‘rov 1 daqiqadan keyin', async () => {
+    now = 0;
+    const send = jest.fn(down);
+    const cache = new ProductResultsCache({ send } as never, clock);
+    await expect(cache.get()).resolves.toEqual({ value: null, stale: true });
+    await expect(cache.get()).resolves.toEqual({ value: null, stale: true });
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
