@@ -84,6 +84,13 @@ export type RemittanceMatch = 'PENDING' | 'MATCHED' | 'PARTIAL' | 'MISMATCH';
  * uzilishi) ham yoziladi, lekin qayta tashlanadi: RabbitMQ uni kechiktirib
  * qayta yetkazadi, oxirida DLQ (BE-02).
  */
+/** Qaytarish so‘rovi belgisi: ochilganda qo‘yiladi, rad etilganda (avvalgi holat) olinadi; tasdiqda — `order.returned`. */
+const RETURN_PENDING_STATUSES: ReadonlySet<string> = new Set([
+  LeadOrderStatus.RETURN_REQUESTED,
+  LeadOrderStatus.DELIVERED,
+  LeadOrderStatus.REMITTED,
+]);
+
 @Injectable()
 export class LedgerService {
   private readonly logger = new Logger(LedgerService.name);
@@ -93,6 +100,19 @@ export class LedgerService {
   // ---------------------------------------------------------------- hodisalar
 
   async onOrderStatusChanged(event: OrderStatusChangedEvent): Promise<void> {
+    // BE-44 / QA-02: qaytarish so‘rovi ochiq — optovik aktiga kirmasin (rad yoki `order.returned` gacha)
+    if (event?.orderId && RETURN_PENDING_STATUSES.has(event.status))
+      await this.guard('finance.return-pending', event, (manager) =>
+        event.status === LeadOrderStatus.RETURN_REQUESTED
+          ? manager.query(
+              `INSERT INTO finance.return_pending (order_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+              [String(event.orderId)],
+            )
+          : manager.query(
+              `DELETE FROM finance.return_pending WHERE order_id = $1`,
+              [String(event.orderId)],
+            ),
+      );
     if (
       event?.status !== LeadOrderStatus.DELIVERED &&
       event?.status !== LeadOrderStatus.REFUSED
@@ -644,6 +664,11 @@ export class LedgerService {
     if (!event.orderId || !event.returnRequestId) {
       throw new SplitError('orderId yoki returnRequestId yo‘q');
     }
+    // qaytarish hal bo‘ldi — yozuvlar teskari, akt endi ularni ko‘rmaydi (REVERSED)
+    await manager.query(
+      `DELETE FROM finance.return_pending WHERE order_id = $1`,
+      [String(event.orderId)],
+    );
     const [delivered] = (await manager.query(
       `SELECT id::text, gross_amount AS "gross", lead_id AS "leadId", stream_id AS "streamId",
               affiliate_id AS "affiliateId", source, order_number AS "orderNumber"

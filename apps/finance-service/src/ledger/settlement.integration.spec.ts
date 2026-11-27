@@ -17,6 +17,7 @@ import { CreateFeeHold1795824000000 } from '../migrations/1795824000000-create-f
 import { AddRemittanceResolution1796860800000 } from '../migrations/1796860800000-add-remittance-resolution';
 import { CreateSettlementResponse1796947200000 } from '../migrations/1796947200000-create-settlement-response';
 import { CreateTextSetting1796774400000 } from '../migrations/1796774400000-create-text-setting';
+import { CreateReturnPending1799193600000 } from '../migrations/1799193600000-create-return-pending';
 import { BalanceCheckService } from './balance-check.service';
 import { LedgerService } from './ledger.service';
 import { orderEvent } from './order-events.samples';
@@ -164,6 +165,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
         AddRemittanceResolution1796860800000,
         CreateSettlementResponse1796947200000,
         CreateTextSetting1796774400000,
+        CreateReturnPending1799193600000,
       ],
       migrationsRun: true,
       synchronize: false,
@@ -191,7 +193,7 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
   }, 300_000);
 
   beforeEach(async () => {
-    await ds.query(`TRUNCATE finance.settlement_dispute, finance.wholesaler_settlement_item, finance.wholesaler_settlement,
+    await ds.query(`TRUNCATE finance.return_pending, finance.settlement_dispute, finance.wholesaler_settlement_item, finance.wholesaler_settlement,
       finance.withdrawal_approval, finance.withdrawal_request, finance.affiliate_payout_profile,
       finance.ledger_entry, finance.journal, finance.remittance_item, finance.elchi_remittance,
       finance.balance_check, finance.processed_event, finance.event_failure, finance.fee_hold`);
@@ -391,6 +393,32 @@ describePostgres('BE-33 optovik hisob-kitobi (PostgreSQL)', () => {
       `INSERT INTO finance.processed_event (consumer, event_id) VALUES ('order.returned', 'ev-x')`,
     );
     expect((await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).items).toBe(1);
+  });
+
+  it('QA-02: qaytarish so‘rovi ochiq buyurtma aktga kirmaydi; rad etilgach (REMITTED) — kiradi', async () => {
+    await window(10);
+    const orderId = await deliver('501', '2026-12-28T10:00:00.000Z');
+    const statusEvent = (status: string, eventId: string) =>
+      ledger.onOrderStatusChanged({
+        ...orderEvent({
+          eventId,
+          orderId,
+          leadId: '8999',
+          affiliateId: '42',
+          wholesalerId: '501',
+        }),
+        status,
+      } as never);
+    await statusEvent('RETURN_REQUESTED', `rr-${orderId}`);
+    expect((await svc.run({ asOf: MONDAY })).items).toBe(0);
+    await statusEvent('REMITTED', `rj-${orderId}`);
+    expect((await svc.run({ asOf: '2027-01-18T04:00:00.000Z' })).items).toBe(1);
+    expect(
+      await ds.query(
+        `SELECT * FROM finance.return_pending WHERE order_id = $1`,
+        [orderId],
+      ),
+    ).toEqual([]);
   });
 
   it('«To‘landi» faqat bank faylidan keyin; aynan fayldagi summa ledgerga; takror — o‘sha natija; kechki tekshiruv farqsiz', async () => {

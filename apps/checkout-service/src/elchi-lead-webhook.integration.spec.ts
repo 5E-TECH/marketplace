@@ -19,6 +19,8 @@ import { ElchiLeadWebhookService } from './elchi-lead-webhook.service';
 import { ElchiParcelEventsService } from './elchi-parcel-events.service';
 import { LeadOrderService } from './lead-order.service';
 import { LeadOrderStatusService } from './lead-order-status.service';
+import { LeadReturnService } from './lead-return.service';
+import { ReturnRequestQueryService } from './return-request-query.service';
 import { INVENTORY_DB } from '../../inventory-service/src/database';
 import { InventoryService } from '../../inventory-service/src/inventory.service';
 
@@ -460,6 +462,99 @@ describeWithPostgres(
         }),
       ]);
       expect(notifications.emit).not.toHaveBeenCalled();
+    });
+
+    describe('QA-02: qaytarish so‘rovi va Elchi puli', () => {
+      const STAFF = { id: '41', role: 'ADMIN' };
+      const returns = () =>
+        new LeadReturnService(
+          checkoutDs,
+          { get: () => 10 } as never,
+          status,
+          new OutboxService(checkoutDs.getRepository(OutboxEvent)),
+          new ReturnRequestQueryService(checkoutDs),
+        );
+      /** Yetkazilgan buyurtma va unga xodim kiritgan qaytarish so‘rovi. */
+      const requested = async (leadId: string) => {
+        const target = await order(leadId);
+        await webhook.process(hook(target, 'sold'));
+        const [item] = (await checkoutDs.query(
+          `SELECT i.id::text FROM checkout.sales_order_item i
+             JOIN checkout.parcel p ON p.id = i.sales_order_seller_id WHERE p.sales_order_id = $1`,
+          [target.id],
+        )) as Array<{ id: string }>;
+        const created = await returns().create({
+          orderId: target.id,
+          dto: {
+            items: [{ orderItemId: item.id, quantity: 1 }],
+            reason: 'DEFECTIVE',
+            comment: 'test',
+          } as never,
+          actor: STAFF,
+        });
+        return { target, returnId: created.id };
+      };
+      const money = {
+        collectedFromCustomer: 306_000,
+        elchiFee: 40_000,
+        marketPaidAmount: 266_000,
+      };
+
+      it('so‘rov ochiq turganda «to‘landi» (webhook) → rad etilgach «Pul o‘tkazildi»; «qisman to‘landi» — «Yetkazildi»', async () => {
+        const paid = await requested('8130');
+        await expect(
+          webhook.process(hook(paid.target, 'paid', money)),
+        ).resolves.toMatchObject({
+          result: 'NOOP',
+          status: 'RETURN_REQUESTED',
+        });
+        await returns().decide({
+          returnId: paid.returnId,
+          approve: false,
+          actor: STAFF,
+          comment: 'ishlatilgan',
+        });
+        expect(await statusOf(paid.target.id)).toBe('REMITTED');
+
+        const partly = await requested('8131');
+        await webhook.process(
+          hook(partly.target, 'partly_paid', {
+            ...money,
+            marketPaidAmount: 100_000,
+          }),
+        );
+        await returns().decide({
+          returnId: partly.returnId,
+          approve: false,
+          actor: STAFF,
+          comment: 'ishlatilgan',
+        });
+        expect(await statusOf(partly.target.id)).toBe('DELIVERED');
+      });
+
+      it('qaytarish tasdiqlangandan keyin «to‘landi» — holat o‘zgarmaydi (NOOP), pul moliyaga yoziladi, zid xabar yo‘q', async () => {
+        const { target, returnId } = await requested('8132');
+        await returns().decide({ returnId, approve: true, actor: STAFF });
+        expect(await statusOf(target.id)).toBe('RETURNING');
+        notifications.emit.mockClear();
+        await expect(
+          webhook.process(hook(target, 'paid', money)),
+        ).resolves.toMatchObject({
+          result: 'NOOP',
+          status: 'RETURNING',
+        });
+        expect(
+          (await outboxOf(target.id, 'finance.cod.settled')).map(
+            (m) => m.payload,
+          ),
+        ).toEqual([
+          expect.objectContaining({
+            elchiStatus: 'paid',
+            marketPaidAmount: 266_000,
+          }),
+        ]);
+        expect(notifications.emit).not.toHaveBeenCalled();
+      });
     });
 
     it('zid xabar: rad etilgan posilkaga «sotildi»/«to‘landi» — o‘zgarmaydi, pul yozilmaydi, buyurtma uchun bir marta xabar', async () => {

@@ -9153,7 +9153,7 @@
     },
     "/api/v1/admin/orders/{id}/returns": {
       "post": {
-        "description": "Faqat «Yetkazildi» buyurtma, EQ-10 dagi qaytarish muddati ichida (`RETURN_WINDOW_DAYS`), sabab majburiy (`OTHER` da izoh ham). Buyurtma RETURN_REQUESTED; tarixda kiritgan xodim.",
+        "description": "Yetkazilgan buyurtma — «Yetkazildi» yoki «Pul o‘tkazildi» (`DELIVERED`, `REMITTED`), EQ-10 dagi qaytarish muddati ichida (`RETURN_WINDOW_DAYS`), sabab majburiy (`OTHER` da izoh ham). Buyurtma RETURN_REQUESTED; tarixda kiritgan xodim. Rad etilsa — avvalgi holat (Elchi pulni o‘tkazgan bo‘lsa `REMITTED`).",
         "operationId": "AdminOrderReturnsController_create",
         "parameters": [
           {
@@ -9187,7 +9187,7 @@
             }
           },
           "400": {
-            "description": "Sababsiz, muddat o‘tgan, buyurtma «Yetkazildi» emas yoki tovar noto‘g‘ri"
+            "description": "Sababsiz, muddat o‘tgan, buyurtma yetkazilmagan yoki tovar noto‘g‘ri"
           },
           "409": {
             "description": "Bu buyurtmada ochiq so‘rov bor"

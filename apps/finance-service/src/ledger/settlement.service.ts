@@ -424,6 +424,8 @@ export class SettlementService {
             AND j.occurred_at + make_interval(days => $2) <= $1
             AND NOT EXISTS (SELECT 1 FROM finance.wholesaler_settlement_item i WHERE i.entry_id = e.id)
             AND NOT ${OPEN_FAILURE('j.order_id')}
+            -- BE-44 / QA-02: qaytarish so‘rovi ochiq buyurtma — hal bo‘lguncha aktga kirmaydi
+            AND NOT EXISTS (SELECT 1 FROM finance.return_pending rp WHERE rp.order_id = j.order_id)
           ORDER BY e.id
           FOR UPDATE OF e SKIP LOCKED`,
         [cutoff, days],

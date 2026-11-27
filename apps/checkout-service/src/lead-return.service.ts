@@ -10,6 +10,7 @@ import {
   CreateReturnRequestDto,
   ErrorCode,
   LeadOrderActorType,
+  LEAD_RETURNABLE,
   LeadOrderStatus,
   ORDER_EVENTS,
   OrderReturnedEvent,
@@ -67,9 +68,10 @@ function orderLines(
 
 /**
  * BE-44: yetkazilgandan keyin qaytarish (TZ T5, MOL-4, 2.5-4). Mijoz qo‘ng‘iroq qiladi — so‘rovni xodim (admin,
- * superadmin, operator, nazoratchi) mijoz nomidan kiritadi: faqat «Yetkazildi» buyurtma, EQ-10 dagi qaytarish muddati
- * ichida, sabab bilan. Buyurtma RETURN_REQUESTED; tasdiqlansa — RETURNING (tovar BE-17 saralashiga) va `order.returned`
- * bir marta (moliya teskari yozuvlari, BE-22); rad etilsa — DELIVERED ga qaytadi [taklif]. Qaror yakuniy [taklif].
+ * superadmin, operator, nazoratchi) mijoz nomidan kiritadi: «Yetkazildi» yoki «Pul o‘tkazildi» buyurtma (Elchi pulni
+ * odatda bir-ikki kunda o‘tkazadi — QA-02), EQ-10 dagi qaytarish muddati ichida, sabab bilan. Buyurtma RETURN_REQUESTED;
+ * tasdiqlansa — RETURNING (tovar BE-17 saralashiga) va `order.returned` bir marta (moliya teskari yozuvlari, BE-22);
+ * rad etilsa — avvalgi holatga: Elchi pulni o‘tkazgan bo‘lsa REMITTED, aks holda DELIVERED [taklif]. Qaror yakuniy [taklif].
  */
 @Injectable()
 export class LeadReturnService {
@@ -128,10 +130,10 @@ export class LeadReturnService {
         throw new BadRequestException(
           'Qaytarish so‘rovi faqat liddan buyurtmaga',
         );
-      // TC3: faqat «Yetkazildi»
-      if (order.status !== LeadOrderStatus.DELIVERED)
+      // TC3: faqat yetkazilgan — «Yetkazildi» yoki «Pul o‘tkazildi» (QA-02)
+      if (!LEAD_RETURNABLE.includes(order.status))
         throw new BadRequestException(
-          `Buyurtma ${order.status} holatida — qaytarish so‘rovi faqat «Yetkazildi» buyurtmaga`,
+          `Buyurtma ${order.status} holatida — qaytarish so‘rovi faqat yetkazilgan buyurtmaga («Yetkazildi» yoki «Pul o‘tkazildi»)`,
         );
       await this.assertWithinWindow(manager, orderId);
       const [active] = (await manager.query(
@@ -330,12 +332,18 @@ export class LeadReturnService {
         actor: input.actor,
         comment,
       });
+      // buyurtma qulfi rad etishdagi holat hisobidan OLDIN: Elchi «to‘landi» xabari shu paytda yozilayotgan bo‘lsa,
+      // u commit bo‘lgach ko‘riladi (aks holda to‘langan buyurtma «Yetkazildi» ga tushardi)
+      await manager.query(
+        `SELECT 1 FROM checkout.sales_order WHERE id = $1 FOR UPDATE`,
+        [row.orderId],
+      );
       const applied = await this.status.applyTransition(manager, {
         orderId: row.orderId,
         returnDecision: true,
         to: input.approve
           ? LeadOrderStatus.RETURNING
-          : LeadOrderStatus.DELIVERED,
+          : await this.statusAfterRejection(manager, row.orderId),
         actor: this.orderActor(input.actor),
         reason: input.approve
           ? `Qaytarish tasdiqlandi (#${row.id})`
@@ -345,6 +353,29 @@ export class LeadReturnService {
       if (input.approve)
         await this.enqueueReturned(manager, row.id, row.orderId);
     });
+  }
+
+  /**
+   * Rad etilgan so‘rovdan keyingi holat — so‘rovdan oldingi holat (tarixdagi oxirgi qabul qilingan `→ RETURN_REQUESTED`
+   * o‘tishining `from`), so‘rov ochiq turganda Elchi «to‘landi» puli yozilgan bo‘lsa — REMITTED (webhook bu paytda
+   * holatni o‘zgartirmay pulni moliyaga yozgan). Chaqiruvchi buyurtma qatorini qulflagan.
+   */
+  private async statusAfterRejection(
+    manager: EntityManager,
+    orderId: string,
+  ): Promise<LeadOrderStatus> {
+    const [row] = (await manager.query(
+      `SELECT (SELECT h.from_status FROM checkout.order_status_history h
+                WHERE h.order_id = $1::bigint AND h.to_status = 'RETURN_REQUESTED' AND h.accepted = TRUE
+                ORDER BY h.id DESC LIMIT 1) AS "before",
+              EXISTS (SELECT 1 FROM checkout.elchi_webhook_event w
+                       WHERE w.order_id = $1::bigint AND w.status = 'paid' AND w.result <> 'REJECTED') AS paid`,
+      [orderId],
+    )) as Array<{ before: LeadOrderStatus | null; paid: boolean }>;
+    if (row?.paid) return LeadOrderStatus.REMITTED;
+    return row?.before && LEAD_RETURNABLE.includes(row.before)
+      ? row.before
+      : LeadOrderStatus.DELIVERED;
   }
 
   /** EQ-10 muddati: oxirgi «Yetkazildi» o‘tishidan. TC2: muddat o‘tgan — 400. */

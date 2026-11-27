@@ -72,7 +72,15 @@ export const ELCHI_STATUS_MATCH: Readonly<Record<string, LeadOrderStatus[]>> = {
   cancelled: CANCELLED_BY_ELCHI,
   'cancelled (sent)': CANCELLED_BY_ELCHI,
   returned_to_market: RETURNED,
-  closed: [...new Set([...CANCELLED_BY_ELCHI, S.REMITTED, S.SETTLED])],
+  // QA-02: Elchi yopgan to‘langan buyurtmaga bizda qaytarish so‘rovi ochiq bo‘lishi mumkin
+  closed: [
+    ...new Set([
+      ...CANCELLED_BY_ELCHI,
+      S.REMITTED,
+      S.SETTLED,
+      S.RETURN_REQUESTED,
+    ]),
+  ],
 };
 
 /** Elchi pulni bizga o‘tkazgan (to‘liq yoki qisman) holatlar — moliyada o‘tkazma yozuvi bo‘lishi kerak. */

@@ -33,7 +33,11 @@ export const LEAD_ORDER_TRANSITIONS: Readonly<
     LeadOrderStatus.REMITTED,
     LeadOrderStatus.RETURN_REQUESTED,
   ],
-  [LeadOrderStatus.REMITTED]: [LeadOrderStatus.SETTLED],
+  // QA-02 (2026-11-27): Elchi pulni o‘tkazgandan keyin ham mijoz qaytarish muddati ichida (EQ-10) qaytara oladi
+  [LeadOrderStatus.REMITTED]: [
+    LeadOrderStatus.SETTLED,
+    LeadOrderStatus.RETURN_REQUESTED,
+  ],
   [LeadOrderStatus.REFUSED]: [LeadOrderStatus.RETURNING],
   [LeadOrderStatus.RETURNING]: [LeadOrderStatus.RETURNED_GRADED],
   // BE-44: qaror o‘tishlari umumiy jadvalda emas (Elchi xabari yo‘l qidirib kutilayotgan qaytarishni chetlab o‘tmasin) —
@@ -45,7 +49,8 @@ export const LEAD_ORDER_TRANSITIONS: Readonly<
 };
 
 /**
- * BE-44 [taklif, T5 ga yoziladi]: qaytarish so‘rovi qarori — tasdiq: tovar qaytmoqda (BE-17 saralashi), rad: yetkazilgan.
+ * BE-44 [taklif, T5 ga yoziladi]: qaytarish so‘rovi qarori — tasdiq: tovar qaytmoqda (BE-17 saralashi), rad: avvalgi
+ * holat — Elchi pulni o‘tkazgan bo‘lsa «Pul o‘tkazildi», aks holda «Yetkazildi».
  * Faqat xodim qarori bilan (`LeadReturnService`); Elchi, ombor va boshqa o‘tishlar bu yo‘lni ishlata olmaydi.
  */
 export const LEAD_RETURN_TRANSITIONS: Readonly<
@@ -54,8 +59,15 @@ export const LEAD_RETURN_TRANSITIONS: Readonly<
   [LeadOrderStatus.RETURN_REQUESTED]: [
     LeadOrderStatus.RETURNING,
     LeadOrderStatus.DELIVERED,
+    LeadOrderStatus.REMITTED,
   ],
 };
+
+/** Qaytarish so‘rovi ochiladigan holatlar: yetkazilgan va Elchi pulini o‘tkazgan (muddat — EQ-10). */
+export const LEAD_RETURNABLE: readonly LeadOrderStatus[] = [
+  LeadOrderStatus.DELIVERED,
+  LeadOrderStatus.REMITTED,
+];
 
 export function isLeadOrderTransitionAllowed(
   from: LeadOrderStatus,

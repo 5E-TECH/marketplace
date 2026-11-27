@@ -1285,6 +1285,42 @@ describeWithPostgres('BE-18 liddan buyurtma (PostgreSQL)', () => {
       expect(await outboxOf('order.returned', id)).toEqual([]);
     });
 
+    it('QA-02: Elchi pulni o‘tkazgan («Pul o‘tkazildi») buyurtma ham qaytariladi; rad etilsa — yana «Pul o‘tkazildi»', async () => {
+      const elchi = { type: LeadOrderActorType.ELCHI, id: null };
+      const paid = await deliveredOrder('8011');
+      await status.transition({
+        orderId: paid.id,
+        to: LeadOrderStatus.REMITTED,
+        actor: elchi,
+      });
+      const created = await request(paid.id, paid.itemId);
+      expect((await orderOfLead('8011')).status).toBe('RETURN_REQUESTED');
+      await returns().decide({
+        returnId: created.id,
+        approve: true,
+        actor: STAFF,
+      });
+      expect((await orderOfLead('8011')).status).toBe('RETURNING');
+      expect(await outboxOf('order.returned', paid.id)).toHaveLength(1);
+
+      // rad: to‘langan buyurtma yana «Pul o‘tkazildi» (DELIVERED emas)
+      const other = await deliveredOrder('8012');
+      await status.transition({
+        orderId: other.id,
+        to: LeadOrderStatus.REMITTED,
+        actor: elchi,
+      });
+      const second = await request(other.id, other.itemId);
+      await returns().decide({
+        returnId: second.id,
+        approve: false,
+        actor: STAFF,
+        comment: 'Tovar ishlatilgan',
+      });
+      expect((await orderOfLead('8012')).status).toBe('REMITTED');
+      expect(await outboxOf('order.returned', other.id)).toEqual([]);
+    });
+
     it('qisman qaytarish hozircha yo‘q — 400; rad etilgandan keyin muddat birinchi yetkazilishdan', async () => {
       const { id, itemId } = await deliveredOrder('8005', 2);
       await expect(request(id, itemId)).rejects.toMatchObject({ status: 400 }); // 2 dan 1

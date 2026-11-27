@@ -65,13 +65,14 @@ export class AdminOrderReturnsController {
   @ApiOperation({
     summary: 'Qaytarish so‘rovini mijoz nomidan kiritish',
     description:
-      'Faqat «Yetkazildi» buyurtma, EQ-10 dagi qaytarish muddati ichida (`RETURN_WINDOW_DAYS`), sabab majburiy ' +
-      '(`OTHER` da izoh ham). Buyurtma RETURN_REQUESTED; tarixda kiritgan xodim.',
+      'Yetkazilgan buyurtma — «Yetkazildi» yoki «Pul o‘tkazildi» (`DELIVERED`, `REMITTED`), EQ-10 dagi qaytarish muddati ' +
+      'ichida (`RETURN_WINDOW_DAYS`), sabab majburiy (`OTHER` da izoh ham). Buyurtma RETURN_REQUESTED; tarixda kiritgan ' +
+      'xodim. Rad etilsa — avvalgi holat (Elchi pulni o‘tkazgan bo‘lsa `REMITTED`).',
   })
   @ApiCreatedResponse({ type: ReturnRequestDetailsDto })
   @ApiBadRequestResponse({
     description:
-      'Sababsiz, muddat o‘tgan, buyurtma «Yetkazildi» emas yoki tovar noto‘g‘ri',
+      'Sababsiz, muddat o‘tgan, buyurtma yetkazilmagan yoki tovar noto‘g‘ri',
   })
   @ApiConflictResponse({ description: 'Bu buyurtmada ochiq so‘rov bor' })
   async create(
