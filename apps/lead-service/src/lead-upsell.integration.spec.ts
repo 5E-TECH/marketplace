@@ -7,6 +7,7 @@ import {
   CatalogOfferSnapshot,
   CheckoutDeliveryDestination,
   LEAD_EVENTS,
+  LeadOrderStatus,
   LeadConfirmedEvent,
   LeadOutcome,
   LeadSource,
@@ -26,6 +27,9 @@ import { LeadAddressService } from './lead-address.service';
 import { LeadCardService } from './lead-card.service';
 import { LeadQueueService } from './lead-queue.service';
 import { LeadStatsService } from './lead-stats.service';
+import { LeadOrderService } from './lead-order.service';
+import { OperatorBonusService } from './operator-bonus.service';
+import { orderEvent } from '../../finance-service/src/ledger/order-events.samples';
 import { tashkentParts } from './lead-schedule';
 import {
   isInsideWindow,
@@ -596,5 +600,182 @@ describeWithPostgres('BE-45 qo‘shimcha tovar (PostgreSQL)', () => {
       note: 'Operator oldi',
     });
     expect((await upsell().get('41', lead.id)).declinedAt).toBeNull();
+  });
+
+  describe('TC6: operatorga upsell bonusi (ega qarori 2026-11-28)', () => {
+    const bonus = () => new OperatorBonusService(db);
+    const orders = () =>
+      new LeadOrderService(db, undefined, undefined, bonus());
+    let seq = 0;
+    const status = (lead: Lead, s: LeadOrderStatus, at: Date) =>
+      orders().onOrderStatusChanged(
+        orderEvent({
+          eventId: `bonus-${++seq}`,
+          orderId: String(90_000 + Number(lead.id)),
+          leadId: lead.id,
+          streamId: lead.streamId,
+          affiliateId: lead.affiliateId,
+          status: s,
+          occurredAt: at.toISOString(),
+        }),
+      );
+    /** Operator qo‘shimcha tovar(lar) qo‘shib tasdiqlagan lid. */
+    const upsold = async (operatorId: string, products: string[]) => {
+      const lead = await mkLead({ operatorId });
+      for (const productId of products)
+        await upsell().add(operatorId, lead.id, productId, 1);
+      await queue().submitResult(operatorId, lead.id, {
+        outcome: LeadOutcome.CONFIRMED,
+      } as never);
+      return db.getRepository(Lead).findOneByOrFail({ id: lead.id });
+    };
+    const today = () =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent' }).format(
+        new Date(),
+      );
+    const statsOf = (operatorId: string) => {
+      jest
+        .spyOn(LeadStatsService.prototype as never, 'todayTashkent' as never)
+        .mockReturnValue(today() as never);
+      return new LeadStatsService(db, {} as never).operatorStats({
+        operatorId,
+        query: { from: today(), to: today() },
+      });
+    };
+    const rowsOf = (leadId: string) =>
+      db.query(
+        `SELECT operator_id::text AS "operatorId", product_id::text AS "productId", amount::int AS amount,
+                cancelled_at IS NOT NULL AS cancelled
+           FROM lead.operator_bonus WHERE lead_id = $1 ORDER BY id`,
+        [leadId],
+      ) as Promise<Array<Record<string, unknown>>>;
+
+    it('sozlama 0 — bonus yozilmaydi; summa o‘zgartirilsa eski bonuslar o‘z summasi bilan qoladi', async () => {
+      expect(await bonus().settings()).toMatchObject({
+        upsellBonus: 0,
+        updatedBy: null,
+      });
+      offers['516'] = offer('516', { name: 'Kabel', approvedPrice: 20_000 });
+      const free = await upsold('61', ['512']);
+      await status(free, LeadOrderStatus.DELIVERED, new Date());
+      expect(await rowsOf(free.id)).toEqual([]);
+
+      // sinov qiymati (summa — superadmin sozlamasidan, TZ da raqam yo‘q)
+      await expect(bonus().updateSettings('1', 10_000)).resolves.toMatchObject({
+        upsellBonus: 10_000,
+        updatedBy: '1',
+      });
+      const first = await upsold('61', ['512']);
+      await status(first, LeadOrderStatus.DELIVERED, new Date());
+      await bonus().updateSettings('1', 15_000);
+      const second = await upsold('61', ['516']);
+      await status(second, LeadOrderStatus.DELIVERED, new Date());
+      expect(await rowsOf(first.id)).toEqual([
+        {
+          operatorId: '61',
+          productId: '512',
+          amount: 10_000,
+          cancelled: false,
+        },
+      ]);
+      expect(await rowsOf(second.id)).toEqual([
+        {
+          operatorId: '61',
+          productId: '516',
+          amount: 15_000,
+          cancelled: false,
+        },
+      ]);
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('2 ta qo‘shimcha tovarli buyurtma yetkazildi → 20 000; rad etilgan va qaytarilgan — bonus yo‘q; har qo‘shilgan tovarga bitta', async () => {
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      offers['516'] = offer('516', { name: 'Kabel', approvedPrice: 20_000 });
+      const now = new Date();
+      const a = await upsold('62', ['512']);
+      const b = await upsold('62', ['516']);
+      const refused = await upsold('62', ['512']);
+      const returned = await upsold('62', ['516']);
+      const two = await upsold('63', ['512', '516']);
+      await status(a, LeadOrderStatus.DELIVERED, now);
+      await status(b, LeadOrderStatus.DELIVERED, now);
+      // takror va keyingi holatlar — ikkinchi bonus yo‘q
+      await status(a, LeadOrderStatus.REMITTED, now);
+      await status(a, LeadOrderStatus.DELIVERED, now);
+      await status(refused, LeadOrderStatus.REFUSED, now);
+      await status(refused, LeadOrderStatus.RETURNING, now);
+      await status(returned, LeadOrderStatus.DELIVERED, now);
+      await status(returned, LeadOrderStatus.RETURN_REQUESTED, now);
+      await status(returned, LeadOrderStatus.RETURNING, now);
+      await status(two, LeadOrderStatus.DELIVERED, now);
+
+      expect(await rowsOf(a.id)).toHaveLength(1);
+      expect(await rowsOf(refused.id)).toEqual([]);
+      expect(await rowsOf(returned.id)).toEqual([
+        expect.objectContaining({ cancelled: true }),
+      ]);
+      // qaytarilgani shu kunda yozilib, shu kunda bekor — davrda 2 ta (20 000), bekor qilingan 10 000
+      expect(await statsOf('62')).toMatchObject({
+        upsellBonus: 20_000,
+        upsellBonusCount: 2,
+        upsellBonusCancelled: 10_000,
+      });
+      // bitta buyurtmada 2 ta qo‘shimcha tovar — 2 ta bonus
+      expect(await rowsOf(two.id)).toHaveLength(2);
+      expect(await statsOf('63')).toMatchObject({
+        upsellBonus: 20_000,
+        upsellBonusCount: 2,
+      });
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('sozlama 0 da yetkazilgan, summa keyin oshirilgan — keyingi holat («Pul o‘tkazildi») orqa sana bilan bonus yozmaydi', async () => {
+      const lead = await upsold('65', ['512']);
+      await status(lead, LeadOrderStatus.DELIVERED, new Date());
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      await status(lead, LeadOrderStatus.REMITTED, new Date());
+      await status(lead, LeadOrderStatus.RETURN_REQUESTED, new Date());
+      await status(lead, LeadOrderStatus.DELIVERED, new Date());
+      expect(await rowsOf(lead.id)).toEqual([]);
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('o‘tgan davr o‘zgarmaydi: oldingi kunda yozilgan bonus bugun qaytarilsa — bugun ayiriladi; REMITTED oldin kelsa kun — yetkazilgan kun', async () => {
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      const lead = await upsold('66', ['512']);
+      const dayMs = 24 * 3600_000;
+      const yesterday = new Date(Date.now() - dayMs);
+      // «Pul o‘tkazildi» birinchi ishlandi, «yetkazildi» (bir kun oldin) keyin keldi
+      await status(lead, LeadOrderStatus.REMITTED, new Date());
+      await status(lead, LeadOrderStatus.DELIVERED, yesterday);
+      const [row] = (await db.query(
+        `SELECT earned_at AS "earnedAt" FROM lead.operator_bonus WHERE lead_id = $1`,
+        [lead.id],
+      )) as Array<{ earnedAt: Date }>;
+      expect(new Date(row.earnedAt).getTime()).toBe(yesterday.getTime());
+      await status(lead, LeadOrderStatus.RETURN_REQUESTED, new Date());
+      await status(lead, LeadOrderStatus.RETURNING, new Date());
+      expect(await statsOf('66')).toMatchObject({
+        upsellBonus: -10_000,
+        upsellBonusCount: -1,
+        upsellBonusCancelled: 10_000,
+      });
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('qaytarish hodisasi «yetkazildi» dan oldin kelsa — bonus yozilmaydi', async () => {
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      const lead = await upsold('64', ['512']);
+      const t0 = new Date();
+      await status(
+        lead,
+        LeadOrderStatus.RETURNING,
+        new Date(t0.getTime() + 2000),
+      );
+      await status(lead, LeadOrderStatus.DELIVERED, t0);
+      expect(await rowsOf(lead.id)).toEqual([]);
+      await bonus().updateSettings('1', 0);
+    });
   });
 });

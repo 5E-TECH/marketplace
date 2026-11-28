@@ -49,6 +49,7 @@ import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
 import { LeadUpsell1799366400000 } from './migrations/1799366400000-lead-upsell';
+import { OperatorBonus1799452800000 } from './migrations/1799452800000-operator-bonus';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 /** lead.integration.spec.ts dagi bilan bir xil: lead sxemasini DROP/CREATE qiladigan spec’lar ketma-ket. */
@@ -152,6 +153,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
         OperatorStateSince1798416000000,
         Telephony1798675200000,
         LeadUpsell1799366400000,
+        OperatorBonus1799452800000,
       ],
       synchronize: false,
       logging: false,
@@ -160,7 +162,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000); // lead sxemasi qulfini boshqa spec’lar ushlab turishi mumkin
 
   afterAll(async () => {
     if (db?.isInitialized) {

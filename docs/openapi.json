@@ -15004,6 +15004,72 @@
         ]
       }
     },
+    "/api/v1/admin/operator-bonus": {
+      "get": {
+        "operationId": "AdminOperatorBonusController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorBonusSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upsell bonusi sozlamasi (BE-45)",
+        "tags": [
+          "admin-operator-bonus"
+        ]
+      },
+      "put": {
+        "description": "Yangi summa keyin yetkazilgan buyurtmalarga qo‘llanadi; avval yozilgan bonuslar o‘z summasi bilan qoladi. Audit: `operator-bonus.settings`.",
+        "operationId": "AdminOperatorBonusController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOperatorBonusSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorBonusSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Summa noto‘g‘ri"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upsell bonusi summasini o‘zgartirish (BE-45)",
+        "tags": [
+          "admin-operator-bonus"
+        ]
+      }
+    },
     "/api/v1/operator/leads/{id}/call": {
       "post": {
         "description": "Lid shu operatorning bronida bo‘lishi kerak. Provayder 3 soniyada javob bermasa ham 201 — bosqich `GET /operator/calls/{id}` da (TEL-2).",
@@ -31506,6 +31572,21 @@
             "example": 15,
             "nullable": true,
             "description": "BE-45 (OPR-7): upsell foizi — shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (TZ 9: «Qo‘shimcha tovarli buyurtmalar / barcha buyurtmalar»); maxraj 0 bo‘lsa bo‘sh"
+          },
+          "upsellBonus": {
+            "type": "number",
+            "example": 20000,
+            "description": "BE-45 TC6: upsell bonusi, so‘m — shu davrda mijoz olgan qo‘shimcha tovarlar uchun yozilganlar (har tovarga bitta, summa sozlamadan) minus shu davrda qaytarish sababli bekor qilinganlar. O‘tgan davr keyin o‘zgarmaydi — qaytarish qaytarilgan davrda ayiriladi (manfiy bo‘lishi mumkin). Ish haqi bilan to‘lanadi (TZ 2.5)"
+          },
+          "upsellBonusCount": {
+            "type": "number",
+            "example": 2,
+            "description": "Shu davrda bonus yozilgan tovarlar soni minus bekor qilinganlari"
+          },
+          "upsellBonusCancelled": {
+            "type": "number",
+            "example": 0,
+            "description": "Shu davrda qaytarish sababli bekor qilingan bonuslar, so‘m (`upsellBonus` dan ayirilgan)"
           }
         },
         "required": [
@@ -31514,7 +31595,48 @@
           "approveRate",
           "saleRate",
           "firstCallMedianMinutes",
-          "upsellRate"
+          "upsellRate",
+          "upsellBonus",
+          "upsellBonusCount",
+          "upsellBonusCancelled"
+        ]
+      },
+      "OperatorBonusSettingsDto": {
+        "type": "object",
+        "properties": {
+          "upsellBonus": {
+            "type": "number",
+            "example": 10000
+          },
+          "updatedBy": {
+            "type": "string",
+            "example": "17",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-28T09:00:00.000Z",
+            "nullable": true
+          }
+        },
+        "required": [
+          "upsellBonus",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "UpdateOperatorBonusSettingsDto": {
+        "type": "object",
+        "properties": {
+          "upsellBonus": {
+            "type": "number",
+            "example": 10000,
+            "minimum": 0,
+            "description": "Har qo‘shilgan boshqa tovar uchun operatorga bonus, so‘m; 0 — bonus hisoblanmaydi. Mijoz tovarni olganda, shu paytdagi summa bilan yoziladi (keyin o‘zgartirilsa eski bonuslar o‘zgarmaydi). Ish haqi bilan to‘lanadi (TZ 2.5)"
+          }
+        },
+        "required": [
+          "upsellBonus"
         ]
       },
       "LeadCallDto": {

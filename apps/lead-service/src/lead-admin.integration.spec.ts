@@ -269,7 +269,7 @@ describeWithPostgres('BE-25 (FE-26): admin lidlari PostgreSQL da', () => {
       synchronize: false,
       logging: false,
     }).initialize();
-  });
+  }, 300_000); // lead sxemasi qulfini boshqa spec’lar ushlab turishi mumkin
 
   beforeEach(async () => {
     await db.query(

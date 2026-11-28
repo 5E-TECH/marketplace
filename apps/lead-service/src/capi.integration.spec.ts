@@ -37,6 +37,7 @@ import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
 import { LeadUpsell1799366400000 } from './migrations/1799366400000-lead-upsell';
+import { OperatorBonus1799452800000 } from './migrations/1799452800000-operator-bonus';
 
 describe('BE-31: CAPI hodisasi (sof funksiyalar)', () => {
   const base = {
@@ -215,6 +216,7 @@ describeWithPostgres(
           OperatorStateSince1798416000000,
           Telephony1798675200000,
           LeadUpsell1799366400000,
+          OperatorBonus1799452800000,
         ],
         synchronize: false,
         logging: false,

@@ -410,7 +410,8 @@ export class LeadStatsService {
    * - tasdiq %: tasdiqlagan lidlari / shu davrda ishlagan yaroqli lidlari;
    * - sotilish %: shu davrda tasdiqlaganlaridan yetkazilgan / (yetkazilgan + rad);
    * - birinchi qo‘ng‘iroq: lid kelganidan birinchi urinishgacha (shu operatorniki bo‘lsa), median, daqiqa;
-   * - upsell %: shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (BE-45).
+   * - upsell %: shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (BE-45);
+   * - upsell bonusi: shu davrda yozilganlar minus shu davrda qaytarish sababli bekor qilinganlar (BE-45 TC6).
    */
   async operatorStats(input: {
     operatorId: string;
@@ -441,6 +442,22 @@ export class LeadStatsService {
       refused: number;
       upsold: number;
     }>;
+    // BE-45 TC6: upsell bonusi — shu davrda yozilganlar minus shu davrda bekor qilinganlar (o‘tgan davr o‘zgarmaydi)
+    const [bonus] = (await this.db.query(
+      `SELECT coalesce(sum(amount) FILTER (WHERE earned_at >= $2 AND earned_at < $3), 0)::text AS earned,
+              count(*) FILTER (WHERE earned_at >= $2 AND earned_at < $3)::int AS "earnedCount",
+              coalesce(sum(amount) FILTER (WHERE cancelled_at >= $2 AND cancelled_at < $3), 0)::text AS cancelled,
+              count(*) FILTER (WHERE cancelled_at >= $2 AND cancelled_at < $3)::int AS "cancelledCount"
+         FROM lead.operator_bonus
+        WHERE operator_id = $1
+          AND ((earned_at >= $2 AND earned_at < $3) OR (cancelled_at >= $2 AND cancelled_at < $3))`,
+      range,
+    )) as Array<{
+      earned: string;
+      earnedCount: number;
+      cancelled: string;
+      cancelledCount: number;
+    }>;
     const [{ median }] = (await this.db.query(
       `SELECT percentile_cont(0.5) WITHIN GROUP (
                 ORDER BY extract(epoch FROM a.created_at - l.created_at) / 60) AS median
@@ -461,6 +478,10 @@ export class LeadStatsService {
         median === null ? null : Math.round(Number(median)),
       // BE-45 (OPR-7, TZ 9): qo‘shimcha tovarli tasdiqlar / tasdiqlar
       upsellRate: percent(upsold, confirmed),
+      upsellBonus: Number(bonus?.earned ?? 0) - Number(bonus?.cancelled ?? 0),
+      upsellBonusCount:
+        (bonus?.earnedCount ?? 0) - (bonus?.cancelledCount ?? 0),
+      upsellBonusCancelled: Number(bonus?.cancelled ?? 0),
     };
   }
 }

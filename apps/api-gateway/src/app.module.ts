@@ -70,6 +70,7 @@ import { WholesalerProductsController } from './wholesaler-cabinet/wholesaler-pr
 import { WholesalerShipmentsController } from './wholesaler-cabinet/wholesaler-shipments.controller';
 import { AdminMetricsController } from './metrics/admin-metrics.controller';
 import { OperatorLeadsController } from './leads/operator-leads.controller';
+import { AdminOperatorBonusController } from './leads/admin-operator-bonus.controller';
 import { OperatorCallsController } from './leads/operator-calls.controller';
 import { AdminOperatorPhoneController } from './calls/admin-operator-phone.controller';
 import { CallRecordingsController } from './calls/call-recordings.controller';
@@ -229,6 +230,7 @@ import { gatewayThrottlerModule } from './rate-limit/gateway-throttler.module';
     SignedFilesController,
     AdminMetricsController,
     OperatorLeadsController,
+    AdminOperatorBonusController,
     // BE-15: telefoniya
     OperatorCallsController,
     CallsController,
