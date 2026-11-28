@@ -715,15 +715,51 @@ describeWithPostgres('BE-45 qo‘shimcha tovar (PostgreSQL)', () => {
       expect(await rowsOf(returned.id)).toEqual([
         expect.objectContaining({ cancelled: true }),
       ]);
+      // qaytarilgani shu kunda yozilib, shu kunda bekor — davrda 2 ta (20 000), bekor qilingan 10 000
       expect(await statsOf('62')).toMatchObject({
         upsellBonus: 20_000,
         upsellBonusCount: 2,
+        upsellBonusCancelled: 10_000,
       });
       // bitta buyurtmada 2 ta qo‘shimcha tovar — 2 ta bonus
       expect(await rowsOf(two.id)).toHaveLength(2);
       expect(await statsOf('63')).toMatchObject({
         upsellBonus: 20_000,
         upsellBonusCount: 2,
+      });
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('sozlama 0 da yetkazilgan, summa keyin oshirilgan — keyingi holat («Pul o‘tkazildi») orqa sana bilan bonus yozmaydi', async () => {
+      const lead = await upsold('65', ['512']);
+      await status(lead, LeadOrderStatus.DELIVERED, new Date());
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      await status(lead, LeadOrderStatus.REMITTED, new Date());
+      await status(lead, LeadOrderStatus.RETURN_REQUESTED, new Date());
+      await status(lead, LeadOrderStatus.DELIVERED, new Date());
+      expect(await rowsOf(lead.id)).toEqual([]);
+      await bonus().updateSettings('1', 0);
+    });
+
+    it('o‘tgan davr o‘zgarmaydi: oldingi kunda yozilgan bonus bugun qaytarilsa — bugun ayiriladi; REMITTED oldin kelsa kun — yetkazilgan kun', async () => {
+      await bonus().updateSettings('1', 10_000); // sinov qiymati
+      const lead = await upsold('66', ['512']);
+      const dayMs = 24 * 3600_000;
+      const yesterday = new Date(Date.now() - dayMs);
+      // «Pul o‘tkazildi» birinchi ishlandi, «yetkazildi» (bir kun oldin) keyin keldi
+      await status(lead, LeadOrderStatus.REMITTED, new Date());
+      await status(lead, LeadOrderStatus.DELIVERED, yesterday);
+      const [row] = (await db.query(
+        `SELECT earned_at AS "earnedAt" FROM lead.operator_bonus WHERE lead_id = $1`,
+        [lead.id],
+      )) as Array<{ earnedAt: Date }>;
+      expect(new Date(row.earnedAt).getTime()).toBe(yesterday.getTime());
+      await status(lead, LeadOrderStatus.RETURN_REQUESTED, new Date());
+      await status(lead, LeadOrderStatus.RETURNING, new Date());
+      expect(await statsOf('66')).toMatchObject({
+        upsellBonus: -10_000,
+        upsellBonusCount: -1,
+        upsellBonusCancelled: 10_000,
       });
       await bonus().updateSettings('1', 0);
     });

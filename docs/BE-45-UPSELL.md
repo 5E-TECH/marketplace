@@ -48,7 +48,9 @@ platformada; istalgan tovar, taklif — juftlik; «yana bir dona» upsell emas; 
      buyurtmada yo‘q; yetkazilgandan keyin qaytarilsa («Qaytmoqda») — bekor;
    - summa: `GET /admin/operator-bonus` (admin, superadmin), `PUT /admin/operator-bonus` `{ upsellBonus }` (superadmin,
      audit `operator-bonus.settings`); sukut 0 — bonus hisoblanmaydi; o‘zgartirilsa eski bonuslar o‘z summasi bilan qoladi;
-   - `GET /operator/stats` → `upsellBonus` (so‘m) va `upsellBonusCount` — davrdagi bonuslar (qaytarilganlarsiz);
+   - faqat birinchi yetkazilishda yoziladi: sozlama keyin oshirilsa, avval yetkazilgan buyurtmaga orqa sana bilan bonus yo‘q;
+   - `GET /operator/stats` → `upsellBonus` (so‘m), `upsellBonusCount`, `upsellBonusCancelled`: davrda yozilganlar minus davrda
+     qaytarish sababli bekor qilinganlar — to‘langan o‘tgan davr keyin o‘zgarmaydi, qaytarish keyingi davrda ayiriladi;
    - ish haqi bilan to‘lanadi (TZ 2.5) — tizim faqat hisoblaydi.
 
 ## Sozlama

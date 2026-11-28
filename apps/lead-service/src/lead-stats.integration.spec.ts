@@ -639,6 +639,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         upsellRate: 0, // BE-45: 0 / 1 tasdiq
         upsellBonus: 0,
         upsellBonusCount: 0,
+        upsellBonusCancelled: 0,
       });
       // Yangi natija — keyingi so‘rovda (kesh yo‘q)
       await attempt(b, '41', 'NO_ANSWER', new Date());
@@ -657,6 +658,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         upsellRate: null,
         upsellBonus: 0,
         upsellBonusCount: 0,
+        upsellBonusCancelled: 0,
       });
     });
 
@@ -670,6 +672,7 @@ describeWithPostgres('BE-28 statistika (PostgreSQL)', () => {
         upsellRate: null,
         upsellBonus: 0,
         upsellBonusCount: 0,
+        upsellBonusCancelled: 0,
       });
     });
   });

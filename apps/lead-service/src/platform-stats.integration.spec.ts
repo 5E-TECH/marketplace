@@ -308,6 +308,7 @@ describeWithPostgres(
           upsellRate: undefined,
           upsellBonus: undefined,
           upsellBonusCount: undefined,
+          upsellBonusCancelled: undefined,
         });
       }
       expect(rows.find((r) => r.key === '41')).toMatchObject({

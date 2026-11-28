@@ -14,7 +14,9 @@ export const RETURNED_AFTER_DELIVERY = new Set<LeadOrderStatus>([
  * - Har qo‘shilgan boshqa tovar (lid qatori `is_upsell`) — bitta bonus, qatorni qo‘shgan operatorga (`added_by`).
  * - Mijoz tovarni olganda (buyurtma yetkazildi) yoziladi; summa — shu paytdagi sozlama; 0 bo‘lsa yozilmaydi.
  * - Rad etilgan (mijoz olmagan) buyurtmada bonus yo‘q; yetkazilgandan keyin qaytarilsa — bekor qilinadi.
- * - Ish haqi bilan to‘lanadi (TZ 2.5) — tizim faqat hisoblab ko‘rsatadi (operator statistikasi).
+ * - Ish haqi bilan to‘lanadi (TZ 2.5) — tizim faqat hisoblab ko‘rsatadi (operator statistikasi). Davr hisobi: o‘sha davrda
+ *   yozilgan bonuslar minus o‘sha davrda bekor qilinganlari — o‘tgan (to‘langan) davr keyin o‘zgarmaydi, qaytarish
+ *   qaytarilgan davrda ayiriladi.
  */
 @Injectable()
 export class OperatorBonusService {
@@ -70,6 +72,19 @@ export class OperatorBonusService {
       [lead.id, lead.orderId, amount, at],
     )) as unknown[];
     return inserted.length;
+  }
+
+  /** Birinchi ishlangan hodisa keyingi holat bo‘lsa (REMITTED oldin kelgan), bonus kuni — haqiqiy yetkazilgan kun. */
+  async alignEarnedAt(
+    manager: EntityManager,
+    leadId: string,
+    deliveredAt: Date,
+  ): Promise<void> {
+    await manager.query(
+      `UPDATE lead.operator_bonus SET earned_at = $2
+        WHERE lead_id = $1 AND earned_at > $2 AND cancelled_at IS NULL`,
+      [leadId, deliveredAt],
+    );
   }
 
   /** Yetkazilgan buyurtma qaytarildi — bonuslar bekor (qayta yozilmaydi). */

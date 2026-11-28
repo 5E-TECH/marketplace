@@ -734,16 +734,25 @@ export class OperatorStatsDto {
   @ApiProperty({
     example: 20000,
     description:
-      'BE-45 TC6: upsell bonusi, so‘m — shu davrda mijoz olgan qo‘shimcha tovarlar uchun (har tovarga bitta, summa sozlamadan, ' +
-      'qaytarilganlari ayirilgan). Ish haqi bilan to‘lanadi (TZ 2.5)',
+      'BE-45 TC6: upsell bonusi, so‘m — shu davrda mijoz olgan qo‘shimcha tovarlar uchun yozilganlar (har tovarga bitta, ' +
+      'summa sozlamadan) minus shu davrda qaytarish sababli bekor qilinganlar. O‘tgan davr keyin o‘zgarmaydi — qaytarish ' +
+      'qaytarilgan davrda ayiriladi (manfiy bo‘lishi mumkin). Ish haqi bilan to‘lanadi (TZ 2.5)',
   })
   upsellBonus: number;
 
   @ApiProperty({
     example: 2,
-    description: 'Bonus olingan qo‘shimcha tovarlar soni',
+    description:
+      'Shu davrda bonus yozilgan tovarlar soni minus bekor qilinganlari',
   })
   upsellBonusCount: number;
+
+  @ApiProperty({
+    example: 0,
+    description:
+      'Shu davrda qaytarish sababli bekor qilingan bonuslar, so‘m (`upsellBonus` dan ayirilgan)',
+  })
+  upsellBonusCancelled: number;
 }
 
 /**

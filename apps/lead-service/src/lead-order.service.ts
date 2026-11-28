@@ -90,6 +90,8 @@ export class LeadOrderService {
           return;
         }
         lead.orderId = orderId;
+        // BE-45 TC6: bonus faqat birinchi yetkazilishda (keyingi holatlar va sozlama keyin oshirilsa — orqa sana bilan yo‘q)
+        const wasDelivered = !!lead.deliveredAt;
         if (!lead.orderStatusAt || at >= lead.orderStatusAt) {
           lead.orderStatus = event.status;
           lead.orderStatusAt = at;
@@ -124,7 +126,11 @@ export class LeadOrderService {
             lead,
             AffiliatePostbackEvent.DELIVERED,
           );
-          await this.bonus?.earn(manager, lead, lead.deliveredAt);
+          if (!wasDelivered)
+            await this.bonus?.earn(manager, lead, lead.deliveredAt);
+          // tartibsiz hodisa: «yetkazildi» vaqti erta bo‘lib chiqsa — bonus kuni ham shu kun
+          else
+            await this.bonus?.alignEarnedAt(manager, lead.id, lead.deliveredAt);
         }
         // BE-44 qaytarish tasdiqlangan (yetkazilgandan keyin «Qaytmoqda») — upsell bonusi bekor
         if (RETURNED_AFTER_DELIVERY.has(event.status) && lead.deliveredAt)
