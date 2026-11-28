@@ -150,7 +150,7 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000); // lead sxemasi qulfini boshqa spec’lar ushlab turishi mumkin
 
   afterAll(async () => {
     if (db?.isInitialized) {

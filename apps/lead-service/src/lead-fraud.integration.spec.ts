@@ -162,7 +162,7 @@ describeWithPostgres('BE-35 nazoratchi va firibgarlik (PostgreSQL)', () => {
     await db.query('DROP SCHEMA IF EXISTS lead CASCADE');
     await db.query('CREATE SCHEMA lead');
     await db.runMigrations();
-  });
+  }, 300_000); // lead sxemasi qulfini boshqa spec’lar ushlab turishi mumkin
 
   afterAll(async () => {
     if (db?.isInitialized) {
