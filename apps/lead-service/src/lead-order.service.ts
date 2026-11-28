@@ -9,6 +9,10 @@ import {
 import { CapiService } from './capi.service';
 import { Lead } from './entities';
 import { PostbackService } from './postback.service';
+import {
+  OperatorBonusService,
+  RETURNED_AFTER_DELIVERY,
+} from './operator-bonus.service';
 import { expectedAffiliateCommission } from './order-commission';
 
 /** Yetkazilgan buyurtmaning keyingi holatlari: DELIVERED hodisasi kelmay qolsa ham yetkazilgan kun yoziladi. */
@@ -41,6 +45,8 @@ export class LeadOrderService {
     private readonly db: DataSource,
     @Optional() private readonly capi?: CapiService,
     @Optional() private readonly postback?: PostbackService,
+    // BE-45 TC6: operatorga upsell bonusi (mijoz olganda; qaytarilsa bekor)
+    @Optional() private readonly bonus?: OperatorBonusService,
   ) {}
 
   async onOrderStatusChanged(event: OrderStatusChangedEvent): Promise<void> {
@@ -118,7 +124,11 @@ export class LeadOrderService {
             lead,
             AffiliatePostbackEvent.DELIVERED,
           );
+          await this.bonus?.earn(manager, lead, lead.deliveredAt);
         }
+        // BE-44 qaytarish tasdiqlangan (yetkazilgandan keyin «Qaytmoqda») — upsell bonusi bekor
+        if (RETURNED_AFTER_DELIVERY.has(event.status) && lead.deliveredAt)
+          await this.bonus?.cancel(manager, lead.id, at);
       },
     );
   }

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min, ValidateIf } from 'class-validator';
 import { IsLeadBigintId } from './lead.dto';
+import { MAX_MONEY } from '../database/money.transformer';
 
 // BE-45: upsell va cross-sell (OPR-4; TZ 5-bo‘lim 12-qoida — taklif; OPR-7 «upsell %»).
 // Operator tasdiqlash qo‘ng‘irog‘ida lidga qo‘shimcha tovar qo‘shadi: narx — shu tovarning tasdiqlangan narxi (BE-09),
@@ -142,4 +143,38 @@ export class LeadUpsellDto {
       'Oxirgi «Mijoz olmadi» vaqti (shu bron ichida qayd etilgan bo‘lsa)',
   })
   declinedAt: string | null;
+}
+
+/** BE-45 TC6: operator bonusi sozlamasi (ega qarori 2026-11-28). */
+export const OPERATOR_BONUS_RPC = {
+  SETTINGS_GET: 'lead.operator-bonus.settings.get',
+  SETTINGS_SET: 'lead.operator-bonus.settings.set',
+} as const;
+
+/** PUT /admin/operator-bonus — superadmin. */
+export class UpdateOperatorBonusSettingsDto {
+  @ApiProperty({
+    example: 10000,
+    minimum: 0,
+    description:
+      'Har qo‘shilgan boshqa tovar uchun operatorga bonus, so‘m; 0 — bonus hisoblanmaydi. Mijoz tovarni olganda, shu paytdagi ' +
+      'summa bilan yoziladi (keyin o‘zgartirilsa eski bonuslar o‘zgarmaydi). Ish haqi bilan to‘lanadi (TZ 2.5)',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(MAX_MONEY)
+  upsellBonus: number;
+}
+
+export class OperatorBonusSettingsDto {
+  @ApiProperty({ example: 10000 }) upsellBonus: number;
+  @ApiProperty({ example: '17', nullable: true, type: String })
+  updatedBy: string | null;
+  @ApiProperty({
+    example: '2026-11-28T09:00:00.000Z',
+    nullable: true,
+    type: String,
+  })
+  updatedAt: string | null;
 }

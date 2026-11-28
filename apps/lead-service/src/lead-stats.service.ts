@@ -410,7 +410,8 @@ export class LeadStatsService {
    * - tasdiq %: tasdiqlagan lidlari / shu davrda ishlagan yaroqli lidlari;
    * - sotilish %: shu davrda tasdiqlaganlaridan yetkazilgan / (yetkazilgan + rad);
    * - birinchi qo‘ng‘iroq: lid kelganidan birinchi urinishgacha (shu operatorniki bo‘lsa), median, daqiqa;
-   * - upsell %: shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (BE-45).
+   * - upsell %: shu davrda tasdiqlaganlaridan qo‘shimcha tovarlilari / tasdiqlaganlari (BE-45);
+   * - upsell bonusi: shu davrda mijoz olgan qo‘shimcha tovarlar uchun, qaytarilganlarsiz (BE-45 TC6).
    */
   async operatorStats(input: {
     operatorId: string;
@@ -441,6 +442,13 @@ export class LeadStatsService {
       refused: number;
       upsold: number;
     }>;
+    // BE-45 TC6: upsell bonusi — shu davrda mijoz olgan qo‘shimcha tovarlar uchun, qaytarilganlarsiz
+    const [bonus] = (await this.db.query(
+      `SELECT coalesce(sum(amount), 0)::text AS total, count(*)::int AS n
+         FROM lead.operator_bonus
+        WHERE operator_id = $1 AND earned_at >= $2 AND earned_at < $3 AND cancelled_at IS NULL`,
+      range,
+    )) as Array<{ total: string; n: number }>;
     const [{ median }] = (await this.db.query(
       `SELECT percentile_cont(0.5) WITHIN GROUP (
                 ORDER BY extract(epoch FROM a.created_at - l.created_at) / 60) AS median
@@ -461,6 +469,8 @@ export class LeadStatsService {
         median === null ? null : Math.round(Number(median)),
       // BE-45 (OPR-7, TZ 9): qo‘shimcha tovarli tasdiqlar / tasdiqlar
       upsellRate: percent(upsold, confirmed),
+      upsellBonus: Number(bonus?.total ?? 0),
+      upsellBonusCount: bonus?.n ?? 0,
     };
   }
 }

@@ -730,6 +730,20 @@ export class OperatorStatsDto {
       '(TZ 9: «Qo‘shimcha tovarli buyurtmalar / barcha buyurtmalar»); maxraj 0 bo‘lsa bo‘sh',
   })
   upsellRate: number | null;
+
+  @ApiProperty({
+    example: 20000,
+    description:
+      'BE-45 TC6: upsell bonusi, so‘m — shu davrda mijoz olgan qo‘shimcha tovarlar uchun (har tovarga bitta, summa sozlamadan, ' +
+      'qaytarilganlari ayirilgan). Ish haqi bilan to‘lanadi (TZ 2.5)',
+  })
+  upsellBonus: number;
+
+  @ApiProperty({
+    example: 2,
+    description: 'Bonus olingan qo‘shimcha tovarlar soni',
+  })
+  upsellBonusCount: number;
 }
 
 /**

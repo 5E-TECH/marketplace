@@ -21,6 +21,7 @@ import { SiteOrder1798070400000 } from './migrations/1798070400000-site-order';
 import { OperatorStateSince1798416000000 } from './migrations/1798416000000-operator-state-since';
 import { Telephony1798675200000 } from './migrations/1798675200000-telephony';
 import { LeadUpsell1799366400000 } from './migrations/1799366400000-lead-upsell';
+import { OperatorBonus1799452800000 } from './migrations/1799452800000-operator-bonus';
 import { csvCell, VariantReportService } from './variant-report.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -140,6 +141,7 @@ describeWithPostgres('BE-39 S1 va S3 sinovi hisoboti (PostgreSQL)', () => {
         OperatorStateSince1798416000000,
         Telephony1798675200000,
         LeadUpsell1799366400000,
+        OperatorBonus1799452800000,
       ],
       synchronize: false,
       logging: false,
